@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { isOpenStatus } from '@shared/constants';
+import { isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/constants';
 import type { Task } from '@shared/types';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { DeadlineText, PriorityBadge, StatusBadge } from './Badges';
+import { BulkCheck, bulkClick, BulkScope, useBulk } from './Bulk';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { Empty } from './ui';
@@ -18,6 +19,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
   const navigate = useNavigate();
   const { user, isCommander } = useSession();
   const toast = useToast();
+  const bulk = useBulk();
   const [busy, setBusy] = useState(false);
   const open = isOpenStatus(task.status);
   const canCheck = !readOnly && canQuickUpdate(task, user.id, isCommander) && open && task.status !== 'pending_approval';
@@ -43,12 +45,15 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
 
   return (
     <div
-      className={`task-row t-${task.tone}${task.status === 'done' ? ' done' : ''}`}
-      onClick={() => navigate(`/tasks/${task.id}`)}
+      className={`task-row t-${task.tone}${task.status === 'done' ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}`}
+      onClick={bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`))}
       role="link"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && navigate(`/tasks/${task.id}`)}
+      onKeyDown={(e) => e.key === 'Enter' && bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`))()}
     >
+      {bulk?.active ? (
+        <BulkCheck id={task.id} />
+      ) : (
       <button
         type="button"
         className={`task-check${task.status === 'done' ? ' checked' : ''}`}
@@ -59,6 +64,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
       >
         <Icon name="check" />
       </button>
+      )}
       <div className="task-main">
         <div className="task-title">{task.title}</div>
         <div className="task-meta">
@@ -89,6 +95,33 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
         <StatusBadge status={task.status} overdue={task.overdue} />
       </div>
     </div>
+  );
+}
+
+/** Selecting tasks on a page and changing them together (wrap the page, put <BulkToggle /> in its actions). */
+export function TaskBulkScope({ tasks, children }: { tasks: Task[]; children: ReactNode }) {
+  const { users, weeks, settings } = useSession();
+  const active = users.filter((u) => u.active);
+  return (
+    <BulkScope
+      entity="tasks"
+      noun="משימות"
+      topics={['tasks', 'weeks']}
+      ids={tasks.map((t) => t.id)}
+      actions={[
+        { key: 'complete', label: 'הושלמו', icon: 'check' },
+        { key: 'start', label: 'בטיפול', icon: 'play' },
+        { key: 'priority', label: 'עדיפות', ask: { title: 'שינוי עדיפות', label: 'עדיפות', options: PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] })), initial: 'high' } },
+        { key: 'owner', label: 'אחראי', icon: 'users', ask: { title: 'העברה לאחראי אחר', label: 'אחראי', options: active.map((u) => ({ value: String(u.id), label: u.displayName })) } },
+        { key: 'week', label: 'שבוע', icon: 'layers', ask: { title: 'שיוך לשבוע', label: 'שבוע', options: [{ value: '', label: 'ללא שבוע' }, ...weeks.map((w) => ({ value: String(w.id), label: w.name }))] } },
+        { key: 'domain', label: 'תחום', ask: { title: 'שינוי תחום', label: 'תחום', options: [{ value: '', label: 'ללא תחום' }, ...settings.domains.map((d) => ({ value: d, label: d }))] } },
+        { key: 'shift', label: 'הזזת דד-ליין', icon: 'clock', ask: { title: 'הזזת הדד-ליין', label: 'בכמה ימים להזיז (שלילי - להקדים)', type: 'number', initial: '1' } },
+        { key: 'cancel', label: 'ביטול', ask: { title: 'ביטול משימות', label: 'סיבת הביטול', type: 'text', placeholder: 'לדוגמה: הפעילות בוטלה' } },
+        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} משימות? אי אפשר לבטל.' },
+      ]}
+    >
+      {children}
+    </BulkScope>
   );
 }
 

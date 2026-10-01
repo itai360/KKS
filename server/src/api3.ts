@@ -56,6 +56,7 @@ import {
 import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
 import { getFile, sendStoredFile, uploadName } from './files';
 import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
+import { runBulk } from './bulk';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { localDateKey } from '../../shared/dates';
 
@@ -118,6 +119,10 @@ export function v3Router(): Router {
     deleteRecord(me(req), id(req.params.id));
     res.json({ ok: true });
   });
+
+  // ---------------- many items at once ----------------
+
+  r.post('/bulk', (req, res) => res.json(runBulk(me(req), req.body)));
 
   // ---------------- evaluation files ----------------
   // every change answers with the cadet's file as the user may see it

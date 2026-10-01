@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { addDays, shortDate, startOfWeek, weekdayName } from '@shared/dates';
 import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
+import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
@@ -54,6 +55,18 @@ export function SchedulePage() {
   const nowTime = fmtTime(new Date().toISOString());
 
   return (
+    <BulkScope
+      entity="events"
+      noun="אירועים"
+      topics={['events', 'tasks']}
+      ids={dayEvents.map((e) => e.id)}
+      actions={[
+        { key: 'shift', label: 'הזזה בימים', icon: 'calendar', ask: { title: 'הזזת אירועים', label: 'בכמה ימים להזיז (שלילי - להקדים)', type: 'number', initial: '1' } },
+        { key: 'cancel', label: 'ביטול', confirm: 'לבטל {n} אירועים? המשימות המקושרות יישארו כפי שהן.' },
+        { key: 'restore', label: 'שחזור' },
+        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} אירועים?' },
+      ]}
+    >
     <div className="page">
       <PageHead
         eyebrow={week ? week.name : 'לו"ז'}
@@ -61,6 +74,7 @@ export function SchedulePage() {
         sub={fmtLongDate(date)}
         actions={
           <>
+            {canAdd && <BulkToggle />}
             <button className="btn" onClick={() => setGoogle(true)}>
               <Icon name="calendar" /> יומן Google
             </button>
@@ -154,36 +168,7 @@ export function SchedulePage() {
               }
               const e = item.e;
               const isNow = date === today && e.startTime <= nowTime && (e.endTime ? e.endTime > nowTime : false);
-              return (
-                <div key={e.id} className={`event-row${e.cancelled ? ' cancelled' : ''}${isNow ? ' now' : ''}`} onClick={() => set({ event: String(e.id) })}>
-                  <div className="event-time">
-                    {e.startTime}
-                    {e.endTime && <span className="end">עד {e.endTime}</span>}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="event-title">
-                      {e.title} {e.cancelled && <span className="badge t-red">בוטל</span>}
-                      {isNow && <span className="badge t-orange">עכשיו</span>}
-                    </div>
-                    <div className="task-meta">
-                      {e.location && (
-                        <span>
-                          <Icon name="pin" size={13} /> {e.location}
-                        </span>
-                      )}
-                      {e.ownerName && <span className={e.location ? 'sep' : ''}>אחראי: {e.ownerName}</span>}
-                      {e.notes && <span className="sep">{e.notes.slice(0, 60)}</span>}
-                    </div>
-                  </div>
-                  <div className="row gap-6">
-                    {e.taskTotal > 0 && (
-                      <span className={`badge t-${e.taskDone === e.taskTotal ? 'green' : 'orange'}`}>
-                        הכנה {e.taskDone}/{e.taskTotal}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
+              return <CourseEventRow key={e.id} e={e} isNow={isNow} onOpen={() => set({ event: String(e.id) })} />;
             })}
           </>
         )}
@@ -193,6 +178,42 @@ export function SchedulePage() {
       {eventId && <EventDrawer id={Number(eventId)} onClose={() => set({ event: null })} onEdit={(e) => setEditing(e)} />}
       {/* after the drawer so the edit form stacks on top of it */}
       {editing && <EventForm event={editing} onClose={() => setEditing(null)} />}
+    </div>
+    </BulkScope>
+  );
+}
+
+function CourseEventRow({ e, isNow, onOpen }: { e: ScheduleEvent; isNow: boolean; onOpen: () => void }) {
+  const bulk = useBulk();
+  return (
+    <div className={`event-row${e.cancelled ? ' cancelled' : ''}${isNow ? ' now' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`} onClick={bulkClick(bulk, e.id, onOpen)}>
+      <div className="event-time">
+        <BulkCheck id={e.id} />
+        {e.startTime}
+        {e.endTime && <span className="end">עד {e.endTime}</span>}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div className="event-title">
+          {e.title} {e.cancelled && <span className="badge t-red">בוטל</span>}
+          {isNow && <span className="badge t-orange">עכשיו</span>}
+        </div>
+        <div className="task-meta">
+          {e.location && (
+            <span>
+              <Icon name="pin" size={13} /> {e.location}
+            </span>
+          )}
+          {e.ownerName && <span className={e.location ? 'sep' : ''}>אחראי: {e.ownerName}</span>}
+          {e.notes && <span className="sep">{e.notes.slice(0, 60)}</span>}
+        </div>
+      </div>
+      <div className="row gap-6">
+        {e.taskTotal > 0 && (
+          <span className={`badge t-${e.taskDone === e.taskTotal ? 'green' : 'orange'}`}>
+            הכנה {e.taskDone}/{e.taskTotal}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

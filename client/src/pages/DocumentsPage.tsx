@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { DOCUMENT_CATEGORIES } from '@shared/constants';
 import type { CourseDocument } from '@shared/types';
+import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
@@ -22,14 +23,29 @@ export function DocumentsPage() {
   const rest = (data ?? []).filter((d) => !d.pinned);
 
   return (
+    <BulkScope
+      entity="documents"
+      noun="מסמכים"
+      topics={['documents']}
+      ids={(data ?? []).filter((d) => d.canEdit).map((d) => d.id)}
+      actions={[
+        { key: 'category', label: 'קטגוריה', ask: { title: 'העברה לקטגוריה', label: 'קטגוריה', options: DOCUMENT_CATEGORIES.map((c) => ({ value: c, label: c })) } },
+        { key: 'pin', label: 'הצמדה', icon: 'pin', value: true },
+        { key: 'pin', label: 'ביטול הצמדה', value: false },
+        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} מסמכים?' },
+      ]}
+    >
     <div className="page">
       <PageHead
         title="מסמכים"
         sub="נהלים, פקודות, מצגות, חומרי הדרכה וקישורים - במקום אחד, בלי לחפש בקבוצות וואטסאפ."
         actions={
-          <button className="btn btn-primary" onClick={() => setAdding(true)}>
-            <Icon name="plus" /> מסמך
-          </button>
+          <>
+            <BulkToggle />
+            <button className="btn btn-primary" onClick={() => setAdding(true)}>
+              <Icon name="plus" /> מסמך
+            </button>
+          </>
         }
       />
       <div className="chips chips-scroll mb-12">
@@ -78,6 +94,7 @@ export function DocumentsPage() {
       {adding && <DocForm onClose={() => setAdding(false)} />}
       {editing && <DocForm doc={editing} onClose={() => setEditing(null)} />}
     </div>
+    </BulkScope>
   );
 }
 
@@ -87,6 +104,7 @@ function DocGrid({ docs, onEdit }: { docs: CourseDocument[]; onEdit: (d: CourseD
       {docs.map((d) => (
         <div key={d.id} className="card card-pad col gap-6" style={{ padding: 14 }}>
           <div className="row gap-6">
+            {d.canEdit && <BulkCheck id={d.id} />}
             <Icon name={d.kind === 'file' ? 'file' : 'link'} className="muted" />
             <span className="badge">{d.category}</span>
             {d.restricted && (

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PRIORITIES, PRIORITY_LABELS, WEEKDAY_NAMES, type Priority } from '@shared/constants';
 import type { RecurringRule } from '@shared/types';
+import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
@@ -39,15 +40,29 @@ export function RecurringPage() {
   };
 
   return (
+    <BulkScope
+      entity="recurring"
+      noun="משימות חוזרות"
+      topics={['recurring']}
+      ids={isCommander ? (data ?? []).map((r) => r.id) : []}
+      actions={[
+        { key: 'active', label: 'השהיה', icon: 'pause', value: false },
+        { key: 'active', label: 'הפעלה', icon: 'play', value: true },
+        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} משימות חוזרות? משימות שכבר נפתחו יישארו.' },
+      ]}
+    >
     <div className="page narrow">
       <PageHead
         title="משימות חוזרות"
         sub="המערכת פותחת אותן לבד בכל יום מתאים. הן לא נספרות במדד המוכנות ולא מציפות התראות."
         actions={
           isCommander && (
-            <button className="btn btn-primary" onClick={() => setEditing('new')}>
-              <Icon name="plus" /> משימה חוזרת
-            </button>
+            <>
+              <BulkToggle />
+              <button className="btn btn-primary" onClick={() => setEditing('new')}>
+                <Icon name="plus" /> משימה חוזרת
+              </button>
+            </>
           )
         }
       />
@@ -59,7 +74,8 @@ export function RecurringPage() {
       ) : (
         <div className="card">
           {data.map((r) => (
-            <div key={r.id} className="health" style={{ opacity: r.active ? 1 : 0.55, cursor: isCommander ? 'pointer' : 'default' }} onClick={() => isCommander && setEditing(r)}>
+            <BulkRow key={r.id} itemId={r.id} className="health" style={{ opacity: r.active ? 1 : 0.55, cursor: isCommander ? 'pointer' : 'default' }} onOpen={() => isCommander && setEditing(r)}>
+              <BulkCheck id={r.id} />
               <Icon name="repeat" className="muted" size={18} />
               <div className="grow">
                 <div className="strong">{r.title}</div>
@@ -75,7 +91,7 @@ export function RecurringPage() {
                   פעילה
                 </label>
               )}
-            </div>
+            </BulkRow>
           ))}
         </div>
       )}
@@ -89,6 +105,7 @@ export function RecurringPage() {
         />
       )}
     </div>
+    </BulkScope>
   );
 }
 

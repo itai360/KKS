@@ -5,7 +5,8 @@ import { shortDate } from '@shared/dates';
 import type { MyTasksData, Task } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
-import { GroupTitle, TaskList } from '../components/TaskRow';
+import { BulkToggle } from '../components/Bulk';
+import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { Empty, ErrorBox, Loading, PageHead, Ring } from '../components/ui';
 import { fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
 import { useSession } from '../lib/session';
@@ -20,7 +21,10 @@ export function MyTasksPage() {
 
   const total = data ? data.overdue.length + data.today.length + data.important.length + data.week.length + data.later.length + data.waiting.length : 0;
 
+  const allTasks = data ? [...data.overdue, ...data.today, ...data.important, ...data.week, ...data.later, ...data.waiting, ...data.teamTasks] : [];
+
   return (
+    <TaskBulkScope tasks={allTasks}>
     <div className="page">
       <PageHead
         eyebrow={fmtLongDate(todayKey())}
@@ -28,6 +32,7 @@ export function MyTasksPage() {
         sub="היום, באיחור, השבוע ובהמשך - מה שאתה צריך לעשות."
         actions={
           <>
+            <BulkToggle />
             <button className="btn" onClick={() => navigate('/day-end')}>
               <Icon name="moon" /> סיכום יום
             </button>
@@ -128,6 +133,7 @@ export function MyTasksPage() {
         </div>
       ) : null}
     </div>
+    </TaskBulkScope>
   );
 }
 

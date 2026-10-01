@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { REQUEST_TYPE_LABELS } from '@shared/constants';
 import type { Task, TaskRequest } from '@shared/types';
+import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { NoteDialog } from '../components/TaskActions';
 import { useToast } from '../components/Toasts';
@@ -54,11 +55,13 @@ export function RequestsPage() {
       ) : (
         <div className="col gap-16 fade-in">
           {(isCommander || myApprovals.length > 0) && (
+            <BulkScope entity="tasks" noun="משימות" topics={['tasks', 'requests']} ids={myApprovals.map((t) => t.id)} actions={[{ key: 'approve', label: 'אישור וסגירה', icon: 'check' }]}>
             <section className="card">
               <div className="card-head">
                 <Icon name="check" />
                 <h3 className="grow">ממתינות לאישור סגירה</h3>
                 <span className="mono tiny muted">{myApprovals.length}</span>
+                {myApprovals.length > 1 && <BulkToggle />}
               </div>
               {myApprovals.length === 0 ? (
                 <Empty title="אין בקשות סגירה" />
@@ -66,6 +69,7 @@ export function RequestsPage() {
                 myApprovals.map((t) => (
                   <div key={t.id} className="attn-item t-blue" style={{ cursor: 'default' }}>
                     <span className="attn-bar" />
+                    <BulkCheck id={t.id} />
                     <div>
                       <Link to={`/tasks/${t.id}`} className="attn-title">
                         {t.title}
@@ -86,14 +90,26 @@ export function RequestsPage() {
                 ))
               )}
             </section>
+            </BulkScope>
           )}
 
           {(isCommander || toDecide.length > 0) && (
+            <BulkScope
+              entity="requests"
+              noun="בקשות"
+              topics={['tasks', 'requests']}
+              ids={toDecide.map((r) => r.id)}
+              actions={[
+                { key: 'approve', label: 'אישור', icon: 'check' },
+                { key: 'reject', label: 'דחייה', ask: { title: 'דחיית בקשות', label: 'הסבר (לא חובה)', type: 'text' } },
+              ]}
+            >
             <section className="card">
               <div className="card-head">
                 <Icon name="inbox" />
                 <h3 className="grow">בקשות שינוי</h3>
                 <span className="mono tiny muted">{toDecide.length}</span>
+                {toDecide.length > 1 && <BulkToggle />}
               </div>
               {toDecide.length === 0 ? (
                 <Empty title="אין בקשות פתוחות" />
@@ -101,6 +117,7 @@ export function RequestsPage() {
                 toDecide.map((r) => (
                   <div key={r.id} className="attn-item t-blue" style={{ cursor: 'default' }}>
                     <span className="attn-bar" />
+                    <BulkCheck id={r.id} />
                     <div>
                       <div className="attn-kind">{REQUEST_TYPE_LABELS[r.type]}</div>
                       <Link to={`/tasks/${r.taskId}`} className="attn-title">
@@ -132,6 +149,7 @@ export function RequestsPage() {
                 ))
               )}
             </section>
+            </BulkScope>
           )}
 
           <section className="card">

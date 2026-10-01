@@ -1,10 +1,11 @@
 // Section 36 - setting up the course (dates, weeks, staff, domains, templates,
 // recurring tasks, permissions) and personal settings.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
 import type { CourseSettings, RecurringRule, Template, User } from '@shared/types';
+import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { ErrorBox, Field, Modal, PageHead, Seg } from '../components/ui';
@@ -168,10 +169,21 @@ function StaffCard() {
   const { data } = useApi<User[]>('/api/users?all=1', ['users']);
   const [editing, setEditing] = useState<User | 'new' | null>(null);
   return (
+    <BulkScope
+      entity="users"
+      noun="משתמשים"
+      topics={['users']}
+      ids={(data ?? []).map((u) => u.id)}
+      actions={[
+        { key: 'active', label: 'השבתה', value: false, confirm: 'להשבית {n} משתמשים? הם ינותקו ולא יוכלו להיכנס עד שיופעלו מחדש.' },
+        { key: 'active', label: 'הפעלה', value: true },
+      ]}
+    >
     <div className="card" id="staff">
       <div className="card-head">
         <Icon name="users" />
         <h3 className="grow">אנשי סגל ומשתמשים</h3>
+        <BulkToggle />
         <button className="btn btn-sm btn-primary" onClick={() => setEditing('new')}>
           <Icon name="plus" /> משתמש
         </button>
@@ -190,8 +202,13 @@ function StaffCard() {
           </thead>
           <tbody>
             {(data ?? []).map((u) => (
-              <tr key={u.id} className="click" style={{ opacity: u.active ? 1 : 0.5 }} onClick={() => setEditing(u)}>
-                <td className="strong">{u.displayName}</td>
+              <StaffRow key={u.id} u={u} onOpen={() => setEditing(u)}>
+                <td className="strong">
+                  <span className="row gap-6">
+                    <BulkCheck id={u.id} />
+                    {u.displayName}
+                  </span>
+                </td>
                 <td className="small">{u.title || '-'}</td>
                 <td className="mono small" dir="ltr" style={{ textAlign: 'right' }}>
                   {u.username}
@@ -204,13 +221,23 @@ function StaffCard() {
                 <td>
                   <Icon name="edit" size={16} className="muted" />
                 </td>
-              </tr>
+              </StaffRow>
             ))}
           </tbody>
         </table>
       </div>
       {editing && <UserEditor user={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
     </div>
+    </BulkScope>
+  );
+}
+
+function StaffRow({ u, onOpen, children }: { u: User; onOpen: () => void; children: ReactNode }) {
+  const bulk = useBulk();
+  return (
+    <tr className={`click${bulk?.selected.has(u.id) ? ' selected' : ''}`} style={{ opacity: u.active ? 1 : 0.5 }} onClick={bulkClick(bulk, u.id, onOpen)}>
+      {children}
+    </tr>
   );
 }
 

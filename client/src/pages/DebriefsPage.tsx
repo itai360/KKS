@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
 import type { Debrief, DebriefDetail, DebriefItem, ScheduleEvent, Template } from '@shared/types';
+import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
@@ -38,14 +39,18 @@ export function DebriefsPage() {
   const [creating, setCreating] = useState(!!creatingFromEvent || params.get('new') === '1');
 
   return (
+    <BulkScope entity="debriefs" noun="תחקירים" topics={['debriefs', 'tasks']} ids={(data ?? []).map((d) => d.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} תחקירים? משימות שנפתחו מהם יישארו.' }]}>
     <div className="page">
       <PageHead
         title="תחקירים"
         sub="אירוע, עובדות, ממצאים, מסקנות, לקחים - וכל לקח הופך למשימה, למשימה חוזרת או לשלב בתבנית."
         actions={
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            <Icon name="plus" /> תחקיר
-          </button>
+          <>
+            <BulkToggle />
+            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+              <Icon name="plus" /> תחקיר
+            </button>
+          </>
         }
       />
       <ErrorBox error={error} />
@@ -56,7 +61,8 @@ export function DebriefsPage() {
       ) : (
         <div className="list">
           {data.map((d) => (
-            <div key={d.id} className="task-row t-gray" style={{ gridTemplateColumns: '1fr auto' }} onClick={() => navigate(`/debriefs/${d.id}`)} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/debriefs/${d.id}`)}>
+            <BulkRow key={d.id} itemId={d.id} className="task-row t-gray" style={{ gridTemplateColumns: 'auto 1fr auto' }} onOpen={() => navigate(`/debriefs/${d.id}`)} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/debriefs/${d.id}`)}>
+              <BulkCheck id={d.id} />
               <div className="task-main">
                 <div className="task-title">{d.title}</div>
                 <div className="task-meta">
@@ -75,7 +81,7 @@ export function DebriefsPage() {
                 {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks} משימות פתוחות</span>}
                 <span className={`badge ${d.status === 'final' ? 't-green' : 't-yellow'}`}>{d.status === 'final' ? 'סוכם' : 'טיוטה'}</span>
               </div>
-            </div>
+            </BulkRow>
           ))}
         </div>
       )}
@@ -89,6 +95,7 @@ export function DebriefsPage() {
         />
       )}
     </div>
+    </BulkScope>
   );
 }
 

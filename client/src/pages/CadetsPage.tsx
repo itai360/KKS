@@ -17,6 +17,7 @@ import {
 } from '@shared/constants';
 import { shortDate } from '@shared/dates';
 import type { Cadet, CadetDetail, CadetRecord, Team } from '@shared/types';
+import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
@@ -38,7 +39,6 @@ export function CadetsPage() {
   const teams = useApi<Team[]>('/api/teams', ['cadets']);
   const cadets = useApi<Cadet[]>(`/api/cadets${qs({ team, status })}`, ['cadets']);
   const [dialog, setDialog] = useState<null | 'cadet' | 'import' | 'teams'>(null);
-  const navigate = useNavigate();
   const myTeams = (teams.data ?? []).filter((t) => t.commanderId === user.id);
   const canAdd = isCommander || myTeams.length > 0;
 
@@ -57,12 +57,24 @@ export function CadetsPage() {
   };
 
   return (
+    <BulkScope
+      entity="cadets"
+      noun="צוערים"
+      topics={['cadets']}
+      ids={shown.map((c) => c.id)}
+      actions={[
+        { key: 'team', label: 'העברה לצוות', icon: 'users', ask: { title: 'העברה לצוות', label: 'צוות', options: [...(isCommander ? (teams.data ?? []) : myTeams).map((t) => ({ value: String(t.id), label: t.name })), ...(isCommander ? [{ value: '', label: 'ללא צוות' }] : [])] } },
+        { key: 'status', label: 'סטטוס', ask: { title: 'שינוי סטטוס', label: 'סטטוס', options: CADET_STATUSES.map((x) => ({ value: x, label: CADET_STATUS_LABELS[x] })) } },
+        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, show: isCommander, confirm: 'למחוק {n} צוערים וכל התיקים שלהם? לסיום קורס או הדחה עדיף לשנות סטטוס.' },
+      ]}
+    >
     <div className="page">
       <PageHead
         title="צוערים"
         sub="רשימת צוערים לפי צוותים, הערות, שיחות אישיות, משמעת, הערכות ומעקב התפתחות."
         actions={
           <>
+            {canAdd && <BulkToggle />}
             {isCommander && (
               <>
                 <button className="btn" onClick={() => setDialog('teams')}>
@@ -118,35 +130,7 @@ export function CadetsPage() {
                 <span className="n">{list.length}</span>
                 <span className="line" />
               </div>
-              <div className="card">
-                {list.map((c) => (
-                  <div key={c.id} className="health" onClick={() => navigate(`/cadets/${c.id}`)} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/cadets/${c.id}`)}>
-                    <div className="avatar">{initials(c.fullName)}</div>
-                    <div className="grow">
-                      <div className="strong">{c.fullName}</div>
-                      <div className="tiny muted">
-                        {c.personalNumber && <span className="mono">{c.personalNumber} · </span>}
-                        {c.recordCount ? (
-                          <>
-                            {c.recordCount} רישומים<span className="hide-mobile"> · עודכן {fmtAgo(c.lastRecordAt!)}</span>
-                          </>
-                        ) : (
-                          'אין רישומים עדיין'
-                        )}
-                      </div>
-                    </div>
-                    {c.status !== 'active' && <span className="badge">{CADET_STATUS_LABELS[c.status]}</span>}
-                    {c.disciplineCount > 0 && <span className="badge t-orange">{c.disciplineCount} משמעת</span>}
-                    {c.talkCount > 0 && <span className="badge t-blue">{c.talkCount} שיחות</span>}
-                    {c.avgScore !== null && (
-                      <span className="mono strong" title="ממוצע הערכות (1-5)">
-                        {c.avgScore.toFixed(1)}
-                      </span>
-                    )}
-                    <Icon name="chevronLeft" size={16} className="faint" />
-                  </div>
-                ))}
-              </div>
+              <CadetRows list={list} />
             </section>
           );
         })
@@ -154,6 +138,44 @@ export function CadetsPage() {
       {dialog === 'cadet' && <CadetForm teams={isCommander ? (teams.data ?? []) : myTeams} defaultTeam={team ? Number(team) : undefined} onClose={() => setDialog(null)} />}
       {dialog === 'import' && <ImportCadets teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'teams' && <TeamsDialog teams={teams.data ?? []} onClose={() => setDialog(null)} />}
+    </div>
+    </BulkScope>
+  );
+}
+
+function CadetRows({ list }: { list: Cadet[] }) {
+  const navigate = useNavigate();
+  const bulk = useBulk();
+  return (
+    <div className="card">
+      {list.map((c) => (
+        <div key={c.id} className={`health${bulk?.selected.has(c.id) ? ' selected' : ''}`} onClick={bulkClick(bulk, c.id, () => navigate(`/cadets/${c.id}`))} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && bulkClick(bulk, c.id, () => navigate(`/cadets/${c.id}`))()}>
+          <BulkCheck id={c.id} />
+          <div className="avatar">{initials(c.fullName)}</div>
+          <div className="grow">
+            <div className="strong">{c.fullName}</div>
+            <div className="tiny muted">
+              {c.personalNumber && <span className="mono">{c.personalNumber} · </span>}
+              {c.recordCount ? (
+                <>
+                  {c.recordCount} רישומים<span className="hide-mobile"> · עודכן {fmtAgo(c.lastRecordAt!)}</span>
+                </>
+              ) : (
+                'אין רישומים עדיין'
+              )}
+            </div>
+          </div>
+          {c.status !== 'active' && <span className="badge">{CADET_STATUS_LABELS[c.status]}</span>}
+          {c.disciplineCount > 0 && <span className="badge t-orange">{c.disciplineCount} משמעת</span>}
+          {c.talkCount > 0 && <span className="badge t-blue">{c.talkCount} שיחות</span>}
+          {c.avgScore !== null && (
+            <span className="mono strong" title="ממוצע הערכות (1-5)">
+              {c.avgScore.toFixed(1)}
+            </span>
+          )}
+          <Icon name="chevronLeft" size={16} className="faint" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -355,10 +377,17 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
     }
   };
   return (
+    <BulkScope entity="teams" noun="צוותים" topics={['cadets']} ids={teams.map((t) => t.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} צוותים? הצוערים שלהם יישארו ללא צוות.' }]}>
     <Modal title="צוותים ומפקדי צוות" onClose={onClose}>
       <div className="col gap-6">
+        {teams.length > 1 && (
+          <div>
+            <BulkToggle label="בחירת צוותים" />
+          </div>
+        )}
         {teams.map((t) => (
           <div key={t.id} className="row wrap">
+            <BulkCheck id={t.id} />
             <input
               className="input grow"
               defaultValue={t.name}
@@ -408,6 +437,7 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
         <ErrorBox error={error} />
       </div>
     </Modal>
+    </BulkScope>
   );
 }
 

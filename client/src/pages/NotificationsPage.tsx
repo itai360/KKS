@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { NOTIFICATION_CATEGORY_LABELS, type NotificationCategory } from '@shared/constants';
 import type { Notification } from '@shared/types';
+import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
@@ -39,18 +40,35 @@ export function NotificationsPage() {
   };
 
   const unreadCount = data?.filter((n) => !n.read).length ?? 0;
+  // the bell follows changes made here in bulk
+  useEffect(() => {
+    if (data && !cat) setUnread(unreadCount);
+  }, [data, cat, unreadCount, setUnread]);
 
   return (
+    <BulkScope
+      entity="notifications"
+      noun="התראות"
+      topics={['*']}
+      ids={(data ?? []).map((n) => n.id)}
+      actions={[
+        { key: 'read', label: 'סימון כנקראו', icon: 'check' },
+        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} התראות?' },
+      ]}
+    >
     <div className="page narrow">
       <PageHead
         title="התראות"
         sub="מקבלים רק מה שחשוב: חריגות, חסמים, בקשות שמחייבות אישור ודד-ליינים."
         actions={
-          unreadCount > 0 && (
-            <button className="btn" onClick={() => void markAll()}>
-              <Icon name="check" /> סמן הכל כנקרא
-            </button>
-          )
+          <>
+            {!!data?.length && <BulkToggle />}
+            {unreadCount > 0 && (
+              <button className="btn" onClick={() => void markAll()}>
+                <Icon name="check" /> סמן הכל כנקרא
+              </button>
+            )}
+          </>
         }
       />
       <div className="tabs">
@@ -71,16 +89,18 @@ export function NotificationsPage() {
       ) : (
         <div className="card">
           {data.map((n) => (
-            <div
+            <BulkRow
               key={n.id}
+              itemId={n.id}
               className={`attn-item t-${TONE[n.category]}`}
-              onClick={() => void open(n)}
+              onOpen={() => void open(n)}
               style={{ background: n.read ? undefined : 'var(--card-2)' }}
               role="link"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && void open(n)}
             >
               <span className="attn-bar" style={{ opacity: n.read ? 0.3 : 1 }} />
+              <BulkCheck id={n.id} />
               <div style={{ minWidth: 0 }}>
                 <div className="attn-kind">
                   <Icon name={ICON[n.category]} size={12} /> {NOTIFICATION_CATEGORY_LABELS[n.category]}
@@ -93,10 +113,11 @@ export function NotificationsPage() {
               <span className="tiny muted" style={{ whiteSpace: 'nowrap' }}>
                 {fmtAgo(n.createdAt)}
               </span>
-            </div>
+            </BulkRow>
           ))}
         </div>
       )}
     </div>
+    </BulkScope>
   );
 }

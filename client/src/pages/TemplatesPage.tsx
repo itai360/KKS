@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { PRIORITIES, PRIORITY_LABELS, type Priority } from '@shared/constants';
 import { addDays, shortDate, weekdayName } from '@shared/dates';
 import type { Template, TemplateItem } from '@shared/types';
+import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
@@ -23,15 +24,19 @@ export function TemplatesPage() {
   const leadsAWeek = weeks.some((w) => w.leadId === user.id);
 
   return (
+    <BulkScope entity="templates" noun="תבניות" topics={['templates']} ids={isCommander ? (data ?? []).map((t) => t.id) : []} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} תבניות? משימות שכבר נוצרו מהן יישארו.' }]}>
     <div className="page">
       <PageHead
         title="תבניות"
         sub="רשימות קבועות שהופכות למשימות בלחיצה: פתיחת שבוע, הכנת פעילות, סיכום שבוע."
         actions={
           isCommander && (
-            <button className="btn btn-primary" onClick={() => setEditing('new')}>
-              <Icon name="plus" /> תבנית
-            </button>
+            <>
+              <BulkToggle />
+              <button className="btn btn-primary" onClick={() => setEditing('new')}>
+                <Icon name="plus" /> תבנית
+              </button>
+            </>
           )
         }
       />
@@ -45,6 +50,7 @@ export function TemplatesPage() {
           {data.map((t) => (
             <div key={t.id} className="card">
               <div className="card-head">
+                <BulkCheck id={t.id} />
                 <div className="grow">
                   <h3>{t.name}</h3>
                   <div className="tiny muted">
@@ -85,6 +91,7 @@ export function TemplatesPage() {
       {editing && <TemplateEditor template={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
       {applying && <ApplyTemplate template={applying} onClose={() => setApplying(null)} />}
     </div>
+    </BulkScope>
   );
 }
 

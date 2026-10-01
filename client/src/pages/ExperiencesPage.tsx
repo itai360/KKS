@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { shortDate } from '@shared/dates';
 import type { Cadet, Experience } from '@shared/types';
+import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui';
@@ -37,15 +38,19 @@ export function ExperiencesPage() {
   const count = (t: Tab) => (data ?? []).filter((x) => (t === 'mine' ? x.mentorId === user.id : x.phase === t)).length;
 
   return (
+    <BulkScope entity="experiences" noun="התנסויות" topics={['cadets', 'tasks']} ids={list.filter((x) => x.canEdit).map((x) => x.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} התנסויות?' }]}>
     <div className="page">
       <PageHead
         title="התנסויות"
         sub="שיבוץ צוערים לתפקידים, מטרות, מפקד חונך, משוב והערכה. המשוב נכנס אוטומטית לתיק הצוער."
         actions={
           canCreate && (
-            <button className="btn btn-primary" onClick={() => setCreating(true)}>
-              <Icon name="plus" /> התנסות
-            </button>
+            <>
+              <BulkToggle />
+              <button className="btn btn-primary" onClick={() => setCreating(true)}>
+                <Icon name="plus" /> התנסות
+              </button>
+            </>
           )
         }
       />
@@ -80,6 +85,7 @@ export function ExperiencesPage() {
       )}
       {creating && <ExperienceForm onClose={() => setCreating(false)} />}
     </div>
+    </BulkScope>
   );
 }
 
@@ -90,6 +96,7 @@ export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolea
   return (
     <div className={`card card-pad t-${p.tone}`} style={{ borderRight: '4px solid var(--tone)', padding: compact ? 12 : 16 }}>
       <div className="row wrap gap-6">
+        {x.canEdit && <BulkCheck id={x.id} />}
         <span className={`badge t-${p.tone}`}>{p.label}</span>
         <span className="tiny muted mono">
           {shortDate(x.startDate)}

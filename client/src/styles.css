@@ -2458,3 +2458,56 @@ p {
     break-inside: avoid;
   }
 }
+
+/* selecting several items (components/Bulk.tsx) */
+.bulk-bar {
+  position: fixed;
+  bottom: 18px;
+  inset-inline: calc(var(--rail-w) + 24px) 24px;
+  z-index: 150;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: fade 0.15s ease-out;
+}
+
+/* messages rise above the bar while it is open */
+body:has(.bulk-bar) .toasts {
+  bottom: 96px;
+}
+
+.bulk-check {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+.selected,
+tr.selected td {
+  background: var(--blue-bg) !important;
+}
+
+@media (max-width: 860px) {
+  .bulk-bar {
+    inset-inline: 10px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.bulk-bar) .toasts {
+    bottom: calc(170px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media print {
+  .bulk-bar,
+  .bulk-check {
+    display: none !important;
+  }
+}

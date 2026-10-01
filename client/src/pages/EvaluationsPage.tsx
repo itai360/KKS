@@ -21,6 +21,7 @@ import {
 } from '@shared/constants';
 import { shortDate } from '@shared/dates';
 import type { Committee, CommitteeDetail, EvaluationEntry, EvaluationFile, EvaluationListItem, Team } from '@shared/types';
+import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
@@ -281,12 +282,28 @@ function FileView({ file, onChange, readOnly = false }: { file: EvaluationFile; 
           </>
         )}
         {editable && <EntryForm cadetId={file.cadet.id} onChange={onChange!} />}
+        <BulkScope
+          entity="evaluationEntries"
+          noun="רישומים"
+          topics={['cadets']}
+          ids={editable ? file.entries.filter((e) => e.canEdit || file.full).map((e) => e.id) : []}
+          actions={[
+            { key: 'shown', label: 'הוצגו לצוער היום', icon: 'check', value: true },
+            { key: 'shown', label: 'ביטול סימון', value: null },
+            { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} רישומים מתיק ההערכה?' },
+          ]}
+        >
         <div>
           <div className="row wrap mb-12">
             <div className="section-title grow" style={{ margin: 0 }}>
               <h2 style={{ whiteSpace: 'nowrap' }}>{file.full ? 'רישומים' : 'הרישומים שלי'}</h2>
               <span className="count-pill">{file.entries.length}</span>
             </div>
+            {editable && file.entries.length > 1 && (
+              <span className="no-print">
+                <BulkToggle />
+              </span>
+            )}
             <div className="chips no-print">
               <button className={`chip chip-sm${tone === 'all' ? ' on' : ''}`} onClick={() => setTone('all')}>
                 הכל
@@ -308,6 +325,7 @@ function FileView({ file, onChange, readOnly = false }: { file: EvaluationFile; 
             </div>
           )}
         </div>
+        </BulkScope>
       </div>
       {file.full && (
         <div className="col gap-16 sticky-side">
@@ -552,6 +570,7 @@ function EntryRow({ entry: e, file, editable, onChange }: { entry: EvaluationEnt
   return (
     <div className="eval-entry">
       <div className="row wrap gap-6">
+        {(e.canEdit || file.full) && <BulkCheck id={e.id} />}
         <span className={`badge t-${EVAL_TONE_TONES[e.tone]}`}>{EVAL_TONE_LABELS[e.tone]}</span>
         <span className="tiny muted">{e.category}</span>
         <span className="grow" />

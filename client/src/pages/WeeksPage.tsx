@@ -8,7 +8,8 @@ import type { CarryDecision, CloseCheck, Task, Template, Week, WeekDetail } from
 import { CalendarWeeksModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
-import { GroupTitle, TaskList } from '../components/TaskRow';
+import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
+import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Bar, Empty, ErrorBox, Field, Loading, Modal, PageHead, Ring, Seg } from '../components/ui';
 import { api } from '../lib/api';
@@ -18,16 +19,25 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
 export function WeeksPage() {
-  const { weeks, isCommander } = useSession();
+  const { weeks, isCommander, staff } = useSession();
   const { data, loading } = useApi<Week[]>('/api/weeks', ['weeks', 'tasks']);
   const list = data ?? weeks;
-  const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [fromCalendar, setFromCalendar] = useState(false);
   const today = todayKey();
 
   return (
+    <BulkScope
+      entity="weeks"
+      noun="שבועות"
+      topics={['weeks', 'tasks']}
+      ids={list.map((w) => w.id)}
+      actions={[
+        { key: 'lead', label: 'מפק"צ אחראי', icon: 'users', ask: { title: 'מפק"צ אחראי לשבועות', label: 'מפק"צ', options: [{ value: '', label: 'ללא מפק"צ' }, ...staff.map((u) => ({ value: String(u.id), label: u.displayName }))] } },
+        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} שבועות? המשימות שלהם יישארו, בלי שיוך לשבוע.' },
+      ]}
+    >
     <div className="page">
       <PageHead
         title="שבועות הקורס"
@@ -35,6 +45,7 @@ export function WeeksPage() {
         actions={
           isCommander && (
             <>
+              <BulkToggle />
               <button className="btn" onClick={() => setFromCalendar(true)}>
                 <Icon name="calendar" /> מיומן Google
               </button>
@@ -53,13 +64,28 @@ export function WeeksPage() {
       ) : !list.length ? (
         <Empty icon="layers" title="עדיין אין שבועות" text={isCommander ? 'צרו את רשימת שבועות הקורס - שם, נושא ומפק"צ אחראי לכל שבוע.' : 'מפקד הקורס עדיין לא הגדיר שבועות.'} />
       ) : (
+        <WeekCards list={list} today={today} />
+      )}
+      {creating && <WeekForm onClose={() => setCreating(false)} />}
+      {generating && <GenerateWeeks onClose={() => setGenerating(false)} />}
+      {fromCalendar && <CalendarWeeksModal onClose={() => setFromCalendar(false)} />}
+    </div>
+    </BulkScope>
+  );
+}
+
+function WeekCards({ list, today }: { list: Week[]; today: string }) {
+  const navigate = useNavigate();
+  const bulk = useBulk();
+  return (
         <div className="weeks-track fade-in">
           {list.map((w) => {
             const current = w.startDate <= today && w.endDate >= today;
             const until = diffDays(w.startDate, today);
             return (
-              <div key={w.id} className={`card week-card${current ? ' current' : ''}`} onClick={() => navigate(`/weeks/${w.id}`)} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/weeks/${w.id}`)}>
+              <div key={w.id} className={`card week-card${current ? ' current' : ''}${bulk?.selected.has(w.id) ? ' selected' : ''}`} onClick={bulkClick(bulk, w.id, () => navigate(`/weeks/${w.id}`))} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && bulkClick(bulk, w.id, () => navigate(`/weeks/${w.id}`))()}>
                 <span className="week-num">{w.number}</span>
+                <BulkCheck id={w.id} />
                 <div style={{ position: 'relative' }}>
                   <div className="row gap-6 wrap">
                     {current && <span className="badge t-orange">השבוע</span>}
@@ -90,11 +116,6 @@ export function WeeksPage() {
             );
           })}
         </div>
-      )}
-      {creating && <WeekForm onClose={() => setCreating(false)} />}
-      {generating && <GenerateWeeks onClose={() => setGenerating(false)} />}
-      {fromCalendar && <CalendarWeeksModal onClose={() => setFromCalendar(false)} />}
-    </div>
   );
 }
 
@@ -296,6 +317,7 @@ export function WeekPage() {
   };
 
   return (
+    <TaskBulkScope tasks={data.tasks}>
     <div className="page">
       <PageHead
         eyebrow={
@@ -318,6 +340,7 @@ export function WeekPage() {
         }
         actions={
           <>
+            <BulkToggle />
             {canManage && w.status !== 'closed' && (
               <button className="btn" onClick={() => setDialog('open')}>
                 <Icon name="template" /> פתיחת שבוע
@@ -477,6 +500,7 @@ export function WeekPage() {
       {dialog === 'open' && <OpenWeek detail={data} onClose={() => setDialog(null)} />}
       {dialog === 'close' && <CloseWeek detail={data} onClose={() => setDialog(null)} />}
     </div>
+    </TaskBulkScope>
   );
 }
 
