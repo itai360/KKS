@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import type { Task, TaskRequest } from '@shared/types';
+import { pendingRequests, reportIssue } from '../lib/api';
 import { onStatus } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -114,6 +115,20 @@ export function Layout({ children }: { children: ReactNode }) {
 
   useEffect(() => onStatus(setLive), []);
   useEffect(() => window.scrollTo(0, 0), [location.pathname]);
+
+  // a screen still loading (or empty) a few seconds after moving to it is reported, with what the browser is waiting for
+  useEffect(() => {
+    const path = location.pathname;
+    const t = setTimeout(() => {
+      const main = document.getElementById('main');
+      const busy = !!main?.querySelector('[aria-busy="true"]');
+      const text = main?.innerText.trim() ?? '';
+      if (document.visibilityState === 'visible' && (busy || !text)) {
+        reportIssue('screen still loading after 6 s', { path, busy, empty: !text, title: main?.querySelector('h1')?.textContent ?? null, pending: pendingRequests() });
+      }
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [location.pathname]);
 
   const symbol = settings.courseSymbol || 'קק"ס';
 

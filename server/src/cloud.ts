@@ -30,8 +30,18 @@ process.env.KKS_REALTIME = 'poll';
 const dbPath = () => join(config.dataDir, 'kks.db');
 
 let identityToken = ''; // Vercel's OIDC token for the request being served
+let storageMs = 0; // time the request being served spent waiting on storage
 
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
+  const t0 = Date.now();
+  try {
+    return await rpcOnce<T>(fn, args);
+  } finally {
+    storageMs += Date.now() - t0;
+  }
+}
+
+async function rpcOnce<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   let res: Response;
   if (env('KKS_SECRET')) {
     const missing = ['SUPABASE_URL', 'SUPABASE_KEY'].filter((k) => !env(k));
@@ -251,8 +261,12 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
   if (typeof token === 'string' && token) identityToken = token;
   delete req.headers['x-vercel-oidc-token']; // never passed on to the app
   const body = ['GET', 'HEAD'].includes(req.method ?? 'GET') ? undefined : await readBody(req);
+  const arrived = Date.now();
+  let started = 0;
   try {
     await serialized(async () => {
+      started = Date.now();
+      storageMs = 0;
       const isSync = (req.url ?? '').startsWith('/api/sync');
       // the browser has seen a newer version than this copy: it must not get older data
       let recent = await prepare(Number.isFinite(seen) && seen > version ? 0 : isSync ? SYNC_FRESH_MS : FRESH_MS);
@@ -286,6 +300,8 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
     console.error('[cloud]', e);
     if (!res.headersSent) json(res, 503, { error: 'השרת לא זמין כרגע. נסו שוב בעוד רגע.' });
   }
+  const total = Date.now() - arrived;
+  if (total > 1500) console.warn(`[slow] ${req.method} ${req.url} ${res.statusCode} ${total}ms (queued ${started ? started - arrived : total}ms, storage ${storageMs}ms)`);
   try {
     const { waitUntil } = await import('@vercel/functions');
     waitUntil(pushesSettled());

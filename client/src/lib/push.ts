@@ -11,6 +11,24 @@ export function needsHomeScreen(): boolean {
   return ios && !standalone;
 }
 
+/**
+ * The service worker is only needed for phone notifications. A browser that has
+ * not turned them on keeps no service worker, so it never stands between the app
+ * and the server; it is registered again when notifications are turned on.
+ */
+export async function dropUnusedServiceWorker(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const reg of regs) {
+      const sub = await reg.pushManager?.getSubscription().catch(() => null);
+      if (!sub) await reg.unregister();
+    }
+  } catch {
+    /* nothing to clean up */
+  }
+}
+
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | undefined> {
   if (!('serviceWorker' in navigator)) return undefined;
   try {

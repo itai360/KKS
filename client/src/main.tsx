@@ -9,7 +9,8 @@ import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/600.css';
 import './styles.css';
 import { App } from './App';
-import { registerServiceWorker } from './lib/push';
+import { reportIssue } from './lib/api';
+import { dropUnusedServiceWorker } from './lib/push';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -17,4 +18,8 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-void registerServiceWorker();
+void dropUnusedServiceWorker();
+
+// errors outside a screen still reach the server log
+window.addEventListener('error', (e) => reportIssue(`error: ${e.message}`, { at: `${e.filename}:${e.lineno}` }));
+window.addEventListener('unhandledrejection', (e) => reportIssue(`unhandled: ${String((e.reason as Error)?.message ?? e.reason)}`));
