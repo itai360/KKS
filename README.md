@@ -65,6 +65,29 @@ npm run typecheck
 
 ## פריסה
 
+### Vercel + Supabase (חינם)
+
+השרת רץ כפונקציה ב-Vercel, והנתונים נשמרים ב-Supabase. כל שינוי נשמר עם בדיקת גרסה, כך ששני אנשים ששומרים באותו רגע לא דורסים זה את זה. עדכונים בין משתמשים מגיעים תוך כמה שניות.
+
+1. **Supabase:** פרויקט חדש (אזור Frankfurt). ב-SQL Editor מריצים את `supabase/migrations/0001_kks_storage.sql`, ואז שורה אחת שקובעת את הסוד של הפריסה (מחרוזת אקראית ארוכה שתבחרו):
+   ```sql
+   insert into kks_secret values (1, encode(sha256(convert_to('הסוד-שלכם', 'UTF8')), 'hex'));
+   ```
+2. **Vercel:** Add New → Project → בוחרים את הריפו. הגדרות הבנייה נלקחות מ-`vercel.json`. מוסיפים משתני סביבה ל-Production:
+
+   | משתנה | ערך |
+   |---|---|
+   | `SUPABASE_URL` | כתובת הפרויקט ב-Supabase (`https://xxxx.supabase.co`) |
+   | `SUPABASE_KEY` | המפתח הציבורי (anon / publishable) של הפרויקט |
+   | `KKS_SECRET` | אותו סוד מסעיף 1 |
+   | `DATA_DIR` | `/tmp/kks` |
+   | `COOKIE_SECURE` | `true` |
+   | `MAX_UPLOAD_MB` | `4` |
+
+3. **Deploy**, ואז נכנסים לכתובת ומשלימים מיד את מסך הקמת הקורס (יצירת חשבון המפקד).
+
+הטבלאות ב-Supabase סגורות לגמרי (RLS בלי הרשאות), והגישה היחידה היא דרך פונקציות שדורשות את `KKS_SECRET`. קובץ מצורף מוגבל ל-4MB (מגבלת Vercel). בתוכנית החינמית של Supabase פרויקט שלא נעשה בו שימוש שבוע נכנס להשהיה, ומחזירים אותו בלחיצה בלוח הבקרה.
+
 ### בלחיצה אחת (Render)
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/itai360/KKS)
@@ -141,6 +164,7 @@ server/   Node + Express + SQLite מובנה (node:sqlite) - ללא תלויות
   src/documents.ts     ספריית מסמכים וקבצים
   src/push.ts          Web Push (מפתחות VAPID נוצרים ונשמרים במסד)
   src/google.ts        אימות כניסה עם Google (בדיקת חתימת ה-ID token מול המפתחות של Google)
+  src/cloud.ts         הפריסה ב-Vercel: עותק של המסד בכל מופע, שמירה ל-Supabase עם בדיקת גרסה והרצה חוזרת כשמישהו שמר קודם
   test/                בדיקות API לזרימות ולהרשאות
 client/   React + Vite, עברית RTL, מותאם לנייד (תפריט תחתון וכפתור + גדול), אפליקציה להתקנה עם Service Worker להתראות
 demo/     גרסת ההדגמה: shims של Express, node:sqlite, crypto ו-fs לדפדפן, והגשר שמנתב את בקשות האפליקציה לשרת שבדף
