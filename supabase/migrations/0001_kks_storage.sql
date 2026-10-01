@@ -85,11 +85,12 @@ create or replace function public.kks_delete_file(p_secret text, p_name text) re
 language plpgsql security definer set search_path = public as $$
 begin
   perform public.kks_check(p_secret);
-  delete from public.kks_files where name = p_name;
+  -- the row stays as a tombstone; its contents are released
+  update public.kks_files set data = '', size = 0 where name = p_name;
 end $$;
 
 revoke execute on function public.kks_check(text) from public, anon, authenticated;
 revoke execute on function public.kks_version(text), public.kks_load(text), public.kks_save(text, bigint, text),
-  public.kks_put_file(text, text, text), public.kks_get_file(text, text), public.kks_delete_file(text, text) from public;
+  public.kks_put_file(text, text, text), public.kks_get_file(text, text), public.kks_delete_file(text, text) from public, authenticated;
 grant execute on function public.kks_version(text), public.kks_load(text), public.kks_save(text, bigint, text),
   public.kks_put_file(text, text, text), public.kks_get_file(text, text), public.kks_delete_file(text, text) to anon;
