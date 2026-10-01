@@ -76,7 +76,7 @@ export function v3Router(): Router {
     res.json(listCadets(me(req), { teamId: num(req.query.team), status: str(req.query.status) ?? 'active', q: str(req.query.q) })),
   );
   r.post('/cadets', (req, res) => res.json(cadetDetail(me(req), createCadet(me(req), req.body))));
-  r.post('/cadets/import', requireCommander, (req, res) => res.json({ imported: importCadets(me(req), req.body) }));
+  r.post('/cadets/import', requireCommander, (req, res) => res.json(importCadets(me(req), req.body)));
   r.get('/cadets/:id', (req, res) => res.json(cadetDetail(me(req), id(req.params.id))));
   r.patch('/cadets/:id', (req, res) => {
     updateCadet(me(req), id(req.params.id), req.body);

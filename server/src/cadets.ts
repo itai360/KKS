@@ -263,33 +263,89 @@ export const importSchema = z.object({
   teamId: z.number().int().positive().nullable().optional(),
 });
 
+// column titles a pasted list may start with (as copied from Excel with its header row)
+const IMPORT_HEADERS: [RegExp, 'first' | 'last' | 'full' | 'pn' | 'phone' | 'team'][] = [
+  [/^שם פרטי$/, 'first'],
+  [/^שם משפחה$/, 'last'],
+  [/^(שם מלא|שם|name)$/i, 'full'],
+  [/^(מספר אישי|מ\.?\s?א\.?|מ"א)$/, 'pn'],
+  [/^(טלפון|נייד|פלאפון|מספר טלפון)$/, 'phone'],
+  [/^(צוות|team)$/i, 'team'],
+];
+
+const cleanNumber = (s: string) => s.replace(/\.0+$/, '').trim(); // 9397319.0 from a spreadsheet
+
 /**
- * Paste a list (one cadet per line): "full name [, personal number] [, phone] [, team]".
- * Tabs, commas or semicolons separate columns, so a column copied from Excel works.
+ * Paste a list, one cadet per line. With a header row (e.g. "שם פרטי, שם משפחה,
+ * מספר אישי, צוות") the columns are read by their titles; without one each line
+ * is "full name [, personal number] [, phone] [, team]". Tabs, commas or
+ * semicolons separate columns, so rows copied from Excel work. Teams that do not
+ * exist are created; a cadet whose personal number is already listed is skipped.
  */
-export function importCadets(actor: UserRow, raw: z.input<typeof importSchema>): number {
+export function importCadets(actor: UserRow, raw: z.input<typeof importSchema>): { imported: number; skipped: number } {
   const { text, teamId } = importSchema.parse(raw);
   const teams = new Map(listTeams().map((t) => [t.name.trim(), t.id]));
-  let n = 0;
+  const known = new Set(db().all<{ pn: string }>("SELECT personal_number AS pn FROM cadets WHERE personal_number <> ''").map((r) => r.pn));
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  const split = (line: string) => line.split(/\t|;|,/).map((c) => c.trim());
+
+  // a header row: at least two cells are known column titles
+  let columns: (string | null)[] | null = null;
+  if (lines.length) {
+    const titles = split(lines[0]).map((cell) => IMPORT_HEADERS.find(([re]) => re.test(cell.replace(/\s+/g, ' ')))?.[1] ?? null);
+    if (titles.filter(Boolean).length >= 2) {
+      columns = titles;
+      lines.shift();
+    }
+  }
+
+  let imported = 0;
+  let skipped = 0;
   db().tx(() => {
-    for (const line of text.split(/\r?\n/)) {
-      const cols = line.split(/\t|;|,/).map((c) => c.trim());
-      if (!cols[0] || /^(שם|name)/i.test(cols[0])) continue;
-      const parts = cols[0].split(/\s+/);
+    for (const line of lines) {
+      const cols = split(line);
+      const get = (key: string) => (columns ? cols[columns.indexOf(key)] ?? '' : '');
+      let first: string;
+      let last: string;
+      let pn: string;
+      let phone: string;
+      let teamName: string;
+      if (columns) {
+        const full = get('full').split(/\s+/).filter(Boolean);
+        first = get('first') || full[0] || '';
+        last = get('last') || (get('first') ? '' : full.slice(1).join(' '));
+        pn = cleanNumber(get('pn'));
+        phone = get('phone');
+        teamName = get('team');
+      } else {
+        if (!cols[0] || /^(שם|name)/i.test(cols[0])) continue;
+        const parts = cols[0].split(/\s+/);
+        first = parts[0];
+        last = parts.slice(1).join(' ');
+        pn = cleanNumber(cols[1] ?? '');
+        phone = cols[2] ?? '';
+        teamName = cols[3] ?? '';
+      }
+      if (!first) continue;
+      if (pn && known.has(pn)) {
+        skipped++;
+        continue;
+      }
       let team = teamId ?? null;
-      if (!team && cols[3]) {
-        team = teams.get(cols[3]) ?? null;
+      if (!team && teamName) {
+        team = teams.get(teamName) ?? null;
         if (!team) {
-          team = db().run('INSERT INTO teams(name, sort, created_at) VALUES (?, ?, ?)', cols[3], teams.size + 1, nowIso()).id;
-          teams.set(cols[3], team);
+          team = db().run('INSERT INTO teams(name, sort, created_at) VALUES (?, ?, ?)', teamName, teams.size + 1, nowIso()).id;
+          teams.set(teamName, team);
         }
       }
-      createCadet(actor, { firstName: parts[0], lastName: parts.slice(1).join(' '), personalNumber: cols[1] ?? '', phone: cols[2] ?? '', teamId: team });
-      n++;
+      createCadet(actor, { firstName: first, lastName: last, personalNumber: pn, phone, teamId: team });
+      if (pn) known.add(pn);
+      imported++;
     }
-    logActivity({ userId: actor.id, action: 'cadets_import', text: `${actor.display_name} ייבא ${n} צוערים` });
+    logActivity({ userId: actor.id, action: 'cadets_import', text: `${actor.display_name} ייבא ${imported} צוערים` });
   });
-  return n;
+  return { imported, skipped };
 }
 
 // ---------------- records ----------------

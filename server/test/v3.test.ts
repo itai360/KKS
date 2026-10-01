@@ -31,6 +31,26 @@ describe('cadets and teams (section 31)', () => {
     expect((await c.s1.get('/api/cadets')).body.every((x: { canManage: boolean }) => x.canManage)).toBe(true);
   });
 
+  it('reads a pasted list by its header row, keeps two-word first names, and never adds a cadet twice', async () => {
+    const text = [
+      'שם פרטי\tשם משפחה\tמספר אישי\tצוות',
+      'איתן משה\tשפיגלר\t9335581.0\tצוות 2 - גיורא',
+      'יהב\tגור אריה\t9397319.0\tצוות 1 - אלון',
+      'עמית\tשמש\t\tצוות 2 - גיורא',
+    ].join('\n');
+    expect((await c.cmd.post('/api/cadets/import', { text })).body).toEqual({ imported: 3, skipped: 0 });
+    const cadets = (await c.cmd.get('/api/cadets')).body;
+    const byPn = (pn: string) => cadets.find((x: { personalNumber: string }) => x.personalNumber === pn);
+    expect(byPn('9335581')).toMatchObject({ firstName: 'איתן משה', lastName: 'שפיגלר', teamName: 'צוות 2 - גיורא' });
+    expect(byPn('9397319')).toMatchObject({ firstName: 'יהב', lastName: 'גור אריה', teamName: 'צוות 1 - אלון' });
+    // the same list again: everyone with a personal number is already there
+    expect((await c.cmd.post('/api/cadets/import', { text: text.split('\n').slice(0, 3).join('\n') })).body).toEqual({ imported: 0, skipped: 2 });
+    expect((await c.cmd.get('/api/teams')).body.map((t: { name: string; cadetCount: number }) => [t.name, t.cadetCount])).toEqual([
+      ['צוות 2 - גיורא', 2],
+      ['צוות 1 - אלון', 1],
+    ]);
+  });
+
   it('imports a pasted list and creates missing teams', async () => {
     const res = await c.cmd.post('/api/cadets/import', { text: 'שם, מספר אישי, טלפון, צוות\nיואב בר\t1234567\t050-1\tצוות 3\nשירה טל, 7654321, , צוות 3\n\n' });
     expect(res.body.imported).toBe(2);

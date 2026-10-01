@@ -255,8 +255,8 @@ function ImportCadets({ teams, onClose }: { teams: Team[]; onClose: () => void }
   const submit = async () => {
     setError(null);
     try {
-      const r = await api.post<{ imported: number }>('/api/cadets/import', { text, teamId: teamId ? Number(teamId) : null });
-      toast({ title: `יובאו ${r.imported} צוערים`, tone: 'green' });
+      const r = await api.post<{ imported: number; skipped: number }>('/api/cadets/import', { text, teamId: teamId ? Number(teamId) : null });
+      toast({ title: `יובאו ${r.imported} צוערים${r.skipped ? ` (${r.skipped} כבר היו ברשימה ודולגו)` : ''}`, tone: 'green' });
       emitLocalChange('cadets');
       onClose();
     } catch (e) {
@@ -281,11 +281,11 @@ function ImportCadets({ teams, onClose }: { teams: Team[]; onClose: () => void }
     >
       <div className="col gap-16">
         <div className="info-box">
-          הדביקו רשימה מאקסל או כתבו שורה לכל צוער: <b>שם מלא, מספר אישי, טלפון, צוות</b>. רק השם חובה. צוותים שלא קיימים ייווצרו אוטומטית.
+          הדביקו רשימה מאקסל או כתבו שורה לכל צוער: <b>שם מלא, מספר אישי, טלפון, צוות</b>. רק השם חובה. אפשר להדביק גם עם שורת כותרות (למשל "שם פרטי", "שם משפחה", "מספר אישי", "צוות") - העמודות יזוהו לפי הכותרות. צוותים שלא קיימים ייווצרו אוטומטית, וצוער שהמספר האישי שלו כבר ברשימה לא ייווסף שוב.
         </div>
         <Field label="שיוך כל הרשימה לצוות (לא חובה)">
           <select className="select" value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ maxWidth: 260 }}>
-            <option value="">לפי העמודה הרביעית ברשימה</option>
+            <option value="">לפי עמודת הצוות ברשימה</option>
             {teams.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
