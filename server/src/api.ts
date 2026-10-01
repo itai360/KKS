@@ -24,7 +24,7 @@ import {
   verifyPassword,
   type UserRow,
 } from './auth';
-import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, tz, updateSettings } from './core';
+import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { db } from './db';
 import { changed, logActivity, toNotification } from './journal';
 import { activeMeeting, endMeeting, getMeeting, listMeetings, startMeeting, updateMeeting } from './meetings';
@@ -206,7 +206,7 @@ export function apiRouter(): Router {
     const uid = id(req.params.id);
     const cur = getUserRow(uid);
     if (!cur) throw notFound('המשתמש לא נמצא');
-    const p = userSchema.partial().extend({ active: z.boolean().optional() }).parse(req.body);
+    const p = patchSchema(userSchema).extend({ active: z.boolean().optional() }).parse(req.body);
     const willBeCommander = (p.role ?? cur.role) === 'commander' && (p.active ?? !!cur.active);
     if (cur.role === 'commander' && cur.active && !willBeCommander) {
       const others = db().get<{ n: number }>("SELECT count(*) AS n FROM users WHERE role = 'commander' AND active = 1 AND id <> ?", uid)!.n;

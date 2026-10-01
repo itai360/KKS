@@ -1,7 +1,7 @@
 // Section 3 - a very simple entry screen. On a fresh install it becomes the
 // course set-up screen that creates the commander account (section 36).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { ErrorBox, Field } from '../components/ui';
 import { Icon } from '../components/Icon';
@@ -10,6 +10,43 @@ interface Info {
   courseName: string;
   courseSymbol: string;
   needsSetup: boolean;
+  googleClientId: string | null;
+}
+
+interface GoogleIdApi {
+  accounts: {
+    id: {
+      initialize: (o: { client_id: string; callback: (r: { credential: string }) => void; ux_mode?: string }) => void;
+      renderButton: (el: HTMLElement, o: Record<string, unknown>) => void;
+    };
+  };
+}
+
+/** Section 3: optional "sign in with Google", rendered by Google's own button. */
+function GoogleButton({ clientId, onLogin, onError }: { clientId: string; onLogin: () => void; onError: (m: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const render = () => {
+      const g = (window as unknown as { google?: GoogleIdApi }).google;
+      if (!g || !ref.current) return;
+      g.accounts.id.initialize({
+        client_id: clientId,
+        callback: (r) =>
+          void api
+            .post('/api/auth/google', { credential: r.credential })
+            .then(onLogin)
+            .catch((e: Error) => onError(e.message)),
+      });
+      g.accounts.id.renderButton(ref.current, { theme: 'outline', size: 'large', text: 'signin_with', locale: 'he', width: 380, shape: 'rectangular' });
+    };
+    if ((window as unknown as { google?: GoogleIdApi }).google) return render();
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = render;
+    document.head.appendChild(script);
+  }, [clientId, onLogin, onError]);
+  return <div ref={ref} style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }} />;
 }
 
 export function LoginPage({ onLogin }: { onLogin: () => void }) {
@@ -26,7 +63,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
     api
       .get<Info>('/api/public/info')
       .then(setInfo)
-      .catch(() => setInfo({ courseName: 'קורס קק"ס', courseSymbol: 'קק"ס', needsSetup: false }));
+      .catch(() => setInfo({ courseName: 'קורס קק"ס', courseSymbol: 'קק"ס', needsSetup: false, googleClientId: null }));
   }, []);
 
   const submit = async (e: React.FormEvent) => {
@@ -105,6 +142,14 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
           <button className="btn btn-primary btn-lg btn-block" disabled={busy || !info}>
             {setup ? 'הקם את הקורס' : 'כניסה'} <Icon name="chevronLeft" />
           </button>
+          {!setup && info?.googleClientId && (
+            <>
+              <div className="row small muted" style={{ justifyContent: 'center' }}>
+                או
+              </div>
+              <GoogleButton clientId={info.googleClientId} onLogin={onLogin} onError={setError} />
+            </>
+          )}
         </form>
       </div>
     </div>

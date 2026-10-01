@@ -6,10 +6,12 @@ import { addDays, DAY, isDateKey, zonedIso } from '../../shared/dates';
 import { readinessPct } from '../../shared/taskLogic';
 import type { CloseCheck, DomainReadiness, Lesson, Week, WeekDetail } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
-import { badRequest, clock, forbidden, getSettings, notFound, nowIso, tz, updateSettings } from './core';
+import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
 import { listEvents } from './schedule';
+import { listExperiences } from './cadets';
+import { listDebriefs } from './debriefs';
 import { isCommander, mustTaskRow, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime } from './taskService';
 import { applyTemplate, listTemplates } from './templates';
@@ -154,7 +156,7 @@ function notifyLead(actor: UserRow, weekId: number, leadId: number, name: string
 export function updateWeek(actor: UserRow, id: number, raw: Partial<z.input<typeof weekSchema>>): void {
   const cur = getWeek(id);
   if (!canManage(actor, cur)) throw forbidden();
-  const patch = weekSchema.partial().parse(raw);
+  const patch = patchSchema(weekSchema).parse(raw);
   // The lead may update goals/topic; dates, name and lead belong to the commander.
   if (!isCommander(actor) && (patch.startDate || patch.endDate || patch.leadId !== undefined || patch.name || patch.number !== undefined)) {
     throw forbidden('רק מפקד הקורס יכול לשנות תאריכים, שם ומפק"צ אחראי');
@@ -266,6 +268,8 @@ export function weekDetail(actor: UserRow, id: number): WeekDetail {
       .all<{ template_id: number }>('SELECT template_id FROM week_templates WHERE week_id = ?', id)
       .map((r) => r.template_id),
     nextWeek: next ? { id: next.id, name: next.name, startDate: next.startDate } : null,
+    debriefs: listDebriefs(actor, { weekId: id }),
+    experiences: listExperiences(actor, { weekId: id }),
   };
 }
 

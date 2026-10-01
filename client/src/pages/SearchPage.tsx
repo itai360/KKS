@@ -24,13 +24,13 @@ export function SearchPage() {
   }, [text, q, setParams]);
   const { data, loading } = useApi<SearchResults>(q.trim().length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null, ['tasks', 'weeks', 'events']);
   const domainHits = q ? settings.domains.filter((d) => d.includes(q)) : [];
-  const total = data ? data.tasks.length + data.users.length + data.weeks.length + data.events.length : 0;
+  const total = data ? data.tasks.length + data.users.length + data.weeks.length + data.events.length + data.cadets.length + data.debriefs.length + data.documents.length : 0;
 
   return (
     <div className="page narrow">
       <PageHead title="חיפוש" />
       <div className="nl-box mb-12">
-        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="משימה, איש סגל, שבוע, תחום או מילת מפתח" autoFocus aria-label="חיפוש" />
+        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="משימה, איש סגל, צוער, שבוע, תחקיר, מסמך או מילת מפתח" autoFocus aria-label="חיפוש" />
         <span className="btn btn-sm btn-ghost" style={{ pointerEvents: 'none' }}>
           <Icon name="search" />
         </span>
@@ -89,6 +89,44 @@ export function SearchPage() {
                     <Link key={e.id} to={`/schedule?date=${e.date}&event=${e.id}`} className="chip">
                       <Icon name="calendar" size={14} /> {e.title} · {shortDate(e.date)} {e.startTime}
                     </Link>
+                  ))}
+                </div>
+              </>
+            )}
+            {data.cadets.length > 0 && (
+              <>
+                <GroupTitle title="צוערים" count={data.cadets.length} />
+                <div className="chips">
+                  {data.cadets.map((c) => (
+                    <Link key={c.id} to={`/cadets/${c.id}`} className="chip">
+                      <Icon name="shield" size={14} /> {c.fullName}
+                      {c.teamName && <span className="muted"> · {c.teamName}</span>}
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+            {data.debriefs.length > 0 && (
+              <>
+                <GroupTitle title="תחקירים" count={data.debriefs.length} />
+                <div className="chips">
+                  {data.debriefs.map((d) => (
+                    <Link key={d.id} to={`/debriefs/${d.id}`} className="chip">
+                      <Icon name="lightbulb" size={14} /> {d.title} · {shortDate(d.occurredOn)}
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+            {data.documents.length > 0 && (
+              <>
+                <GroupTitle title="מסמכים" count={data.documents.length} />
+                <div className="chips">
+                  {data.documents.map((d) => (
+                    <a key={d.id} href={d.url} target="_blank" rel="noreferrer noopener" className="chip">
+                      <Icon name={d.kind === 'file' ? 'file' : 'link'} size={14} /> {d.title}
+                      <span className="muted"> · {d.category}</span>
+                    </a>
                   ))}
                 </div>
               </>

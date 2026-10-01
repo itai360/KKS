@@ -13,6 +13,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { GenerateWeeks } from './WeeksPage';
+import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupported } from '../lib/push';
 
 export function SettingsPage() {
   const { isCommander } = useSession();
@@ -27,6 +28,7 @@ export function SettingsPage() {
             <StaffCard />
             <DomainsCard />
             <PermissionsCard />
+            <BackupCard />
           </>
         )}
         <BrowserNotificationsCard />
@@ -218,13 +220,14 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>(user?.role ?? 'staff');
   const [phone, setPhone] = useState(user?.phone ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
   const [active, setActive] = useState(user?.active ?? true);
   const [error, setError] = useState<string | null>(null);
   const save = async () => {
     setError(null);
     try {
-      if (user) await api.patch(`/api/users/${user.id}`, { displayName, title, username, role, phone, active, ...(password ? { password } : {}) });
-      else await api.post('/api/users', { displayName, title, username, password, role, phone });
+      if (user) await api.patch(`/api/users/${user.id}`, { displayName, title, username, role, phone, email, active, ...(password ? { password } : {}) });
+      else await api.post('/api/users', { displayName, title, username, password, role, phone, email });
       toast({ title: user ? 'המשתמש עודכן' : 'המשתמש נוסף', body: user ? undefined : `שם משתמש: ${username}`, tone: 'green' });
       emitLocalChange('users');
       onClose();
@@ -262,6 +265,9 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
         </Field>
         <Field label="טלפון">
           <input className="input" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Field label="מייל" hint="לכניסה עם חשבון Google (אם הופעלה)">
+          <input className="input" dir="ltr" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="הרשאה">
           <Seg value={role} onChange={setRole} options={[{ value: 'staff', label: 'איש סגל' }, { value: 'commander', label: 'מפקד הקורס' }]} />
@@ -373,29 +379,79 @@ function PermissionsCard() {
 }
 
 function BrowserNotificationsCard() {
-  const supported = typeof window !== 'undefined' && 'Notification' in window;
-  const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>(supported ? Notification.permission : 'unsupported');
+  const toast = useToast();
+  const supported = pushSupported();
+  const [state, setState] = useState<'loading' | 'on' | 'off' | 'denied'>('loading');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!supported) return;
+    void currentSubscription().then((sub) => setState(Notification.permission === 'denied' ? 'denied' : sub ? 'on' : 'off'));
+  }, [supported]);
+  const act = async (fn: () => Promise<unknown>, ok: string, next: typeof state) => {
+    setBusy(true);
+    try {
+      await fn();
+      setState(next);
+      toast({ title: ok, tone: 'green' });
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+      if (Notification.permission === 'denied') setState('denied');
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="card">
       <div className="card-head">
         <Icon name="bell" />
-        <h3 className="grow">התראות בדפדפן</h3>
+        <h3 className="grow">התראות לטלפון ולמחשב</h3>
+        {state === 'on' && <span className="badge t-green">פעיל במכשיר הזה</span>}
+      </div>
+      <div className="card-body col gap-6">
+        <p className="small">
+          התראה תגיע גם כשהאפליקציה סגורה: משימה חדשה, תזכורות לפני דד-ליין, איחורים, חסמים ובקשות שמחכות לך. עדכוני מידע נשארים בתוך המערכת.
+        </p>
+        {!supported ? (
+          <p className="small muted">הדפדפן הזה לא תומך בהתראות. התראות ימשיכו להופיע בתוך המערכת.</p>
+        ) : needsHomeScreen() ? (
+          <div className="info-box">באייפון: פתחו את האתר בספארי, לחצו על כפתור השיתוף ואז "הוסף למסך הבית". פתחו את האפליקציה מהמסך הראשי והפעילו כאן את ההתראות.</div>
+        ) : state === 'denied' ? (
+          <p className="small text-red">ההתראות חסומות בדפדפן. אפשרו אותן בהגדרות האתר (סמל המנעול ליד הכתובת) ונסו שוב.</p>
+        ) : (
+          <div className="row wrap gap-6">
+            {state !== 'on' ? (
+              <button className="btn btn-primary" disabled={busy || state === 'loading'} onClick={() => void act(enablePush, 'ההתראות הופעלו במכשיר הזה', 'on')}>
+                הפעל התראות במכשיר הזה
+              </button>
+            ) : (
+              <>
+                <button className="btn" disabled={busy} onClick={() => void act(() => api.post('/api/push/test'), 'נשלחה התראת בדיקה', 'on')}>
+                  שלח התראת בדיקה
+                </button>
+                <button className="btn btn-ghost" disabled={busy} onClick={() => void act(disablePush, 'ההתראות כובו במכשיר הזה', 'off')}>
+                  כבה במכשיר הזה
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BackupCard() {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="history" />
+        <h3 className="grow">גיבוי</h3>
       </div>
       <div className="card-body row wrap">
-        <p className="small grow">
-          {perm === 'granted'
-            ? 'פעיל: כשהמערכת פתוחה ברקע תקבל התראת מערכת על משימות חדשות, חריגות ובקשות.'
-            : perm === 'denied'
-              ? 'ההתראות חסומות בדפדפן. ניתן לאפשר אותן בהגדרות האתר בדפדפן.'
-              : perm === 'unsupported'
-                ? 'הדפדפן הזה לא תומך בהתראות. התראות ימשיכו להופיע בתוך המערכת.'
-                : 'קבל התראת מערכת גם כשהמערכת פתוחה בלשונית אחרת.'}
-        </p>
-        {perm === 'default' && (
-          <button className="btn" onClick={() => void Notification.requestPermission().then(setPerm)}>
-            הפעל התראות
-          </button>
-        )}
+        <p className="small grow">הורדת עותק מלא ועקבי של מסד הנתונים (משימות, שבועות, לו"ז, צוערים, תחקירים). מומלץ לגבות בסוף כל שבוע. קבצים מצורפים נשמרים בתיקיית uploads בשרת.</p>
+        <a className="btn" href="/api/admin/backup" download>
+          <Icon name="download" /> הורד גיבוי
+        </a>
       </div>
     </div>
   );

@@ -4,6 +4,10 @@ import { NewTaskProvider } from './components/NewTask';
 import { ToastProvider } from './components/Toasts';
 import { SessionGate, useSession } from './lib/session';
 import { BriefingPage } from './pages/BriefingPage';
+import { CadetPage, CadetsPage } from './pages/CadetsPage';
+import { DebriefPage, DebriefsPage } from './pages/DebriefsPage';
+import { DocumentsPage } from './pages/DocumentsPage';
+import { ExperiencesPage } from './pages/ExperiencesPage';
 import { CommandPage } from './pages/CommandPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
@@ -52,6 +56,12 @@ function AuthedRoutes() {
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/cadets" element={<CadetsPage />} />
+            <Route path="/cadets/:id" element={<CadetPage />} />
+            <Route path="/experiences" element={<ExperiencesPage />} />
+            <Route path="/debriefs" element={<DebriefsPage />} />
+            <Route path="/debriefs/:id" element={<DebriefPage />} />
+            <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/more" element={<MorePage />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

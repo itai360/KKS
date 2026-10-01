@@ -242,6 +242,7 @@ export interface EventDetail {
   event: ScheduleEvent;
   tasks: Task[];
   attachments: Attachment[];
+  debriefs: Debrief[];
 }
 
 export interface TemplateItem {
@@ -384,6 +385,8 @@ export interface WeekDetail {
   checklistTemplates: Template[];
   appliedTemplateIds: number[];
   nextWeek: Pick<Week, 'id' | 'name' | 'startDate'> | null;
+  debriefs: Debrief[];
+  experiences: Experience[];
 }
 
 export interface CloseCheck {
@@ -462,6 +465,9 @@ export interface SearchResults {
   users: User[];
   weeks: Week[];
   events: ScheduleEvent[];
+  cadets: Cadet[];
+  debriefs: Debrief[];
+  documents: CourseDocument[];
 }
 
 // ---------------- Version 3 (section 31) ----------------

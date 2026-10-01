@@ -24,6 +24,9 @@ import { listEvents } from './schedule';
 import { getTaskRow, isCommander, visibleTasks, canApprove } from './taskRepo';
 import { pendingRequestsFor } from './taskService';
 import { listWeeks, weekContaining } from './weeks';
+import { listCadets } from './cadets';
+import { listDebriefs } from './debriefs';
+import { listDocuments } from './documents';
 
 const ms = (iso: string) => Date.parse(iso);
 const byDeadline = (a: Task, b: Task) => ms(a.deadline) - ms(b.deadline);
@@ -396,7 +399,7 @@ export function dayEnd(actor: UserRow): DayEndData {
 
 export function search(actor: UserRow, q: string): SearchResults {
   const needle = q.trim().replace(/[״]/g, '"').toLowerCase();
-  if (needle.length < 2) return { tasks: [], users: [], weeks: [], events: [] };
+  if (needle.length < 2) return { tasks: [], users: [], weeks: [], events: [], cadets: [], debriefs: [], documents: [] };
   const has = (...fields: (string | null | undefined)[]) => fields.some((f) => f && f.replace(/[״]/g, '"').toLowerCase().includes(needle));
   const tasks = visibleTasks(actor)
     .filter((t) => has(t.title, t.description, t.domain, t.weekName, t.ownerName, t.eventTitle))
@@ -409,5 +412,8 @@ export function search(actor: UserRow, q: string): SearchResults {
   const weeks = listWeeks().filter((w) => has(w.name, w.topic, w.goals, w.leadName));
   const c = ctx();
   const events = listEvents(addDays(c.today, -120), addDays(c.today, 365)).filter((e) => has(e.title, e.location, e.notes, e.ownerName)).slice(0, 40);
-  return { tasks, users, weeks, events };
+  const cadets = listCadets(actor, { status: 'all' }).filter((x) => has(x.fullName, x.personalNumber, x.teamName)).slice(0, 40);
+  const debriefs = listDebriefs(actor).filter((d) => has(d.title, d.summary, d.eventTitle, d.participants)).slice(0, 30);
+  const documents = listDocuments(actor).filter((d) => has(d.title, d.description, d.category, d.fileName)).slice(0, 30);
+  return { tasks, users, weeks, events, cadets, debriefs, documents };
 }

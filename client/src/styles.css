@@ -2138,6 +2138,20 @@ p {
   background: var(--line-2);
 }
 
+.chart-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 14px));
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px -8px rgba(25, 28, 24, 0.35);
+  pointer-events: none;
+  z-index: 2;
+}
+
 .fade-in > * {
   animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }

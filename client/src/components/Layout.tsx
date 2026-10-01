@@ -45,6 +45,15 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         ],
       },
       {
+        title: 'צוערים ולקחים',
+        items: [
+          { to: '/cadets', label: 'צוערים', icon: 'shield' },
+          { to: '/experiences', label: 'התנסויות', icon: 'target' },
+          { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
+          { to: '/documents', label: 'מסמכים', icon: 'file' },
+        ],
+      },
+      {
         title: 'כלים',
         items: [
           { to: '/command', label: 'פקודות שלי', icon: 'zap' },
@@ -72,6 +81,15 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
         { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
         { to: `/requests`, label: 'הבקשות שלי', icon: 'inbox' },
+      ],
+    },
+    {
+      title: 'צוערים ולקחים',
+      items: [
+        { to: '/cadets', label: 'צוערים', icon: 'shield' },
+        { to: '/experiences', label: 'התנסויות', icon: 'target' },
+        { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
+        { to: '/documents', label: 'מסמכים', icon: 'file' },
       ],
     },
     {

@@ -5,11 +5,12 @@ import { isOpenStatus } from '../../shared/constants';
 import { isDateKey, shortDate, zonedToUtc } from '../../shared/dates';
 import type { EventDetail, ScheduleEvent, Task } from '../../shared/types';
 import { getUserRow, type UserRow } from './auth';
-import { badRequest, forbidden, notFound, nowIso, tz } from './core';
+import { badRequest, forbidden, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
 import { isCommander, queryTasks, toTask, visibleTasks } from './taskRepo';
 import { listAttachments, updateTask, weekForDate } from './taskService';
+import { listDebriefs } from './debriefs';
 
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -73,7 +74,12 @@ function eventRow(id: number): EventRow {
 
 export function eventDetail(actor: UserRow, id: number): EventDetail {
   const r = eventRow(id);
-  return { event: toEvent(r), tasks: visibleTasks(actor, 't.event_id = ?', id), attachments: listAttachments('a.event_id = ?', id) };
+  return {
+    event: toEvent(r),
+    tasks: visibleTasks(actor, 't.event_id = ?', id),
+    attachments: listAttachments('a.event_id = ?', id),
+    debriefs: listDebriefs(actor, { eventId: id }),
+  };
 }
 
 function weekLeadOn(dateKey: string): number | null {
@@ -133,7 +139,7 @@ export function createEvent(actor: UserRow, raw: z.input<typeof eventSchema>): n
 export function updateEvent(actor: UserRow, id: number, raw: Partial<z.input<typeof eventSchema>>): { affectedTasks: Task[]; deltaMinutes: number } {
   const cur = eventRow(id);
   if (!canManageEvent(actor, cur)) throw forbidden();
-  const patch = eventSchema.partial().parse(raw);
+  const patch = patchSchema(eventSchema).parse(raw);
   const next = {
     date: patch.date ?? cur.date,
     startTime: patch.startTime ?? cur.start_time,

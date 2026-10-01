@@ -2,7 +2,7 @@
 // 66-67 (schedule changes and cancellations ripple into tasks).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { addDays, shortDate, startOfWeek, weekdayName } from '@shared/dates';
 import type { EventDetail, ScheduleEvent, Task, Template } from '@shared/types';
 import { Icon } from '../components/Icon';
@@ -298,7 +298,8 @@ function ShiftTasks({ tasks, delta, id, onClose }: { tasks: Task[]; delta: numbe
 }
 
 function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void; onEdit: (e: ScheduleEvent) => void }) {
-  const { data, error } = useApi<EventDetail>(`/api/events/${id}`, ['events', 'tasks']);
+  const { data, error } = useApi<EventDetail>(`/api/events/${id}`, ['events', 'tasks', 'debriefs']);
+  const navigate = useNavigate();
   const { isCommander, user, weeks } = useSession();
   const newTask = useNewTask();
   const toast = useToast();
@@ -390,6 +391,27 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
             </button>
           </div>
           <TaskList tasks={data.tasks} empty={<p className="small muted">כל פעילות יכולה להפוך למרכז משימות: תיאום, מדריכים, רפואה, בטיחות, הסעות...</p>} />
+        </div>
+
+        <div>
+          <div className="row mb-12">
+            <h3 className="grow">תחקיר</h3>
+            <button className="btn btn-sm" onClick={() => navigate(`/debriefs?event=${e.id}`)}>
+              <Icon name="lightbulb" /> פתח תחקיר
+            </button>
+          </div>
+          {data.debriefs.length === 0 ? (
+            <p className="small muted">לאחר הפעילות - פתחו תחקיר: עובדות, ממצאים, מסקנות ולקחים שהופכים למשימות.</p>
+          ) : (
+            data.debriefs.map((d) => (
+              <Link key={d.id} to={`/debriefs/${d.id}`} className="row small" onClick={onClose}>
+                <Icon name="lightbulb" size={16} /> <b>{d.title}</b>
+                <span className="tiny muted">
+                  {d.itemCounts.lesson === 1 ? 'לקח אחד' : `${d.itemCounts.lesson} לקחים`} · {d.status === 'final' ? 'סוכם' : 'טיוטה'}
+                </span>
+              </Link>
+            ))
+          )}
         </div>
 
         <div>

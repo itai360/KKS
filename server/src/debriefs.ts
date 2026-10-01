@@ -7,7 +7,7 @@ import { DEBRIEF_ITEM_KINDS, PRIORITIES, isOpenStatus, type DebriefItemKind, typ
 import { isDateKey } from '../../shared/dates';
 import type { Debrief, DebriefDetail, DebriefItem } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
-import { badRequest, forbidden, notFound, nowIso } from './core';
+import { badRequest, forbidden, notFound, nowIso, patchSchema } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
 import { recurringSchema, saveRule } from './recurring';
@@ -132,7 +132,7 @@ export function createDebrief(actor: UserRow, raw: z.input<typeof debriefSchema>
 export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<typeof debriefSchema>> & { status?: 'draft' | 'final' }): void {
   const cur = debriefRow(id);
   if (!canEditDebrief(actor, cur)) throw forbidden();
-  const p = debriefSchema.partial().extend({ status: z.enum(['draft', 'final']).optional() }).parse(raw);
+  const p = patchSchema(debriefSchema).extend({ status: z.enum(['draft', 'final']).optional() }).parse(raw);
   const occurredOn = p.occurredOn ?? cur.occurred_on;
   db().tx(() => {
     db().run(

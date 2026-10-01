@@ -243,6 +243,30 @@ function Details({ task: t }: { task: Task }) {
           <dd>{t.domain || '-'}</dd>
           <dt>שבוע</dt>
           <dd>{t.weekId ? <Link to={`/weeks/${t.weekId}`}>{t.weekName}</Link> : '-'}</dd>
+          {t.cadetId && (
+            <>
+              <dt>צוער</dt>
+              <dd>
+                <Link to={`/cadets/${t.cadetId}`}>{t.cadetName}</Link>
+              </dd>
+            </>
+          )}
+          {t.debriefId && (
+            <>
+              <dt>תחקיר</dt>
+              <dd>
+                <Link to={`/debriefs/${t.debriefId}`}>{t.debriefTitle}</Link>
+              </dd>
+            </>
+          )}
+          {t.experienceId && (
+            <>
+              <dt>התנסות</dt>
+              <dd>
+                <Link to="/experiences">משוב התנסות</Link>
+              </dd>
+            </>
+          )}
           {t.eventId && (
             <>
               <dt>פעילות בלו"ז</dt>

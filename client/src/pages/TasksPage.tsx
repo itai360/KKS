@@ -11,6 +11,7 @@ import { canQuickUpdate, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, PageHead, Seg } from '../components/ui';
 import { api, qs } from '../lib/api';
+import { fmtDateTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
@@ -85,6 +86,9 @@ export function TasksPage() {
                 { value: 'board', label: 'לוח', icon: 'board' },
               ]}
             />
+            <button className="btn hide-mobile" onClick={() => data && exportCsv(data)} disabled={!data?.length} title="ייצוא הרשימה המסוננת לאקסל">
+              <Icon name="download" /> אקסל
+            </button>
             <button className="btn btn-primary" onClick={() => newTask({ weekId: f.week ? Number(f.week) : undefined })}>
               <Icon name="plus" /> משימה
             </button>
@@ -320,4 +324,32 @@ function Board({ tasks }: { tasks: Task[] }) {
       })}
     </div>
   );
+}
+
+/** Excel opens UTF-8 CSV correctly (Hebrew included) when it starts with a BOM. */
+function exportCsv(tasks: Task[]) {
+  const cell = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [
+    ['משימה', 'אחראי', 'משתתפים', 'יצר', 'תחום', 'שבוע', 'דד-ליין', 'עדיפות', 'סטטוס', 'באיחור', 'הושלמה'],
+    ...tasks.map((t) => [
+      t.title,
+      t.ownerName,
+      t.participantIds.length,
+      t.createdByName,
+      t.domain,
+      t.weekName ?? '',
+      fmtDateTime(t.deadline),
+      PRIORITY_LABELS[t.priority],
+      STATUS_LABELS[t.status],
+      t.overdue ? 'כן' : '',
+      t.completedAt ? fmtDateTime(t.completedAt) : '',
+    ]),
+  ];
+  const csv = '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `משימות-${todayKey()}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

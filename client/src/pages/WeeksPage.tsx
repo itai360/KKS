@@ -428,6 +428,41 @@ export function WeekPage() {
                 </Link>
               ))}
           </div>
+          <div className="card">
+            <div className="card-head">
+              <Icon name="lightbulb" />
+              <h3 className="grow">תחקירים</h3>
+              <Link to="/debriefs?new=1" className="btn btn-ghost btn-sm">
+                <Icon name="plus" /> תחקיר
+              </Link>
+            </div>
+            {data.debriefs.length === 0 && <div className="card-body small muted">לא נפתחו תחקירים בשבוע זה.</div>}
+            {data.debriefs.map((d) => (
+              <Link key={d.id} to={`/debriefs/${d.id}`} className="health">
+                <span className="grow small strong">{d.title}</span>
+                <span className="tiny muted">{d.itemCounts.lesson === 1 ? 'לקח אחד' : `${d.itemCounts.lesson} לקחים`}</span>
+                {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks}</span>}
+              </Link>
+            ))}
+          </div>
+          {data.experiences.length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <Icon name="target" />
+                <h3 className="grow">התנסויות בשבוע</h3>
+                <span className="mono tiny muted">{data.experiences.length}</span>
+              </div>
+              {data.experiences.map((x) => (
+                <Link key={x.id} to={`/cadets/${x.cadetId}`} className="health">
+                  <span className="grow small">
+                    <b>{x.cadetName}</b> · {x.role}
+                  </span>
+                  <span className="tiny muted">{x.mentorName ?? ''}</span>
+                  {x.status === 'done' ? <span className="badge t-green">הושלמה</span> : <span className="badge">{shortDate(x.startDate)}</span>}
+                </Link>
+              ))}
+            </div>
+          )}
           <Lessons detail={data} />
         </div>
       </div>
@@ -671,7 +706,7 @@ function CloseWeek({ detail, onClose }: { detail: WeekDetail; onClose: () => voi
         { ok: check.overdue.length === 0, text: check.overdue.length ? `${check.overdue.length} משימות באיחור` : 'אין משימות באיחור' },
         { ok: check.open.length === 0, text: check.open.length ? `${check.open.length} משימות פתוחות` : 'אין משימות פתוחות' },
         { ok: check.blocked.length === 0, text: check.blocked.length ? `${check.blocked.length} חסמים פתוחים` : 'אין חסמים' },
-        { ok: check.lessonsCount > 0, text: check.lessonsCount ? `הוזנו ${check.lessonsCount} לקחים` : 'עדיין לא הוזנו לקחים' },
+        { ok: check.lessonsCount > 0, text: check.lessonsCount ? check.lessonsCount === 1 ? 'הוזן לקח אחד' : `הוזנו ${check.lessonsCount} לקחים` : 'עדיין לא הוזנו לקחים' },
         { ok: !!check.nextWeek, text: check.nextWeek ? `משימות להמשך יועברו ל${check.nextWeek.name}` : 'אין שבוע הבא מוגדר' },
       ]
     : [];

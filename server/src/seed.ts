@@ -16,6 +16,9 @@ import { createEvent } from './schedule';
 import { addDependency, addUpdate, createRequest, createTasks, respondOverdue, transition } from './taskService';
 import { saveTemplate, applyTemplate } from './templates';
 import { addLesson, approveWeek, closeWeek, generateWeeks, openWeek } from './weeks';
+import { addRecord, createExperience, giveFeedback, saveTeam } from './cadets';
+import { addItem, createDebrief, itemToTask, updateDebrief } from './debriefs';
+import { createLinkDocument } from './documents';
 
 const PASSWORD = process.env.SEED_PASSWORD ?? 'kks12345';
 const dbPath = join(config.dataDir, 'kks.db');
@@ -318,6 +321,97 @@ at(d(-2, '20:00'), () => endMeeting(cmd, meeting));
 
 // apply the activity template to the exercise for a realistic event page
 at(d(-6, '14:00'), () => applyTemplate(cmd, db().get<{ id: number }>("SELECT id FROM templates WHERE kind = 'activity'")!.id, { eventId: exercise, itemIndexes: [1, 2, 4, 6] }));
+
+// ---------------- version 3: teams, cadets, experiences, debriefs, documents ----------------
+const teamIds = at(d(-20, '11:00'), () =>
+  [ids.s1, ids.s2, ids.s3, ids.s4].map((cmdr, i) => saveTeam(cmd, { name: `צוות ${i + 1}`, commanderId: cmdr })),
+);
+const names = [
+  ['דניאל', 'כהן'], ['מאיה', 'לוי'], ['יונתן', 'מזרחי'], ['נועה', 'פרידמן'], ['איתי', 'אברהם'], ['שירה', 'גולן'],
+  ['עומר', 'ביטון'], ['תמר', 'שפירא'], ['אורי', 'דהן'], ['רוני', 'אזולאי'], ['אלון', 'ברגר'], ['ליה', 'חדד'],
+  ['גיא', 'וקנין'], ['הילה', 'רוזנברג'], ['עידו', 'פרץ'], ['יעל', 'נחום'], ['אביב', 'שטרן'], ['מיכל', 'אוחנה'],
+  ['רועי', 'קפלן'], ['נוי', 'סעדה'], ['טל', 'יוסף'], ['אדם', 'גבאי'], ['ענבר', 'לנדאו'], ['בן', 'אלמוג'],
+];
+const cadetIds = names.map(([first, last], i) => {
+  const at0 = nowFor(-19);
+  clock.set(new Date(at0));
+  const id = db().run(
+    'INSERT INTO cadets(first_name, last_name, personal_number, team_id, phone, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    first, last, String(8_200_100 + i * 37), teamIds[i % 4], `05${(i % 9) + 1}-${String(2_000_000 + i * 4111).slice(0, 7)}`, i === 23 ? 'dropped' : 'active', at0, at0,
+  ).id;
+  clock.set(null);
+  return id;
+});
+function nowFor(offset: number) {
+  return d(offset, '12:00');
+}
+// evaluations over the course - development tracking
+const criteria = ['פיקוד והובלה', 'מקצועיות', 'ערכים ודוגמה אישית', 'עבודת צוות', 'יוזמה'];
+cadetIds.slice(0, 16).forEach((cid, i) => {
+  const lead = u([ids.s1, ids.s2, ids.s3, ids.s4][i % 4]);
+  const base = 2 + (i % 3);
+  [-14, -9, -4, -1].forEach((off, k) => {
+    const score = Math.max(1, Math.min(5, base + (k >= 2 ? 1 : 0) - (i % 5 === 0 && k === 1 ? 1 : 0)));
+    at(d(off, '19:00'), () => addRecord(lead, cid, { kind: 'evaluation', category: criteria[(i + k) % criteria.length], score, body: k === 3 ? 'שיפור ניכר בהובלת הכיתה בשטח' : 'הערכה שבועית', occurredOn: addDays(today, off) }));
+  });
+});
+// personal talks, discipline and notes
+at(d(-13, '20:00'), () => addRecord(u(ids.s1), cadetIds[0], { kind: 'talk', category: 'שיחת היכרות', body: 'מגיע ממשפחה תומכת, מוטיבציה גבוהה מאוד. רוצה לפקד על צוות בתרגיל המסכם.', followUp: 'לתת לו הובלה בשבוע השטח' }));
+at(d(-6, '21:00'), () =>
+  addRecord(u(ids.s2), cadetIds[1], {
+    kind: 'talk',
+    category: 'שיחת אמצע',
+    body: 'מרגישה עומס בשבוע האחרון, קושי בשינה. סיכמנו על תוכנית קצרה.',
+    followUp: 'שיחה חוזרת בעוד שבוע, עדכון מפקד הקורס',
+    followUpTask: { title: 'שיחה חוזרת עם מאיה לוי', deadline: d(1, '20:00') },
+  }),
+);
+at(d(-3, '08:30'), () => addRecord(u(ids.s3), cadetIds[2], { kind: 'discipline', category: 'קלה', body: 'איחור של 10 דקות למסדר בוקר. שיחת בירור ואזהרה.' }));
+at(d(-2, '22:00'), () => addRecord(u(ids.s3), cadetIds[6], { kind: 'discipline', category: 'בינונית', body: 'שימוש בטלפון בזמן שיעור לאחר אזהרה. ריתוק לסוף השבוע.' }));
+at(d(-1, '17:00'), () => addRecord(u(ids.s4), cadetIds[3], { kind: 'note', body: 'בלטה בתדריך הבטיחות - שאלות חכמות והכנה מעולה.' }));
+at(d(-1, '18:00'), () => addRecord(u(ids.s5), cadetIds[0], { kind: 'note', body: 'עזר לצוער אחר עם הציוד בניווט בלי שהתבקש.' }));
+
+// experiences: done with feedback, running now, planned for attack week, awaiting feedback
+const exps: [number, string, number, number, number, string][] = [
+  [cadetIds[0], 'מ"כ בתרגיל כיתה', -8, -7, ids.s2, 'קבלת החלטות, מתן פקודות'],
+  [cadetIds[4], 'סמל תורן', -3, -1, ids.s1, 'סדר יום, אחריות על הצוות'],
+  [cadetIds[1], 'מ"מ בתרגיל מחלקה', 0, 0, ids.s3, 'שליטה בקשר, הובלה תחת לחץ'],
+  [cadetIds[8], 'מ"מ בתרגיל התקפה', 11, 11, ids.s2, 'תכנון התקפה, ניהול אש'],
+  [cadetIds[5], 'סמ"פ בשבוע התקפה', 7, 10, ids.s4, 'ניהול לוגיסטיקה ולו"ז מחלקתי'],
+];
+const expIds = exps.map(([cid, role, s0, e0, mentor, goals]) =>
+  at(d(-10, '10:00'), () => createExperience(cmd, { cadetId: cid, role, startDate: addDays(today, s0), endDate: addDays(today, e0), mentorId: mentor, goals })),
+);
+at(d(-7, '20:00'), () => giveFeedback(u(ids.s2), expIds[0], { strengths: 'החלטיות, קול פיקודי ברור', improvements: 'לשתף את הסגנים בתכנון', feedback: 'התנסות מוצלחת מאוד', score: 4 }));
+
+// debriefs (section 57)
+const range0 = db().get<{ id: number }>("SELECT id FROM events WHERE title = 'תרגיל כיתה בשטח' ORDER BY date LIMIT 1")?.id ?? null;
+const deb = at(d(-1, '19:30'), () => createDebrief(u(ids.s3), { title: 'תחקיר תרגיל כיתה בשטח', occurredOn: addDays(today, -1), eventId: range0, participants: 'סגל צוות 3, מדריכי שטח', summary: 'תרגיל כיתה בשטח הצפוני. התרגיל התחיל באיחור של 40 דקות בגלל המתנה למדריך ולהסעה.' }));
+const debItems: [string, string][] = [
+  ['fact', 'ההסעה הגיעה 25 דקות אחרי השעה שנקבעה'],
+  ['fact', 'מדריך השטח לא ידע על שינוי בשעת ההתחלה'],
+  ['finding', 'לא בוצע וידוא אחרון עם ההסעות והמדריך ערב לפני'],
+  ['finding', 'הצוערים ניצלו את זמן ההמתנה לחזרה על הפקודה - עבד טוב'],
+  ['conclusion', 'חסר תיאום מוקדם בין המדריך לבין מפק"צ השבוע'],
+  ['lesson', 'לקיים שיחת תיאום עם המדריך 48 שעות לפני כל פעילות'],
+  ['lesson', 'וידוא הסעות טלפוני ערב לפני כל יציאה לשטח'],
+];
+const itemIds = debItems.map(([kind, body]) => at(d(-1, '20:00'), () => addItem(u(ids.s3), deb, { kind: kind as 'fact', body })));
+at(d(-1, '20:15'), () => itemToTask(u(ids.s3), itemIds[6], { title: 'וידוא הסעות לתרגיל התקפה ערב לפני', ownerIds: [ids.s5], deadline: d(4, '20:00'), priority: 'high' }));
+at(d(-1, '20:20'), () => updateDebrief(u(ids.s3), deb, { status: 'final' }));
+at(d(-8, '18:00'), () => createDebrief(u(ids.s2), { title: 'תחקיר ניווט בסיסי', occurredOn: addDays(today, -8), summary: 'ניווט בסיסי ראשון. שתי חוליות טעו בנקודה 3.' }));
+
+// documents
+const docs: [string, string, string, string][] = [
+  ['נוהל בטיחות במטווחים', 'נהלים', 'https://drive.google.com/file/d/safety-range', 'גרסה מעודכנת לשנת 2026'],
+  ['פקודת הקורס', 'פקודות', 'https://drive.google.com/file/d/course-order', 'כולל לו"ז מסגרת וחלוקת אחריות'],
+  ['מצגת עקרונות ההתקפה', 'מצגות', 'https://docs.google.com/presentation/d/attack', 'לשיעור בשבוע התקפה'],
+  ['חוברת ניווט לצוער', 'חומרי הדרכה', 'https://drive.google.com/file/d/nav-booklet', ''],
+  ['טופס בקשת שטח אש', 'קישורים', 'https://forms.gle/firing-area', 'להגשה 10 ימים מראש'],
+];
+docs.forEach(([title, category, url, description], i) =>
+  at(d(-15 + i, '12:00'), () => createLinkDocument(i < 2 ? cmd : u(S[i % 5]), { title, category, url, description, pinned: i === 1, weekId: i === 2 ? weekIds[3] : null })),
+);
 
 // ---------------- let the automation catch up to "now" ----------------
 db().run('UPDATE notifications SET read_at = created_at WHERE created_at < ?', d(-1, '00:00'));

@@ -13,7 +13,7 @@ import {
 import { isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import type { Cadet, CadetDetail, CadetRecord, Experience, Team } from '../../shared/types';
 import { getUserRow, type UserRow } from './auth';
-import { badRequest, clock, forbidden, getSettings, notFound, nowIso, tz } from './core';
+import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
 import { isCommander, visibleTasks } from './taskRepo';
@@ -230,7 +230,7 @@ export function createCadet(actor: UserRow, raw: z.input<typeof cadetSchema>): n
 export function updateCadet(actor: UserRow, id: number, raw: Partial<z.input<typeof cadetSchema>>): void {
   const cur = cadetRow(id);
   if (!canManageCadet(actor, cur)) throw forbidden();
-  const p = cadetSchema.partial().parse(raw);
+  const p = patchSchema(cadetSchema).parse(raw);
   // moving a cadet between teams is the commander's call
   if (p.teamId !== undefined && p.teamId !== cur.team_id && !isCommander(actor)) throw forbidden('העברת צוער בין צוותים שמורה למפקד הקורס');
   if (p.teamId) teamCommander(p.teamId);

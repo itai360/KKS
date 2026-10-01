@@ -3,6 +3,7 @@
 import { DEFAULT_DOMAINS } from '../../shared/constants';
 import { DEFAULT_TZ } from '../../shared/dates';
 import type { CourseSettings } from '../../shared/types';
+import { z } from 'zod';
 import { db } from './db';
 
 // ---- clock (overridable in tests) ----
@@ -38,6 +39,19 @@ export class HttpError extends Error {
 export const badRequest = (m: string) => new HttpError(400, m);
 export const forbidden = (m = 'אין לך הרשאה לפעולה זו') => new HttpError(403, m);
 export const notFound = (m = 'לא נמצא') => new HttpError(404, m);
+
+// ---- validation ----
+type PatchShape<T extends z.ZodRawShape> = { [K in keyof T]: z.ZodOptional<T[K]> };
+/**
+ * The PATCH form of a create schema: every field optional and without its
+ * default. zod 4's .partial() still applies defaults, so a patch that leaves a
+ * field out would silently reset it (e.g. moving an event would wipe its notes).
+ */
+export function patchSchema<T extends z.ZodRawShape>(schema: z.ZodObject<T>): z.ZodObject<PatchShape<T>> {
+  const shape: Record<string, z.ZodType> = {};
+  for (const [k, v] of Object.entries(schema.shape)) shape[k] = ((v instanceof z.ZodDefault ? v.unwrap() : v) as z.ZodType).optional();
+  return z.object(shape) as unknown as z.ZodObject<PatchShape<T>>;
+}
 
 // ---- settings ----
 const DEFAULT_SETTINGS: CourseSettings = {

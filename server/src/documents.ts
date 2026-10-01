@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import type { CourseDocument } from '../../shared/types';
 import type { UserRow } from './auth';
-import { badRequest, config, forbidden, notFound, nowIso } from './core';
+import { badRequest, config, forbidden, notFound, nowIso, patchSchema } from './core';
 import { db } from './db';
 import { changed, logActivity } from './journal';
 import { isCommander } from './taskRepo';
@@ -151,7 +151,7 @@ export function createFileDocument(actor: UserRow, meta: unknown, file: { buf: B
 export function updateDocument(actor: UserRow, id: number, raw: unknown): void {
   const cur = documentRow(actor, id);
   if (!canEditDoc(actor, cur)) throw forbidden();
-  const p = metaSchema.partial().parse(raw);
+  const p = patchSchema(metaSchema).parse(raw);
   const next = {
     title: p.title ?? cur.title,
     category: p.category ?? cur.category,
