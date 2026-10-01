@@ -275,17 +275,41 @@ const IMPORT_HEADERS: [RegExp, 'first' | 'last' | 'full' | 'pn' | 'phone' | 'tea
 
 const cleanNumber = (s: string) => s.replace(/\.0+$/, '').trim(); // 9397319.0 from a spreadsheet
 
+/** A team name as written in a list, against the teams that exist: "אלון" finds "צוות 1 - אלון" and the other way round. */
+function findTeam(teams: Map<string, number>, name: string): number | null {
+  const exact = teams.get(name);
+  if (exact) return exact;
+  const parts = (n: string) => n.split(/\s+[-–]\s+/).map((p) => p.trim()).filter(Boolean);
+  const wanted = parts(name);
+  const hits = [...teams].filter(([t]) => parts(t).some((p) => wanted.includes(p)));
+  return hits.length === 1 ? hits[0][1] : null;
+}
+
+export interface ImportResult {
+  imported: number;
+  /** already listed, moved to the team in the list or given the personal number from it */
+  updated: number;
+  /** already listed as is */
+  skipped: number;
+}
+
 /**
  * Paste a list, one cadet per line. With a header row (e.g. "שם פרטי, שם משפחה,
  * מספר אישי, צוות") the columns are read by their titles; without one each line
  * is "full name [, personal number] [, phone] [, team]". Tabs, commas or
  * semicolons separate columns, so rows copied from Excel work. Teams that do not
- * exist are created; a cadet whose personal number is already listed is skipped.
+ * exist are created. A cadet already listed (same personal number, or the same
+ * name without a personal number) is not added again: they move to the team in
+ * the list and get its personal number and phone if they had none.
  */
-export function importCadets(actor: UserRow, raw: z.input<typeof importSchema>): { imported: number; skipped: number } {
+export function importCadets(actor: UserRow, raw: z.input<typeof importSchema>): ImportResult {
   const { text, teamId } = importSchema.parse(raw);
   const teams = new Map(listTeams().map((t) => [t.name.trim(), t.id]));
-  const known = new Set(db().all<{ pn: string }>("SELECT personal_number AS pn FROM cadets WHERE personal_number <> ''").map((r) => r.pn));
+  const existing = db().all<{ id: number; first_name: string; last_name: string; personal_number: string; phone: string; team_id: number | null }>(
+    'SELECT id, first_name, last_name, personal_number, phone, team_id FROM cadets',
+  );
+  const byPn = new Map(existing.filter((c) => c.personal_number).map((c) => [c.personal_number, c]));
+  const fullName = (first: string, last: string) => `${first} ${last}`.replace(/\s+/g, ' ').trim();
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   const split = (line: string) => line.split(/\t|;|,/).map((c) => c.trim());
 
@@ -299,8 +323,7 @@ export function importCadets(actor: UserRow, raw: z.input<typeof importSchema>):
     }
   }
 
-  let imported = 0;
-  let skipped = 0;
+  const result: ImportResult = { imported: 0, updated: 0, skipped: 0 };
   db().tx(() => {
     for (const line of lines) {
       const cols = split(line);
@@ -327,25 +350,42 @@ export function importCadets(actor: UserRow, raw: z.input<typeof importSchema>):
         teamName = cols[3] ?? '';
       }
       if (!first) continue;
-      if (pn && known.has(pn)) {
-        skipped++;
-        continue;
-      }
+
       let team = teamId ?? null;
       if (!team && teamName) {
-        team = teams.get(teamName) ?? null;
+        team = findTeam(teams, teamName);
         if (!team) {
           team = db().run('INSERT INTO teams(name, sort, created_at) VALUES (?, ?, ?)', teamName, teams.size + 1, nowIso()).id;
           teams.set(teamName, team);
         }
       }
-      createCadet(actor, { firstName: first, lastName: last, personalNumber: pn, phone, teamId: team });
-      if (pn) known.add(pn);
-      imported++;
+
+      const name = fullName(first, last);
+      const found = (pn && byPn.get(pn)) || existing.find((c) => !c.personal_number && fullName(c.first_name, c.last_name) === name);
+      if (found) {
+        const changes: string[] = [];
+        const values: (string | number | null)[] = [];
+        if (team && found.team_id !== team) changes.push('team_id = ?'), values.push(team);
+        if (pn && !found.personal_number) changes.push('personal_number = ?'), values.push(pn);
+        if (phone && !found.phone) changes.push('phone = ?'), values.push(phone);
+        if (changes.length) {
+          db().run(`UPDATE cadets SET ${changes.join(', ')}, updated_at = ? WHERE id = ?`, ...values, nowIso(), found.id);
+          Object.assign(found, { team_id: team ?? found.team_id, personal_number: found.personal_number || pn, phone: found.phone || phone });
+          if (pn) byPn.set(pn, found);
+          result.updated++;
+        } else result.skipped++;
+        continue;
+      }
+      const id = createCadet(actor, { firstName: first, lastName: last, personalNumber: pn, phone, teamId: team });
+      const created = { id, first_name: first, last_name: last, personal_number: pn, phone, team_id: team };
+      existing.push(created);
+      if (pn) byPn.set(pn, created);
+      result.imported++;
     }
-    logActivity({ userId: actor.id, action: 'cadets_import', text: `${actor.display_name} ייבא ${imported} צוערים` });
+    logActivity({ userId: actor.id, action: 'cadets_import', text: `${actor.display_name} ייבא רשימת צוערים: ${result.imported} חדשים, ${result.updated} עודכנו` });
   });
-  return { imported, skipped };
+  changed('cadets');
+  return result;
 }
 
 // ---------------- records ----------------

@@ -250,13 +250,33 @@ function ImportCadets({ teams, onClose }: { teams: Team[]; onClose: () => void }
   const toast = useToast();
   const [text, setText] = useState('');
   const [teamId, setTeamId] = useState('');
+  const [link, setLink] = useState('');
+  const [found, setFound] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lines = text.split('\n').filter((l) => l.trim()).length;
+
+  // a spreadsheet fills the box; nothing is saved until "ייבא"
+  const read = async (fn: () => Promise<{ text: string; sheet: string; cadets: number; teams: string[] }>) => {
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await fn();
+      setText(r.text);
+      setFound(`נמצאו ${r.cadets} צוערים${r.teams.length ? ` ב-${r.teams.length} צוותים (${r.teams.join(', ')})` : ''} בגיליון "${r.sheet}". בדקו את הרשימה ולחצו "ייבא".`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async () => {
     setError(null);
     try {
-      const r = await api.post<{ imported: number; skipped: number }>('/api/cadets/import', { text, teamId: teamId ? Number(teamId) : null });
-      toast({ title: `יובאו ${r.imported} צוערים${r.skipped ? ` (${r.skipped} כבר היו ברשימה ודולגו)` : ''}`, tone: 'green' });
+      const r = await api.post<{ imported: number; updated: number; skipped: number }>('/api/cadets/import', { text, teamId: teamId ? Number(teamId) : null });
+      const parts = [`${r.imported} חדשים`, r.updated && `${r.updated} עודכנו (צוות / מספר אישי)`, r.skipped && `${r.skipped} כבר היו ברשימה`].filter(Boolean);
+      toast({ title: `ייבוא הצוערים הסתיים: ${parts.join(', ')}`, tone: 'green' });
       emitLocalChange('cadets');
       onClose();
     } catch (e) {
@@ -270,8 +290,8 @@ function ImportCadets({ teams, onClose }: { teams: Team[]; onClose: () => void }
       wide
       footer={
         <>
-          <button className="btn btn-primary" onClick={() => void submit()} disabled={!lines}>
-            ייבא {lines || ''} שורות
+          <button className="btn btn-primary" onClick={() => void submit()} disabled={!lines || busy}>
+            ייבא {lines ? lines - (/שם/.test(text.split('\n')[0] ?? '') ? 1 : 0) : ''} שורות
           </button>
           <button className="btn btn-ghost" onClick={onClose}>
             ביטול
@@ -280,8 +300,28 @@ function ImportCadets({ teams, onClose }: { teams: Team[]; onClose: () => void }
       }
     >
       <div className="col gap-16">
+        <div className="row wrap gap-6">
+          <label className="btn">
+            <Icon name="upload" /> קובץ אקסל / CSV
+            <input
+              type="file"
+              accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) void read(() => api.upload('/api/cadets/import/file', f));
+              }}
+            />
+          </label>
+          <input className="input grow" dir="ltr" placeholder="או קישור ל-Google Sheets / Drive" value={link} onChange={(e) => setLink(e.target.value)} style={{ minWidth: 220 }} />
+          <button className="btn" disabled={busy || link.trim().length < 10} onClick={() => void read(() => api.post('/api/cadets/import/link', { url: link }))}>
+            {busy ? 'קורא...' : 'קריאה מהקישור'}
+          </button>
+        </div>
+        {found && <div className="info-box">{found}</div>}
         <div className="info-box">
-          הדביקו רשימה מאקסל או כתבו שורה לכל צוער: <b>שם מלא, מספר אישי, טלפון, צוות</b>. רק השם חובה. אפשר להדביק גם עם שורת כותרות (למשל "שם פרטי", "שם משפחה", "מספר אישי", "צוות") - העמודות יזוהו לפי הכותרות. צוותים שלא קיימים ייווצרו אוטומטית, וצוער שהמספר האישי שלו כבר ברשימה לא ייווסף שוב.
+          אפשר גם להדביק רשימה או לכתוב שורה לכל צוער: <b>שם מלא, מספר אישי, טלפון, צוות</b>. רק השם חובה. עם שורת כותרות (למשל "שם פרטי", "שם משפחה", "מספר אישי", "צוות") העמודות יזוהו לפי הכותרות. צוותים שלא קיימים ייווצרו. צוער שכבר ברשימה (לפי מספר אישי) לא ייווסף שוב - הוא יעבור לצוות שברשימה. קישור ל-Google צריך להיות משותף ל"כל מי שיש לו את הקישור".
         </div>
         <Field label="שיוך כל הרשימה לצוות (לא חובה)">
           <select className="select" value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ maxWidth: 260 }}>

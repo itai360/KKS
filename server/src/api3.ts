@@ -55,6 +55,7 @@ import {
 } from './evaluations';
 import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
 import { getFile, sendStoredFile, uploadName } from './files';
+import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { localDateKey } from '../../shared/dates';
 
@@ -91,6 +92,15 @@ export function v3Router(): Router {
   );
   r.post('/cadets', (req, res) => res.json(cadetDetail(me(req), createCadet(me(req), req.body))));
   r.post('/cadets/import', requireCommander, (req, res) => res.json(importCadets(me(req), req.body)));
+  // a spreadsheet becomes the text of the paste import, which the commander reviews before importing
+  r.post('/cadets/import/file', requireCommander, express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(cadetsFromSpreadsheet(req.body));
+  });
+  r.post('/cadets/import/link', requireCommander, async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    res.json(cadetsFromSpreadsheet(await downloadGoogleSheet(url, config.maxUploadMb * 1024 * 1024)));
+  });
   r.get('/cadets/:id', (req, res) => res.json(cadetDetail(me(req), id(req.params.id))));
   r.patch('/cadets/:id', (req, res) => {
     updateCadet(me(req), id(req.params.id), req.body);
