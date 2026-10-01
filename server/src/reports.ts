@@ -80,9 +80,26 @@ export function dashboard(actor: UserRow): DashboardData {
   const notable = (t: Task) => !t.recurringRuleId || PRIORITY_RANK[t.priority] >= PRIORITY_RANK.high;
   const attention: AttentionItem[] = [];
   const listed = new Set<number>();
+  // copies of one all-staff task (section 64) collapse into a single line per kind
+  const groupItems = new Map<string, { entry: AttentionItem; names: string[] }>();
   const push = (t: Task, item: Omit<AttentionItem, 'taskId' | 'ownerName' | 'deadline' | 'title'> & { title?: string }) => {
     if (listed.has(t.id)) return;
     listed.add(t.id);
+    if (t.groupId) {
+      const key = `${t.groupId}:${item.kind}`;
+      const existing = groupItems.get(key);
+      if (existing) {
+        const { entry, names } = existing;
+        names.push(t.ownerName);
+        entry.count = names.length;
+        entry.ownerName = names.length > 3 ? `${names.slice(0, 3).join(', ')} ועוד ${names.length - 3}` : names.join(', ');
+        return;
+      }
+      const entry: AttentionItem = { title: t.title, taskId: t.id, ownerName: t.ownerName, deadline: t.deadline, count: 1, ...item };
+      groupItems.set(key, { entry, names: [t.ownerName] });
+      attention.push(entry);
+      return;
+    }
     attention.push({ title: t.title, taskId: t.id, ownerName: t.ownerName, deadline: t.deadline, ...item });
   };
 
@@ -197,7 +214,7 @@ export function myTasks(actor: UserRow): MyTasksData & { teamTasks: Task[] } {
     waiting,
     recentDone,
     myWeeks: listWeeks('w.lead_id = ? AND w.end_date >= ?', actor.id, c.today),
-    teamTasks: visible.filter((t) => t.visibility === 'team' && !involves(t, actor.id) && isOpenStatus(t.status)).sort(byDeadline),
+    teamTasks: teamTasks(visible, mine, actor.id),
     stats: {
       today: today.length,
       overdue: overdue.length,
@@ -205,6 +222,21 @@ export function myTasks(actor: UserRow): MyTasksData & { teamTasks: Task[] } {
       doneToday: mine.filter((t) => t.status === 'done' && t.completedAt && ms(t.completedAt) >= c.dayStart).length,
     },
   };
+}
+
+/** Company-wide tasks, without the other copies of an all-staff task I already have (section 64). */
+function teamTasks(visible: Task[], mine: Task[], uid: number): Task[] {
+  const myGroups = new Set(mine.map((t) => t.groupId).filter(Boolean));
+  const seenGroups = new Set<string>();
+  return visible
+    .filter((t) => t.visibility === 'team' && !involves(t, uid) && isOpenStatus(t.status))
+    .filter((t) => {
+      if (!t.groupId) return true;
+      if (myGroups.has(t.groupId) || seenGroups.has(t.groupId)) return false;
+      seenGroups.add(t.groupId);
+      return true;
+    })
+    .sort(byDeadline);
 }
 
 export function team(actor: UserRow): StaffStatus[] {

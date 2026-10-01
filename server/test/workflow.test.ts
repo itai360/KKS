@@ -257,9 +257,12 @@ describe('dashboard and reports', () => {
     await newTask(c.cmd, { title: 'בשבוע', ownerIds: [c.ids.s2], deadline: at('2026-10-05', '18:00') });
     const doneId = await newTask(c.cmd, { title: 'הושלמה', ownerIds: [c.ids.s3], deadline: at('2026-10-02', '18:00') });
     await c.s3.post(`/api/tasks/${doneId}/transition`, { action: 'complete' });
-    // stale: created 4 days ago and never touched
+    // stale: started 4 days ago and not updated since
     clock.set(new Date(zonedIso('2026-09-27', '10:00', TZ)));
     const stale = await newTask(c.cmd, { title: 'בניית שיעור התקפה', ownerIds: [c.ids.s1], deadline: at('2026-10-20') });
+    await c.s1.post(`/api/tasks/${stale}/transition`, { action: 'start' });
+    // untouched but far from its deadline - not flagged
+    const quiet = await newTask(c.cmd, { title: 'תכנון ניווט לילה', ownerIds: [c.ids.s1], deadline: at('2026-10-20') });
     clock.set(new Date(zonedIso('2026-10-01', '10:00', TZ)));
 
     const d = (await c.cmd.get('/api/dashboard')).body;
@@ -267,8 +270,18 @@ describe('dashboard and reports', () => {
     const kinds = d.attention.map((a: { kind: string; title: string }) => `${a.kind}:${a.title}`);
     expect(kinds).toEqual(expect.arrayContaining(['overdue:באיחור', 'due_soon:היום', 'stale:בניית שיעור התקפה']));
     expect(d.attention.find((a: { taskId: number }) => a.taskId === stale).subtitle).toBe('לא עודכן במשך 4 ימים');
+    expect(d.attention.find((a: { taskId: number }) => a.taskId === quiet)).toBeUndefined();
     expect(d.staff.find((s: { userId: number }) => s.userId === c.ids.s2)).toMatchObject({ open: 2, overdue: 1 });
     expect((await c.s1.get('/api/dashboard')).status).toBe(403);
+  });
+
+  it('copies of an all-staff task appear once in the attention list', async () => {
+    await c.cmd.post('/api/tasks', { title: 'מעבר על נהלים', assignMode: 'all', deadline: at('2026-09-30', '18:00') });
+    const d = (await c.cmd.get('/api/dashboard')).body;
+    const items = d.attention.filter((a: { title: string }) => a.title === 'מעבר על נהלים');
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'overdue', count: 3 });
+    expect(items[0].ownerName).toContain('מפק"צ 1');
   });
 
   it('staff page shows on-time / late percentages (section 12)', async () => {

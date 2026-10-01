@@ -24,10 +24,13 @@ export function computeFlags(t: FlagInput, now: Date, staleDays: number): TaskFl
   const left = new Date(t.deadline).getTime() - now.getTime();
   const overdue = open && left < 0;
   const dueSoon = open && !overdue && left <= 24 * HOUR;
+  // "Not updated" matters for work in progress, or for untouched work that is
+  // close to its deadline - not for a task due in three weeks (section 77).
   const stale =
     open &&
     t.status !== 'pending_approval' &&
     staleDays > 0 &&
+    (t.status !== 'todo' || left <= 3 * DAY) &&
     now.getTime() - new Date(t.lastActivityAt).getTime() >= staleDays * DAY;
   return { overdue, dueSoon, stale, tone: toneOf(t.status, t.priority, overdue, dueSoon) };
 }

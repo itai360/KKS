@@ -1,0 +1,137 @@
+// Section 50 - morning briefing: one screen to go over the day with the staff.
+
+import { useRef } from 'react';
+import { useNavigate } from 'react-router';
+import type { BriefingData } from '@shared/types';
+import { Icon } from '../components/Icon';
+import { TaskList } from '../components/TaskRow';
+import { ErrorBox, Loading } from '../components/ui';
+import { fmtLongDate, fmtTime } from '../lib/format';
+import { useSession } from '../lib/session';
+import { useApi, useTick } from '../lib/useApi';
+
+export function BriefingPage() {
+  const { data, error, loading } = useApi<BriefingData>('/api/briefing', ['tasks', 'events']);
+  const { settings } = useSession();
+  const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  useTick(30_000);
+  const now = fmtTime(new Date().toISOString());
+
+  const fullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void ref.current?.requestFullscreen?.();
+  };
+
+  return (
+    <div className="briefing" ref={ref}>
+      <div className="brief-head">
+        <div>
+          <div className="label-caps" style={{ color: 'var(--rail-muted)' }}>
+            {settings.courseName} · תדריך בוקר
+          </div>
+          <div className="brief-title">{data ? fmtLongDate(data.date) : 'תדריך בוקר'}</div>
+        </div>
+        {data && (
+          <div className="brief-nums">
+            <div>
+              <b>{data.events.length}</b>
+              <span>אירועים</span>
+            </div>
+            <div>
+              <b>{data.dueToday.length}</b>
+              <span>דד-ליינים היום</span>
+            </div>
+            <div>
+              <b style={{ color: data.overdue.length ? '#ff7a5c' : undefined }}>{data.overdue.length}</b>
+              <span>באיחור</span>
+            </div>
+            <div>
+              <b style={{ color: data.blocked.length ? '#c9a7ff' : undefined }}>{data.blocked.length}</b>
+              <span>חסמים</span>
+            </div>
+          </div>
+        )}
+        <div className="row gap-6">
+          <button className="btn btn-sm" onClick={fullscreen}>
+            <Icon name="external" /> מסך מלא
+          </button>
+          <button className="btn btn-sm btn-ghost" style={{ color: 'var(--rail-ink)' }} onClick={() => navigate(-1)}>
+            <Icon name="x" /> סגירה
+          </button>
+        </div>
+      </div>
+      <ErrorBox error={error} />
+      {loading && !data ? (
+        <Loading rows={4} />
+      ) : data ? (
+        <div className="split">
+          <div className="col gap-16">
+            <Section title="משימות קריטיות" count={data.critical.length} tone="#ff7a5c">
+              <TaskList tasks={data.critical} empty={<p className="muted small">אין משימות קריטיות להיום ולמחר.</p>} />
+            </Section>
+            <Section title="דד-ליינים היום" count={data.dueToday.length}>
+              <TaskList tasks={data.dueToday} empty={<p className="muted small">אין דד-ליינים נוספים היום.</p>} />
+            </Section>
+            <Section title="באיחור" count={data.overdue.length} tone="#ff7a5c">
+              <TaskList tasks={data.overdue} empty={<p className="muted small">אין משימות באיחור.</p>} />
+            </Section>
+            <Section title="חסמים" count={data.blocked.length} tone="#c9a7ff">
+              <TaskList tasks={data.blocked} empty={<p className="muted small">אין חסמים פתוחים.</p>} />
+            </Section>
+          </div>
+          <div className="col gap-16">
+            <div className="card">
+              <div className="card-head">
+                <h3>אירועים מרכזיים</h3>
+              </div>
+              {data.events.length === 0 && <div className="card-body muted small">אין אירועים בלו"ז היום.</div>}
+              {data.events.map((e) => (
+                <div key={e.id} className={`event-row${e.startTime <= now && (e.endTime ?? '') > now ? ' now' : ''}`} onClick={() => navigate(`/schedule?date=${e.date}&event=${e.id}`)}>
+                  <div className="event-time">{e.startTime}</div>
+                  <div>
+                    <div className="event-title">{e.title}</div>
+                    <div className="small muted">{[e.location, e.ownerName].filter(Boolean).join(' · ')}</div>
+                  </div>
+                  {e.taskTotal > 0 && (
+                    <span className="small mono">
+                      {e.taskDone}/{e.taskTotal}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <div className="card-head">
+                <h3>אחראים</h3>
+              </div>
+              {data.byOwner.length === 0 && <div className="card-body muted small">אין פריטים פתוחים לאף איש סגל.</div>}
+              {data.byOwner.map((o) => (
+                <div key={o.userId} className="health" style={{ borderColor: '#2e352d' }}>
+                  <span className="strong grow">{o.name}</span>
+                  {o.dueToday > 0 && <span className="small">{o.dueToday} היום</span>}
+                  {o.overdue > 0 && <span className="small" style={{ color: '#ff7a5c' }}>{o.overdue} באיחור</span>}
+                  {o.blocked > 0 && <span className="small" style={{ color: '#c9a7ff' }}>{o.blocked} חסמים</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Section({ title, count, tone, children }: { title: string; count: number; tone?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="section-title" style={{ marginTop: 6 }}>
+        <h2 style={{ color: count && tone ? tone : undefined }}>{title}</h2>
+        <span className="count-pill" style={{ color: 'var(--rail-muted)' }}>
+          {count}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}

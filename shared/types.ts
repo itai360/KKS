@@ -309,6 +309,8 @@ export interface AttentionItem {
   requestId?: number;
   weekId?: number;
   userId?: number;
+  /** number of all-staff copies merged into this line */
+  count?: number;
 }
 
 export interface StaffStatus {

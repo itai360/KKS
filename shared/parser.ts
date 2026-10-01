@@ -44,7 +44,7 @@ export function normalizeHebrew(s: string): string {
   return s
     .replace(/[״“”„׳]/g, (c) => (c === '׳' ? "'" : '"'))
     .replace(/[‘’]/g, "'")
-    .replace(/[–—]/g, '-')
+    .replace(/[\u2013\u2014]/g, '-')
     .replace(/\s+/g, ' ')
     .trim();
 }
