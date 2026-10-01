@@ -73,16 +73,13 @@ npm run typecheck
    ```sql
    insert into kks_secret values (1, encode(sha256(convert_to('הסוד-שלכם', 'UTF8')), 'hex'));
    ```
-2. **Vercel:** Add New → Project → בוחרים את הריפו. הגדרות הבנייה נלקחות מ-`vercel.json`. מוסיפים משתני סביבה ל-Production:
+2. **Vercel:** Add New → Project → בוחרים את הריפו. הגדרות הבנייה נלקחות מ-`vercel.json`. מוסיפים שלושה משתני סביבה ל-Production (תיקיית העבודה, עוגיות מאובטחות ומגבלת הקבצים נקבעים אוטומטית):
 
    | משתנה | ערך |
    |---|---|
    | `SUPABASE_URL` | כתובת הפרויקט ב-Supabase (`https://xxxx.supabase.co`) |
    | `SUPABASE_KEY` | המפתח הציבורי (anon / publishable) של הפרויקט |
    | `KKS_SECRET` | אותו סוד מסעיף 1 |
-   | `DATA_DIR` | `/tmp/kks` |
-   | `COOKIE_SECURE` | `true` |
-   | `MAX_UPLOAD_MB` | `4` |
 
 3. **Deploy**, ואז נכנסים לכתובת ומשלימים מיד את מסך הקמת הקורס (יצירת חשבון המפקד).
 

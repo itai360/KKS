@@ -26,6 +26,8 @@ process.env.KKS_REALTIME = 'poll';
 const dbPath = () => join(config.dataDir, 'kks.db');
 
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
+  const missing = ['SUPABASE_URL', 'SUPABASE_KEY', 'KKS_SECRET'].filter((k) => !env(k));
+  if (missing.length) throw new Error(`missing environment variables: ${missing.join(', ')}`);
   const key = env('SUPABASE_KEY');
   const headers: Record<string, string> = { apikey: key, 'Content-Type': 'application/json', Accept: 'application/json' };
   if (!key.startsWith('sb_')) headers.Authorization = `Bearer ${key}`; // legacy anon JWT
