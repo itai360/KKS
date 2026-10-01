@@ -76,7 +76,7 @@ npm run typecheck
 2. ב-Vercel מייבאים את הריפו (הגדרות הבנייה ב-`vercel.json`). אם כתובת הפונקציה שונה, מגדירים `KKS_STORE_URL`.
 3. נכנסים לכתובת ומשלימים מיד את מסך הקמת הקורס.
 
-דרך חלופית בלי פונקציה: משתני הסביבה `SUPABASE_URL`, `SUPABASE_KEY` (המפתח הציבורי) ו-`KKS_SECRET`, עם הגדרת הסוד ב-Supabase:
+דרך חלופית בלי פונקציה (בפריסה הפעילה היא סגורה, כדי שלא יישאר במסד שום דבר שאפשר לקרוא לו מבחוץ): משתני הסביבה `SUPABASE_URL`, `SUPABASE_KEY` (המפתח הציבורי) ו-`KKS_SECRET`, עם הגדרת הסוד ב-Supabase:
 ```sql
 insert into kks_secret values (1, encode(sha256(convert_to('הסוד-שלכם', 'UTF8')), 'hex'));
 ```
