@@ -59,6 +59,11 @@ async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T
 let version = 0; // shared version this instance's copy matches (0: none loaded)
 let stale = true; // the local copy may hold unsaved changes or be missing
 let lastAutomation = 0;
+let checkedAt = 0; // when the copy was last known to match the shared one
+
+// A screen sends several requests at once; one storage check covers them all.
+// Writes stay safe regardless: every save is checked against the version.
+const FRESH_MS = 2000;
 
 const changes = () => db().get<{ n: number }>('SELECT total_changes() AS n')!.n;
 
@@ -81,6 +86,7 @@ async function reload(): Promise<void> {
   openDb(dbPath(), { wal: false }); // also applies schema migrations of a newer release
   version = Number(row.version);
   stale = false;
+  checkedAt = Date.now();
 }
 
 /** First start: an empty course (with the commander account, when configured). */
@@ -102,6 +108,7 @@ async function save(): Promise<boolean> {
     if (ok) {
       version += 1;
       stale = false;
+      checkedAt = Date.now();
     } else stale = true;
     return ok;
   } catch (e) {
@@ -110,10 +117,14 @@ async function save(): Promise<boolean> {
   }
 }
 
-async function ensureFresh(): Promise<void> {
+/** Returns true when it relied on a check made a moment ago instead of asking storage. */
+async function ensureFresh(force = false): Promise<boolean> {
+  if (!force && !stale && Date.now() - checkedAt < FRESH_MS) return true;
   const shared = await rpc<number | null>('kks_version');
-  if (shared === null) return bootstrap();
-  if (stale || Number(shared) !== version) await reload();
+  if (shared === null) await bootstrap();
+  else if (stale || Number(shared) !== version) await reload();
+  else checkedAt = Date.now();
+  return false;
 }
 
 // ---------------- requests ----------------
@@ -128,7 +139,7 @@ function serialized<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-async function prepare(): Promise<void> {
+async function prepare(): Promise<boolean> {
   if (!app) {
     setFileStore({
       put: (name, data) => rpc('kks_put_file', { p_name: name, p_data: data.toString('base64') }),
@@ -140,7 +151,7 @@ async function prepare(): Promise<void> {
     });
     app = createApp();
   }
-  await ensureFresh();
+  const recent = await ensureFresh();
   // deadlines, reminders and recurring tasks: there is no always-on scheduler here
   if (Date.now() - lastAutomation > 60_000) {
     lastAutomation = Date.now();
@@ -148,6 +159,7 @@ async function prepare(): Promise<void> {
     runAutomation();
     if (changes() !== before && !(await save())) await reload();
   }
+  return recent;
 }
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -209,7 +221,7 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
   const body = ['GET', 'HEAD'].includes(req.method ?? 'GET') ? undefined : await readBody(req);
   try {
     await serialized(async () => {
-      await prepare();
+      let recent = await prepare();
       if ((req.url ?? '').startsWith('/api/sync')) return sync(req, res);
       const headers = { ...req.headers };
       delete headers['content-length'];
@@ -218,7 +230,16 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
       for (let attempt = 0; attempt < 8; attempt++) {
         const before = changes();
         out = await inject(app!, { method: req.method as 'GET', url: req.url ?? '/', headers, payload: body });
-        if (changes() === before || (await save())) break;
+        if (changes() === before) {
+          // a session or record created a moment ago on another instance: check storage and try again
+          if (recent && (out.statusCode === 401 || out.statusCode === 404)) {
+            recent = false;
+            await ensureFresh(true);
+            continue;
+          }
+          break;
+        }
+        if (await save()) break;
         out = null;
         // someone saved first: wait a moment (spreads out simultaneous savers), then run the request again on their data
         await new Promise((r) => setTimeout(r, 20 + Math.random() * 60 * (attempt + 1)));

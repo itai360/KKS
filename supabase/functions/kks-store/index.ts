@@ -18,12 +18,22 @@ const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SE
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+// tokens already verified by this instance, until they expire
+const verified = new Map<string, number>();
+
 async function authorized(req: Request): Promise<boolean> {
   const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
   if (!token) return false;
+  const until = verified.get(token);
+  if (until && until > Date.now()) return true;
   try {
     const { payload } = await jwtVerify(token, jwks, { issuer: ISSUER, audience: `https://vercel.com/${TEAM_SLUG}` });
-    return payload.owner_id === TEAM_ID && payload.project_id === PROJECT_ID && payload.environment === 'production';
+    const ok = payload.owner_id === TEAM_ID && payload.project_id === PROJECT_ID && payload.environment === 'production';
+    if (ok && payload.exp) {
+      if (verified.size > 100) verified.clear();
+      verified.set(token, payload.exp * 1000);
+    }
+    return ok;
   } catch {
     return false;
   }
@@ -78,7 +88,9 @@ const ops: Record<string, (a: Args) => Promise<unknown>> = {
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json(405, { message: 'method not allowed' });
+  const t0 = performance.now();
   if (!(await authorized(req))) return json(401, { message: 'unauthorized' });
+  const t1 = performance.now();
   let body: { fn?: string; args?: Args };
   try {
     body = await req.json();
@@ -88,7 +100,9 @@ Deno.serve(async (req) => {
   const op = body.fn ? ops[body.fn] : undefined;
   if (!op) return json(404, { message: 'unknown operation' });
   try {
-    return json(200, await op(body.args ?? {}));
+    const out = await op(body.args ?? {});
+    console.log(`${body.fn} auth=${Math.round(t1 - t0)}ms op=${Math.round(performance.now() - t1)}ms`);
+    return json(200, out);
   } catch (e) {
     console.error(body.fn, e);
     return json(500, { message: 'storage error' });

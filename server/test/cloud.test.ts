@@ -25,6 +25,7 @@ const rpcs: Record<string, (a: Record<string, unknown>) => unknown> = {
 };
 
 let handler: (req: never, res: never) => Promise<void>;
+const calls: string[] = [];
 
 beforeAll(async () => {
   process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'kks-cloud-'));
@@ -35,6 +36,7 @@ beforeAll(async () => {
   process.env.ADMIN_PASSWORD = 'secret123';
   globalThis.fetch = (async (url: string, init: RequestInit) => {
     const fn = String(url).split('/rpc/')[1];
+    calls.push(fn);
     const args = JSON.parse(String(init.body));
     if (args.p_secret !== 'secret') return new Response('{"message":"unauthorized"}', { status: 403 });
     const out = rpcs[fn](args);
@@ -108,5 +110,27 @@ describe('serverless storage', () => {
     const r = await call('GET', '/api/sync', undefined, cookie);
     expect(r.json()).toMatchObject({ v: store.state!.version, notifications: [] });
     expect((await call('GET', '/api/sync')).statusCode).toBe(401);
+  });
+
+  it('one storage check covers the requests of a screen, and a fresh session from another instance still works', async () => {
+    const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
+    calls.length = 0;
+    for (const url of ['/api/tasks', '/api/weeks', '/api/dashboard']) expect((await call('GET', url, undefined, cookie)).statusCode).toBe(200);
+    expect(calls.filter((c) => c === 'kks_version').length).toBe(0); // all within the moment after the login was saved
+
+    // another instance signs someone in: a session this instance's copy does not have yet
+    const { createHash } = await import('node:crypto');
+    const { DatabaseSync } = await import('node:sqlite');
+    const { writeFileSync, readFileSync } = await import('node:fs');
+    const other = join(process.env.DATA_DIR!, 'other-session.db');
+    writeFileSync(other, Buffer.from(store.state!.data, 'base64'));
+    const odb = new DatabaseSync(other);
+    const hash = createHash('sha256').update('token-from-elsewhere').digest('hex');
+    odb.prepare('INSERT INTO sessions(token_hash, user_id, created_at, expires_at) VALUES (?, 1, ?, ?)').run(hash, new Date().toISOString(), new Date(Date.now() + 86_400_000).toISOString());
+    odb.close();
+    store.state = { version: store.state!.version + 1, data: readFileSync(other).toString('base64') };
+
+    const me = await call('GET', '/api/auth/me', undefined, 'kks_session=token-from-elsewhere');
+    expect(me.statusCode).toBe(200); // the 401 from the older copy triggered a check and a second try
   });
 });
