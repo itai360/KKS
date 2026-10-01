@@ -1141,6 +1141,10 @@ p {
   gap: 16px;
 }
 
+.grid-3 > .grid-span-2 {
+  grid-column: span 2;
+}
+
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
@@ -2214,6 +2218,12 @@ p {
   .only-mobile {
     display: initial;
   }
+  .btn.only-mobile {
+    display: inline-flex;
+  }
+  .icon-btn.only-mobile {
+    display: inline-grid;
+  }
   .page {
     padding: 16px 14px 110px;
   }
@@ -2240,6 +2250,26 @@ p {
   .grid-3,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+  .grid-3 > .grid-span-2 {
+    grid-column: auto;
+  }
+  .filters.mobile-collapsed {
+    display: none;
+  }
+  .chips-scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-inline: -14px;
+    padding-inline: 14px;
+  }
+  .chips-scroll .chip {
+    flex-shrink: 0;
+  }
+  .filters .select,
+  .filters .input {
+    flex: 1 1 140px;
   }
   .task-row {
     grid-template-columns: auto 1fr;

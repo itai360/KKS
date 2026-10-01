@@ -351,7 +351,7 @@ export function WeekPage() {
             <div className="tiny muted">{until > 0 ? `מתחיל בעוד ${until} ימים` : w.endDate >= today ? 'השבוע מתקיים עכשיו' : 'השבוע הסתיים'}</div>
           </div>
         </div>
-        <div className="card card-pad" style={{ gridColumn: 'span 2' }}>
+        <div className="card card-pad grid-span-2">
           <div className="label-caps mb-12">מוכנות לפי תחום</div>
           {data.byDomain.length === 0 ? (
             <p className="small muted">אין עדיין משימות לשבוע. השתמשו ב"פתיחת שבוע" כדי לפתוח את רשימת התיוג הקבועה.</p>
@@ -595,7 +595,12 @@ function OpenWeek({ detail, onClose }: { detail: WeekDetail; onClose: () => void
                       className="select"
                       style={{ width: 170, height: 32, fontSize: 13 }}
                       value={owners[String(i)] ?? ''}
-                      onChange={(e) => setOwners({ ...owners, [String(i)]: Number(e.target.value) })}
+                      onChange={(e) => {
+                        const next = { ...owners };
+                        if (e.target.value) next[String(i)] = Number(e.target.value);
+                        else delete next[String(i)];
+                        setOwners(next);
+                      }}
                       aria-label="אחראי"
                     >
                       <option value="">{ownerLabel(it.owner)}</option>
@@ -636,13 +641,19 @@ function CloseWeek({ detail, onClose }: { detail: WeekDetail; onClose: () => voi
 
   const unfinished = check ? [...check.overdue, ...check.open] : [];
   const decisionFor = (t: Task): CarryDecision => decisions[t.id] ?? { taskId: t.id, action: check?.nextWeek ? 'move' : 'keep' };
+  // the date shown for "move" is the date sent - a week after the deadline, or after today if already late
+  const defaultMoveDate = (t: Task) => addDays(dateKeyOf(t.deadline) < todayKey() ? todayKey() : dateKeyOf(t.deadline), 7);
+  const moveDeadline = (t: Task, d: CarryDecision) => d.newDeadline ?? isoAt(defaultMoveDate(t), fmtTime(t.deadline));
   const update = (t: Task, patch: Partial<CarryDecision>) => setDecisions({ ...decisions, [t.id]: { ...decisionFor(t), ...patch } });
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
-      const list = unfinished.map(decisionFor);
+      const list = unfinished.map((t) => {
+        const d = decisionFor(t);
+        return d.action === 'move' ? { ...d, newDeadline: moveDeadline(t, d) } : d;
+      });
       if (list.some((d) => d.action === 'cancel' && !(d.reason ?? '').trim())) throw new Error('יש לכתוב סיבת ביטול לכל משימה שמבוטלת');
       await api.post(`/api/weeks/${w.id}/close`, { decisions: list });
       toast({ title: `${w.name} נסגר`, tone: 'green' });
@@ -719,10 +730,10 @@ function CloseWeek({ detail, onClose }: { detail: WeekDetail; onClose: () => voi
                         <span className="small muted">דד-ליין חדש:</span>
                         <div style={{ width: 280 }}>
                           <DateTimeInputs
-                            date={d.newDeadline ? dateKeyOf(d.newDeadline) : addDays(dateKeyOf(t.deadline) < todayKey() ? todayKey() : dateKeyOf(t.deadline), 7)}
-                            time={d.newDeadline ? fmtTime(d.newDeadline) : fmtTime(t.deadline)}
-                            onDate={(v) => update(t, { newDeadline: isoAt(v, d.newDeadline ? fmtTime(d.newDeadline) : fmtTime(t.deadline)) })}
-                            onTime={(v) => update(t, { newDeadline: isoAt(d.newDeadline ? dateKeyOf(d.newDeadline) : addDays(dateKeyOf(t.deadline) < todayKey() ? todayKey() : dateKeyOf(t.deadline), 7), v) })}
+                            date={dateKeyOf(moveDeadline(t, d))}
+                            time={fmtTime(moveDeadline(t, d))}
+                            onDate={(v) => v && update(t, { newDeadline: isoAt(v, fmtTime(moveDeadline(t, d))) })}
+                            onTime={(v) => v && update(t, { newDeadline: isoAt(dateKeyOf(moveDeadline(t, d)), v) })}
                           />
                         </div>
                       </div>

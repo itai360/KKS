@@ -474,6 +474,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
       if (parts.join(',') !== t.participantIds.join(',')) patch.participantIds = parts;
     }
     if (p.canChangeDeadline) {
+      if (!date || !time) return m.setError('יש לבחור תאריך ושעה לדד-ליין');
       const iso = isoAt(date, time);
       if (iso !== t.deadline) patch.deadline = iso;
     }

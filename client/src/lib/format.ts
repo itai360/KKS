@@ -5,6 +5,8 @@ import {
   formatDateTime,
   formatDeadline,
   formatTimeLeft,
+  isDateKey,
+  isTimeString,
   localDateKey,
   localTime,
   longDate,
@@ -27,7 +29,10 @@ export const fmtTime = (iso: string) => localTime(iso, tz);
 export const fmtDate = (iso: string) => shortDate(localDateKey(iso, tz));
 export const fmtLongDate = (key: string) => longDate(key);
 export const dateKeyOf = (iso: string) => localDateKey(iso, tz);
-export const isoAt = (dateKey: string, time: string) => zonedIso(dateKey, time, tz);
+export function isoAt(dateKey: string, time: string): string {
+  if (!isDateKey(dateKey) || !isTimeString(time)) throw new Error('יש לבחור תאריך ושעה תקינים');
+  return zonedIso(dateKey, time, tz);
+}
 export const tomorrowKey = () => addDays(todayKey(), 1);
 
 export function greeting(): string {

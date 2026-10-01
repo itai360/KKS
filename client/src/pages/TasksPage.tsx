@@ -67,6 +67,7 @@ export function TasksPage() {
   };
   const people = isCommander ? users : staff;
   const active = [f.owner, f.week, f.domain, f.status, f.priority, f.q].filter(Boolean).length;
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
     <div className="page">
@@ -90,14 +91,17 @@ export function TasksPage() {
           </>
         }
       />
-      <div className="chips mb-12">
+      <div className="chips chips-scroll mb-12">
         {SCOPES.map(([v, l]) => (
           <button key={v} className={`chip${f.scope === v ? ' on' : ''}${v === 'overdue' && f.scope === v ? ' t-red' : ''}`} onClick={() => set('scope', v === 'open' ? '' : v)}>
             {l}
           </button>
         ))}
       </div>
-      <div className="filters">
+      <button className="btn btn-sm only-mobile mb-12" onClick={() => setFiltersOpen(!filtersOpen)}>
+        <Icon name="filter" /> סינון{active ? ` (${active})` : ''}
+      </button>
+      <div className={`filters${filtersOpen ? '' : ' mobile-collapsed'}`}>
         <input className="input" placeholder="מילת מפתח..." value={f.q} onChange={(e) => set('q', e.target.value)} aria-label="חיפוש במשימות" />
         <select className="select" value={f.owner} onChange={(e) => set('owner', e.target.value)} aria-label="איש סגל">
           <option value="">כל הסגל</option>
