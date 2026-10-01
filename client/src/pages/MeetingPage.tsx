@@ -1,6 +1,7 @@
 // Sections 68-69: open tasks during a staff meeting, then save a summary to the history.
 
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { parseTaskText } from '@shared/parser';
 import type { Meeting } from '@shared/types';
 import { Icon } from '../components/Icon';
@@ -194,12 +195,12 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
           <div className="card-body col gap-6">
             {!s?.newTasks.length && <p className="small muted">משימות שתוסיפו יופיעו כאן.</p>}
             {s?.newTasks.map((t) => (
-              <a key={t.id} href={`/tasks/${t.id}`} className="row small">
+              <Link key={t.id} to={`/tasks/${t.id}`} className="row small">
                 <Icon name="check" size={14} className="text-green" />
                 <span className="grow strong">{t.title}</span>
                 <span className="muted">{t.ownerName}</span>
                 <span className="mono tiny">{fmtDeadline(t.deadline)}</span>
-              </a>
+              </Link>
             ))}
           </div>
         </div>
@@ -247,7 +248,7 @@ function SummaryView({ meeting }: { meeting: Meeting }) {
         <ul className="small">
           {s.newTasks.map((t) => (
             <li key={t.id}>
-              <a href={`/tasks/${t.id}`}>{t.title}</a> <span className="muted">· {t.ownerName}</span>
+              <Link to={`/tasks/${t.id}`}>{t.title}</Link> <span className="muted">· {t.ownerName}</span>
             </li>
           ))}
         </ul>

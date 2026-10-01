@@ -11,12 +11,29 @@ import { canQuickUpdate, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, PageHead, Seg } from '../components/ui';
 import { api, qs } from '../lib/api';
+import { saveFile } from '../lib/download';
 import { fmtDateTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
 
 type View = 'table' | 'list' | 'board';
+// a remembered view is a convenience: storage can be missing or blocked
+function readPref(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writePref(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* not saved */
+  }
+}
+
 const SCOPES: [string, string][] = [
   ['open', 'פתוחות'],
   ['overdue', 'באיחור'],
@@ -31,7 +48,8 @@ export function TasksPage() {
   const [params, setParams] = useSearchParams();
   const { staff, users, weeks, settings, isCommander } = useSession();
   const newTask = useNewTask();
-  const [view, setView] = useState<View>(() => (window.innerWidth < 860 ? 'list' : ((localStorage.getItem('kks.tasksView') as View) ?? 'table')));
+  const toast = useToast();
+  const [view, setView] = useState<View>(() => (window.innerWidth < 860 ? 'list' : ((readPref('kks.tasksView') as View | null) ?? 'table')));
   useTick();
 
   const f = {
@@ -64,7 +82,7 @@ export function TasksPage() {
   const { data, error, loading } = useApi<Task[]>(url);
   const changeView = (v: View) => {
     setView(v);
-    localStorage.setItem('kks.tasksView', v);
+    writePref('kks.tasksView', v);
   };
   const people = isCommander ? users : staff;
   const active = [f.owner, f.week, f.domain, f.status, f.priority, f.q].filter(Boolean).length;
@@ -86,7 +104,12 @@ export function TasksPage() {
                 { value: 'board', label: 'לוח', icon: 'board' },
               ]}
             />
-            <button className="btn hide-mobile" onClick={() => data && exportCsv(data)} disabled={!data?.length} title="ייצוא הרשימה המסוננת לאקסל">
+            <button
+              className="btn hide-mobile"
+              onClick={() => data && exportCsv(data).catch((e: Error) => toast({ title: e.message, tone: 'red' }))}
+              disabled={!data?.length}
+              title="ייצוא הרשימה המסוננת לאקסל"
+            >
               <Icon name="download" /> אקסל
             </button>
             <button className="btn btn-primary" onClick={() => newTask({ weekId: f.week ? Number(f.week) : undefined })}>
@@ -346,10 +369,5 @@ function exportCsv(tasks: Task[]) {
     ]),
   ];
   const csv = '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `משימות-${todayKey()}.csv`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return saveFile(`משימות-${todayKey()}.csv`, new Blob([csv], { type: 'text/csv;charset=utf-8' }));
 }

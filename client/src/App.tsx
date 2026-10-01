@@ -71,12 +71,19 @@ function AuthedRoutes() {
   );
 }
 
+/** The app without a router, so the demo build can use an in-memory one. */
+export function AppShell() {
+  return (
+    <SessionGate anon={(onLogin) => <LoginPage onLogin={onLogin} />}>
+      <AuthedRoutes />
+    </SessionGate>
+  );
+}
+
 export function App() {
   return (
     <BrowserRouter>
-      <SessionGate anon={(onLogin) => <LoginPage onLogin={onLogin} />}>
-        <AuthedRoutes />
-      </SessionGate>
+      <AppShell />
     </BrowserRouter>
   );
 }

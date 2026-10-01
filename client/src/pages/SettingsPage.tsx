@@ -9,6 +9,7 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { ErrorBox, Field, Modal, PageHead, Seg } from '../components/ui';
 import { api } from '../lib/api';
+import { demoHooks, IS_DEMO } from '../lib/demo';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -380,7 +381,7 @@ function PermissionsCard() {
 
 function BrowserNotificationsCard() {
   const toast = useToast();
-  const supported = pushSupported();
+  const supported = !IS_DEMO && pushSupported();
   const [state, setState] = useState<'loading' | 'on' | 'off' | 'denied'>('loading');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -411,7 +412,9 @@ function BrowserNotificationsCard() {
         <p className="small">
           התראה תגיע גם כשהאפליקציה סגורה: משימה חדשה, תזכורות לפני דד-ליין, איחורים, חסמים ובקשות שמחכות לך. עדכוני מידע נשארים בתוך המערכת.
         </p>
-        {!supported ? (
+        {IS_DEMO ? (
+          <p className="small muted">בגרסת ההדגמה ההתראות מופיעות בתוך המערכת. התראות לטלפון פועלות במערכת המותקנת על שרת עם HTTPS.</p>
+        ) : !supported ? (
           <p className="small muted">הדפדפן הזה לא תומך בהתראות. התראות ימשיכו להופיע בתוך המערכת.</p>
         ) : needsHomeScreen() ? (
           <div className="info-box">באייפון: פתחו את האתר בספארי, לחצו על כפתור השיתוף ואז "הוסף למסך הבית". פתחו את האפליקציה מהמסך הראשי והפעילו כאן את ההתראות.</div>
@@ -440,7 +443,32 @@ function BrowserNotificationsCard() {
   );
 }
 
+function DemoDataCard() {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const reset = async () => {
+    if (!armed) return setArmed(true);
+    setBusy(true);
+    await demoHooks.reset?.();
+  };
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="history" />
+        <h3 className="grow">נתוני ההדגמה</h3>
+      </div>
+      <div className="card-body row wrap">
+        <p className="small grow">זו גרסת הדגמה: כל הנתונים נשמרים רק בדפדפן הזה ואינם משותפים עם אנשים אחרים. איפוס מוחק את השינויים ומחזיר את קורס הדוגמה עם תאריכים של היום.</p>
+        <button className={`btn${armed ? ' btn-danger' : ''}`} disabled={busy} onClick={() => void reset()} onBlur={() => setArmed(false)}>
+          {armed ? 'לחצו שוב לאישור האיפוס' : 'איפוס נתוני ההדגמה'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BackupCard() {
+  if (IS_DEMO) return <DemoDataCard />;
   return (
     <div className="card">
       <div className="card-head">
@@ -449,7 +477,8 @@ function BackupCard() {
       </div>
       <div className="card-body row wrap">
         <p className="small grow">הורדת עותק מלא ועקבי של מסד הנתונים (משימות, שבועות, לו"ז, צוערים, תחקירים). מומלץ לגבות בסוף כל שבוע. קבצים מצורפים נשמרים בתיקיית uploads בשרת.</p>
-        <a className="btn" href="/api/admin/backup" download>
+        {/* the server sends it as an attachment, so following the link saves the file */}
+        <a className="btn" href="/api/admin/backup">
           <Icon name="download" /> הורד גיבוי
         </a>
       </div>

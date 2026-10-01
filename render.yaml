@@ -1,0 +1,25 @@
+# One-click deploy to Render (render.com): HTTPS address, persistent disk for
+# the database and uploaded files. Render asks for the values marked sync: false.
+services:
+  - type: web
+    name: kks-course
+    runtime: node
+    plan: starter # a persistent disk needs a paid plan
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/public/info
+    disk:
+      name: kks-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: PUSH_CONTACT
+        sync: false
