@@ -13,11 +13,12 @@ export class Db {
   private cache = new Map<string, StatementSync>();
   private depth = 0;
 
-  constructor(path: string) {
+  /** wal: false keeps the whole database in its one file (the cloud deployment uploads it). */
+  constructor(path: string, opts: { wal?: boolean } = {}) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.raw = new DatabaseSync(path);
     this.raw.exec('PRAGMA foreign_keys = ON');
-    if (path !== ':memory:') this.raw.exec('PRAGMA journal_mode = WAL');
+    if (path !== ':memory:' && opts.wal !== false) this.raw.exec('PRAGMA journal_mode = WAL');
     this.raw.exec('PRAGMA busy_timeout = 5000');
   }
 
@@ -478,8 +479,8 @@ export function migrate(db: Db): void {
 
 let current: Db | null = null;
 
-export function openDb(path: string): Db {
-  const db = new Db(path);
+export function openDb(path: string, opts: { wal?: boolean } = {}): Db {
+  const db = new Db(path, opts);
   migrate(db);
   current = db;
   return db;

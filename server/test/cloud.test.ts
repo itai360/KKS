@@ -1,0 +1,112 @@
+// The serverless storage layer (cloud.ts): first start, saving, and replaying a
+// request when another instance saved first. Supabase is replaced by an
+// in-memory implementation of its database functions.
+
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { inject } from 'light-my-request';
+import { beforeAll, describe, expect, it } from 'vitest';
+
+const store: { state: { version: number; data: string } | null; files: Map<string, string> } = { state: null, files: new Map() };
+const rpcs: Record<string, (a: Record<string, unknown>) => unknown> = {
+  kks_version: () => store.state?.version ?? null,
+  kks_load: () => (store.state ? [store.state] : []),
+  kks_save: ({ p_expected, p_data }) => {
+    if (p_expected === 0) return store.state ? false : ((store.state = { version: 1, data: String(p_data) }), true);
+    const cur = store.state;
+    if (!cur || cur.version !== p_expected) return false;
+    store.state = { version: cur.version + 1, data: String(p_data) };
+    return true;
+  },
+  kks_put_file: ({ p_name, p_data }) => void store.files.set(String(p_name), String(p_data)),
+  kks_get_file: ({ p_name }) => store.files.get(String(p_name)) ?? null,
+  kks_delete_file: ({ p_name }) => void store.files.delete(String(p_name)),
+};
+
+let handler: (req: never, res: never) => Promise<void>;
+
+beforeAll(async () => {
+  process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'kks-cloud-'));
+  process.env.SUPABASE_URL = 'http://storage.test';
+  process.env.SUPABASE_KEY = 'anon';
+  process.env.KKS_SECRET = 'secret';
+  process.env.ADMIN_USERNAME = 'boss';
+  process.env.ADMIN_PASSWORD = 'secret123';
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    const fn = String(url).split('/rpc/')[1];
+    const args = JSON.parse(String(init.body));
+    if (args.p_secret !== 'secret') return new Response('{"message":"unauthorized"}', { status: 403 });
+    const out = rpcs[fn](args);
+    return new Response(out === undefined ? '' : JSON.stringify(out), { status: 200 });
+  }) as typeof fetch;
+  ({ handler } = (await import('../src/cloud')) as unknown as { handler: typeof handler });
+});
+
+const call = (method: string, url: string, body?: unknown, cookie = '') =>
+  inject(handler as never, { method: method as 'GET', url, headers: { 'x-kks': '1', 'content-type': 'application/json', cookie }, payload: body === undefined ? undefined : JSON.stringify(body) });
+
+describe('serverless storage', () => {
+  it('creates the course with the commander account on first start and saves every change', async () => {
+    const info = await call('GET', '/api/public/info');
+    expect(info.json()).toMatchObject({ needsSetup: false, realtime: 'poll' });
+    expect(store.state?.version).toBe(1);
+
+    const login = await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' });
+    expect(login.statusCode).toBe(200);
+    expect(store.state?.version).toBe(2); // the new session is shared by every instance
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+
+    const reads = await call('GET', '/api/tasks', undefined, cookie);
+    expect(reads.statusCode).toBe(200);
+    expect(store.state?.version).toBe(2); // reading saves nothing
+  });
+
+  it('replays a request on newer data when another instance saved first', async () => {
+    const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
+    const staff = await call('POST', '/api/users', { username: 's1', password: 'secret123', displayName: 'מפק"צ 1', role: 'staff' }, cookie);
+    const s1 = staff.json().id;
+
+    // another instance adds a task: same database file, one version ahead
+    const { DatabaseSync } = await import('node:sqlite');
+    const { writeFileSync, readFileSync } = await import('node:fs');
+    const other = join(process.env.DATA_DIR!, 'other.db');
+    writeFileSync(other, Buffer.from(store.state!.data, 'base64'));
+    const odb = new DatabaseSync(other);
+    odb.exec(`INSERT INTO meta(key, value) VALUES ('other_instance', 'was here')`);
+    odb.close();
+    store.state = { version: store.state!.version + 1, data: readFileSync(other).toString('base64') };
+
+    // this instance still holds the older copy until the next request reloads it
+    const res = await call('POST', '/api/tasks', { title: 'בדיקה', ownerIds: [s1], deadline: new Date(Date.now() + 86_400_000).toISOString() }, cookie);
+    expect(res.statusCode).toBe(200);
+    const check = join(process.env.DATA_DIR!, 'check.db');
+    writeFileSync(check, Buffer.from(store.state!.data, 'base64'));
+    const cdb = new DatabaseSync(check);
+    expect(cdb.prepare("SELECT value FROM meta WHERE key = 'other_instance'").get()).toEqual({ value: 'was here' });
+    expect(cdb.prepare("SELECT title FROM tasks WHERE title = 'בדיקה'").get()).toEqual({ title: 'בדיקה' });
+    cdb.close();
+  });
+
+  it('keeps uploaded files in the shared store', async () => {
+    const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
+    const up = await inject(handler as never, {
+      method: 'POST',
+      url: `/api/documents/file?title=${encodeURIComponent('נוהל')}&category=${encodeURIComponent('נהלים')}`,
+      headers: { 'x-kks': '1', 'content-type': 'text/plain', 'x-filename': 'a.txt', cookie },
+      payload: 'תוכן',
+    });
+    expect(up.statusCode).toBe(200);
+    expect(store.files.size).toBe(1);
+    const doc = up.json().find((d: { title: string }) => d.title === 'נוהל');
+    const dl = await call('GET', doc.url, undefined, cookie);
+    expect(dl.body).toBe('תוכן');
+  });
+
+  it('answers the live-update poll with the shared version', async () => {
+    const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
+    const r = await call('GET', '/api/sync', undefined, cookie);
+    expect(r.json()).toMatchObject({ v: store.state!.version, notifications: [] });
+    expect((await call('GET', '/api/sync')).statusCode).toBe(401);
+  });
+});

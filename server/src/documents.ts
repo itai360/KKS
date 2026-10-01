@@ -1,13 +1,12 @@
 // Section 31 (documents): procedures, orders, presentations, training material, links.
 
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { z } from 'zod';
 import type { CourseDocument } from '../../shared/types';
 import type { UserRow } from './auth';
-import { badRequest, config, forbidden, notFound, nowIso, patchSchema } from './core';
+import { badRequest, forbidden, notFound, nowIso, patchSchema } from './core';
 import { db } from './db';
+import { putFile, removeFile } from './files';
 import { changed, logActivity } from './journal';
 import { isCommander } from './taskRepo';
 
@@ -34,12 +33,6 @@ const BASE = `
 SELECT d.*, w.name AS week_name, u.display_name AS uploaded_by_name
 FROM documents d LEFT JOIN weeks w ON w.id = d.week_id LEFT JOIN users u ON u.id = d.uploaded_by
 `;
-
-export const uploadsDir = (): string => {
-  const dir = join(config.dataDir, 'uploads');
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
-};
 
 const canSee = (actor: UserRow, d: Pick<DocRow, 'restricted'>) => isCommander(actor) || !d.restricted;
 const canEditDoc = (actor: UserRow, d: Pick<DocRow, 'uploaded_by'>) => isCommander(actor) || d.uploaded_by === actor.id;
@@ -121,12 +114,12 @@ export function createLinkDocument(actor: UserRow, raw: z.input<typeof linkDocSc
   return id;
 }
 
-export function createFileDocument(actor: UserRow, meta: unknown, file: { buf: Buffer; name: string; mime: string }): number {
+export async function createFileDocument(actor: UserRow, meta: unknown, file: { buf: Buffer; name: string; mime: string }): Promise<number> {
   const d = metaSchema.parse(meta);
   checkMeta(actor, d);
   if (!file.buf.length) throw badRequest('הקובץ ריק');
   const stored = randomUUID();
-  writeFileSync(join(uploadsDir(), stored), file.buf);
+  await putFile(stored, file.buf);
   const id = db().run(
     `INSERT INTO documents(title, category, description, kind, url, file_name, mime, size, week_id, restricted, pinned, uploaded_by, created_at)
      VALUES (?, ?, ?, 'file', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -180,13 +173,7 @@ export function deleteDocument(actor: UserRow, id: number): void {
   const d = documentRow(actor, id);
   if (!canEditDoc(actor, d)) throw forbidden();
   db().run('DELETE FROM documents WHERE id = ?', id);
-  if (d.kind === 'file' && d.url) {
-    try {
-      unlinkSync(join(uploadsDir(), d.url));
-    } catch {
-      /* already gone */
-    }
-  }
+  if (d.kind === 'file' && d.url) void removeFile(d.url);
   logActivity({ userId: actor.id, action: 'document', text: `${actor.display_name} הסיר מספריית המסמכים: ${d.title}` });
   changed('documents');
 }

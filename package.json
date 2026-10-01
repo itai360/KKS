@@ -20,10 +20,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed:dist": "node --disable-warning=ExperimentalWarning dist/server/seed.js",
-    "build:demo": "node demo/build.mjs"
+    "build:demo": "node demo/build.mjs",
+    "build:vercel": "npm run build && node scripts/vercel-output.mjs"
   },
   "dependencies": {
+    "@vercel/functions": "^3.9.9",
     "express": "^5.1.0",
+    "light-my-request": "^6.6.0",
     "web-push": "^3.6.7",
     "zod": "^4.1.0"
   },

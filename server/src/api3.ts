@@ -1,7 +1,7 @@
 // Routes for version 3 (cadets, experiences, debriefs, documents), push and backup.
 // Mounted inside the authenticated API router.
 
-import { createReadStream, existsSync, statSync, unlinkSync } from 'node:fs';
+import { unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
@@ -39,7 +39,8 @@ import {
   updateDebrief,
   updateItem,
 } from './debriefs';
-import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument, uploadsDir } from './documents';
+import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
+import { getFile, sendStoredFile, uploadName } from './files';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { localDateKey } from '../../shared/dates';
 
@@ -179,17 +180,12 @@ export function v3Router(): Router {
     createLinkDocument(me(req), req.body);
     res.json(listDocuments(me(req)));
   });
-  r.post('/documents/file', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+  r.post('/documents/file', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), async (req, res) => {
     const buf = req.body as Buffer;
     if (!Buffer.isBuffer(buf)) throw badRequest('הקובץ ריק');
-    let name = 'file';
-    try {
-      name = decodeURIComponent(String(req.headers['x-filename'] ?? 'file')).replace(/[\\/\0]/g, '_').slice(0, 200) || 'file';
-    } catch {
-      /* keep default */
-    }
+    const name = uploadName(req.headers['x-filename']);
     const q = req.query;
-    createFileDocument(
+    await createFileDocument(
       me(req),
       {
         title: str(q.title) ?? name,
@@ -211,18 +207,12 @@ export function v3Router(): Router {
     deleteDocument(me(req), id(req.params.id));
     res.json({ ok: true });
   });
-  r.get('/documents/:id/file', (req, res) => {
+  r.get('/documents/:id/file', async (req, res) => {
     const d = documentRow(me(req), id(req.params.id));
     if (d.kind !== 'file' || !d.url) throw notFound();
-    const path = join(uploadsDir(), d.url);
-    if (!existsSync(path)) throw notFound('הקובץ לא נמצא');
-    const mime = d.mime ?? 'application/octet-stream';
-    const inline = /^(image\/(png|jpe?g|gif|webp)|application\/pdf)$/i.test(mime);
-    res.setHeader('Content-Type', inline ? mime : 'application/octet-stream');
-    res.setHeader('Content-Length', String(statSync(path).size));
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(d.file_name ?? 'file')}`);
-    createReadStream(path).pipe(res);
+    const data = await getFile(d.url);
+    if (!data) throw notFound('הקובץ לא נמצא');
+    sendStoredFile(res, data, d.mime, d.file_name);
   });
 
   // ---------------- push ----------------

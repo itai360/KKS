@@ -18,8 +18,12 @@ function setOnline(v: boolean) {
   statusListeners.forEach((l) => l(v));
 }
 
-export function connectRealtime(): void {
-  if (source) return;
+let wanted = false;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let lastVersion: number | null = null;
+let lastNotification: number | null = null;
+
+function startStream(): void {
   source = new EventSource('/api/stream');
   source.onopen = () => {
     // after a reconnect, refresh everything that may have changed meanwhile
@@ -38,9 +42,53 @@ export function connectRealtime(): void {
   };
 }
 
+// The serverless deployment keeps no connection open: ask every few seconds
+// whether anything changed, and for new notifications.
+async function poll(): Promise<void> {
+  if (document.hidden || !wanted) return;
+  try {
+    const res = await fetch(`/api/sync${lastNotification === null ? '' : `?n=${lastNotification}`}`, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(String(res.status));
+    const d: { v: number; n: number; notifications: Notification[] } = await res.json();
+    if (lastVersion !== null && (d.v !== lastVersion || !online)) changeListeners.forEach((l) => l(['*']));
+    lastVersion = d.v;
+    lastNotification = d.n;
+    for (const n of d.notifications) notificationListeners.forEach((l) => l(n));
+    setOnline(true);
+  } catch {
+    setOnline(false);
+  }
+}
+const onVisible = () => void poll();
+
+function startPolling(): void {
+  void poll();
+  pollTimer = setInterval(() => void poll(), 8000);
+  document.addEventListener('visibilitychange', onVisible);
+}
+
+export function connectRealtime(): void {
+  if (wanted) return;
+  wanted = true;
+  fetch('/api/public/info')
+    .then((r) => r.json())
+    .then((info: { realtime?: string }) => {
+      if (!wanted) return;
+      if (info.realtime === 'poll') startPolling();
+      else startStream();
+    })
+    .catch(() => wanted && startStream());
+}
+
 export function disconnectRealtime(): void {
+  wanted = false;
   source?.close();
   source = null;
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+  document.removeEventListener('visibilitychange', onVisible);
+  lastVersion = null;
+  lastNotification = null;
   setOnline(false);
 }
 

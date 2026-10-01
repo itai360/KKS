@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { createReadStream, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
 import { isOpenStatus, ROLES } from '../../shared/constants';
@@ -26,6 +24,7 @@ import {
 } from './auth';
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { db } from './db';
+import { getFile, putFile, removeFile, sendStoredFile, uploadName } from './files';
 import { changed, logActivity, toNotification } from './journal';
 import { activeMeeting, endMeeting, getMeeting, listMeetings, startMeeting, updateMeeting } from './meetings';
 import { deleteRule, listRules, saveRule } from './recurring';
@@ -94,7 +93,14 @@ export function apiRouter(): Router {
   r.get('/public/info', (_req, res) => {
     const s = getSettings();
     const users = db().get<{ n: number }>('SELECT count(*) AS n FROM users')!.n;
-    res.json({ courseName: s.courseName, courseSymbol: s.courseSymbol, needsSetup: users === 0, googleClientId: googleClientId() || null });
+    res.json({
+      courseName: s.courseName,
+      courseSymbol: s.courseSymbol,
+      needsSetup: users === 0,
+      googleClientId: googleClientId() || null,
+      // the serverless deployment has no long-lived connections: the app asks for changes instead
+      realtime: process.env.KKS_REALTIME === 'poll' ? 'poll' : 'stream',
+    });
   });
 
   const setupSchema = z.object({
@@ -400,12 +406,6 @@ export function apiRouter(): Router {
     title: z.string().trim().max(200).optional(),
   });
 
-  const uploadsDir = () => {
-    const dir = join(config.dataDir, 'uploads');
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    return dir;
-  };
-
   const assertTaskAttachable = (u: UserRow, taskId: number) => {
     const t = mustTaskRow(taskId);
     if (!canView(u, t)) throw notFound('המשימה לא נמצאה');
@@ -439,17 +439,12 @@ export function apiRouter(): Router {
   };
 
   const rawBody = express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` });
-  const addFile = (u: UserRow, target: { taskId?: number; eventId?: number }, req: Request) => {
+  const addFile = async (u: UserRow, target: { taskId?: number; eventId?: number }, req: Request) => {
     const buf = req.body as Buffer;
     if (!Buffer.isBuffer(buf) || buf.length === 0) throw badRequest('הקובץ ריק');
-    let name = 'file';
-    try {
-      name = decodeURIComponent(String(req.headers['x-filename'] ?? 'file')).replace(/[\\/\0]/g, '_').slice(0, 200) || 'file';
-    } catch {
-      /* keep default */
-    }
+    const name = uploadName(req.headers['x-filename']);
     const stored = randomUUID();
-    writeFileSync(join(uploadsDir(), stored), buf);
+    await putFile(stored, buf);
     const mime = String(req.headers['content-type'] ?? 'application/octet-stream').slice(0, 100);
     db().tx(() => {
       db().run(
@@ -475,10 +470,10 @@ export function apiRouter(): Router {
     addLink(me(req), { taskId: tid }, req.body);
     res.json(taskDetail(me(req), tid));
   });
-  r.post('/tasks/:id/files', rawBody, (req, res) => {
+  r.post('/tasks/:id/files', rawBody, async (req, res) => {
     const tid = id(req.params.id);
     assertTaskAttachable(me(req), tid);
-    addFile(me(req), { taskId: tid }, req);
+    await addFile(me(req), { taskId: tid }, req);
     res.json(taskDetail(me(req), tid));
   });
   r.post('/events/:id/links', (req, res) => {
@@ -487,10 +482,10 @@ export function apiRouter(): Router {
     addLink(me(req), { eventId: eid }, req.body);
     res.json(eventDetail(me(req), eid));
   });
-  r.post('/events/:id/files', rawBody, (req, res) => {
+  r.post('/events/:id/files', rawBody, async (req, res) => {
     const eid = id(req.params.id);
     assertEventAttachable(me(req), eid);
-    addFile(me(req), { eventId: eid }, req);
+    await addFile(me(req), { eventId: eid }, req);
     res.json(eventDetail(me(req), eid));
   });
 
@@ -506,22 +501,16 @@ export function apiRouter(): Router {
     title: string;
   }
 
-  r.get('/files/:id', (req, res) => {
+  r.get('/files/:id', async (req, res) => {
     const a = db().get<AttRow>('SELECT * FROM attachments WHERE id = ?', id(req.params.id));
     if (!a || a.kind !== 'file' || !a.url) throw notFound();
     if (a.task_id) {
       const t = getTaskRow(a.task_id);
       if (!t || !canView(me(req), t)) throw notFound();
     }
-    const path = join(uploadsDir(), a.url);
-    if (!existsSync(path)) throw notFound('הקובץ לא נמצא');
-    const mime = a.mime ?? 'application/octet-stream';
-    const inline = /^(image\/(png|jpe?g|gif|webp)|application\/pdf)$/i.test(mime);
-    res.setHeader('Content-Type', inline ? mime : 'application/octet-stream');
-    res.setHeader('Content-Length', String(statSync(path).size));
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(a.file_name ?? 'file')}`);
-    createReadStream(path).pipe(res);
+    const data = await getFile(a.url);
+    if (!data) throw notFound('הקובץ לא נמצא');
+    sendStoredFile(res, data, a.mime, a.file_name);
   });
 
   r.delete('/attachments/:id', (req, res) => {
@@ -538,13 +527,7 @@ export function apiRouter(): Router {
       db().run('DELETE FROM attachments WHERE id = ?', a.id);
       logActivity({ taskId: a.task_id, eventId: a.event_id, userId: u.id, action: 'attachment_removed', text: `${u.display_name} הסיר את "${a.title}"` });
     });
-    if (a.kind === 'file' && a.url) {
-      try {
-        unlinkSync(join(uploadsDir(), a.url));
-      } catch {
-        /* already gone */
-      }
-    }
+    if (a.kind === 'file' && a.url) void removeFile(a.url);
     changed('tasks', 'events');
     res.json({ ok: true });
   });

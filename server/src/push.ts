@@ -60,7 +60,21 @@ export function subscriptionCount(userId: number): number {
   return db().get<{ n: number }>('SELECT count(*) AS n FROM push_subscriptions WHERE user_id = ?', userId)!.n;
 }
 
-export async function sendPush(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>, force = false): Promise<number> {
+const inFlight = new Set<Promise<number>>();
+
+/** Settles when the pushes sent so far are done (a serverless function must not stop before). */
+export function pushesSettled(): Promise<unknown> {
+  return Promise.allSettled([...inFlight]);
+}
+
+export function sendPush(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>, force = false): Promise<number> {
+  const p = deliver(userId, n, force);
+  inFlight.add(p);
+  void p.finally(() => inFlight.delete(p)).catch(() => undefined);
+  return p;
+}
+
+async function deliver(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>, force: boolean): Promise<number> {
   if (!force && n.category === 'info') return 0;
   const subs = db().all<{ endpoint: string; p256dh: string; auth: string }>('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', userId);
   if (!subs.length) return 0;
