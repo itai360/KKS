@@ -10,6 +10,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 const STORE = 'https://store.test/functions/v1/kks-store';
 let state: { version: number; data: string } | null = null;
 const seen: { auth: string | null; fn: string }[] = [];
+let oldStore = false; // a kks-store function from before kks_fetch
 let handler: (req: never, res: never) => Promise<void>;
 
 beforeAll(async () => {
@@ -22,8 +23,15 @@ beforeAll(async () => {
     const { fn, args } = JSON.parse(String(init.body));
     seen.push({ auth, fn });
     if (auth !== 'Bearer vercel-token') return new Response('{"message":"unauthorized"}', { status: 401 });
+    if (fn === 'kks_fetch' && oldStore) return new Response('{"message":"unknown operation"}', { status: 404 });
     const out =
-      fn === 'kks_version'
+      fn === 'kks_fetch'
+        ? !state
+          ? { version: null }
+          : state.version === args.p_have
+            ? { version: state.version }
+            : state
+        : fn === 'kks_version'
         ? (state?.version ?? null)
         : fn === 'kks_load'
           ? state
@@ -56,5 +64,22 @@ describe('storage through the kks-store function', () => {
     });
     expect(r.statusCode).toBe(200);
     expect(state!.version).toBeGreaterThan(1);
+  });
+
+  it('checks and loads in one call', async () => {
+    seen.length = 0;
+    state = { ...state!, version: state!.version + 1 }; // another instance saved
+    const r = await inject(handler as never, { method: 'GET', url: '/api/public/info', headers: { 'x-vercel-oidc-token': 'vercel-token', 'x-kks-v': String(state!.version) } });
+    expect(r.statusCode).toBe(200);
+    expect(seen.map((s) => s.fn)).toEqual(['kks_fetch']);
+  });
+
+  it('still works with an older kks-store function', async () => {
+    oldStore = true;
+    seen.length = 0;
+    state = { ...state!, version: state!.version + 1 };
+    const r = await inject(handler as never, { method: 'GET', url: '/api/public/info', headers: { 'x-vercel-oidc-token': 'vercel-token', 'x-kks-v': String(state!.version) } });
+    expect(r.statusCode).toBe(200);
+    expect(seen.map((s) => s.fn)).toEqual(['kks_fetch', 'kks_version', 'kks_load']);
   });
 });

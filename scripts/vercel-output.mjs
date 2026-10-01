@@ -75,6 +75,8 @@ writeFileSync(
           continue: true,
         },
         { src: '/assets/(.*)', headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }, continue: true },
+        // the app page and the service worker are checked on every load, so a new release is picked up at once
+        { src: '^/(index\\.html|sw\\.js)?$', headers: { 'Cache-Control': 'no-cache' }, continue: true },
         // the path also travels as a parameter, in case the platform hands the function the rewritten URL
         { src: '^/api/(.*)$', dest: '/api/index?__path=$1' },
         { handle: 'filesystem' },

@@ -6,6 +6,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
+import { ScreenBoundary } from './ScreenBoundary';
 import { initials } from './ui';
 
 interface NavItem {
@@ -189,7 +190,9 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
-        <main id="main">{children}</main>
+        <main id="main">
+          <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
+        </main>
       </div>
 
       <nav className="bottom-nav" aria-label="ניווט">

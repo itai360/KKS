@@ -51,6 +51,17 @@ const ops: Record<string, (a: Args) => Promise<unknown>> = {
     if (error) throw error;
     return data ?? [];
   },
+  // the version, plus the data only when it differs from the caller's copy (p_have)
+  async kks_fetch({ p_have }) {
+    const { data, error } = await db.from('kks_state').select('version').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    if (!data) return { version: null };
+    const version = Number(data.version);
+    if (version === Number(p_have)) return { version };
+    const full = await db.from('kks_state').select('version, data').eq('id', 1).maybeSingle();
+    if (full.error) throw full.error;
+    return full.data ? { version: Number(full.data.version), data: full.data.data } : { version: null };
+  },
   // saves only if nobody saved since p_expected (0: the first save)
   async kks_save({ p_expected, p_data }) {
     const expected = Number(p_expected);

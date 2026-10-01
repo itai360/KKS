@@ -16,6 +16,8 @@ function zodMessage(e: ZodError): string {
 export function createApp(opts: { staticDir?: string } = {}) {
   const app = express();
   app.disable('x-powered-by');
+  // course data is always live: browsers must never answer from a stored copy (no ETag, no 304)
+  app.set('etag', false);
   app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
   app.use((_req, res, next) => {
@@ -25,7 +27,17 @@ export function createApp(opts: { staticDir?: string } = {}) {
     next();
   });
 
-  app.use('/api', express.json({ limit: '1mb' }), loadUser, csrfGuard, apiRouter());
+  app.use(
+    '/api',
+    (_req, res, next) => {
+      res.setHeader('Cache-Control', 'no-store');
+      next();
+    },
+    express.json({ limit: '1mb' }),
+    loadUser,
+    csrfGuard,
+    apiRouter(),
+  );
 
   const staticDir = opts.staticDir;
   if (staticDir && existsSync(join(staticDir, 'index.html'))) {

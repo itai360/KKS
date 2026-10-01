@@ -68,9 +68,10 @@ const DEFAULT_SETTINGS: CourseSettings = {
 };
 
 let settingsCache: CourseSettings | null = null;
+let settingsDb: unknown = null; // the database the cache was read from: a swapped-in copy (serverless) reads again
 
 export function getSettings(): CourseSettings {
-  if (settingsCache) return settingsCache;
+  if (settingsCache && settingsDb === db()) return settingsCache;
   const rows = db().all<{ key: string; value: string }>('SELECT key, value FROM settings');
   const s: Record<string, unknown> = { ...DEFAULT_SETTINGS };
   for (const r of rows) {
@@ -81,6 +82,7 @@ export function getSettings(): CourseSettings {
     }
   }
   settingsCache = s as unknown as CourseSettings;
+  settingsDb = db();
   return settingsCache;
 }
 

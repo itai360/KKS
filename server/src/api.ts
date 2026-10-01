@@ -103,6 +103,16 @@ export function apiRouter(): Router {
     });
   });
 
+  // a screen that failed to draw in someone's browser: written to the server log so it can be fixed
+  let clientErrors = { minute: 0, count: 0 };
+  r.post('/client-error', (req, res) => {
+    const e = z.object({ path: z.string().max(300), message: z.string().max(500), stack: z.string().max(2000).optional() }).parse(req.body);
+    const minute = Math.floor(Date.now() / 60_000);
+    if (clientErrors.minute !== minute) clientErrors = { minute, count: 0 };
+    if (++clientErrors.count <= 20) console.error(`[client] ${e.path}: ${e.message}\n${e.stack ?? ''}`);
+    res.json({ ok: true });
+  });
+
   const setupSchema = z.object({
     courseName: z.string().trim().min(1).max(120),
     courseSymbol: z.string().trim().max(12).optional(),

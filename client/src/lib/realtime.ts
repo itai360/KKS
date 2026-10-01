@@ -1,6 +1,7 @@
 // Section 51 - changes made by anyone appear immediately for everyone.
 
 import type { Notification } from '@shared/types';
+import { noteVersion, versionHeaders } from './api';
 
 type ChangeListener = (topics: string[]) => void;
 type NotificationListener = (n: Notification) => void;
@@ -47,9 +48,10 @@ function startStream(): void {
 async function poll(): Promise<void> {
   if (document.hidden || !wanted) return;
   try {
-    const res = await fetch(`/api/sync${lastNotification === null ? '' : `?n=${lastNotification}`}`, { credentials: 'same-origin' });
+    const res = await fetch(`/api/sync${lastNotification === null ? '' : `?n=${lastNotification}`}`, { credentials: 'same-origin', cache: 'no-store', headers: versionHeaders() });
     if (!res.ok) throw new Error(String(res.status));
     const d: { v: number; n: number; notifications: Notification[] } = await res.json();
+    noteVersion(d.v);
     if (lastVersion !== null && (d.v !== lastVersion || !online)) changeListeners.forEach((l) => l(['*']));
     lastVersion = d.v;
     lastNotification = d.n;
@@ -67,21 +69,35 @@ function startPolling(): void {
   document.addEventListener('visibilitychange', onVisible);
 }
 
-export function connectRealtime(): void {
-  if (wanted) return;
-  wanted = true;
-  fetch('/api/public/info')
-    .then((r) => r.json())
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function chooseMode(): void {
+  fetch('/api/public/info', { cache: 'no-store' })
+    .then((r) => {
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json();
+    })
     .then((info: { realtime?: string }) => {
       if (!wanted) return;
       if (info.realtime === 'poll') startPolling();
       else startStream();
     })
-    .catch(() => wanted && startStream());
+    // not known yet: ask again soon rather than guess (a stream on the serverless deployment would never answer)
+    .catch(() => {
+      if (wanted) retryTimer = setTimeout(chooseMode, 3000);
+    });
+}
+
+export function connectRealtime(): void {
+  if (wanted) return;
+  wanted = true;
+  chooseMode();
 }
 
 export function disconnectRealtime(): void {
   wanted = false;
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
   source?.close();
   source = null;
   if (pollTimer) clearInterval(pollTimer);

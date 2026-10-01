@@ -61,9 +61,13 @@ let stale = true; // the local copy may hold unsaved changes or be missing
 let lastAutomation = 0;
 let checkedAt = 0; // when the copy was last known to match the shared one
 
-// A screen sends several requests at once; one storage check covers them all.
-// Writes stay safe regardless: every save is checked against the version.
-const FRESH_MS = 2000;
+// Reads use the local copy if it was checked in the last half minute, unless
+// the browser has already seen a newer version (x-kks-v): everyone sees their
+// own changes at once, and other people's changes arrive with the next poll,
+// which checks more often. Writes stay safe regardless: every save is checked
+// against the version.
+const FRESH_MS = 30_000;
+const SYNC_FRESH_MS = 4_000;
 
 const changes = () => db().get<{ n: number }>('SELECT total_changes() AS n')!.n;
 
@@ -76,17 +80,32 @@ function closeLocal(): void {
   for (const f of [dbPath(), `${dbPath()}-journal`, `${dbPath()}-wal`, `${dbPath()}-shm`]) if (existsSync(f)) rmSync(f);
 }
 
-async function reload(): Promise<void> {
-  const rows = await rpc<{ version: number; data: string }[]>('kks_load');
-  const row = rows[0];
-  if (!row) return bootstrap();
+function install(v: number, data: string): void {
   closeLocal();
   mkdirSync(config.dataDir, { recursive: true });
-  writeFileSync(dbPath(), Buffer.from(row.data, 'base64'));
+  writeFileSync(dbPath(), Buffer.from(data, 'base64'));
   openDb(dbPath(), { wal: false }); // also applies schema migrations of a newer release
-  version = Number(row.version);
+  version = v;
   stale = false;
   checkedAt = Date.now();
+}
+
+let fetchOp = !env('KKS_SECRET'); // the kks-store function checks and loads in one call
+
+/** The shared version, with the data when this copy does not match it. */
+async function fetchShared(): Promise<{ version: number | null; data?: string }> {
+  if (fetchOp) {
+    try {
+      return await rpc<{ version: number | null; data?: string }>('kks_fetch', { p_have: stale ? -1 : version });
+    } catch (e) {
+      if (!String(e).includes('(404)')) throw e;
+      fetchOp = false; // an older kks-store function
+    }
+  }
+  const shared = await rpc<number | null>('kks_version');
+  if (shared === null || (!stale && Number(shared) === version)) return { version: shared === null ? null : Number(shared) };
+  const row = (await rpc<{ version: number; data: string }[]>('kks_load'))[0];
+  return row ? { version: Number(row.version), data: row.data } : { version: null };
 }
 
 /** First start: an empty course (with the commander account, when configured). */
@@ -97,7 +116,7 @@ async function bootstrap(): Promise<void> {
     createUser({ username: env('ADMIN_USERNAME'), password: env('ADMIN_PASSWORD'), displayName: env('ADMIN_NAME') || 'מפקד הקורס', title: 'מפקד הקורס', role: 'commander' });
   }
   version = 0;
-  if (!(await save())) await reload(); // another instance started it first
+  if (!(await save())) await ensureFresh(0); // another instance started it first
 }
 
 /** Saves the local copy if nobody saved since it was loaded. */
@@ -117,12 +136,12 @@ async function save(): Promise<boolean> {
   }
 }
 
-/** Returns true when it relied on a check made a moment ago instead of asking storage. */
-async function ensureFresh(force = false): Promise<boolean> {
-  if (!force && !stale && Date.now() - checkedAt < FRESH_MS) return true;
-  const shared = await rpc<number | null>('kks_version');
-  if (shared === null) await bootstrap();
-  else if (stale || Number(shared) !== version) await reload();
+/** Returns true when it relied on a recent check instead of asking storage. */
+async function ensureFresh(maxAge = FRESH_MS): Promise<boolean> {
+  if (!stale && Date.now() - checkedAt < maxAge) return true;
+  const shared = await fetchShared();
+  if (shared.version === null) await bootstrap();
+  else if (shared.data !== undefined) install(shared.version, shared.data);
   else checkedAt = Date.now();
   return false;
 }
@@ -139,7 +158,7 @@ function serialized<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-async function prepare(): Promise<boolean> {
+async function prepare(maxAge: number): Promise<boolean> {
   if (!app) {
     setFileStore({
       put: (name, data) => rpc('kks_put_file', { p_name: name, p_data: data.toString('base64') }),
@@ -151,13 +170,13 @@ async function prepare(): Promise<boolean> {
     });
     app = createApp();
   }
-  const recent = await ensureFresh();
+  const recent = await ensureFresh(maxAge);
   // deadlines, reminders and recurring tasks: there is no always-on scheduler here
   if (Date.now() - lastAutomation > 60_000) {
     lastAutomation = Date.now();
     const before = changes();
     runAutomation();
-    if (changes() !== before && !(await save())) await reload();
+    if (changes() !== before && !(await save())) await ensureFresh(0);
   }
   return recent;
 }
@@ -173,6 +192,7 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 
 function send(res: ServerResponse, status: number, headers: Record<string, unknown>, body: Buffer | string): void {
   res.statusCode = status;
+  res.setHeader('x-kks-v', String(version)); // the browser sends back the newest version it has seen
   for (const [k, v] of Object.entries(headers)) {
     if (v === undefined || ['content-length', 'transfer-encoding', 'connection', 'keep-alive'].includes(k.toLowerCase())) continue;
     res.setHeader(k, v as string | string[]);
@@ -213,28 +233,42 @@ function originalUrl(raw: string): string {
   return pathname + (q ? `?${q}` : '');
 }
 
+/** A request that never finishes must not hold up the ones queued behind it. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`request did not finish within ${ms} ms`)), ms);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
 export async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   req.url = originalUrl(req.url ?? '/');
+  // no long-lived connections here; 204 tells a browser's EventSource not to reconnect
+  if (req.url.startsWith('/api/stream')) return send(res, 204, { 'cache-control': 'no-store' }, '');
+  const seen = Number(req.headers['x-kks-v']);
   const token = req.headers['x-vercel-oidc-token'];
   if (typeof token === 'string' && token) identityToken = token;
   delete req.headers['x-vercel-oidc-token']; // never passed on to the app
   const body = ['GET', 'HEAD'].includes(req.method ?? 'GET') ? undefined : await readBody(req);
   try {
     await serialized(async () => {
-      let recent = await prepare();
-      if ((req.url ?? '').startsWith('/api/sync')) return sync(req, res);
+      const isSync = (req.url ?? '').startsWith('/api/sync');
+      // the browser has seen a newer version than this copy: it must not get older data
+      let recent = await prepare(Number.isFinite(seen) && seen > version ? 0 : isSync ? SYNC_FRESH_MS : FRESH_MS);
+      if (isSync) return sync(req, res);
       const headers = { ...req.headers };
       delete headers['content-length'];
       delete headers['transfer-encoding'];
       let out: Injected | null = null;
       for (let attempt = 0; attempt < 8; attempt++) {
         const before = changes();
-        out = await inject(app!, { method: req.method as 'GET', url: req.url ?? '/', headers, payload: body });
+        out = await withTimeout(inject(app!, { method: req.method as 'GET', url: req.url ?? '/', headers, payload: body }), 20_000);
         if (changes() === before) {
           // a session or record created a moment ago on another instance: check storage and try again
           if (recent && (out.statusCode === 401 || out.statusCode === 404)) {
             recent = false;
-            await ensureFresh(true);
+            await ensureFresh(0);
             continue;
           }
           break;
@@ -243,7 +277,7 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
         out = null;
         // someone saved first: wait a moment (spreads out simultaneous savers), then run the request again on their data
         await new Promise((r) => setTimeout(r, 20 + Math.random() * 60 * (attempt + 1)));
-        await reload();
+        await ensureFresh(0);
       }
       if (!out) return json(res, 409, { error: 'מישהו עדכן את אותם נתונים באותו רגע. נסו שוב.' });
       send(res, out.statusCode, out.headers, out.rawPayload);

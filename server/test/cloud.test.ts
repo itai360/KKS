@@ -133,4 +133,44 @@ describe('serverless storage', () => {
     const me = await call('GET', '/api/auth/me', undefined, 'kks_session=token-from-elsewhere');
     expect(me.statusCode).toBe(200); // the 401 from the older copy triggered a check and a second try
   });
+
+  it('a browser that has seen a newer version never gets the older copy, even right after a check', async () => {
+    const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
+    expect((await call('GET', '/api/public/info')).json().courseName).not.toBe('שם מהמופע השני');
+
+    // another instance renames the course
+    const { DatabaseSync } = await import('node:sqlite');
+    const { writeFileSync, readFileSync } = await import('node:fs');
+    const other = join(process.env.DATA_DIR!, 'other-settings.db');
+    writeFileSync(other, Buffer.from(store.state!.data, 'base64'));
+    const odb = new DatabaseSync(other);
+    odb.prepare("INSERT INTO settings(key, value) VALUES ('courseName', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify('שם מהמופע השני'));
+    odb.close();
+    const newer = store.state!.version + 1;
+    store.state = { version: newer, data: readFileSync(other).toString('base64') };
+
+    // within the half minute this copy answers on its own...
+    const stale = await call('GET', '/api/settings', undefined, cookie);
+    expect(stale.json().courseName).not.toBe('שם מהמופע השני');
+    expect(Number(stale.headers['x-kks-v'])).toBe(newer - 1);
+
+    // ...but not to a browser that already saw the newer version (from a poll or its own save)
+    const fresh = await inject(handler as never, { method: 'GET', url: '/api/settings', headers: { cookie, 'x-kks-v': String(newer) } });
+    expect(fresh.json().courseName).toBe('שם מהמופע השני'); // read again from the new copy, not from a cache
+    expect(Number(fresh.headers['x-kks-v'])).toBe(newer);
+  });
+
+  it('never lets the browser keep a stored copy of course data', async () => {
+    const r = await call('GET', '/api/public/info');
+    expect(r.headers['cache-control']).toBe('no-store');
+    expect(r.headers.etag).toBeUndefined();
+    const again = await inject(handler as never, { method: 'GET', url: '/api/public/info', headers: { 'if-none-match': 'W/"anything"' } });
+    expect(again.statusCode).toBe(200);
+  });
+
+  it('answers a live-update stream at once instead of holding the instance', async () => {
+    const r = await call('GET', '/api/stream');
+    expect(r.statusCode).toBe(204);
+    expect((await call('GET', '/api/public/info')).statusCode).toBe(200); // nothing is stuck behind it
+  });
 });
