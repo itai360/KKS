@@ -70,6 +70,7 @@ writeFileSync(
             'Referrer-Policy': 'same-origin',
             'X-Frame-Options': 'DENY',
             'Strict-Transport-Security': 'max-age=31536000',
+            'Content-Security-Policy': csp,
           },
           continue: true,
         },
@@ -77,7 +78,7 @@ writeFileSync(
         // the path also travels as a parameter, in case the platform hands the function the rewritten URL
         { src: '^/api/(.*)$', dest: '/api/index?__path=$1' },
         { handle: 'filesystem' },
-        { src: '/(.*)', dest: '/index.html', headers: { 'Content-Security-Policy': csp, 'Cache-Control': 'no-cache' } },
+        { src: '/(.*)', dest: '/index.html', headers: { 'Cache-Control': 'no-cache' } },
       ],
     },
     null,
