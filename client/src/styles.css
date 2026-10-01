@@ -2420,7 +2420,8 @@ p {
   .rail,
   .topbar,
   .bottom-nav,
-  .page-actions {
+  .page-actions,
+  .no-print {
     display: none !important;
   }
   .app {
@@ -2439,4 +2440,21 @@ p {
 
 .event-row.external:hover {
   background: none;
+}
+
+/* evaluation files */
+.eval-entry {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.eval-entry:last-child {
+  border-bottom: none;
+}
+
+@media print {
+  .eval-entry,
+  .card {
+    break-inside: avoid;
+  }
 }

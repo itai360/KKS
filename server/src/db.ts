@@ -480,7 +480,55 @@ const SCHEMA_V4 = `
 ALTER TABLE weeks ADD COLUMN calendar_uid TEXT;
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4];
+// evaluation files: an assessment of each cadet, used when a cadet comes before a committee
+const SCHEMA_V5 = `
+CREATE TABLE evaluation_files (
+  cadet_id INTEGER PRIMARY KEY REFERENCES cadets(id) ON DELETE CASCADE,
+  standing TEXT NOT NULL DEFAULT 'ok' CHECK (standing IN ('ok', 'watch', 'risk')),
+  team_opinion TEXT NOT NULL DEFAULT '',
+  team_opinion_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  team_opinion_at TEXT,
+  commander_opinion TEXT NOT NULL DEFAULT '',
+  commander_opinion_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  commander_opinion_at TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE evaluation_entries (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  tone TEXT NOT NULL CHECK (tone IN ('positive', 'improve', 'exception')),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  occurred_on TEXT NOT NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  shown_on TEXT,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX evaluation_entries_cadet ON evaluation_entries(cadet_id);
+
+CREATE TABLE committees (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  meeting_date TEXT,
+  referred_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  referred_at TEXT NOT NULL,
+  snapshot TEXT NOT NULL,
+  snapshot_at TEXT NOT NULL,
+  decision TEXT CHECK (decision IN ('continue', 'conditional', 'dismissed', 'other')),
+  decision_text TEXT NOT NULL DEFAULT '',
+  decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  decided_at TEXT
+);
+CREATE INDEX committees_cadet ON committees(cadet_id);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5];
 
 export function migrate(db: Db): void {
   const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");

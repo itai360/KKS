@@ -3,6 +3,9 @@
 import type {
   CadetStatus,
   CarryAction,
+  CommitteeDecision,
+  EvalTone,
+  Standing,
   DebriefItemKind,
   LessonKind,
   NotificationCategory,
@@ -595,6 +598,93 @@ export interface Experience {
   canEdit: boolean;
   canGiveFeedback: boolean;
   feedbackTaskId: number | null;
+}
+
+// ---------------- evaluation files (תיקי הערכה) ----------------
+
+export interface EvaluationEntry {
+  id: number;
+  cadetId: number;
+  category: string;
+  tone: EvalTone;
+  title: string;
+  body: string;
+  occurredOn: string;
+  weekId: number | null;
+  weekName: string | null;
+  /** when the entry was shown to the cadet (what gives it weight at a committee) */
+  shownOn: string | null;
+  authorId: number;
+  authorName: string;
+  createdAt: string;
+  canEdit: boolean;
+}
+
+export interface EvaluationOpinion {
+  text: string;
+  byName: string | null;
+  at: string | null;
+}
+
+export interface Committee {
+  id: number;
+  cadetId: number;
+  kind: string;
+  reason: string;
+  meetingDate: string | null;
+  referredAt: string;
+  referredByName: string | null;
+  /** when the version presented to the committee was taken */
+  snapshotAt: string;
+  decision: CommitteeDecision | null;
+  decisionText: string;
+  decidedAt: string | null;
+  decidedByName: string | null;
+}
+
+export interface EvaluationFile {
+  cadet: Cadet;
+  teamCommanderName: string | null;
+  standing: Standing;
+  teamOpinion: EvaluationOpinion;
+  commanderOpinion: EvaluationOpinion;
+  entries: EvaluationEntry[];
+  /** from the cadet file: average score by criterion */
+  scores: { criterion: string; average: number; count: number }[];
+  experiences: { role: string; startDate: string; endDate: string; mentorName: string | null; score: number | null; strengths: string; improvements: string }[];
+  discipline: CadetRecord[];
+  talks: CadetRecord[];
+  committees: Committee[];
+  /** the viewer sees the whole file (team commander, course commander); others see only their own entries */
+  full: boolean;
+  canEditStanding: boolean;
+  canEditCommanderOpinion: boolean;
+  canRefer: boolean;
+  generatedAt: string;
+}
+
+export interface EvaluationListItem {
+  cadetId: number;
+  fullName: string;
+  personalNumber: string;
+  teamId: number | null;
+  teamName: string | null;
+  status: CadetStatus;
+  standing: Standing;
+  positive: number;
+  improve: number;
+  exception: number;
+  notShown: number;
+  lastEntryAt: string | null;
+  hasOpinions: boolean;
+  committee: { id: number; kind: string; decision: CommitteeDecision | null } | null;
+  full: boolean;
+}
+
+/** A committee with the evaluation file as it was presented to it. */
+export interface CommitteeDetail {
+  committee: Committee;
+  file: EvaluationFile;
 }
 
 export interface CadetDetail {

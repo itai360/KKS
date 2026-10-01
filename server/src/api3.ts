@@ -39,6 +39,20 @@ import {
   updateDebrief,
   updateItem,
 } from './debriefs';
+import {
+  addEvaluationEntry,
+  cancelCommittee,
+  committeeDetail,
+  decideCommittee,
+  deleteEvaluationEntry,
+  evaluationFile,
+  listEvaluations,
+  referToCommittee,
+  refreshCommitteeVersion,
+  setEntryShown,
+  updateEvaluationEntry,
+  updateEvaluationFile,
+} from './evaluations';
 import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
 import { getFile, sendStoredFile, uploadName } from './files';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
@@ -93,6 +107,34 @@ export function v3Router(): Router {
   r.delete('/records/:id', (req, res) => {
     deleteRecord(me(req), id(req.params.id));
     res.json({ ok: true });
+  });
+
+  // ---------------- evaluation files ----------------
+  // every change answers with the cadet's file as the user may see it
+
+  r.get('/evaluations', (req, res) => res.json(listEvaluations(me(req))));
+  r.get('/evaluations/committees/:id', (req, res) => res.json(committeeDetail(me(req), id(req.params.id))));
+  r.post('/evaluations/committees/:id/refresh', requireCommander, (req, res) => res.json(evaluationFile(me(req), refreshCommitteeVersion(me(req), id(req.params.id)))));
+  r.post('/evaluations/committees/:id/decision', requireCommander, (req, res) => res.json(evaluationFile(me(req), decideCommittee(me(req), id(req.params.id), req.body))));
+  r.delete('/evaluations/committees/:id', requireCommander, (req, res) => res.json(evaluationFile(me(req), cancelCommittee(me(req), id(req.params.id)))));
+  r.patch('/evaluations/entries/:id', (req, res) => res.json(evaluationFile(me(req), updateEvaluationEntry(me(req), id(req.params.id), req.body))));
+  r.post('/evaluations/entries/:id/shown', (req, res) => {
+    const { shownOn } = z.object({ shownOn: z.string().nullable() }).parse(req.body);
+    res.json(evaluationFile(me(req), setEntryShown(me(req), id(req.params.id), shownOn)));
+  });
+  r.delete('/evaluations/entries/:id', (req, res) => res.json(evaluationFile(me(req), deleteEvaluationEntry(me(req), id(req.params.id)))));
+  r.get('/evaluations/:cadetId', (req, res) => res.json(evaluationFile(me(req), id(req.params.cadetId))));
+  r.patch('/evaluations/:cadetId', (req, res) => {
+    updateEvaluationFile(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  r.post('/evaluations/:cadetId/entries', (req, res) => {
+    addEvaluationEntry(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  r.post('/evaluations/:cadetId/committees', requireCommander, (req, res) => {
+    referToCommittee(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
   });
 
   // ---------------- experiences ----------------

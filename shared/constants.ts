@@ -148,6 +148,31 @@ export const EVALUATION_CRITERIA = ['פיקוד והובלה', 'מקצועיות
 export const DISCIPLINE_SEVERITIES = ['קלה', 'בינונית', 'חמורה'] as const;
 export const TALK_TYPES = ['שיחת היכרות', 'שיחת אמצע', 'שיחת משוב', 'שיחה יזומה', 'שיחת סיום'] as const;
 
+// ---------------- evaluation files (תיקי הערכה) ----------------
+
+export const STANDINGS = ['ok', 'watch', 'risk'] as const;
+export type Standing = (typeof STANDINGS)[number];
+export const STANDING_LABELS: Record<Standing, string> = { ok: 'תקין', watch: 'במעקב', risk: 'בסיכון' };
+export const STANDING_TONES: Record<Standing, string> = { ok: 'green', watch: 'yellow', risk: 'red' };
+
+export const EVAL_TONES = ['positive', 'improve', 'exception'] as const;
+export type EvalTone = (typeof EVAL_TONES)[number];
+export const EVAL_TONE_LABELS: Record<EvalTone, string> = { positive: 'לשבח', improve: 'לשיפור', exception: 'חריג' };
+export const EVAL_TONE_TONES: Record<EvalTone, string> = { positive: 'green', improve: 'orange', exception: 'red' };
+
+/** What an evaluation entry is about: the evaluation criteria, conduct, and anything else. */
+export const EVAL_CATEGORIES = [...EVALUATION_CRITERIA, 'משמעת והתנהגות', 'אחר'] as const;
+
+export const COMMITTEE_KINDS = ['ועדת הדחה', 'ועדת מעבר שלב', 'ועדת חריגים', 'ועדת סיום', 'אחר'] as const;
+export const COMMITTEE_DECISIONS = ['continue', 'conditional', 'dismissed', 'other'] as const;
+export type CommitteeDecision = (typeof COMMITTEE_DECISIONS)[number];
+export const COMMITTEE_DECISION_LABELS: Record<CommitteeDecision, string> = {
+  continue: 'ממשיך בקורס',
+  conditional: 'ממשיך בתנאים / במעקב',
+  dismissed: 'הודח מהקורס',
+  other: 'אחר',
+};
+
 export const DEBRIEF_ITEM_KINDS = ['fact', 'finding', 'conclusion', 'lesson'] as const;
 export type DebriefItemKind = (typeof DEBRIEF_ITEM_KINDS)[number];
 export const DEBRIEF_ITEM_LABELS: Record<DebriefItemKind, string> = {

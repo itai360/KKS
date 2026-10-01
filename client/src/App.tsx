@@ -7,6 +7,7 @@ import { BriefingPage } from './pages/BriefingPage';
 import { CadetPage, CadetsPage } from './pages/CadetsPage';
 import { DebriefPage, DebriefsPage } from './pages/DebriefsPage';
 import { DocumentsPage } from './pages/DocumentsPage';
+import { CommitteePage, EvaluationFilePage, EvaluationsPage } from './pages/EvaluationsPage';
 import { ExperiencesPage } from './pages/ExperiencesPage';
 import { CommandPage } from './pages/CommandPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -59,6 +60,9 @@ function AuthedRoutes() {
             <Route path="/cadets" element={<CadetsPage />} />
             <Route path="/cadets/:id" element={<CadetPage />} />
             <Route path="/experiences" element={<ExperiencesPage />} />
+            <Route path="/evaluations" element={<EvaluationsPage />} />
+            <Route path="/evaluations/committee/:id" element={<CommitteePage />} />
+            <Route path="/evaluations/:cadetId" element={<EvaluationFilePage />} />
             <Route path="/debriefs" element={<DebriefsPage />} />
             <Route path="/debriefs/:id" element={<DebriefPage />} />
             <Route path="/documents" element={<DocumentsPage />} />

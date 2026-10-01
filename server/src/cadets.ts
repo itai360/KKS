@@ -70,7 +70,7 @@ export function deleteTeam(id: number): void {
 
 // ---------------- cadets ----------------
 
-interface CadetRow {
+export interface CadetRow {
   id: number;
   first_name: string;
   last_name: string;
@@ -88,7 +88,7 @@ SELECT c.*, t.name AS team_name, t.commander_id AS team_commander_id
 FROM cadets c LEFT JOIN teams t ON t.id = c.team_id
 `;
 
-interface RecordRow {
+export interface RecordRow {
   id: number;
   cadet_id: number;
   kind: RecordKind;
@@ -108,7 +108,7 @@ interface RecordRow {
   created_at: string;
 }
 
-const RECORD_BASE = `
+export const RECORD_BASE = `
 SELECT r.*, u.display_name AS author_name, t.title AS task_title, w.name AS week_name
 FROM cadet_records r JOIN users u ON u.id = r.author_id
 LEFT JOIN tasks t ON t.id = r.task_id LEFT JOIN weeks w ON w.id = r.week_id
@@ -125,13 +125,13 @@ export function canViewRecord(actor: UserRow, r: Pick<RecordRow, 'author_id' | '
   return !r.private && !RESTRICTED_RECORD_KINDS.includes(r.kind);
 }
 
-function cadetRow(id: number): CadetRow {
+export function cadetRow(id: number): CadetRow {
   const c = db().get<CadetRow>(`${CADET_BASE} WHERE c.id = ?`, id);
   if (!c) throw notFound('הצוער לא נמצא');
   return c;
 }
 
-function toCadet(actor: UserRow, c: CadetRow, records: RecordRow[]): Cadet {
+export function toCadet(actor: UserRow, c: CadetRow, records: RecordRow[]): Cadet {
   const visible = records.filter((r) => canViewRecord(actor, r, c));
   const scores = visible.filter((r) => r.kind === 'evaluation' && r.score !== null).map((r) => r.score as number);
   return {
@@ -154,7 +154,7 @@ function toCadet(actor: UserRow, c: CadetRow, records: RecordRow[]): Cadet {
   };
 }
 
-function toRecord(actor: UserRow, r: RecordRow): CadetRecord {
+export function toRecord(actor: UserRow, r: RecordRow): CadetRecord {
   return {
     id: r.id,
     cadetId: r.cadet_id,
