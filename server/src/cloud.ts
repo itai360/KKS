@@ -1,11 +1,15 @@
 // Serverless deployment (Vercel). Every instance keeps a copy of the SQLite
-// database in /tmp; the shared copy lives in Supabase (Postgres) behind
-// database functions that require KKS_SECRET. A request that changes data is
-// saved with a version check; if another instance saved first, the request is
-// replayed on the newer data, so concurrent edits are never lost.
+// database in /tmp; the shared copy lives in Supabase (Postgres). A request
+// that changes data is saved with a version check; if another instance saved
+// first, the request is replayed on the newer data, so concurrent edits are
+// never lost.
 //
-// Env: SUPABASE_URL, SUPABASE_KEY (publishable / anon), KKS_SECRET, DATA_DIR,
-//      ADMIN_USERNAME / ADMIN_PASSWORD (first start only).
+// Storage is reached one of two ways:
+// - KKS_STORE_URL: the kks-store Supabase function, which trusts the identity
+//   token Vercel gives this function (OIDC). No secret to configure.
+// - SUPABASE_URL + SUPABASE_KEY + KKS_SECRET: the database functions directly,
+//   with a shared secret (supabase/migrations/0001_kks_storage.sql).
+// Also: DATA_DIR, ADMIN_USERNAME / ADMIN_PASSWORD (first start only).
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -25,17 +29,26 @@ const env = (k: string) => process.env[k] ?? '';
 process.env.KKS_REALTIME = 'poll';
 const dbPath = () => join(config.dataDir, 'kks.db');
 
+let identityToken = ''; // Vercel's OIDC token for the request being served
+
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
-  const missing = ['SUPABASE_URL', 'SUPABASE_KEY', 'KKS_SECRET'].filter((k) => !env(k));
-  if (missing.length) throw new Error(`missing environment variables: ${missing.join(', ')}`);
-  const key = env('SUPABASE_KEY');
-  const headers: Record<string, string> = { apikey: key, 'Content-Type': 'application/json', Accept: 'application/json' };
-  if (!key.startsWith('sb_')) headers.Authorization = `Bearer ${key}`; // legacy anon JWT
-  const res = await fetch(`${env('SUPABASE_URL')}/rest/v1/rpc/${fn}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ p_secret: env('KKS_SECRET'), ...args }),
-  });
+  let res: Response;
+  if (env('KKS_SECRET')) {
+    const missing = ['SUPABASE_URL', 'SUPABASE_KEY'].filter((k) => !env(k));
+    if (missing.length) throw new Error(`missing environment variables: ${missing.join(', ')}`);
+    const key = env('SUPABASE_KEY');
+    const headers: Record<string, string> = { apikey: key, 'Content-Type': 'application/json', Accept: 'application/json' };
+    if (!key.startsWith('sb_')) headers.Authorization = `Bearer ${key}`; // legacy anon JWT
+    res = await fetch(`${env('SUPABASE_URL')}/rest/v1/rpc/${fn}`, { method: 'POST', headers, body: JSON.stringify({ p_secret: env('KKS_SECRET'), ...args }) });
+  } else if (env('KKS_STORE_URL')) {
+    const token = identityToken || env('VERCEL_OIDC_TOKEN');
+    if (!token) throw new Error('no Vercel identity token: enable OIDC for the project, or set KKS_SECRET');
+    res = await fetch(env('KKS_STORE_URL'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fn, args }),
+    });
+  } else throw new Error('storage is not configured: set KKS_STORE_URL, or SUPABASE_URL, SUPABASE_KEY and KKS_SECRET');
   const text = await res.text();
   if (!res.ok) throw new Error(`storage ${fn} failed (${res.status}): ${text.slice(0, 300)}`);
   return (text ? JSON.parse(text) : null) as T;
@@ -190,6 +203,9 @@ function originalUrl(raw: string): string {
 
 export async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   req.url = originalUrl(req.url ?? '/');
+  const token = req.headers['x-vercel-oidc-token'];
+  if (typeof token === 'string' && token) identityToken = token;
+  delete req.headers['x-vercel-oidc-token']; // never passed on to the app
   const body = ['GET', 'HEAD'].includes(req.method ?? 'GET') ? undefined : await readBody(req);
   try {
     await serialized(async () => {
