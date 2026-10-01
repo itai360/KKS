@@ -4,7 +4,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { addDays, shortDate, startOfWeek, weekdayName } from '@shared/dates';
-import type { EventDetail, ScheduleEvent, Task, Template } from '@shared/types';
+import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
+import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
@@ -23,9 +24,12 @@ export function SchedulePage() {
   const eventId = params.get('event');
   const weekStart = startOfWeek(date);
   const { data, error, loading } = useApi<ScheduleEvent[]>(`/api/events?from=${weekStart}&to=${addDays(weekStart, 6)}`, ['events', 'tasks']);
+  // events of connected Google calendars (read-only); loaded on their own so the course schedule never waits for Google
+  const external = useApi<ExternalEvent[]>(`/api/calendar/external?from=${weekStart}&to=${addDays(weekStart, 6)}`, ['events']);
   const { isCommander, weeks, user } = useSession();
   const [creating, setCreating] = useState(params.get('new') === '1');
   const [editing, setEditing] = useState<ScheduleEvent | null>(null);
+  const [google, setGoogle] = useState(false);
 
   const set = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
@@ -38,6 +42,13 @@ export function SchedulePage() {
   };
 
   const dayEvents = (data ?? []).filter((e) => e.date === date);
+  const dayExternal = (external.data ?? []).filter((e) => e.date === date);
+  const allDay = dayExternal.filter((e) => !e.startTime);
+  // course events and timed Google events in one timeline
+  const timeline: ({ kind: 'event'; at: string; e: ScheduleEvent } | { kind: 'external'; at: string; e: ExternalEvent })[] = [
+    ...dayEvents.map((e) => ({ kind: 'event' as const, at: e.startTime, e })),
+    ...dayExternal.filter((e) => e.startTime).map((e) => ({ kind: 'external' as const, at: e.startTime!, e })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
   const week = weeks.find((w) => w.startDate <= date && w.endDate >= date);
   const canAdd = isCommander || week?.leadId === user.id;
   const nowTime = fmtTime(new Date().toISOString());
@@ -50,6 +61,9 @@ export function SchedulePage() {
         sub={fmtLongDate(date)}
         actions={
           <>
+            <button className="btn" onClick={() => setGoogle(true)}>
+              <Icon name="calendar" /> יומן Google
+            </button>
             <button className="btn" onClick={() => window.print()}>
               <Icon name="print" /> הדפסה
             </button>
@@ -68,7 +82,7 @@ export function SchedulePage() {
         <div className="day-strip grow">
           {Array.from({ length: 7 }, (_, i) => {
             const d = addDays(weekStart, i);
-            const n = (data ?? []).filter((e) => e.date === d && !e.cancelled).length;
+            const n = (data ?? []).filter((e) => e.date === d && !e.cancelled).length + (external.data ?? []).filter((e) => e.date === d).length;
             return (
               <button key={d} className={`day-pill${d === date ? ' on' : ''}${d === today ? ' today' : ''}`} onClick={() => set({ date: d, event: null })}>
                 <div className="dw">{weekdayName(d)}</div>
@@ -93,45 +107,89 @@ export function SchedulePage() {
           <div className="card-body">
             <Loading rows={4} />
           </div>
-        ) : dayEvents.length === 0 ? (
+        ) : timeline.length === 0 && allDay.length === 0 ? (
           <Empty icon="calendar" title="אין אירועים" text={canAdd ? 'הוסיפו אירועים ללו"ז היום - ולכל אירוע אחראי, מיקום ומשימות הכנה.' : undefined} />
         ) : (
-          dayEvents.map((e) => {
-            const isNow = date === today && e.startTime <= nowTime && (e.endTime ? e.endTime > nowTime : false);
-            return (
-              <div key={e.id} className={`event-row${e.cancelled ? ' cancelled' : ''}${isNow ? ' now' : ''}`} onClick={() => set({ event: String(e.id) })}>
-                <div className="event-time">
-                  {e.startTime}
-                  {e.endTime && <span className="end">עד {e.endTime}</span>}
-                </div>
+          <>
+            {allDay.map((e) => (
+              <div key={e.id} className="event-row external">
+                <div className="event-time small">כל היום</div>
                 <div style={{ minWidth: 0 }}>
-                  <div className="event-title">
-                    {e.title} {e.cancelled && <span className="badge t-red">בוטל</span>}
-                    {isNow && <span className="badge t-orange">עכשיו</span>}
-                  </div>
+                  <div className="event-title">{e.title}</div>
                   <div className="task-meta">
+                    <span>{e.sourceName}</span>
                     {e.location && (
-                      <span>
+                      <span className="sep">
                         <Icon name="pin" size={13} /> {e.location}
                       </span>
                     )}
-                    {e.ownerName && <span className={e.location ? 'sep' : ''}>אחראי: {e.ownerName}</span>}
-                    {e.notes && <span className="sep">{e.notes.slice(0, 60)}</span>}
                   </div>
                 </div>
-                <div className="row gap-6">
-                  {e.taskTotal > 0 && (
-                    <span className={`badge t-${e.taskDone === e.taskTotal ? 'green' : 'orange'}`}>
-                      הכנה {e.taskDone}/{e.taskTotal}
-                    </span>
-                  )}
-                </div>
+                <span className="badge t-blue">Google</span>
               </div>
-            );
-          })
+            ))}
+            {timeline.map((item) => {
+              if (item.kind === 'external') {
+                const e = item.e;
+                return (
+                  <div key={e.id} className="event-row external">
+                    <div className="event-time">
+                      {e.startTime}
+                      {e.endTime && <span className="end">עד {e.endTime}</span>}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="event-title">{e.title}</div>
+                      <div className="task-meta">
+                        <span>{e.sourceName}</span>
+                        {e.location && (
+                          <span className="sep">
+                            <Icon name="pin" size={13} /> {e.location}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="badge t-blue">Google</span>
+                  </div>
+                );
+              }
+              const e = item.e;
+              const isNow = date === today && e.startTime <= nowTime && (e.endTime ? e.endTime > nowTime : false);
+              return (
+                <div key={e.id} className={`event-row${e.cancelled ? ' cancelled' : ''}${isNow ? ' now' : ''}`} onClick={() => set({ event: String(e.id) })}>
+                  <div className="event-time">
+                    {e.startTime}
+                    {e.endTime && <span className="end">עד {e.endTime}</span>}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="event-title">
+                      {e.title} {e.cancelled && <span className="badge t-red">בוטל</span>}
+                      {isNow && <span className="badge t-orange">עכשיו</span>}
+                    </div>
+                    <div className="task-meta">
+                      {e.location && (
+                        <span>
+                          <Icon name="pin" size={13} /> {e.location}
+                        </span>
+                      )}
+                      {e.ownerName && <span className={e.location ? 'sep' : ''}>אחראי: {e.ownerName}</span>}
+                      {e.notes && <span className="sep">{e.notes.slice(0, 60)}</span>}
+                    </div>
+                  </div>
+                  <div className="row gap-6">
+                    {e.taskTotal > 0 && (
+                      <span className={`badge t-${e.taskDone === e.taskTotal ? 'green' : 'orange'}`}>
+                        הכנה {e.taskDone}/{e.taskTotal}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </>
         )}
       </div>
       {creating && <EventForm defaultDate={date} onClose={() => setCreating(false)} />}
+      {google && <GoogleCalendarModal onClose={() => setGoogle(false)} />}
       {eventId && <EventDrawer id={Number(eventId)} onClose={() => set({ event: null })} onEdit={(e) => setEditing(e)} />}
       {/* after the drawer so the edit form stacks on top of it */}
       {editing && <EventForm event={editing} onClose={() => setEditing(null)} />}

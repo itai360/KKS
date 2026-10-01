@@ -2430,3 +2430,13 @@ p {
     background: #fff;
   }
 }
+
+/* events from a connected Google calendar: read-only */
+.event-row.external {
+  cursor: default;
+  box-shadow: inset -3px 0 0 var(--blue, #3b6fd4);
+}
+
+.event-row.external:hover {
+  background: none;
+}

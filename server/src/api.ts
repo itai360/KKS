@@ -31,6 +31,7 @@ import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
 import { v3Router } from './api3';
+import { addCalendarSource, calendarFeed, externalEvents, listCalendarSources, removeCalendarSource, scheduleIcs, userForFeedToken } from './calendar';
 import { googleClientId, verifyGoogleIdToken } from './google';
 import {
   cancelEvent,
@@ -77,6 +78,9 @@ import {
   weekDetail,
 } from './weeks';
 
+/** The address the app is reached at, for links that leave it (calendar feeds). */
+const origin = (req: Request) => `${req.protocol}://${req.host}`;
+
 const id = (v: unknown): number => {
   const n = Number(v);
   if (!Number.isInteger(n) || n <= 0) throw badRequest('מזהה לא תקין');
@@ -111,6 +115,14 @@ export function apiRouter(): Router {
     if (clientErrors.minute !== minute) clientErrors = { minute, count: 0 };
     if (++clientErrors.count <= 20) console.error(`[client] ${e.path}: ${e.message}\n${e.stack ?? ''}`);
     res.json({ ok: true });
+  });
+
+  // the schedule for calendar apps: Google Calendar subscribes to this link, and the token in it is the permission
+  r.get('/ics/:file', (req, res) => {
+    if (!userForFeedToken(String(req.params.file).replace(/\.ics$/, ''))) throw notFound('הקישור ליומן אינו בתוקף');
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', 'inline; filename="schedule.ics"');
+    res.send(scheduleIcs(origin(req)));
   });
 
   const setupSchema = z.object({
@@ -645,6 +657,29 @@ export function apiRouter(): Router {
   r.delete('/events/:id', (req, res) => {
     deleteEvent(me(req), id(req.params.id));
     res.json({ ok: true });
+  });
+
+  // ---------------- Google Calendar ----------------
+
+  r.get('/calendar/feed', (req, res) => res.json(calendarFeed(me(req).id, origin(req))));
+  r.post('/calendar/feed/rotate', (req, res) => res.json(calendarFeed(me(req).id, origin(req), true)));
+  r.get('/calendar/sources', (req, res) => res.json(listCalendarSources(isCommander(me(req)))));
+  r.post('/calendar/sources', requireCommander, async (req, res) => {
+    const { name, url } = z.object({ name: z.string().trim().max(60).default(''), url: z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000) }).parse(req.body);
+    await addCalendarSource(me(req), name, url);
+    changed('events');
+    res.json(listCalendarSources(true));
+  });
+  r.delete('/calendar/sources/:id', requireCommander, (req, res) => {
+    removeCalendarSource(id(req.params.id));
+    changed('events');
+    res.json(listCalendarSources(true));
+  });
+  r.get('/calendar/external', async (req, res) => {
+    const today = localDateKey(clock.now(), tz());
+    const from = isDateKey(req.query.from) ? req.query.from : today;
+    const to = isDateKey(req.query.to) && req.query.to >= from ? req.query.to : from;
+    res.json(await externalEvents(from, to));
   });
 
   // ---------------- meetings ----------------

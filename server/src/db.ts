@@ -461,7 +461,21 @@ ALTER TABLE tasks ADD COLUMN experience_id INTEGER REFERENCES experiences(id) ON
 ALTER TABLE tasks ADD COLUMN debrief_id INTEGER REFERENCES debriefs(id) ON DELETE SET NULL;
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2];
+// Google Calendar: a personal feed link per user, and calendars shown in the schedule
+const SCHEMA_V3 = `
+ALTER TABLE users ADD COLUMN calendar_token TEXT;
+CREATE UNIQUE INDEX users_calendar_token ON users(calendar_token);
+
+CREATE TABLE calendar_sources (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3];
 
 export function migrate(db: Db): void {
   const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");

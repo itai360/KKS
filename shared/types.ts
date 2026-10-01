@@ -238,6 +238,33 @@ export interface ScheduleEvent {
   taskDone: number;
 }
 
+/** An event from a Google (or any iCal) calendar shown in the schedule. Read-only. */
+export interface ExternalEvent {
+  id: string;
+  sourceId: number;
+  sourceName: string;
+  date: string;
+  /** null: an all-day event */
+  startTime: string | null;
+  endTime: string | null;
+  title: string;
+  location: string;
+}
+
+export interface CalendarSource {
+  id: number;
+  name: string;
+  /** the calendar's address; only the commander sees it */
+  url: string | null;
+  error: string | null;
+}
+
+/** The user's personal link for subscribing to the schedule from Google Calendar. */
+export interface CalendarFeed {
+  url: string;
+  googleUrl: string;
+}
+
 export interface EventDetail {
   event: ScheduleEvent;
   tasks: Task[];
