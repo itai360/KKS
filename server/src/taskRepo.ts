@@ -23,6 +23,9 @@ export interface TaskRow {
   group_id: string | null;
   meeting_id: number | null;
   recurring_rule_id: number | null;
+  cadet_id: number | null;
+  experience_id: number | null;
+  debrief_id: number | null;
   requires_approval: number;
   visibility: Visibility;
   block_reason: string | null;
@@ -48,6 +51,8 @@ export interface TaskRow {
   week_name: string | null;
   week_lead_id: number | null;
   event_title: string | null;
+  cadet_name: string | null;
+  debrief_title: string | null;
   subtask_total: number;
   subtask_done: number;
   open_deps: number;
@@ -57,6 +62,7 @@ export interface TaskRow {
 const BASE = `
 SELECT t.*, o.display_name AS owner_name, c.display_name AS created_by_name, c.role AS creator_role,
   w.name AS week_name, w.lead_id AS week_lead_id, e.title AS event_title,
+  trim(cd.first_name || ' ' || cd.last_name) AS cadet_name, db.title AS debrief_title,
   (SELECT count(*) FROM tasks s WHERE s.parent_id = t.id AND s.status <> 'cancelled') AS subtask_total,
   (SELECT count(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'done') AS subtask_done,
   (SELECT count(*) FROM task_dependencies d JOIN tasks dt ON dt.id = d.depends_on_id
@@ -67,6 +73,8 @@ JOIN users o ON o.id = t.owner_id
 JOIN users c ON c.id = t.created_by
 LEFT JOIN weeks w ON w.id = t.week_id
 LEFT JOIN events e ON e.id = t.event_id
+LEFT JOIN cadets cd ON cd.id = t.cadet_id
+LEFT JOIN debriefs db ON db.id = t.debrief_id
 `;
 
 export function queryTasks(where = '1=1', ...params: (string | number | null)[]): TaskRow[] {
@@ -115,6 +123,11 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     groupId: r.group_id,
     meetingId: r.meeting_id,
     recurringRuleId: r.recurring_rule_id,
+    cadetId: r.cadet_id,
+    cadetName: r.cadet_name,
+    experienceId: r.experience_id,
+    debriefId: r.debrief_id,
+    debriefTitle: r.debrief_title,
     requiresApproval: !!r.requires_approval,
     visibility: r.visibility,
     blockReason: r.block_reason,

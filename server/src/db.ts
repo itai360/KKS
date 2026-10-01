@@ -332,7 +332,135 @@ CREATE TABLE week_templates (
 );
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1];
+// Version 3 of the spec (section 31): cadets, experiences, debriefs, documents.
+// Plus push subscriptions and an optional e-mail for Google sign-in.
+const SCHEMA_V2 = `
+ALTER TABLE users ADD COLUMN email TEXT;
+CREATE UNIQUE INDEX users_email ON users(email COLLATE NOCASE) WHERE email IS NOT NULL;
+
+CREATE TABLE teams (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  commander_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  sort INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE cadets (
+  id INTEGER PRIMARY KEY,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL DEFAULT '',
+  personal_number TEXT NOT NULL DEFAULT '',
+  team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+  phone TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'dropped', 'graduated')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX cadets_team ON cadets(team_id);
+
+CREATE TABLE cadet_records (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('note', 'talk', 'discipline', 'evaluation')),
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
+  score INTEGER,
+  follow_up TEXT NOT NULL DEFAULT '',
+  private INTEGER NOT NULL DEFAULT 0,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  occurred_on TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX cadet_records_cadet ON cadet_records(cadet_id);
+
+CREATE TABLE experiences (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  goals TEXT NOT NULL DEFAULT '',
+  mentor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'done')),
+  strengths TEXT NOT NULL DEFAULT '',
+  improvements TEXT NOT NULL DEFAULT '',
+  feedback TEXT NOT NULL DEFAULT '',
+  score INTEGER,
+  evaluated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  evaluated_at TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX experiences_cadet ON experiences(cadet_id);
+
+CREATE TABLE debriefs (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  occurred_on TEXT NOT NULL,
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  facilitator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  participants TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'final')),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE debrief_items (
+  id INTEGER PRIMARY KEY,
+  debrief_id INTEGER NOT NULL REFERENCES debriefs(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('fact', 'finding', 'conclusion', 'lesson')),
+  body TEXT NOT NULL,
+  sort INTEGER NOT NULL DEFAULT 0,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  recurring_rule_id INTEGER REFERENCES recurring_rules(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX debrief_items_debrief ON debrief_items(debrief_id);
+
+CREATE TABLE documents (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL CHECK (kind IN ('link', 'file')),
+  url TEXT,
+  file_name TEXT,
+  mime TEXT,
+  size INTEGER,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  restricted INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE push_subscriptions (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+ALTER TABLE tasks ADD COLUMN cadet_id INTEGER REFERENCES cadets(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN experience_id INTEGER REFERENCES experiences(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN debrief_id INTEGER REFERENCES debriefs(id) ON DELETE SET NULL;
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2];
 
 export function migrate(db: Db): void {
   const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");

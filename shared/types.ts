@@ -1,11 +1,14 @@
 // API data shapes shared by the server (producer) and the client (consumer).
 
 import type {
+  CadetStatus,
   CarryAction,
+  DebriefItemKind,
   LessonKind,
   NotificationCategory,
   OverdueResponse,
   Priority,
+  RecordKind,
   RecurrenceFrequency,
   RequestType,
   Role,
@@ -23,6 +26,7 @@ export interface User {
   role: Role;
   active: boolean;
   phone: string;
+  email: string;
 }
 
 export interface CourseSettings {
@@ -60,6 +64,11 @@ export interface Task {
   groupId: string | null;
   meetingId: number | null;
   recurringRuleId: number | null;
+  cadetId: number | null;
+  cadetName: string | null;
+  experienceId: number | null;
+  debriefId: number | null;
+  debriefTitle: string | null;
   requiresApproval: boolean;
   visibility: Visibility;
   blockReason: string | null;
@@ -453,4 +462,153 @@ export interface SearchResults {
   users: User[];
   weeks: Week[];
   events: ScheduleEvent[];
+}
+
+// ---------------- Version 3 (section 31) ----------------
+
+export interface Team {
+  id: number;
+  name: string;
+  commanderId: number | null;
+  commanderName: string | null;
+  sort: number;
+  cadetCount: number;
+}
+
+export interface Cadet {
+  id: number;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  personalNumber: string;
+  teamId: number | null;
+  teamName: string | null;
+  phone: string;
+  notes: string;
+  status: CadetStatus;
+  recordCount: number;
+  lastRecordAt: string | null;
+  avgScore: number | null;
+  disciplineCount: number;
+  talkCount: number;
+  canManage: boolean;
+}
+
+export interface CadetRecord {
+  id: number;
+  cadetId: number;
+  kind: RecordKind;
+  title: string;
+  body: string;
+  category: string;
+  score: number | null;
+  followUp: string;
+  private: boolean;
+  taskId: number | null;
+  taskTitle: string | null;
+  weekId: number | null;
+  weekName: string | null;
+  authorId: number;
+  authorName: string;
+  occurredOn: string;
+  createdAt: string;
+  canDelete: boolean;
+}
+
+export interface Experience {
+  id: number;
+  cadetId: number;
+  cadetName: string;
+  teamName: string | null;
+  role: string;
+  weekId: number | null;
+  weekName: string | null;
+  eventId: number | null;
+  eventTitle: string | null;
+  startDate: string;
+  endDate: string;
+  goals: string;
+  mentorId: number | null;
+  mentorName: string | null;
+  status: 'planned' | 'done';
+  phase: 'planned' | 'active' | 'awaiting_feedback' | 'done';
+  strengths: string;
+  improvements: string;
+  feedback: string;
+  score: number | null;
+  evaluatedByName: string | null;
+  evaluatedAt: string | null;
+  canSeeFeedback: boolean;
+  canEdit: boolean;
+  canGiveFeedback: boolean;
+  feedbackTaskId: number | null;
+}
+
+export interface CadetDetail {
+  cadet: Cadet;
+  records: CadetRecord[];
+  experiences: Experience[];
+  tasks: Task[];
+  scores: { date: string; criterion: string; score: number }[];
+}
+
+export interface DebriefItem {
+  id: number;
+  debriefId: number;
+  kind: DebriefItemKind;
+  body: string;
+  sort: number;
+  taskId: number | null;
+  taskTitle: string | null;
+  taskStatus: TaskStatus | null;
+  recurringRuleId: number | null;
+  recurringTitle: string | null;
+  createdAt: string;
+}
+
+export interface Debrief {
+  id: number;
+  title: string;
+  occurredOn: string;
+  eventId: number | null;
+  eventTitle: string | null;
+  weekId: number | null;
+  weekName: string | null;
+  facilitatorId: number | null;
+  facilitatorName: string | null;
+  participants: string;
+  summary: string;
+  status: 'draft' | 'final';
+  createdBy: number;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+  itemCounts: Record<DebriefItemKind, number>;
+  openTasks: number;
+  canEdit: boolean;
+}
+
+export interface DebriefDetail {
+  debrief: Debrief;
+  items: DebriefItem[];
+  tasks: Task[];
+}
+
+export interface CourseDocument {
+  id: number;
+  title: string;
+  category: string;
+  description: string;
+  kind: 'link' | 'file';
+  url: string;
+  fileName: string | null;
+  size: number | null;
+  weekId: number | null;
+  weekName: string | null;
+  restricted: boolean;
+  pinned: boolean;
+  uploadedBy: number | null;
+  uploadedByName: string | null;
+  createdAt: string;
+  canEdit: boolean;
 }

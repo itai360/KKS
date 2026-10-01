@@ -61,6 +61,9 @@ export const createTaskSchema = z.object({
   eventId: z.number().int().positive().nullable().optional(),
   parentId: z.number().int().positive().nullable().optional(),
   meetingId: z.number().int().positive().nullable().optional(),
+  cadetId: z.number().int().positive().nullable().optional(),
+  experienceId: z.number().int().positive().nullable().optional(),
+  debriefId: z.number().int().positive().nullable().optional(),
   requiresApproval: z.boolean().optional().default(false),
   visibility: z.enum(VISIBILITIES).optional().default('normal'),
   links: z.array(linkSchema).optional().default([]),
@@ -120,6 +123,9 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
   if (weekId === undefined) weekId = weekForDate(localDateKey(input.deadline, tz()));
   if (weekId && !db().get('SELECT 1 FROM weeks WHERE id = ?', weekId)) throw badRequest('השבוע לא נמצא');
   if (input.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', input.eventId)) throw badRequest('הפעילות לא נמצאה');
+  if (input.cadetId && !db().get('SELECT 1 FROM cadets WHERE id = ?', input.cadetId)) throw badRequest('הצוער לא נמצא');
+  if (input.experienceId && !db().get('SELECT 1 FROM experiences WHERE id = ?', input.experienceId)) throw badRequest('ההתנסות לא נמצאה');
+  if (input.debriefId && !db().get('SELECT 1 FROM debriefs WHERE id = ?', input.debriefId)) throw badRequest('התחקיר לא נמצא');
 
   let owners: number[];
   if (input.assignMode === 'all') {
@@ -159,9 +165,9 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
       const flags = reminderFlags(input.deadline);
       const id = db().run(
         `INSERT INTO tasks(title, description, owner_id, created_by, deadline, priority, status, domain, week_id, event_id,
-           parent_id, group_id, meeting_id, recurring_rule_id, requires_approval, visibility,
+           parent_id, group_id, meeting_id, recurring_rule_id, cadet_id, experience_id, debrief_id, requires_approval, visibility,
            reminded_24h, reminded_2h, overdue_notified, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         input.title,
         input.description,
         unit.owner,
@@ -175,6 +181,9 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
         groupId,
         input.meetingId ?? null,
         opts.recurringRuleId ?? null,
+        input.cadetId ?? null,
+        input.experienceId ?? null,
+        input.debriefId ?? null,
         input.requiresApproval,
         input.visibility,
         flags.reminded24,

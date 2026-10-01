@@ -4,6 +4,7 @@ import type { NotificationCategory } from '../../shared/constants';
 import type { Notification } from '../../shared/types';
 import { nowIso } from './core';
 import { db } from './db';
+import { sendPush } from './push';
 import { broadcast, pushNotification, type Topic } from './realtime';
 
 export function changed(...topics: Topic[]): void {
@@ -102,6 +103,10 @@ export function notify(userIds: Iterable<number | null | undefined>, n: NotifyIn
       created,
     ).id;
     const row = db().get<NotificationRow>('SELECT * FROM notifications WHERE id = ?', id)!;
-    db().onCommit(() => pushNotification(uid, toNotification(row)));
+    db().onCommit(() => {
+      const n = toNotification(row);
+      pushNotification(uid, n);
+      void sendPush(uid, n).catch((e) => console.error('[push]', e));
+    });
   }
 }

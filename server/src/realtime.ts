@@ -5,7 +5,19 @@
 import type { Request, Response } from 'express';
 import type { Notification } from '../../shared/types';
 
-export type Topic = 'tasks' | 'weeks' | 'events' | 'templates' | 'recurring' | 'users' | 'settings' | 'meetings' | 'requests';
+export type Topic =
+  | 'tasks'
+  | 'weeks'
+  | 'events'
+  | 'templates'
+  | 'recurring'
+  | 'users'
+  | 'settings'
+  | 'meetings'
+  | 'requests'
+  | 'cadets'
+  | 'debriefs'
+  | 'documents';
 
 const clients = new Map<number, Set<Response>>();
 let pending = new Set<Topic>();

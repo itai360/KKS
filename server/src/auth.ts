@@ -13,6 +13,7 @@ export interface UserRow {
   title: string;
   role: Role;
   phone: string;
+  email: string | null;
   active: number;
   created_at: string;
 }
@@ -37,6 +38,7 @@ export function toUser(r: UserRow): User {
     role: r.role,
     active: !!r.active,
     phone: r.phone,
+    email: r.email ?? '',
   };
 }
 
@@ -186,15 +188,17 @@ export function createUser(input: {
   title?: string;
   role: Role;
   phone?: string;
+  email?: string;
 }): number {
   return db().run(
-    'INSERT INTO users(username, password_hash, display_name, title, role, phone, active, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
+    'INSERT INTO users(username, password_hash, display_name, title, role, phone, email, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)',
     input.username.trim(),
     hashPassword(input.password),
     input.displayName.trim(),
     input.title?.trim() ?? '',
     input.role,
     input.phone?.trim() ?? '',
+    input.email?.trim().toLowerCase() || null,
     nowIso(),
   ).id;
 }

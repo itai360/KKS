@@ -31,6 +31,8 @@ import { activeMeeting, endMeeting, getMeeting, listMeetings, startMeeting, upda
 import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
+import { v3Router } from './api3';
+import { googleClientId, verifyGoogleIdToken } from './google';
 import {
   cancelEvent,
   canManageEvent,
@@ -92,7 +94,7 @@ export function apiRouter(): Router {
   r.get('/public/info', (_req, res) => {
     const s = getSettings();
     const users = db().get<{ n: number }>('SELECT count(*) AS n FROM users')!.n;
-    res.json({ courseName: s.courseName, courseSymbol: s.courseSymbol, needsSetup: users === 0 });
+    res.json({ courseName: s.courseName, courseSymbol: s.courseSymbol, needsSetup: users === 0, googleClientId: googleClientId() || null });
   });
 
   const setupSchema = z.object({
@@ -121,6 +123,27 @@ export function apiRouter(): Router {
     if (!u || !verifyPassword(password, u.password_hash)) {
       loginFailed(key);
       throw new HttpError(401, 'שם משתמש או סיסמה שגויים');
+    }
+    loginSucceeded(key);
+    setSessionCookie(res, createSession(u.id));
+    res.json({ user: toUser(u) });
+  });
+
+  r.post('/auth/google', async (req, res) => {
+    const { credential } = z.object({ credential: z.string().min(20).max(5000) }).parse(req.body);
+    const key = `${req.ip}|google`;
+    loginThrottle(key);
+    let identity;
+    try {
+      identity = await verifyGoogleIdToken(credential);
+    } catch (e) {
+      loginFailed(key);
+      throw e;
+    }
+    const u = db().get<UserRow>('SELECT * FROM users WHERE email = ? AND active = 1', identity.email);
+    if (!u) {
+      loginFailed(key);
+      throw new HttpError(403, `החשבון ${identity.email} לא מוגדר במערכת. פנה למפקד הקורס.`);
     }
     loginSucceeded(key);
     setSessionCookie(res, createSession(u.id));
@@ -167,11 +190,13 @@ export function apiRouter(): Router {
     title: z.string().trim().max(80).optional().default(''),
     role: z.enum(ROLES),
     phone: z.string().trim().max(30).optional().default(''),
+    email: z.string().trim().email('כתובת מייל לא תקינה').max(120).optional().or(z.literal('')),
   });
 
   r.post('/users', requireCommander, (req, res) => {
     const input = userSchema.parse(req.body);
     if (db().get('SELECT 1 FROM users WHERE username = ?', input.username)) throw badRequest('שם המשתמש תפוס');
+    if (input.email && db().get('SELECT 1 FROM users WHERE email = ?', input.email.toLowerCase())) throw badRequest('כתובת המייל כבר משויכת למשתמש אחר');
     const newId = createUser(input);
     changed('users');
     res.json(toUser(getUserRow(newId)!));
@@ -190,13 +215,18 @@ export function apiRouter(): Router {
     if (p.username && p.username.toLowerCase() !== cur.username.toLowerCase() && db().get('SELECT 1 FROM users WHERE username = ?', p.username)) {
       throw badRequest('שם המשתמש תפוס');
     }
+    const email = p.email === undefined ? cur.email : p.email ? p.email.toLowerCase() : null;
+    if (email && email !== cur.email && db().get('SELECT 1 FROM users WHERE email = ? AND id <> ?', email, uid)) {
+      throw badRequest('כתובת המייל כבר משויכת למשתמש אחר');
+    }
     db().run(
-      'UPDATE users SET username = ?, display_name = ?, title = ?, role = ?, phone = ?, active = ? WHERE id = ?',
+      'UPDATE users SET username = ?, display_name = ?, title = ?, role = ?, phone = ?, email = ?, active = ? WHERE id = ?',
       p.username ?? cur.username,
       p.displayName ?? cur.display_name,
       p.title ?? cur.title,
       p.role ?? cur.role,
       p.phone ?? cur.phone,
+      email,
       p.active === undefined ? cur.active : p.active ? 1 : 0,
       uid,
     );
@@ -680,6 +710,8 @@ export function apiRouter(): Router {
     const unread = db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', u.id)!.n;
     res.json({ unread });
   });
+
+  r.use(v3Router());
 
   r.use((_req, _res, next) => next(notFound('נתיב לא קיים')));
   return r;

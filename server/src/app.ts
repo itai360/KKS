@@ -37,11 +37,21 @@ export function createApp(opts: { staticDir?: string } = {}) {
         },
       }),
     );
+    // Google's sign-in button needs its script and frame only when Google login is enabled
+    const g = process.env.GOOGLE_CLIENT_ID ? ' https://accounts.google.com' : '';
+    const csp = [
+      "default-src 'self'",
+      `script-src 'self'${g ? ' https://accounts.google.com/gsi/client' : ''}`,
+      "img-src 'self' data: blob: https://*.googleusercontent.com",
+      `style-src 'self' 'unsafe-inline'${g ? ' https://accounts.google.com/gsi/style' : ''}`,
+      "font-src 'self' data:",
+      `connect-src 'self'${g}`,
+      `frame-src${g || " 'none'"}`,
+      "worker-src 'self'",
+      "frame-ancestors 'none'",
+    ].join('; ');
     app.get(/^(?!\/api\/).*/, (_req, res) => {
-      res.setHeader(
-        'Content-Security-Policy',
-        "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
-      );
+      res.setHeader('Content-Security-Policy', csp);
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(resolve(staticDir, 'index.html'));
     });

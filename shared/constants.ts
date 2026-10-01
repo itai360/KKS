@@ -122,3 +122,39 @@ export const CARRY_ACTION_LABELS: Record<CarryAction, string> = {
 
 // Section 18 - tag colors.
 export type Tone = 'red' | 'orange' | 'yellow' | 'green' | 'gray' | 'blue' | 'purple';
+
+// ---------------- Version 3 (section 31) ----------------
+
+export const CADET_STATUSES = ['active', 'dropped', 'graduated'] as const;
+export type CadetStatus = (typeof CADET_STATUSES)[number];
+export const CADET_STATUS_LABELS: Record<CadetStatus, string> = {
+  active: 'פעיל',
+  dropped: 'הודח / פרש',
+  graduated: 'סיים',
+};
+
+export const RECORD_KINDS = ['note', 'talk', 'discipline', 'evaluation'] as const;
+export type RecordKind = (typeof RECORD_KINDS)[number];
+export const RECORD_KIND_LABELS: Record<RecordKind, string> = {
+  note: 'הערה',
+  talk: 'שיחה אישית',
+  discipline: 'משמעת',
+  evaluation: 'הערכה',
+};
+/** Personal talks and discipline are always restricted to the author, the team commander and the course commander. */
+export const RESTRICTED_RECORD_KINDS: readonly RecordKind[] = ['talk', 'discipline'];
+
+export const EVALUATION_CRITERIA = ['פיקוד והובלה', 'מקצועיות', 'ערכים ודוגמה אישית', 'עבודת צוות', 'יוזמה', 'כושר גופני'] as const;
+export const DISCIPLINE_SEVERITIES = ['קלה', 'בינונית', 'חמורה'] as const;
+export const TALK_TYPES = ['שיחת היכרות', 'שיחת אמצע', 'שיחת משוב', 'שיחה יזומה', 'שיחת סיום'] as const;
+
+export const DEBRIEF_ITEM_KINDS = ['fact', 'finding', 'conclusion', 'lesson'] as const;
+export type DebriefItemKind = (typeof DEBRIEF_ITEM_KINDS)[number];
+export const DEBRIEF_ITEM_LABELS: Record<DebriefItemKind, string> = {
+  fact: 'עובדות',
+  finding: 'ממצאים',
+  conclusion: 'מסקנות',
+  lesson: 'לקחים',
+};
+
+export const DOCUMENT_CATEGORIES = ['נהלים', 'פקודות', 'מצגות', 'חומרי הדרכה', 'קישורים', 'אחר'] as const;
