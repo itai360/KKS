@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { CARRY_ACTION_LABELS, LESSON_KIND_LABELS, LESSON_KINDS, WEEK_STATUS_LABELS, type CarryAction, type LessonKind } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { CarryDecision, CloseCheck, Task, Template, Week, WeekDetail } from '@shared/types';
+import { CalendarWeeksModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
 import { GroupTitle, TaskList } from '../components/TaskRow';
@@ -23,6 +24,7 @@ export function WeeksPage() {
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [fromCalendar, setFromCalendar] = useState(false);
   const today = todayKey();
 
   return (
@@ -33,6 +35,9 @@ export function WeeksPage() {
         actions={
           isCommander && (
             <>
+              <button className="btn" onClick={() => setFromCalendar(true)}>
+                <Icon name="calendar" /> מיומן Google
+              </button>
               <button className="btn" onClick={() => setGenerating(true)}>
                 <Icon name="layers" /> יצירת שבועות
               </button>
@@ -88,6 +93,7 @@ export function WeeksPage() {
       )}
       {creating && <WeekForm onClose={() => setCreating(false)} />}
       {generating && <GenerateWeeks onClose={() => setGenerating(false)} />}
+      {fromCalendar && <CalendarWeeksModal onClose={() => setFromCalendar(false)} />}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 // The schedule and Google Calendar, both ways (see server/src/calendar.ts).
 
 import { useState } from 'react';
-import type { CalendarFeed, CalendarSource } from '@shared/types';
+import { shortDate } from '@shared/dates';
+import type { CalendarFeed, CalendarSource, CalendarWeeksPreview } from '@shared/types';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -169,5 +170,131 @@ function Sources() {
         </div>
       )}
     </section>
+  );
+}
+
+/** Course weeks from a Google calendar: preview what was found, then create / update the chosen weeks. */
+export function CalendarWeeksModal({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const saved = useApi<{ url: string | null }>('/api/weeks/calendar', []);
+  const [url, setUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<CalendarWeeksPreview | null>(null);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [showInSchedule, setShowInSchedule] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const address = url ?? saved.data?.url ?? '';
+
+  const check = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const p = await api.post<CalendarWeeksPreview>('/api/weeks/calendar/preview', { url: address });
+      setPreview(p);
+      setChosen(new Set(p.weeks.filter((w) => w.action !== 'same').map((w) => w.uid)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const apply = async () => {
+    if (!preview) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const items = preview.weeks.filter((w) => chosen.has(w.uid));
+      await api.post('/api/weeks/calendar/apply', { url: address, items, showInSchedule });
+      emitLocalChange('weeks', 'events');
+      toast({ title: `השבועות עודכנו מהיומן (${items.length})`, tone: 'green' });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const toggle = (uid: string) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+
+  return (
+    <Modal
+      title="שבועות הקורס מיומן Google"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          {preview && preview.weeks.length > 0 && (
+            <button className="btn btn-primary" disabled={busy || chosen.size === 0} onClick={() => void apply()}>
+              {busy ? 'מעדכן...' : `עדכון ${chosen.size} שבועות`}
+            </button>
+          )}
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-16">
+        <div className="small muted">
+          כל אירוע ביומן ששמו מתחיל ב"שבוע" הופך לשבוע בקורס. אירוע של יום אחד מסמן את השבוע שמתחיל בו. אם אין אירועים כאלה, נלקחים אירועים של 3 עד 14 ימים. לפני שמשהו
+          משתנה תראו את הרשימה ותבחרו מה לעדכן. אפשר לחזור לכאן בכל פעם שהיומן משתנה.
+        </div>
+        <Field label="הכתובת הסודית של היומן בפורמט iCal" hint={'ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "שילוב היומן" ← "כתובת סודית בפורמט iCal".'}>
+          <div className="row gap-6">
+            <input
+              className="input mono grow"
+              dir="ltr"
+              value={address}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setPreview(null);
+              }}
+              placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+              data-autofocus
+            />
+            <button className="btn" disabled={busy || address.trim().length < 8} onClick={() => void check()}>
+              {busy && !preview ? 'קורא את היומן...' : 'בדיקת היומן'}
+            </button>
+          </div>
+        </Field>
+        <ErrorBox error={error} />
+        {preview &&
+          (preview.weeks.length === 0 ? (
+            <div className="info-box">לא נמצאו ביומן אירועים שנראים כמו שבועות ({preview.ignored} אירועים נבדקו). תנו לאירועי השבועות שם שמתחיל ב"שבוע", למשל "שבוע 1 - הכרות".</div>
+          ) : (
+            <div className="col gap-6">
+              {preview.weeks.map((w) => (
+                <label key={w.uid} className="row gap-6" style={{ cursor: w.action === 'same' ? 'default' : 'pointer', opacity: w.action === 'same' ? 0.6 : 1 }}>
+                  <input type="checkbox" checked={chosen.has(w.uid)} disabled={w.action === 'same'} onChange={() => toggle(w.uid)} />
+                  <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="strong">{w.name}</div>
+                    <div className="tiny muted">
+                      <span className="mono">
+                        {shortDate(w.startDate)}-{shortDate(w.endDate)}
+                      </span>
+                      {w.changes.length > 0 && ` · ${w.changes.join(' · ')}`}
+                    </div>
+                  </div>
+                  <span className={`badge ${w.action === 'create' ? 't-green' : w.action === 'update' ? 't-orange' : 't-gray'}`}>
+                    {w.action === 'create' ? 'חדש' : w.action === 'update' ? 'עדכון' : 'ללא שינוי'}
+                  </span>
+                </label>
+              ))}
+              {preview.ignored > 0 && <div className="tiny muted">עוד {preview.ignored} אירועים ביומן לא נראים כמו שבועות ולא ייכנסו.</div>}
+              <label className="row gap-6 small mt-12">
+                <input type="checkbox" checked={showInSchedule} onChange={(e) => setShowInSchedule(e.target.checked)} />
+                להציג את שאר אירועי היומן גם בלו"ז
+              </label>
+            </div>
+          ))}
+      </div>
+    </Modal>
   );
 }

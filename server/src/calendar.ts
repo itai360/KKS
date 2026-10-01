@@ -7,12 +7,13 @@
 
 import { randomBytes } from 'node:crypto';
 import ICAL from 'ical.js';
-import type { CalendarFeed, CalendarSource, ExternalEvent, ScheduleEvent } from '../../shared/types';
+import type { CalendarFeed, CalendarSource, CalendarWeek, CalendarWeeksPreview, ExternalEvent, ScheduleEvent, Week } from '../../shared/types';
 import { addDays, diffDays, localDateKey, localTime, zonedToUtc } from '../../shared/dates';
 import type { UserRow } from './auth';
-import { badRequest, clock, getSettings, notFound, nowIso, tz } from './core';
+import { badRequest, clock, getSettings, notFound, nowIso, tz, updateSettings } from './core';
 import { db } from './db';
 import { listEvents } from './schedule';
+import { createWeek, listWeeks, updateWeek } from './weeks';
 
 // ---------------- out: the schedule as an iCal feed ----------------
 
@@ -306,4 +307,159 @@ export async function externalEvents(from: string, to: string): Promise<External
   return loaded
     .flatMap(({ s, c }) => (c.root ? expand(s, c.root, from, to, zone) : []))
     .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? ''));
+}
+
+// ---------------- course weeks from a calendar ----------------
+// A week is an event whose title starts with "שבוע" (a one-day marker covers
+// the days until the next week), or any event of 3 to 14 days. Events inside
+// another week are not weeks of their own. Repeating events are left out.
+
+const WEEKS_URL_KEY = 'weeks_calendar_url';
+const STARTS_WITH_WEEK = /^\s*שבוע(?![\u0590-\u05FF])/; // not "שבועות" (the holiday)
+
+interface Candidate {
+  uid: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  number: number | null;
+  strong: boolean;
+  marker: boolean; // one day: stands for the week that starts there
+}
+
+function weekCandidates(root: ICAL.Component, zone: string): { found: Candidate[]; total: number } {
+  const all: Candidate[] = [];
+  let total = 0;
+  for (const ve of root.getAllSubcomponents('vevent')) {
+    if (ve.hasProperty('recurrence-id')) continue;
+    total++;
+    if (ve.hasProperty('rrule') || String(ve.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED') continue;
+    try {
+      const ev = new ICAL.Event(ve);
+      const name = ev.summary?.trim() ?? '';
+      if (!name || !ev.startDate) continue;
+      let start: string;
+      let end: string;
+      if (ev.startDate.isDate) {
+        start = keyOf(ev.startDate);
+        end = ev.endDate?.isDate ? addDays(keyOf(ev.endDate), -1) : start; // the end date of an all-day event is not included
+      } else {
+        const s = instant(ev.startDate, zone);
+        const e = ev.endDate ? instant(ev.endDate, zone) : s;
+        start = localDateKey(s, zone);
+        end = localDateKey(new Date(Math.max(s.getTime(), e.getTime() - 1)), zone); // ending at midnight belongs to the day before
+      }
+      if (end < start) end = start;
+      const days = diffDays(end, start) + 1;
+      const strong = STARTS_WITH_WEEK.test(name);
+      if (strong ? days > 21 : days < 3 || days > 14) continue;
+      const n = /שבוע\s*(\d{1,3})/.exec(name);
+      all.push({ uid: ev.uid || `${start}:${name}`, name: name.slice(0, 80), startDate: start, endDate: end, number: n ? Number(n[1]) : null, strong, marker: strong && days === 1 });
+    } catch {
+      /* a malformed event is skipped */
+    }
+  }
+  all.sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
+  // a one-day "שבוע" marker runs until the day before the next week, at most a week
+  const strongStarts = [...new Set(all.filter((c) => c.strong).map((c) => c.startDate))];
+  for (const c of all) {
+    if (!c.marker) continue;
+    const next = strongStarts.find((d) => d > c.startDate);
+    const limit = addDays(c.startDate, 6);
+    c.endDate = next && addDays(next, -1) < limit ? addDays(next, -1) : limit;
+  }
+  const overlaps = (a: Candidate, b: Candidate) => a.startDate <= b.endDate && b.startDate <= a.endDate;
+  // inside another week (a three-day exercise in week 3), or the same dates twice: not a week of its own
+  const outermost = (list: Candidate[]) =>
+    list.filter(
+      (c, i) =>
+        !list.some(
+          (o, j) => j !== i && o.startDate <= c.startDate && o.endDate >= c.endDate && (o.startDate !== c.startDate || o.endDate !== c.endDate || j < i),
+        ),
+    );
+  // events named "שבוע" define the weeks; a long event only counts where there are none
+  const strong = outermost(all.filter((c) => c.strong));
+  const weak = outermost(all.filter((c) => !c.strong && !strong.some((o) => overlaps(o, c))));
+  const found = [...strong, ...weak].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  return { found, total };
+}
+
+function matchWeeks(found: Candidate[]): CalendarWeek[] {
+  const weeks = db().all<{ id: number; number: number; name: string; start_date: string; end_date: string; calendar_uid: string | null }>(
+    'SELECT id, number, name, start_date, end_date, calendar_uid FROM weeks',
+  );
+  // strongest evidence first for every week: imported from this event, then the same start day, then the same number
+  const match = new Map<Candidate, (typeof weeks)[number]>();
+  const used = new Set<number>();
+  const tests: ((c: Candidate, w: (typeof weeks)[number]) => boolean)[] = [
+    (c, w) => w.calendar_uid === c.uid,
+    (c, w) => !w.calendar_uid && w.start_date === c.startDate,
+    (c, w) => !w.calendar_uid && c.number !== null && w.number === c.number,
+  ];
+  for (const test of tests) {
+    for (const c of found) {
+      if (match.has(c)) continue;
+      const w = weeks.find((x) => !used.has(x.id) && test(c, x));
+      if (w) {
+        match.set(c, w);
+        used.add(w.id);
+      }
+    }
+  }
+  return found.map((c) => {
+    const w = match.get(c);
+    if (!w) return { uid: c.uid, name: c.name, startDate: c.startDate, endDate: c.endDate, number: c.number, weekId: null, action: 'create' as const, changes: [] };
+    const changes = [
+      ...(w.name !== c.name ? [`שם: ${w.name} ← ${c.name}`] : []),
+      ...(w.start_date !== c.startDate || w.end_date !== c.endDate ? ['תאריכים'] : []),
+    ];
+    return { uid: c.uid, name: c.name, startDate: c.startDate, endDate: c.endDate, number: c.number, weekId: w.id, action: changes.length ? ('update' as const) : ('same' as const), changes };
+  });
+}
+
+/** The calendar the weeks were last imported from (the commander's). */
+export function weeksCalendarUrl(): string | null {
+  return db().get<{ value: string }>('SELECT value FROM meta WHERE key = ?', WEEKS_URL_KEY)?.value ?? null;
+}
+
+export async function previewCalendarWeeks(rawUrl: string): Promise<CalendarWeeksPreview> {
+  const url = normalizeCalendarUrl(rawUrl);
+  const loaded = await loadSource(url, true);
+  if (!loaded.root) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
+  const { found, total } = weekCandidates(loaded.root, tz());
+  return { weeks: matchWeeks(found), ignored: total - found.length };
+}
+
+export interface ApplyWeek {
+  uid: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  number: number | null;
+  weekId: number | null;
+}
+
+/** Creates and updates the chosen weeks, each linked to its event for the next update. */
+export function applyCalendarWeeks(actor: UserRow, rawUrl: string, items: ApplyWeek[]): Week[] {
+  const url = normalizeCalendarUrl(rawUrl);
+  db().tx(() => {
+    for (const it of items) {
+      let id = it.weekId;
+      if (id) {
+        updateWeek(actor, id, { name: it.name, startDate: it.startDate, endDate: it.endDate, ...(it.number !== null ? { number: it.number } : {}) });
+      } else {
+        id = createWeek(actor, { name: it.name, startDate: it.startDate, endDate: it.endDate, ...(it.number !== null ? { number: it.number } : {}) });
+      }
+      db().run('UPDATE weeks SET calendar_uid = NULL WHERE calendar_uid = ? AND id <> ?', it.uid, id);
+      db().run('UPDATE weeks SET calendar_uid = ? WHERE id = ?', it.uid, id);
+    }
+    db().run('INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', WEEKS_URL_KEY, url);
+    // the course dates cover every week
+    const range = db().get<{ a: string | null; b: string | null }>('SELECT min(start_date) AS a, max(end_date) AS b FROM weeks');
+    const s = getSettings();
+    if (range?.a && range.b) {
+      updateSettings({ startDate: s.startDate && s.startDate < range.a ? s.startDate : range.a, endDate: s.endDate && s.endDate > range.b ? s.endDate : range.b });
+    }
+  });
+  return listWeeks();
 }

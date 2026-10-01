@@ -475,7 +475,12 @@ CREATE TABLE calendar_sources (
 );
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3];
+// course weeks imported from a Google calendar keep the event they came from
+const SCHEMA_V4 = `
+ALTER TABLE weeks ADD COLUMN calendar_uid TEXT;
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4];
 
 export function migrate(db: Db): void {
   const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");

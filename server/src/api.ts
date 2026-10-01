@@ -31,7 +31,18 @@ import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
 import { v3Router } from './api3';
-import { addCalendarSource, calendarFeed, externalEvents, listCalendarSources, removeCalendarSource, scheduleIcs, userForFeedToken } from './calendar';
+import {
+  addCalendarSource,
+  applyCalendarWeeks,
+  calendarFeed,
+  externalEvents,
+  listCalendarSources,
+  previewCalendarWeeks,
+  removeCalendarSource,
+  scheduleIcs,
+  userForFeedToken,
+  weeksCalendarUrl,
+} from './calendar';
 import { googleClientId, verifyGoogleIdToken } from './google';
 import {
   cancelEvent,
@@ -573,6 +584,37 @@ export function apiRouter(): Router {
   r.post('/weeks/generate', requireCommander, (req, res) => {
     generateWeeks(me(req), req.body);
     res.json(listWeeks());
+  });
+  // course weeks from a Google calendar: preview first, then create / update the chosen ones
+  const calendarUrl = z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000);
+  r.get('/weeks/calendar', requireCommander, (_req, res) => res.json({ url: weeksCalendarUrl() }));
+  r.post('/weeks/calendar/preview', requireCommander, async (req, res) => {
+    res.json(await previewCalendarWeeks(z.object({ url: calendarUrl }).parse(req.body).url));
+  });
+  r.post('/weeks/calendar/apply', requireCommander, async (req, res) => {
+    const dateKey = z.string().refine(isDateKey, 'תאריך לא תקין');
+    const body = z
+      .object({
+        url: calendarUrl,
+        items: z
+          .array(
+            z.object({
+              uid: z.string().min(1).max(500),
+              name: z.string().trim().min(1).max(80),
+              startDate: dateKey,
+              endDate: dateKey,
+              number: z.number().int().min(0).max(100).nullable(),
+              weekId: z.number().int().positive().nullable(),
+            }),
+          )
+          .max(60),
+        showInSchedule: z.boolean().optional(),
+      })
+      .parse(req.body);
+    const weeks = applyCalendarWeeks(me(req), body.url, body.items);
+    // optionally the calendar's events also appear in the schedule (already connected: nothing to do)
+    if (body.showInSchedule) await addCalendarSource(me(req), 'יומן הקורס', body.url).catch(() => undefined);
+    res.json(weeks);
   });
   r.get('/weeks/:id', (req, res) => res.json(weekDetail(me(req), id(req.params.id))));
   r.patch('/weeks/:id', (req, res) => {

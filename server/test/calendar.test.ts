@@ -194,3 +194,107 @@ describe('Google calendars in the schedule', () => {
     }
   });
 });
+
+const weeksIcs = (week1: { start: string; end: string; name: string }) =>
+  [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Google Inc//Google Calendar 70.9054//EN',
+    'X-WR-TIMEZONE:Asia/Jerusalem',
+    // a week as an all-day event from Sunday to Thursday (the end date is not included)
+    'BEGIN:VEVENT',
+    `DTSTART;VALUE=DATE:${week1.start}`,
+    `DTEND;VALUE=DATE:${week1.end}`,
+    'UID:week-1@google.com',
+    `SUMMARY:${week1.name}`,
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'DTSTART;VALUE=DATE:20261011',
+    'DTEND;VALUE=DATE:20261016',
+    'UID:week-2@google.com',
+    'SUMMARY:שבוע 2 - שבוע שטח',
+    'END:VEVENT',
+    // three days inside week 2: not a week of its own
+    'BEGIN:VEVENT',
+    'DTSTART;VALUE=DATE:20261012',
+    'DTEND;VALUE=DATE:20261015',
+    'UID:exercise@google.com',
+    'SUMMARY:תרגיל פלוגתי',
+    'END:VEVENT',
+    // a one-day marker: the week that starts that day
+    'BEGIN:VEVENT',
+    'DTSTART;VALUE=DATE:20261018',
+    'DTEND;VALUE=DATE:20261019',
+    'UID:week-3@google.com',
+    'SUMMARY:שבוע 3',
+    'END:VEVENT',
+    // not weeks: a one-hour summary, the holiday, a repeating meeting, the whole course
+    'BEGIN:VEVENT',
+    'DTSTART;TZID=Asia/Jerusalem:20261008T140000',
+    'DTEND;TZID=Asia/Jerusalem:20261008T150000',
+    'UID:summary@google.com',
+    'SUMMARY:סיכום שבוע',
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'DTSTART;VALUE=DATE:20270611',
+    'DTEND;VALUE=DATE:20270612',
+    'UID:shavuot@google.com',
+    'SUMMARY:שבועות',
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'DTSTART;TZID=Asia/Jerusalem:20261004T090000',
+    'DTEND;TZID=Asia/Jerusalem:20261004T100000',
+    'RRULE:FREQ=WEEKLY;BYDAY=SU',
+    'UID:meeting@google.com',
+    'SUMMARY:שבוע - ישיבת פתיחה',
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'DTSTART;VALUE=DATE:20261004',
+    'DTEND;VALUE=DATE:20261204',
+    'UID:course@google.com',
+    'SUMMARY:קורס קק"ס',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+describe('course weeks from a Google calendar', () => {
+  it('finds the weeks, previews them, and creates or updates them linked to their events', async () => {
+    let ics = weeksIcs({ start: '20261004', end: '20261009', name: 'שבוע 1 - הכרות' });
+    setCalendarFetcher(async () => ics);
+    // a week the commander already made by hand, starting the same day as week 2
+    const manual = (await c.cmd.post('/api/weeks', { name: 'שבוע שני', startDate: '2026-10-11', endDate: '2026-10-17' })).body.id;
+
+    expect((await c.s1.post('/api/weeks/calendar/preview', { url: GOOGLE_URL })).status).toBe(403);
+    const preview = (await c.cmd.post('/api/weeks/calendar/preview', { url: GOOGLE_URL })).body;
+    expect(preview.weeks.map((w: { name: string; startDate: string; endDate: string; number: number | null; action: string }) => [w.name, w.startDate, w.endDate, w.number, w.action])).toEqual([
+      ['שבוע 1 - הכרות', '2026-10-04', '2026-10-08', 1, 'create'],
+      ['שבוע 2 - שבוע שטח', '2026-10-11', '2026-10-15', 2, 'update'],
+      ['שבוע 3', '2026-10-18', '2026-10-24', 3, 'create'],
+    ]);
+    expect(preview.weeks[1]).toMatchObject({ weekId: manual, changes: ['שם: שבוע שני ← שבוע 2 - שבוע שטח', 'תאריכים'] });
+    expect(preview.ignored).toBe(5);
+
+    const applied = await c.cmd.post('/api/weeks/calendar/apply', { url: GOOGLE_URL, items: preview.weeks });
+    expect(applied.status).toBe(200);
+    expect(applied.body.map((w: { number: number; name: string; startDate: string; endDate: string }) => [w.number, w.name, w.startDate, w.endDate])).toEqual([
+      [1, 'שבוע 1 - הכרות', '2026-10-04', '2026-10-08'],
+      [2, 'שבוע 2 - שבוע שטח', '2026-10-11', '2026-10-15'], // the number follows the calendar too
+      [3, 'שבוע 3', '2026-10-18', '2026-10-24'],
+    ]);
+    expect((await c.cmd.get('/api/weeks/calendar')).body).toEqual({ url: GOOGLE_URL });
+    const settings = (await c.cmd.get('/api/settings')).body;
+    expect([settings.startDate, settings.endDate]).toEqual(['2026-10-04', '2026-10-24']);
+
+    // nothing changed: nothing to do
+    expect((await c.cmd.post('/api/weeks/calendar/preview', { url: GOOGLE_URL })).body.weeks.map((w: { action: string }) => w.action)).toEqual(['same', 'same', 'same']);
+
+    // week 1 moves a day and is renamed in Google: the update finds it by its event, not by its date
+    ics = weeksIcs({ start: '20261005', end: '20261010', name: 'שבוע 1 - פתיחה' });
+    const again = (await c.cmd.post('/api/weeks/calendar/preview', { url: GOOGLE_URL })).body.weeks;
+    expect(again[0]).toMatchObject({ action: 'update', startDate: '2026-10-05', endDate: '2026-10-09', weekId: applied.body[0].id });
+    await c.cmd.post('/api/weeks/calendar/apply', { url: GOOGLE_URL, items: [again[0]] });
+    const after = (await c.cmd.get('/api/weeks')).body;
+    expect(after).toHaveLength(3);
+    expect(after[0]).toMatchObject({ id: applied.body[0].id, name: 'שבוע 1 - פתיחה', startDate: '2026-10-05', endDate: '2026-10-09' });
+  });
+});

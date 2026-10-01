@@ -259,6 +259,26 @@ export interface CalendarSource {
   error: string | null;
 }
 
+/** A course week found in a Google calendar, and what importing it would do. */
+export interface CalendarWeek {
+  uid: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  number: number | null;
+  /** the course week it matches: imported from this event before, or starting on the same day */
+  weekId: number | null;
+  action: 'create' | 'update' | 'same';
+  /** what an update changes, in words */
+  changes: string[];
+}
+
+export interface CalendarWeeksPreview {
+  weeks: CalendarWeek[];
+  /** events in the calendar that did not look like weeks */
+  ignored: number;
+}
+
 /** The user's personal link for subscribing to the schedule from Google Calendar. */
 export interface CalendarFeed {
   url: string;
