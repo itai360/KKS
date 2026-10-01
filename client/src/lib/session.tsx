@@ -83,10 +83,14 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
     return onNotification(() => setUnread((n) => n + 1));
   }, []);
 
-  useEffect(() => setUnread(me.unread), [me.unread]);
+  useEffect(() => {
+    setUnread(me.unread);
+  }, [me.unread]);
 
   const currentSettings = settings.data ?? me.settings;
-  useEffect(() => setTimezone(currentSettings.timezone), [currentSettings.timezone]);
+  useEffect(() => {
+    setTimezone(currentSettings.timezone);
+  }, [currentSettings.timezone]);
 
   const value = useMemo<Session>(() => {
     const list = users.data ?? [me.user];

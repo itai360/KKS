@@ -95,7 +95,9 @@ function CourseSettingsCard() {
   const toast = useToast();
   const [s, setS] = useState<CourseSettings>(settings);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => setS(settings), [settings]);
+  useEffect(() => {
+    setS(settings);
+  }, [settings]);
   const save = async () => {
     setError(null);
     try {
@@ -292,7 +294,9 @@ function DomainsCard() {
   const toast = useToast();
   const [domains, setDomains] = useState(settings.domains);
   const [add, setAdd] = useState('');
-  useEffect(() => setDomains(settings.domains), [settings.domains]);
+  useEffect(() => {
+    setDomains(settings.domains);
+  }, [settings.domains]);
   const save = async (list: string[]) => {
     setDomains(list);
     try {

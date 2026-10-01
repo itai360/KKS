@@ -15,7 +15,9 @@ export function SearchPage() {
   const q = params.get('q') ?? '';
   const [text, setText] = useState(q);
   const { settings, isCommander } = useSession();
-  useEffect(() => setText(q), [q]);
+  useEffect(() => {
+    setText(q);
+  }, [q]);
   useEffect(() => {
     const t = setTimeout(() => {
       if (text !== q) setParams(text ? { q: text } : {}, { replace: true });

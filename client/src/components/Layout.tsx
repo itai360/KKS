@@ -114,7 +114,11 @@ export function Layout({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false);
 
   useEffect(() => onStatus(setLive), []);
-  useEffect(() => window.scrollTo(0, 0), [location.pathname]);
+  // a block body on purpose: newer browsers return a promise from scrollTo, and an effect that returns
+  // anything but a cleanup function makes React crash on the next screen change
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   // a screen still loading (or empty) a few seconds after moving to it is reported, with what the browser is waiting for
   useEffect(() => {
