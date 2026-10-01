@@ -132,8 +132,9 @@ export function SchedulePage() {
         )}
       </div>
       {creating && <EventForm defaultDate={date} onClose={() => setCreating(false)} />}
-      {editing && <EventForm event={editing} onClose={() => setEditing(null)} />}
       {eventId && <EventDrawer id={Number(eventId)} onClose={() => set({ event: null })} onEdit={(e) => setEditing(e)} />}
+      {/* after the drawer so the edit form stacks on top of it */}
+      {editing && <EventForm event={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }
@@ -376,7 +377,13 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
             <button
               className="btn btn-sm btn-primary"
               onClick={() =>
-                newTask({ eventId: e.id, ownerIds: e.ownerId ? [e.ownerId] : undefined, deadline: isoAt(addDays(e.date, -1), '18:00'), heading: `משימת הכנה: ${e.title}` })
+                newTask({
+                  eventId: e.id,
+                  ownerIds: e.ownerId ? [e.ownerId] : undefined,
+                  // the evening before, or the activity's start when it is today
+                  deadline: addDays(e.date, -1) < todayKey() ? isoAt(e.date, e.startTime) : isoAt(addDays(e.date, -1), '18:00'),
+                  heading: `משימת הכנה: ${e.title}`,
+                })
               }
             >
               <Icon name="plus" /> משימה

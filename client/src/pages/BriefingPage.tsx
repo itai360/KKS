@@ -56,7 +56,7 @@ export function BriefingPage() {
           <button className="btn btn-sm" onClick={fullscreen}>
             <Icon name="external" /> מסך מלא
           </button>
-          <button className="btn btn-sm btn-ghost" style={{ color: 'var(--rail-ink)' }} onClick={() => navigate(-1)}>
+          <button className="btn btn-sm btn-ghost" style={{ color: 'var(--rail-ink)' }} onClick={() => navigate('/')}>
             <Icon name="x" /> סגירה
           </button>
         </div>

@@ -31,15 +31,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
-      onNotification((n) =>
+      onNotification((n) => {
         push({
           title: n.title,
           body: n.body,
           link: n.link,
           tone: n.category === 'exception' ? 'red' : n.category === 'action' ? 'blue' : 'green',
-        }),
-      ),
-    [push],
+        });
+        // when the tab is in the background, surface it as a system notification (if allowed)
+        if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+          const sys = new Notification(n.title, { body: n.body, lang: 'he', dir: 'rtl', tag: `kks-${n.id}`, icon: '/icon-192.png' });
+          sys.onclick = () => {
+            window.focus();
+            if (n.link) navigate(n.link);
+            sys.close();
+          };
+        }
+      }),
+    [push, navigate],
   );
 
   return (

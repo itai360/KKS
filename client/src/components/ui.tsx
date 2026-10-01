@@ -16,21 +16,32 @@ export function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      // with nested dialogs only the topmost one closes
+      const all = document.querySelectorAll('.modal');
+      if (all[all.length - 1] === ref.current) onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
-    const first = ref.current?.querySelector<HTMLElement>('[data-autofocus], input, textarea, select, button');
+    // prefer an explicit autofocus target, then the first field - never the close button
+    const body = ref.current?.querySelector('.modal-body');
+    const first =
+      ref.current?.querySelector<HTMLElement>('[data-autofocus]') ??
+      body?.querySelector<HTMLElement>('input:not([type=hidden]):not([type=checkbox]), textarea, select') ??
+      body?.querySelector<HTMLElement>('button');
     first?.focus();
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      if (document.querySelectorAll('.modal').length === 0) document.body.style.overflow = '';
       prev?.focus?.();
     };
-  }, [onClose]);
+    // once per opening: re-running on every parent render would steal focus mid-typing
+  }, []);
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" ref={ref}>

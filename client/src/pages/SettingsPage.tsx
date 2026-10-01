@@ -29,6 +29,7 @@ export function SettingsPage() {
             <PermissionsCard />
           </>
         )}
+        <BrowserNotificationsCard />
         <PasswordCard />
       </div>
     </div>
@@ -367,6 +368,35 @@ function PermissionsCard() {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function BrowserNotificationsCard() {
+  const supported = typeof window !== 'undefined' && 'Notification' in window;
+  const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>(supported ? Notification.permission : 'unsupported');
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="bell" />
+        <h3 className="grow">התראות בדפדפן</h3>
+      </div>
+      <div className="card-body row wrap">
+        <p className="small grow">
+          {perm === 'granted'
+            ? 'פעיל: כשהמערכת פתוחה ברקע תקבל התראת מערכת על משימות חדשות, חריגות ובקשות.'
+            : perm === 'denied'
+              ? 'ההתראות חסומות בדפדפן. ניתן לאפשר אותן בהגדרות האתר בדפדפן.'
+              : perm === 'unsupported'
+                ? 'הדפדפן הזה לא תומך בהתראות. התראות ימשיכו להופיע בתוך המערכת.'
+                : 'קבל התראת מערכת גם כשהמערכת פתוחה בלשונית אחרת.'}
+        </p>
+        {perm === 'default' && (
+          <button className="btn" onClick={() => void Notification.requestPermission().then(setPerm)}>
+            הפעל התראות
+          </button>
+        )}
+      </div>
     </div>
   );
 }
