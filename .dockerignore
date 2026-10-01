@@ -5,3 +5,4 @@ data
 coverage
 *.db
 *.db-*
+.env

@@ -1,0 +1,44 @@
+# Production: the app behind Caddy, which issues and renews an HTTPS
+# certificate for $DOMAIN automatically (Let's Encrypt).
+#
+#   cp .env.example .env    # set DOMAIN and the commander account
+#   docker compose up -d
+#
+# The domain's DNS must point at this server, with ports 80 and 443 open.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      PORT: "3000"
+      COOKIE_SECURE: "true"
+    volumes:
+      - kks-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/public/info"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  kks-data:
+  caddy-data:
+  caddy-config:
