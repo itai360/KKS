@@ -2544,6 +2544,8 @@ tr.selected td {
   min-height: 420px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* rows appearing above the hours (deadlines, all-day) must not scroll the hours away */
+  overflow-anchor: none;
 }
 
 .cal-head,
@@ -2994,6 +2996,29 @@ tr.selected td {
   margin-top: 8px;
 }
 
+/* task deadlines in the calendar: a flag and the time, never a block of time */
+.cal-chip.task svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.cal-chip.task.overdue,
+.cal-chip.task.overdue svg {
+  color: var(--red);
+}
+
+.cal-chip.task.done {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.cal-tasks {
+  width: auto;
+  height: 34px;
+  padding-block: 0;
+  font-size: 13px;
+}
+
 @media (max-width: 860px) {
   .cal {
     --hour: 44px;
@@ -3040,7 +3065,8 @@ tr.selected td {
     background: var(--paper-2);
   }
   .cal-chip.timed b,
-  .cal-chip.timed i {
+  .cal-chip.timed i,
+  .cal-chip.task svg {
     display: none;
   }
   .cal-hint {

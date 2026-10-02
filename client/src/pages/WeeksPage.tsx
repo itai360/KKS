@@ -435,7 +435,7 @@ export function WeekPage() {
           <div className="card">
             <div className="card-head">
               <h3 className="grow">אירועים מרכזיים</h3>
-              <Link to={`/schedule?date=${w.startDate}`} className="btn btn-ghost btn-sm">
+              <Link to={`/schedule?date=${w.startDate}&view=week`} className="btn btn-ghost btn-sm">
                 ללו"ז
               </Link>
             </div>

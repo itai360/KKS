@@ -3,14 +3,18 @@
 // time or day and stretched from its bottom edge; dragging over empty time (or
 // clicking it) starts a new event there. In the month view an event is dragged
 // to another day. Events of connected Google calendars are shown read-only. The
-// arithmetic is in shared/calendarGrid.ts.
+// arithmetic is in shared/calendarGrid.ts. Task deadlines can be shown too, as
+// Google Calendar shows tasks - in a row of their own above the hours, since a
+// deadline is a moment and should not crowd the events.
 
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { type CalendarView as View, DAY_MINUTES, eventSpan, fromMinutes, layoutDay, MIN_VISIBLE, monthWeeks, movedSpan, resizedEnd, snap, viewDays } from '@shared/calendarGrid';
 import { WEEKDAY_NAMES } from '@shared/constants';
 import { weekdayName } from '@shared/dates';
-import type { ExternalEvent, ScheduleEvent } from '@shared/types';
+import type { ExternalEvent, ScheduleEvent, Task } from '@shared/types';
+import { dateKeyOf, fmtTime } from '../lib/format';
 import { useBulk } from './Bulk';
+import { Icon } from './Icon';
 
 export interface CalendarProps {
   view: View;
@@ -22,10 +26,13 @@ export interface CalendarProps {
   nowTime: string;
   events: ScheduleEvent[];
   external: ExternalEvent[];
+  /** tasks whose deadline falls in the days shown */
+  tasks: Task[];
   canCreate: (date: string) => boolean;
   canMove: (e: ScheduleEvent) => boolean;
   onOpen: (e: ScheduleEvent) => void;
   onOpenExternal: (e: ExternalEvent) => void;
+  onOpenTask: (t: Task) => void;
   onCreate: (date: string, startTime: string, endTime: string | null) => void;
   onMove: (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }) => void;
   onPickDay: (date: string) => void;
@@ -71,7 +78,13 @@ function track(down: ReactPointerEvent, move: (e: PointerEvent) => void, up: (ca
 const hours = (min: number) => min / 60;
 const range = (start: number, end: number) => `${fromMinutes(start)} - ${end >= DAY_MINUTES ? '24:00' : fromMinutes(end)}`;
 
-function TimeGrid({ view, date, today, ready, nowTime, events, external, canCreate, canMove, onOpen, onOpenExternal, onCreate, onMove, onPickDay }: CalendarProps) {
+/** a deadline's day and time in the course's time zone */
+const deadlineOf = (t: Task) => ({ date: dateKeyOf(t.deadline), time: fmtTime(t.deadline) });
+const byDeadline = (a: Task, b: Task) => a.deadline.localeCompare(b.deadline);
+const DEADLINES_MAX = 3;
+const taskTitle = (t: Task) => [`דד-ליין: ${t.title}`, `${fmtTime(t.deadline)} · ${t.ownerName}`, t.overdue ? 'באיחור' : ''].filter(Boolean).join('\n');
+
+function TimeGrid({ view, date, today, ready, nowTime, events, external, tasks, canCreate, canMove, onOpen, onOpenExternal, onOpenTask, onCreate, onMove, onPickDay }: CalendarProps) {
   const days = viewDays(view, date);
   const bulk = useBulk();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -195,6 +208,7 @@ function TimeGrid({ view, date, today, ready, nowTime, events, external, canCrea
   };
 
   const allDay = external.filter((e) => !e.startTime && days.includes(e.date));
+  const shownTasks = tasks.filter((t) => days.includes(deadlineOf(t).date)).sort(byDeadline);
   const nowMin = eventSpan(nowTime, null).start;
 
   return (
@@ -224,6 +238,27 @@ function TimeGrid({ view, date, today, ready, nowTime, events, external, canCrea
                     ))}
                 </div>
               ))}
+            </>
+          )}
+          {shownTasks.length > 0 && (
+            <>
+              <div className="cal-gutter cal-allday-label">דד-ליינים</div>
+              {days.map((d) => {
+                const list = shownTasks.filter((t) => deadlineOf(t).date === d);
+                const cut = view !== 'day' && list.length > DEADLINES_MAX ? list.slice(0, DEADLINES_MAX - 1) : list;
+                return (
+                  <div key={d} className="cal-allday">
+                    {cut.map((t) => (
+                      <TaskChip key={t.id} t={t} onOpen={onOpenTask} />
+                    ))}
+                    {cut.length < list.length && (
+                      <button className="cal-more" onClick={() => onPickDay(d)}>
+                        עוד {list.length - cut.length}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </>
           )}
         </div>
@@ -327,7 +362,7 @@ function TimeGrid({ view, date, today, ready, nowTime, events, external, canCrea
 
 const MONTH_MAX = 4;
 
-function MonthGrid({ date, today, events, external, canCreate, canMove, onOpen, onOpenExternal, onCreate, onMove, onPickDay }: CalendarProps) {
+function MonthGrid({ date, today, events, external, tasks, canCreate, canMove, onOpen, onOpenExternal, onOpenTask, onCreate, onMove, onPickDay }: CalendarProps) {
   const bulk = useBulk();
   const weeks = monthWeeks(date);
   const month = date.slice(0, 7);
@@ -357,7 +392,12 @@ function MonthGrid({ date, today, events, external, canCreate, canMove, onOpen, 
               ...events.filter((e) => e.date === d).map((e) => ({ at: e.startTime, node: { kind: 'event' as const, e } })),
               ...external.filter((x) => x.date === d && x.startTime).map((x) => ({ at: x.startTime!, node: { kind: 'external' as const, e: x } })),
             ].sort((a, b) => a.at.localeCompare(b.at));
-            const items = [...allDay.map((x) => ({ kind: 'allday' as const, e: x })), ...timed.map((t) => t.node)];
+            // events first: deadlines take what room is left, then go under "עוד"
+            const due = tasks
+              .filter((t) => deadlineOf(t).date === d)
+              .sort(byDeadline)
+              .map((t) => ({ kind: 'task' as const, e: t }));
+            const items = [...allDay.map((x) => ({ kind: 'allday' as const, e: x })), ...timed.map((t) => t.node), ...due];
             const shown = items.length > MONTH_MAX ? items.slice(0, MONTH_MAX - 1) : items;
             const more = items.length - shown.length;
             const creatable = canCreate(d) && !bulk?.active;
@@ -389,6 +429,7 @@ function MonthGrid({ date, today, events, external, canCreate, canMove, onOpen, 
                       </button>
                     );
                   }
+                  if (it.kind === 'task') return <TaskChip key={`t${it.e.id}`} t={it.e} onOpen={onOpenTask} />;
                   if (it.kind === 'external') {
                     return (
                       <button key={it.e.id} className="cal-chip timed external" onClick={() => onOpenExternal(it.e)} title={`${it.e.startTime} ${it.e.title} · ${it.e.sourceName}`}>
@@ -434,5 +475,14 @@ function MonthGrid({ date, today, events, external, canCreate, canMove, onOpen, 
         </div>
       ))}
     </div>
+  );
+}
+
+function TaskChip({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
+  return (
+    <button className={`cal-chip timed task${t.overdue ? ' overdue' : ''}${t.status === 'done' ? ' done' : ''}`} onClick={() => onOpen(t)} title={taskTitle(t)}>
+      <Icon name="flag" size={11} />
+      <b>{deadlineOf(t).time}</b> {t.title}
+    </button>
   );
 }

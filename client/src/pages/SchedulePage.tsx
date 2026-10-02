@@ -38,6 +38,16 @@ function savedView(): ScheduleView {
     return 'list';
   }
 }
+type TasksShown = 'mine' | 'all' | 'none';
+const TASKS_KEY = 'kks.scheduleTasks';
+function savedTasksShown(): TasksShown {
+  try {
+    const v = localStorage.getItem(TASKS_KEY);
+    return v === 'all' || v === 'none' ? v : 'mine';
+  } catch {
+    return 'mine';
+  }
+}
 // keys by position, so they work with a Hebrew keyboard too (as in Google Calendar)
 const VIEW_KEYS: Record<string, ScheduleView> = { KeyA: 'list', KeyD: 'day', KeyW: 'week', KeyM: 'month' };
 
@@ -55,7 +65,19 @@ export function SchedulePage() {
   const { data, error, loading, setData, reload } = useApi<ScheduleEvent[]>(`/api/events?from=${from}&to=${to}`, ['events', 'tasks']);
   // events of connected Google calendars (read-only); loaded on their own so the course schedule never waits for Google
   const external = useApi<ExternalEvent[]>(`/api/calendar/external?from=${from}&to=${to}`, ['events']);
+  // deadlines of open tasks in the calendar views (routine recurring tasks left out)
+  const [tasksShown, setTasksShownRaw] = useState<TasksShown>(savedTasksShown);
+  const setTasksShown = (v: TasksShown) => {
+    setTasksShownRaw(v);
+    try {
+      localStorage.setItem(TASKS_KEY, v);
+    } catch {
+      /* not remembered */
+    }
+  };
+  const tasks = useApi<Task[]>(view !== 'list' && tasksShown !== 'none' ? `/api/tasks?from=${from}&to=${to}&hideClosed=1&recurring=0${tasksShown === 'mine' ? '&owner=me' : ''}` : null, ['tasks']);
   const { isCommander, weeks, user } = useSession();
+  const navigate = useNavigate();
   const toast = useToast();
   const [creating, setCreating] = useState<{ date: string; start?: string; end?: string | null } | null>(params.get('new') === '1' ? { date } : null);
   const [editing, setEditing] = useState<ScheduleEvent | null>(null);
@@ -189,6 +211,13 @@ export function SchedulePage() {
         </button>
         <h2 className="cal-title">{viewTitle(view === 'list' ? 'day' : view, date)}</h2>
         <span className="grow" />
+        {view !== 'list' && (
+          <select className="select cal-tasks" value={tasksShown} onChange={(e) => setTasksShown(e.target.value as TasksShown)} aria-label="דד-ליינים של משימות ביומן">
+            <option value="mine">דד-ליינים: שלי</option>
+            <option value="all">דד-ליינים: כל המשימות</option>
+            <option value="none">בלי דד-ליינים</option>
+          </select>
+        )}
         <Seg value={view} options={VIEWS} onChange={setView} />
       </div>
       {(view === 'list' || view === 'day') && (
@@ -220,10 +249,12 @@ export function SchedulePage() {
             nowTime={nowTime}
             events={data ?? []}
             external={external.data ?? []}
+            tasks={tasksShown === 'none' ? [] : (tasks.data ?? [])}
             canCreate={canAddOn}
             canMove={canMove}
             onOpen={(e) => set({ event: String(e.id) })}
             onOpenExternal={setPeek}
+            onOpenTask={(t) => navigate(`/tasks/${t.id}`)}
             onCreate={(d, start, end) => setCreating({ date: d, start, end })}
             onMove={(e, to) => void move(e, to)}
             onPickDay={(d) => set({ date: d, view: 'day', event: null })}

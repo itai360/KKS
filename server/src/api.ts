@@ -372,6 +372,14 @@ export function apiRouter(): Router {
       );
     }
     if (q.hideClosed === '1') list = list.filter((t) => isOpenStatus(t.status));
+    // deadlines between two days, by the course's time zone (the calendar views of the schedule)
+    if (isDateKey(q.from) && isDateKey(q.to)) {
+      const [from, to, zone] = [q.from, q.to, tz()];
+      list = list.filter((t) => {
+        const d = localDateKey(t.deadline, zone);
+        return d >= from && d <= to;
+      });
+    }
     res.json(list);
   });
 
