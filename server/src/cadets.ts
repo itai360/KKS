@@ -166,18 +166,22 @@ export function toCadet(actor: UserRow, c: CadetRow, records: RecordRow[]): Cade
 }
 
 /**
- * For each discipline record of a cadet: which time its offense happened, and
- * its number among the discipline notes - counted over the whole file, by date.
+ * For each discipline record: which time its offense happened to that cadet,
+ * and its number among the cadet's discipline notes - counted over the whole
+ * file, by date. Works on one cadet's records or on many cadets' at once.
  */
 export function disciplineOrder(rows: RecordRow[]): Map<number, { occurrence: number | null; noteNumber: number | null }> {
   const sorted = rows.filter((r) => r.kind === 'discipline').sort((a, b) => a.occurred_on.localeCompare(b.occurred_on) || a.id - b.id);
   const seen = new Map<string, number>();
-  let notes = 0;
+  const notes = new Map<number, number>();
   const out = new Map<number, { occurrence: number | null; noteNumber: number | null }>();
   for (const r of sorted) {
-    const occurrence = r.offense ? (seen.get(r.offense) ?? 0) + 1 : null;
-    if (r.offense) seen.set(r.offense, occurrence!);
-    out.set(r.id, { occurrence, noteNumber: r.formal ? ++notes : null });
+    const key = `${r.cadet_id}|${r.offense}`;
+    const occurrence = r.offense ? (seen.get(key) ?? 0) + 1 : null;
+    if (r.offense) seen.set(key, occurrence!);
+    const noteNumber = r.formal ? (notes.get(r.cadet_id) ?? 0) + 1 : null;
+    if (noteNumber) notes.set(r.cadet_id, noteNumber);
+    out.set(r.id, { occurrence, noteNumber });
   }
   return out;
 }
