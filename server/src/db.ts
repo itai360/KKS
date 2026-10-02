@@ -539,7 +539,12 @@ CREATE TABLE snapshots (
 );
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6];
+// login lockouts shared by every instance of the serverless deployment (auth.ts)
+const SCHEMA_V7 = `
+CREATE TABLE login_lockouts (key TEXT PRIMARY KEY, until INTEGER NOT NULL);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7];
 
 export function migrate(db: Db): void {
   const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");

@@ -141,22 +141,32 @@ export function csrfGuard(req: Request, _res: Response, next: NextFunction): voi
   next();
 }
 
-// Simple in-memory brute-force protection for the login endpoint.
+// Brute-force protection for the login endpoint: failed attempts are counted
+// in memory; the fifth within a minute locks the name for a minute, and the
+// lock is kept in the database so every instance of a serverless deployment
+// honours it (one write per lock, not per attempt).
+const MAX_FAILURES = 5;
+const LOCK_MS = 60_000;
 const failures = new Map<string, { count: number; until: number }>();
 export function loginThrottle(key: string): void {
   const f = failures.get(key);
-  if (f && f.count >= 5 && f.until > Date.now()) {
-    throw new HttpError(429, 'יותר מדי ניסיונות כניסה. נסה שוב בעוד דקה.');
-  }
+  const locked = (f && f.count >= MAX_FAILURES && f.until > Date.now()) || (db().get<{ until: number }>('SELECT until FROM login_lockouts WHERE key = ?', key)?.until ?? 0) > Date.now();
+  if (locked) throw new HttpError(429, 'יותר מדי ניסיונות כניסה. נסה שוב בעוד דקה.');
 }
 export function loginFailed(key: string): void {
   const f = failures.get(key);
   const count = f && f.until > Date.now() ? f.count + 1 : 1;
-  failures.set(key, { count, until: Date.now() + 60_000 });
+  failures.set(key, { count, until: Date.now() + LOCK_MS });
+  if (count === MAX_FAILURES) {
+    db().run('DELETE FROM login_lockouts WHERE until < ?', Date.now());
+    db().run('INSERT INTO login_lockouts(key, until) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until', key, Date.now() + LOCK_MS);
+  }
 }
 export function loginSucceeded(key: string): void {
   failures.delete(key);
+  db().run('DELETE FROM login_lockouts WHERE key = ?', key); // writes only when there was a lock
 }
+/** forgets the attempts counted by this instance (tests) */
 export function resetLoginThrottle(): void {
   failures.clear();
 }

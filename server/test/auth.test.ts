@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { resetLoginThrottle } from '../src/auth';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { clock, resetSettingsCache } from '../src/core';
@@ -47,6 +48,11 @@ describe('auth', () => {
     expect((await bad()).status).toBe(401);
     for (let i = 0; i < 5; i++) await bad();
     expect((await bad()).status).toBe(429);
+    // another instance (no attempts counted in its memory) still honours the lock
+    resetLoginThrottle();
+    expect((await bad()).status).toBe(429);
+    const good = await request(c.app).post('/api/auth/login').set('x-kks', '1').send({ username: 's1', password: 'secret123' });
+    expect(good.status).toBe(429); // the right password too, until the minute is up
   });
 
   it('requires a session for the API', async () => {

@@ -122,7 +122,7 @@ export async function autoSnapshot(now = Date.now()): Promise<boolean> {
 // ---------------- restoring ----------------
 
 /** Tables not restored from a snapshot: they stay as they are now. */
-const KEEP_CURRENT = new Set(['sessions', 'push_subscriptions', 'snapshots']);
+const KEEP_CURRENT = new Set(['sessions', 'push_subscriptions', 'snapshots', 'login_lockouts']);
 const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents'];
 
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`;
