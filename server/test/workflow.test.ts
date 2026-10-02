@@ -334,3 +334,29 @@ describe('dashboard and reports', () => {
     expect(ended.summary.followUps).toEqual(['אישור מדריך']);
   });
 });
+
+describe('housekeeping', () => {
+  it('once a day removes ended sessions, old notifications and expired locks', async () => {
+    const { housekeeping } = await import('../src/automation');
+    const { db } = await import('../src/db');
+    const now = new Date('2026-12-31T08:00:00Z');
+    const day = 86_400_000;
+    const at = (daysAgo: number) => new Date(now.getTime() - daysAgo * day).toISOString();
+    db().run("INSERT INTO sessions(token_hash, user_id, created_at, expires_at) VALUES ('old', 1, ?, ?)", at(40), at(10));
+    db().run("INSERT INTO sessions(token_hash, user_id, created_at, expires_at) VALUES ('live', 1, ?, ?)", at(1), at(-29));
+    const note = (id: number, daysAgo: number, read: boolean) =>
+      db().run("INSERT INTO notifications(id, user_id, type, category, title, read_at, created_at) VALUES (?, 1, 'x', 'info', 'x', ?, ?)", id, read ? at(daysAgo) : null, at(daysAgo));
+    note(9001, 70, true); // read, old: goes
+    note(9002, 70, false); // unread, not that old: stays
+    note(9003, 130, false); // over four months: goes
+    note(9004, 10, true); // recent: stays
+    db().run("INSERT INTO login_lockouts(key, until) VALUES ('k', ?)", now.getTime() - 1000);
+
+    expect(housekeeping(now)).toBeGreaterThanOrEqual(4);
+    const ids = db().all<{ id: number }>('SELECT id FROM notifications WHERE id > 9000 ORDER BY id').map((r) => r.id);
+    expect(ids).toEqual([9002, 9004]);
+    expect(db().all<{ token_hash: string }>("SELECT token_hash FROM sessions WHERE token_hash IN ('old', 'live')").map((s) => s.token_hash)).toEqual(['live']);
+    expect(db().get('SELECT 1 FROM login_lockouts')).toBeUndefined();
+    expect(housekeeping(now)).toBe(0); // once a day
+  });
+});

@@ -105,7 +105,33 @@ export function runAutomation(): AutomationResult {
   }
 
   if (res.overdue || res.reminders24 || res.reminders2 || res.recurring || res.templates) changed('tasks', 'weeks');
+  housekeeping(now);
   return res;
+}
+
+const READ_NOTIFICATIONS_DAYS = 60;
+const ALL_NOTIFICATIONS_DAYS = 120;
+
+/**
+ * Once a day: what only piles up goes - ended sessions, notifications read
+ * over two months ago (any over four), expired login locks. Keeps the
+ * database (saved whole on every change in the serverless deployment) small.
+ */
+let housekeptOn = '';
+export function housekeeping(now: Date): number {
+  // the day is remembered in memory: the database changes only when something is removed
+  const today = localDateKey(now, tz());
+  if (housekeptOn === today) return 0;
+  housekeptOn = today;
+  const ago = (days: number) => new Date(now.getTime() - days * 24 * HOUR).toISOString();
+  let removed = 0;
+  db().tx(() => {
+    removed += db().run('DELETE FROM sessions WHERE expires_at < ?', now.toISOString()).changes;
+    removed += db().run('DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
+    removed += db().run('DELETE FROM notifications WHERE created_at < ?', ago(ALL_NOTIFICATIONS_DAYS)).changes;
+    removed += db().run('DELETE FROM login_lockouts WHERE until < ?', now.getTime()).changes;
+  });
+  return removed;
 }
 
 let timer: NodeJS.Timeout | null = null;
