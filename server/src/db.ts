@@ -560,15 +560,28 @@ CREATE TABLE discipline_guide (
 );
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8];
+// the third discipline note sends the cadet to an evaluation committee instead of
+// dismissing; a cadet the first release dismissed that way goes to the committee now
+const SCHEMA_V9 = `
+ALTER TABLE committees ADD COLUMN from_record INTEGER;
+INSERT INTO committees(cadet_id, kind, reason, referred_by, referred_at, snapshot, snapshot_at, from_record)
+  SELECT c.id, 'ועדת הערכה', 'קיבל 3 הערות משמעת', r.author_id, r.created_at, '', r.created_at, c.dismissed_by_record
+  FROM cadets c JOIN cadet_records r ON r.id = c.dismissed_by_record
+  WHERE c.status = 'dropped' AND NOT EXISTS (SELECT 1 FROM committees x WHERE x.cadet_id = c.id AND x.decision IS NULL);
+UPDATE cadets SET status = 'active' WHERE dismissed_by_record IS NOT NULL AND status = 'dropped';
+UPDATE cadets SET dismissed_by_record = NULL WHERE dismissed_by_record IS NOT NULL;
+`;
 
-export function migrate(db: Db): void {
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9];
+
+/** Brings a database to the current schema (tests may stop at an earlier version). */
+export function migrate(db: Db, upTo = MIGRATIONS.length): void {
   const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");
   let version = 0;
   if (hasMeta && hasMeta.n > 0) {
     version = Number(db.get<{ value: string }>("SELECT value FROM meta WHERE key='schema_version'")?.value ?? 0);
   }
-  for (let v = version; v < MIGRATIONS.length; v++) {
+  for (let v = version; v < upTo; v++) {
     db.tx(() => {
       db.exec(MIGRATIONS[v]);
       db.run("INSERT INTO meta(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", String(v + 1));

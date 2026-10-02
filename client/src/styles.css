@@ -3211,6 +3211,40 @@ tr.selected td {
   margin: 8px 16px 12px;
 }
 
+/* the cadet's status next to the name: a coloured tag, a menu for those who may change it */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--tone);
+  border-radius: 999px;
+  background: var(--tone-bg);
+  color: var(--tone-ink, var(--tone));
+  font: 600 13px/1 var(--font);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+select.status-pill {
+  appearance: none;
+  cursor: pointer;
+  padding-left: 28px;
+  background: var(--tone-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233a3f38' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat left 10px center;
+}
+.page-head h1 .badge {
+  font: 600 12px/1 var(--font);
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+select.status-pill:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+select.status-pill:disabled {
+  opacity: 0.7;
+}
+
 /* discipline notes: the count on the cadet page, and the enforcement ladder */
 .note-dots {
   display: inline-flex;

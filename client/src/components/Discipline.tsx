@@ -3,8 +3,9 @@
 // commander imports it with (server/src/discipline.ts).
 
 import { useRef, useState } from 'react';
-import { DISCIPLINE_NOTE_LIMIT } from '@shared/constants';
-import type { CadetRecord, DisciplineGuide, DisciplineOffense } from '@shared/types';
+import { Link } from 'react-router';
+import { COMMITTEE_DECISION_LABELS, committeeTo, DISCIPLINE_COMMITTEE_KIND, DISCIPLINE_NOTE_LIMIT } from '@shared/constants';
+import type { Cadet, CadetRecord, DisciplineGuide, DisciplineOffense } from '@shared/types';
 import { api } from '../lib/api';
 import { shortDate } from '@shared/dates';
 import { fmtAgo, fmtDateTime } from '../lib/format';
@@ -46,8 +47,8 @@ export function NotesBadge({ count }: { count: number }) {
   );
 }
 
-/** The cadet page card: how many notes, how many are left, and each note. */
-export function DisciplineSummary({ count, dismissed, notes }: { count: number; dismissed: boolean; notes: CadetRecord[] }) {
+/** The cadet page card: how many notes, how many are left, the committee they opened, and each note. */
+export function DisciplineSummary({ count, committee, notes }: { count: number; committee: Cadet['notesCommittee']; notes: CadetRecord[] }) {
   const left = DISCIPLINE_NOTE_LIMIT - count;
   return (
     <div className={`card card-pad col gap-6 discipline-card${count ? ` ${noteTone(count)}` : ''}`}>
@@ -63,14 +64,22 @@ export function DisciplineSummary({ count, dismissed, notes }: { count: number; 
       </div>
       <p className="tiny muted" style={{ margin: 0 }}>
         {count === 0
-          ? `אין הערות משמעת. בהערה ה-${DISCIPLINE_NOTE_LIMIT} הצוער מודח מהקורס.`
+          ? `אין הערות משמעת. בהערה ה-${DISCIPLINE_NOTE_LIMIT} הצוער עולה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}.`
           : left > 0
             ? left === 1
-              ? 'הערת משמעת נוספת תדיח אותו מהקורס.'
-              : `עוד ${left} הערות עד הדחה.`
-            : dismissed
-              ? 'הודח מהקורס בהערת המשמעת השלישית. מחיקה של הערה תחזיר אותו לסטטוס פעיל.'
-              : `קיבל ${count} הערות משמעת.`}
+              ? `הערת משמעת נוספת תעלה אותו ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}.`
+              : `עוד ${left} הערות עד ${DISCIPLINE_COMMITTEE_KIND}.`
+            : !committee
+              ? `קיבל ${count} הערות משמעת.`
+              : committee.decision
+                ? `${DISCIPLINE_COMMITTEE_KIND} החליטה: ${COMMITTEE_DECISION_LABELS[committee.decision]}.`
+                : `עלה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)} וממתין להחלטה. מחיקה של הערה לפני ההחלטה מבטלת את ההעברה.`}
+        {committee && left <= 0 && (
+          <>
+            {' '}
+            <Link to={`/evaluations/committee/${committee.id}`}>לוועדה</Link>
+          </>
+        )}
       </p>
       {notes.length > 0 && (
         <div className="col gap-4">
@@ -212,7 +221,7 @@ export function GuideImportCard() {
         <p className="small muted" style={{ margin: 0 }}>
           המדרג מהמסמך של הקורס: מה עושים בפעם הראשונה, השנייה וכן הלאה בכל מקרה, ונוסחי הערות המשמעת. כשרושמים משמעת לצוער המערכת מראה איזו פעם זו ומה הצעד לפי המדרג, ומסמנת הערת משמעת כשהמדרג קובע.
           בהערת המשמעת ה-
-          {DISCIPLINE_NOTE_LIMIT} הצוער מודח. המדרג נשמר במערכת בלבד; כשהמסמך משתנה - טוענים אותו שוב.
+          {DISCIPLINE_NOTE_LIMIT} הצוער עולה {committeeTo(DISCIPLINE_COMMITTEE_KIND)}. המדרג נשמר במערכת בלבד; כשהמסמך משתנה - טוענים אותו שוב.
         </p>
         {g?.importedAt ? (
           <div className="small">

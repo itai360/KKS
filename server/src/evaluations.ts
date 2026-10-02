@@ -9,7 +9,7 @@
 // commander. Any staff member can add an entry and sees their own entries.
 
 import { z } from 'zod';
-import { COMMITTEE_DECISIONS, COMMITTEE_DECISION_LABELS, COMMITTEE_KINDS, EVAL_TONE_LABELS, EVAL_TONES, STANDING_LABELS, STANDINGS } from '../../shared/constants';
+import { COMMITTEE_DECISIONS, COMMITTEE_DECISION_LABELS, COMMITTEE_KINDS, committeeTo, DISCIPLINE_COMMITTEE_KIND, EVAL_TONE_LABELS, EVAL_TONES, STANDING_LABELS, STANDINGS } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
 import type { Committee, CommitteeDetail, EvaluationEntry, EvaluationFile, EvaluationListItem } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
@@ -73,7 +73,7 @@ FROM committees c LEFT JOIN users rb ON rb.id = c.referred_by LEFT JOIN users dc
 
 const today = () => localDateKey(clock.now(), tz());
 /** "ל" before a name: "ועדת הדחה" becomes "לוועדת הדחה" */
-const to = (name: string) => `ל${name.startsWith('ו') && !name.startsWith('וו') ? `ו${name}` : name}`;
+const to = committeeTo;
 const dateKey = z.string().refine(isDateKey, 'תאריך לא תקין');
 
 function fileRow(cadetId: number): FileRow | undefined {
@@ -382,6 +382,32 @@ export function referToCommittee(actor: UserRow, cadetId: number, raw: z.input<t
   return id;
 }
 
+/**
+ * The discipline note that reached the limit sends the cadet to an evaluation
+ * committee - by the course's rule, not anyone's decision - with the file as
+ * it stands, the note included.
+ */
+export function referForDiscipline(actor: UserRow, cadetId: number, recordId: number, notes: number): number {
+  const now = nowIso();
+  const list = db()
+    .all<{ occurred_on: string; title: string; category: string }>("SELECT occurred_on, title, category FROM cadet_records WHERE cadet_id = ? AND kind = 'discipline' AND formal = 1 ORDER BY occurred_on, id", cadetId)
+    .map((n, i) => `${i + 1}. ${n.occurred_on.split('-').reverse().join('.')} - ${n.title || n.category || 'הערת משמעת'}`);
+  const id = db().run(
+    'INSERT INTO committees(cadet_id, kind, reason, referred_by, referred_at, snapshot, snapshot_at, from_record) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    cadetId,
+    DISCIPLINE_COMMITTEE_KIND,
+    [`קיבל ${notes} הערות משמעת:`, ...list].join('\n'),
+    actor.id,
+    now,
+    JSON.stringify(evaluationFile(actor, cadetId)),
+    now,
+    recordId,
+  ).id;
+  const c = cadetRow(cadetId);
+  logActivity({ userId: actor.id, action: 'committee_referral', text: `${c.first_name} ${c.last_name} עלה ${to(DISCIPLINE_COMMITTEE_KIND)} (${notes} הערות משמעת)` });
+  return id;
+}
+
 /** Before the committee decides, the version it receives can be brought up to date. */
 export function refreshCommitteeVersion(actor: UserRow, id: number): number {
   if (!isCommander(actor)) throw forbidden();
@@ -438,5 +464,6 @@ export function cancelCommittee(actor: UserRow, id: number): number {
 export function committeeDetail(actor: UserRow, id: number): CommitteeDetail {
   const r = committeeRow(id);
   if (!canManageCadet(actor, cadetRow(r.cadet_id))) throw forbidden();
-  return { committee: toCommittee(r), file: JSON.parse(r.snapshot) as EvaluationFile };
+  // a referral carried over from the first release has no saved version yet: the file as it is now
+  return { committee: toCommittee(r), file: r.snapshot ? (JSON.parse(r.snapshot) as EvaluationFile) : evaluationFile(actor, r.cadet_id) };
 }

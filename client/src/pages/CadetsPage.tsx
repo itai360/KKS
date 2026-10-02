@@ -5,7 +5,10 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   CADET_STATUS_LABELS,
+  CADET_STATUS_TONES,
   CADET_STATUSES,
+  committeeTo,
+  DISCIPLINE_COMMITTEE_KIND,
   DISCIPLINE_NOTE_LIMIT,
   DISCIPLINE_SEVERITIES,
   EVALUATION_CRITERIA,
@@ -203,7 +206,7 @@ function CadetRows({ list }: { list: Cadet[] }) {
               )}
             </div>
           </div>
-          {c.status !== 'active' && <span className="badge">{CADET_STATUS_LABELS[c.status]}</span>}
+          {c.status !== 'active' && <span className={`badge t-${CADET_STATUS_TONES[c.status]}`}>{CADET_STATUS_LABELS[c.status]}</span>}
           <NotesBadge count={c.disciplineNotes} />
           {c.disciplineCount > 0 && <span className="badge t-orange hide-mobile">{c.disciplineCount} משמעת</span>}
           {c.talkCount > 0 && <span className="badge t-blue">{c.talkCount} שיחות</span>}
@@ -517,10 +520,10 @@ export function CadetPage() {
         }
         title={
           <>
-            {c.fullName} <NotesBadge count={c.disciplineNotes} />
+            {c.fullName} <StatusPill cadet={c} /> <NotesBadge count={c.disciplineNotes} />
           </>
         }
-        sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, c.phone, c.dismissedByNotes ? `הודח - ${DISCIPLINE_NOTE_LIMIT} הערות משמעת` : CADET_STATUS_LABELS[c.status]].filter(Boolean).join(' · ')}
+        sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, c.phone].filter(Boolean).join(' · ')}
         actions={
           <>
             {c.canManage && (
@@ -567,7 +570,7 @@ export function CadetPage() {
         </div>
         <div className="col gap-16 sticky-side">
           {(c.canManage || c.disciplineNotes > 0) && (
-            <DisciplineSummary count={c.disciplineNotes} dismissed={c.dismissedByNotes} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
+            <DisciplineSummary count={c.disciplineNotes} committee={c.notesCommittee} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
           )}
           <Development detail={data} />
           {c.notes && (
@@ -612,6 +615,36 @@ export function CadetPage() {
       {dialog === 'edit' && <CadetForm cadet={c} teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'experience' && <ExperienceForm cadetId={c.id} onClose={() => setDialog(null)} />}
     </div>
+  );
+}
+
+/** The cadet's status next to the name: green while active, red when dismissed or withdrew; managers change it right there. */
+function StatusPill({ cadet }: { cadet: Cadet }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const tone = `status-pill t-${CADET_STATUS_TONES[cadet.status]}`;
+  if (!cadet.canManage) return <span className={tone}>{CADET_STATUS_LABELS[cadet.status]}</span>;
+  const change = async (status: CadetStatus) => {
+    if (status === 'dropped' && !confirm(`לסמן את ${cadet.fullName} כ"${CADET_STATUS_LABELS.dropped}"?`)) return;
+    setBusy(true);
+    try {
+      await api.patch(`/api/cadets/${cadet.id}`, { status });
+      emitLocalChange('cadets');
+      toast({ title: `${cadet.fullName}: ${CADET_STATUS_LABELS[status]}`, tone: CADET_STATUS_TONES[status] });
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <select className={tone} value={cadet.status} disabled={busy} onChange={(e) => void change(e.target.value as CadetStatus)} aria-label="סטטוס הצוער" title="שינוי סטטוס">
+      {CADET_STATUSES.map((s) => (
+        <option key={s} value={s}>
+          {CADET_STATUS_LABELS[s]}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -674,11 +707,11 @@ function RecordForm({ cadet, records }: { cadet: Cadet; records: CadetRecord[] }
   };
   const submit = async () => {
     const note = kind === 'discipline' && formal;
-    const dismisses = note && cadet.status === 'active' && cadet.disciplineNotes + 1 >= DISCIPLINE_NOTE_LIMIT;
+    const refers = note && cadet.status === 'active' && cadet.disciplineNotes + 1 >= DISCIPLINE_NOTE_LIMIT && cadet.notesCommittee?.decision !== null;
     if (
-      dismisses &&
+      refers &&
       !confirm(
-        `זו הערת המשמעת ה-${cadet.disciplineNotes + 1} של ${cadet.fullName}.\n\nלפי הנוהל הוא מודח מהקורס: הסטטוס שלו ישתנה ל"הודח / פרש" ומפקד הקורס יקבל התראה. אם ההערה תימחק, הוא יחזור לסטטוס פעיל.\n\nלשמור?`,
+        `זו הערת המשמעת ה-${cadet.disciplineNotes + 1} של ${cadet.fullName}.\n\nלפי הנוהל הוא עולה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}: הוועדה תיפתח בתיק ההערכה שלו, עם התיק כפי שהוא עכשיו, ומפקד הקורס יקבל התראה. אם ההערה תימחק לפני החלטת הוועדה, ההעברה תבוטל.\n\nלשמור?`,
       )
     )
       return;
@@ -698,7 +731,7 @@ function RecordForm({ cadet, records }: { cadet: Cadet; records: CadetRecord[] }
         followUpTask: withTask ? { title: taskTitle.trim() || `המשך: ${cadet.fullName}`, deadline: isoAt(taskDate, taskTime), ownerId: cadet.canManage ? taskOwner : user.id } : undefined,
       });
       const n = res.cadet.disciplineNotes;
-      if (dismisses && res.cadet.dismissedByNotes) toast({ title: `${cadet.fullName} הודח מהקורס`, body: `הערת משמעת ${n} מתוך ${DISCIPLINE_NOTE_LIMIT}`, tone: 'red' });
+      if (refers && res.cadet.notesCommittee?.decision === null) toast({ title: `${cadet.fullName} עלה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`, body: `הערת משמעת ${n} מתוך ${DISCIPLINE_NOTE_LIMIT}`, tone: 'red' });
       else if (note) toast({ title: `הערת משמעת נשמרה בתיק (${n} מתוך ${DISCIPLINE_NOTE_LIMIT})`, tone: 'green' });
       else toast({ title: `${RECORD_KIND_LABELS[kind]} נשמרה בתיק`, tone: 'green' });
       reset();
@@ -773,7 +806,7 @@ function RecordForm({ cadet, records }: { cadet: Cadet; records: CadetRecord[] }
             <b>הערת משמעת</b>{' '}
             <span className="small muted">
               · עד עכשיו {cadet.disciplineNotes} מתוך {DISCIPLINE_NOTE_LIMIT}
-              {cadet.status === 'active' && cadet.disciplineNotes === DISCIPLINE_NOTE_LIMIT - 1 && ' - הערה נוספת תדיח אותו מהקורס'}
+              {cadet.status === 'active' && cadet.disciplineNotes === DISCIPLINE_NOTE_LIMIT - 1 && ` - הערה נוספת תעלה אותו ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`}
             </span>
           </span>
         </label>

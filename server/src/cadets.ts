@@ -5,10 +5,13 @@
 import { z } from 'zod';
 import {
   CADET_STATUSES,
+  committeeTo,
+  DISCIPLINE_COMMITTEE_KIND,
   DISCIPLINE_NOTE_LIMIT,
   RECORD_KINDS,
   RESTRICTED_RECORD_KINDS,
   type CadetStatus,
+  type CommitteeDecision,
   type RecordKind,
 } from '../../shared/constants';
 import { isDateKey, localDateKey, zonedIso } from '../../shared/dates';
@@ -16,6 +19,7 @@ import type { Cadet, CadetDetail, CadetRecord, Experience, Team } from '../../sh
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
+import { referForDiscipline } from './evaluations';
 import { changed, logActivity, notify } from './journal';
 import { isCommander, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime, updateTask, weekForDate } from './taskService';
@@ -82,7 +86,6 @@ export interface CadetRow {
   phone: string;
   notes: string;
   status: CadetStatus;
-  dismissed_by_record: number | null;
 }
 
 const CADET_BASE = `
@@ -154,7 +157,9 @@ export function toCadet(actor: UserRow, c: CadetRow, records: RecordRow[]): Cade
     avgScore: scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null,
     disciplineCount: visible.filter((r) => r.kind === 'discipline').length,
     disciplineNotes: visible.filter((r) => r.kind === 'discipline' && r.formal).length,
-    dismissedByNotes: canManageCadet(actor, c) && c.dismissed_by_record !== null,
+    notesCommittee: canManageCadet(actor, c)
+      ? (db().get<{ id: number; decision: CommitteeDecision | null }>('SELECT id, decision FROM committees WHERE cadet_id = ? AND from_record IS NOT NULL ORDER BY referred_at DESC, id DESC LIMIT 1', c.id) ?? null)
+      : null,
     talkCount: visible.filter((r) => r.kind === 'talk').length,
     canManage: canManageCadet(actor, c),
   };
@@ -262,7 +267,7 @@ export function updateCadet(actor: UserRow, id: number, raw: Partial<z.input<typ
   if (p.teamId !== undefined && p.teamId !== cur.team_id && !isCommander(actor)) throw forbidden('העברת צוער בין צוותים שמורה למפקד הקורס');
   if (p.teamId) teamCommander(p.teamId);
   db().run(
-    'UPDATE cadets SET first_name = ?, last_name = ?, personal_number = ?, team_id = ?, phone = ?, notes = ?, status = ?, dismissed_by_record = ?, updated_at = ? WHERE id = ?',
+    'UPDATE cadets SET first_name = ?, last_name = ?, personal_number = ?, team_id = ?, phone = ?, notes = ?, status = ?, updated_at = ? WHERE id = ?',
     p.firstName ?? cur.first_name,
     p.lastName ?? cur.last_name,
     p.personalNumber ?? cur.personal_number,
@@ -270,8 +275,6 @@ export function updateCadet(actor: UserRow, id: number, raw: Partial<z.input<typ
     p.phone ?? cur.phone,
     p.notes ?? cur.notes,
     p.status ?? cur.status,
-    // a status set by hand replaces a dismissal by discipline notes
-    (p.status ?? cur.status) === cur.status ? cur.dismissed_by_record : null,
     nowIso(),
     id,
   );
@@ -507,16 +510,20 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
 
 /**
  * A discipline note was recorded: the commanders hear of it, and the note that
- * reaches the limit dismisses an active cadet - remembered, so that deleting a
- * note (a mistake) brings the cadet back.
+ * reaches the limit sends an active cadet to an evaluation committee - unless
+ * one is already open. The committee remembers the note, so that deleting a
+ * note (a mistake) before it decides cancels the referral.
  */
 function disciplineNoteGiven(actor: UserRow, c: CadetRow, name: string, recordId: number): void {
   const notes = formalNotes(c.id);
   const to = [...commanderIds(), c.team_commander_id];
-  if (notes >= DISCIPLINE_NOTE_LIMIT && c.status === 'active') {
-    db().run("UPDATE cadets SET status = 'dropped', dismissed_by_record = ?, updated_at = ? WHERE id = ?", recordId, nowIso(), c.id);
-    logActivity({ userId: actor.id, action: 'cadet_status', text: `${name} קיבל הערת משמעת ${notes} והודח מהקורס` });
-    notify(to, { type: 'cadet_record', category: 'exception', title: `${name} קיבל הערת משמעת ${notes} מתוך ${DISCIPLINE_NOTE_LIMIT} והודח מהקורס`, link: `/cadets/${c.id}` }, actor.id);
+  if (notes >= DISCIPLINE_NOTE_LIMIT && c.status === 'active' && !db().get('SELECT 1 FROM committees WHERE cadet_id = ? AND decision IS NULL', c.id)) {
+    referForDiscipline(actor, c.id, recordId, notes);
+    notify(
+      to,
+      { type: 'committee', category: 'exception', title: `${name} קיבל הערת משמעת ${notes} מתוך ${DISCIPLINE_NOTE_LIMIT} ועולה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`, link: `/evaluations/${c.id}` },
+      actor.id,
+    );
     return;
   }
   notify(to, { type: 'cadet_record', category: 'exception', title: `${actor.display_name} נתן הערת משמעת ל${name} (${notes} מתוך ${DISCIPLINE_NOTE_LIMIT})`, link: `/cadets/${c.id}` }, actor.id);
@@ -528,11 +535,12 @@ export function deleteRecord(actor: UserRow, id: number): void {
   if (!isCommander(actor) && r.author_id !== actor.id) throw forbidden();
   db().tx(() => {
     db().run('DELETE FROM cadet_records WHERE id = ?', id);
-    // a dismissal by discipline notes ends when a note is deleted and fewer than the limit remain
-    const c = cadetRow(r.cadet_id);
-    if (r.formal && c.dismissed_by_record !== null && formalNotes(c.id) < DISCIPLINE_NOTE_LIMIT) {
-      db().run("UPDATE cadets SET status = 'active', dismissed_by_record = NULL, updated_at = ? WHERE id = ?", nowIso(), c.id);
-      logActivity({ userId: actor.id, action: 'cadet_status', text: `הערת משמעת של ${c.first_name} ${c.last_name} נמחקה - הצוער חזר לסטטוס פעיל` });
+    // fewer notes than the limit: a committee the notes opened, still undecided, is cancelled
+    if (r.formal && formalNotes(r.cadet_id) < DISCIPLINE_NOTE_LIMIT) {
+      const c = cadetRow(r.cadet_id);
+      if (db().run('DELETE FROM committees WHERE cadet_id = ? AND from_record IS NOT NULL AND decision IS NULL', c.id).changes) {
+        logActivity({ userId: actor.id, action: 'committee_referral', text: `הערת משמעת של ${c.first_name} ${c.last_name} נמחקה - ההעברה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)} בוטלה` });
+      }
     }
   });
   changed('cadets');

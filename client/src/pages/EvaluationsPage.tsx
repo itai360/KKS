@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   CADET_STATUS_LABELS,
+  CADET_STATUS_TONES,
   COMMITTEE_DECISION_LABELS,
   COMMITTEE_DECISIONS,
   COMMITTEE_KINDS,
@@ -154,7 +155,7 @@ export function EvaluationsPage() {
                       )}
                     </div>
                   </div>
-                  {c.status !== 'active' && <span className="badge">{CADET_STATUS_LABELS[c.status]}</span>}
+                  {c.status !== 'active' && <span className={`badge t-${CADET_STATUS_TONES[c.status]}`}>{CADET_STATUS_LABELS[c.status]}</span>}
                   <NotesBadge count={c.disciplineNotes} />
                   {c.notShown > 0 && <span className="badge t-orange hide-mobile">{c.notShown} לא הוצגו לצוער</span>}
                   {c.committee && (

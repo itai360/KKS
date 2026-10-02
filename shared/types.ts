@@ -548,8 +548,8 @@ export interface Cadet {
   disciplineCount: number;
   /** discipline notes (הערות משמעת) - the third dismisses the cadet */
   disciplineNotes: number;
-  /** dismissed automatically by the third discipline note (deleting a note brings the cadet back) */
-  dismissedByNotes: boolean;
+  /** the evaluation committee the third discipline note opened (deleting a note before it decides cancels it) */
+  notesCommittee: { id: number; decision: CommitteeDecision | null } | null;
   talkCount: number;
   canManage: boolean;
 }

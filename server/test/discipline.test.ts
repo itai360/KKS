@@ -2,7 +2,8 @@
 // enforcement ladder the commander imports from the course's document.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { CadetDetail, DisciplineGuide, EvaluationFile } from '../../shared/types';
+import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, EvaluationFile, EvaluationListItem } from '../../shared/types';
+import { Db, migrate } from '../src/db';
 import { guideFromFile, htmlBlocks, ordinalOf } from '../src/discipline';
 import { setSheetFetcher } from '../src/sheets';
 import { notificationsOf, setup, zip, type Ctx } from './helpers';
@@ -149,7 +150,7 @@ describe('discipline notes', () => {
   const record = (over: Record<string, unknown>) => ({ kind: 'discipline', body: 'פירוט', occurredOn: '2026-09-28', ...over });
   const detail = async (agent = c.cmd) => (await agent.get(`/api/cadets/${cadet}`)).body as CadetDetail;
 
-  it('counts each offense, and the third note dismisses the cadet', async () => {
+  it('counts each offense, and the third note sends the cadet to an evaluation committee', async () => {
     expect((await c.s2.post(`/api/cadets/${cadet}/records`, record({ formal: true }))).status).toBe(403);
     // the same offense twice: the second time, by date
     await c.s1.post(`/api/cadets/${cadet}/records`, record({ offense: 'זמנים · איחור למסדר', body: '', occurredOn: '2026-09-29' }));
@@ -161,44 +162,78 @@ describe('discipline notes', () => {
     ]);
 
     const first = (await c.s1.post(`/api/cadets/${cadet}/records`, record({ formal: true, offense: 'זמנים · איחור למסדר', occurredOn: '2026-09-30' }))).body as CadetDetail;
-    expect(first.cadet).toMatchObject({ disciplineNotes: 1, status: 'active', dismissedByNotes: false });
+    expect(first.cadet).toMatchObject({ disciplineNotes: 1, status: 'active', notesCommittee: null });
     expect(first.records[0]).toMatchObject({ formal: true, noteNumber: 1, occurrence: 3 });
     expect(notificationsOf(c.ids.cmd).map((n) => n.title)).toContain('מפק"צ 1 נתן הערת משמעת לנועם לוי (1 מתוך 3)');
 
     await c.s1.post(`/api/cadets/${cadet}/records`, record({ formal: true, occurredOn: '2026-10-01' }));
-    const third = (await c.s1.post(`/api/cadets/${cadet}/records`, record({ formal: true, occurredOn: '2026-10-01' }))).body as CadetDetail;
-    expect(third.cadet).toMatchObject({ disciplineNotes: 3, status: 'dropped', dismissedByNotes: true });
+    const third = (await c.s1.post(`/api/cadets/${cadet}/records`, record({ formal: true, title: 'יציאה בלי אישור', occurredOn: '2026-10-01' }))).body as CadetDetail;
+    expect(third.cadet).toMatchObject({ disciplineNotes: 3, status: 'active', notesCommittee: { decision: null } });
     expect(third.records.filter((r) => r.formal).map((r) => r.noteNumber)).toEqual([3, 2, 1]);
-    expect(notificationsOf(c.ids.cmd).at(-1)).toMatchObject({ title: 'נועם לוי קיבל הערת משמעת 3 מתוך 3 והודח מהקורס', category: 'exception' });
+    expect(notificationsOf(c.ids.cmd).at(-1)).toMatchObject({ title: 'נועם לוי קיבל הערת משמעת 3 מתוך 3 ועולה לוועדת הערכה', category: 'exception' });
     expect(notificationsOf(c.ids.s1)).toEqual([]); // the one who gave it
 
-    // the count is as private as discipline itself; the evaluation file carries the notes
-    const list = async (agent: Ctx['cmd']) => ((await agent.get('/api/cadets?status=all')).body as { disciplineNotes: number; status: string }[])[0];
-    expect(await list(c.cmd)).toMatchObject({ disciplineNotes: 3, status: 'dropped' });
-    expect(await list(c.s2)).toMatchObject({ disciplineNotes: 0, status: 'dropped' });
-    const file = (await c.s1.get(`/api/evaluations/${cadet}`)).body as EvaluationFile;
-    expect(file.discipline.filter((r) => r.formal).map((r) => r.noteNumber)).toEqual([3, 2, 1]);
+    // the committee: in the evaluation file, with the reason and the file as it was, the third note included
+    const committee = (await c.s1.get(`/api/evaluations/committees/${third.cadet.notesCommittee!.id}`)).body as CommitteeDetail;
+    expect(committee.committee).toMatchObject({ kind: 'ועדת הערכה', referredByName: 'מפק"צ 1', decision: null });
+    expect(committee.committee.reason).toBe('קיבל 3 הערות משמעת:\n1. 30.09.2026 - איחור למסדר\n2. 01.10.2026 - הערת משמעת\n3. 01.10.2026 - יציאה בלי אישור');
+    expect(committee.file.discipline.filter((r) => r.formal)).toHaveLength(3);
+    const [row] = (await c.cmd.get('/api/evaluations')).body as EvaluationListItem[];
+    expect(row).toMatchObject({ disciplineNotes: 3, committee: { kind: 'ועדת הערכה', decision: null } });
 
-    // a note given by mistake is deleted: the cadet is back
+    // the count is as private as discipline itself
+    const list = async (agent: Ctx['cmd']) => ((await agent.get('/api/cadets')).body as Cadet[])[0];
+    expect(await list(c.cmd)).toMatchObject({ disciplineNotes: 3, status: 'active' });
+    expect(await list(c.s2)).toMatchObject({ disciplineNotes: 0, notesCommittee: null });
+
+    // a note given by mistake is deleted before the committee decides: the referral is cancelled
     await c.s1.del(`/api/records/${third.records[0].id}`);
     d = await detail();
-    expect(d.cadet).toMatchObject({ disciplineNotes: 2, status: 'active', dismissedByNotes: false });
+    expect(d.cadet).toMatchObject({ disciplineNotes: 2, notesCommittee: null });
+    expect((await c.cmd.get(`/api/evaluations/${cadet}`)).body.committees).toEqual([]);
   });
 
-  it('a status set by hand stays: no return on delete, and no dismissal of a cadet who already left', async () => {
+  it('the committee decides; a decided committee stays, and an open one is not doubled', async () => {
+    // a committee the commander opened by hand: the third note does not open another
+    const manual = (await c.cmd.post(`/api/evaluations/${cadet}/committees`, { kind: 'ועדת חריגים' })).body as EvaluationFile;
     for (let i = 0; i < 3; i++) await c.s1.post(`/api/cadets/${cadet}/records`, record({ formal: true }));
-    expect((await detail()).cadet.dismissedByNotes).toBe(true);
-    // the commander keeps the dismissal but makes it his own decision
-    await c.cmd.patch(`/api/cadets/${cadet}`, { status: 'dropped' });
-    expect((await detail()).cadet.dismissedByNotes).toBe(true);
-    await c.cmd.patch(`/api/cadets/${cadet}`, { status: 'active' });
-    await c.cmd.patch(`/api/cadets/${cadet}`, { status: 'dropped' });
-    const d = await detail();
-    expect(d.cadet).toMatchObject({ status: 'dropped', dismissedByNotes: false });
-    await c.s1.del(`/api/records/${d.records[0].id}`);
+    let file = (await c.cmd.get(`/api/evaluations/${cadet}`)).body as EvaluationFile;
+    expect(file.committees.map((x) => x.kind)).toEqual(['ועדת חריגים']);
+    expect((await detail()).cadet.notesCommittee).toBeNull();
+    await c.cmd.del(`/api/evaluations/committees/${manual.committees[0].id}`);
+
+    // the fourth note, with no committee open, opens one; its decision dismisses
+    const d = (await c.s1.post(`/api/cadets/${cadet}/records`, record({ formal: true }))).body as CadetDetail;
+    const id = d.cadet.notesCommittee!.id;
+    await c.cmd.post(`/api/evaluations/committees/${id}/decision`, { decision: 'dismissed', text: 'הוחלט להדיח' });
+    expect((await detail()).cadet).toMatchObject({ status: 'dropped', notesCommittee: { id, decision: 'dismissed' } });
+    // deleting notes now changes nothing: the decision is part of the file
+    for (const r of (await detail()).records.slice(0, 2)) await c.s1.del(`/api/records/${r.id}`);
+    file = (await c.cmd.get(`/api/evaluations/${cadet}`)).body as EvaluationFile;
+    expect(file.committees.map((x) => x.decision)).toEqual(['dismissed']);
     expect((await detail()).cadet.status).toBe('dropped');
-    // already out: another note changes nothing
-    await c.s1.post(`/api/cadets/${cadet}/records`, record({ formal: true }));
-    expect((await detail()).cadet).toMatchObject({ status: 'dropped', dismissedByNotes: false, disciplineNotes: 3 });
+  });
+
+  it('a cadet who already left gets no committee', async () => {
+    await c.cmd.patch(`/api/cadets/${cadet}`, { status: 'dropped' });
+    for (let i = 0; i < 3; i++) await c.s1.post(`/api/cadets/${cadet}/records`, record({ formal: true }));
+    expect((await detail()).cadet).toMatchObject({ status: 'dropped', disciplineNotes: 3, notesCommittee: null });
+  });
+
+  it('a cadet the first release dismissed at the third note goes to the committee instead', () => {
+    const old = new Db(':memory:');
+    migrate(old, 8);
+    old.run("INSERT INTO users(id, username, password_hash, display_name, role, created_at) VALUES (1, 'u', 'x', 'מפקד', 'commander', '2026-10-01')");
+    old.run("INSERT INTO cadets(id, first_name, last_name, status, created_at, updated_at) VALUES (1, 'נועם', 'לוי', 'dropped', '2026-10-01', '2026-10-01')");
+    old.run("INSERT INTO cadets(id, first_name, last_name, status, created_at, updated_at) VALUES (2, 'דנה', 'כץ', 'dropped', '2026-10-01', '2026-10-01')");
+    old.run("INSERT INTO cadet_records(id, cadet_id, kind, author_id, occurred_on, created_at, formal) VALUES (9, 1, 'discipline', 1, '2026-10-02', '2026-10-02T09:00:00.000Z', 1)");
+    old.run('UPDATE cadets SET dismissed_by_record = 9 WHERE id = 1');
+    migrate(old);
+    expect(old.all('SELECT id, status, dismissed_by_record FROM cadets ORDER BY id')).toEqual([
+      { id: 1, status: 'active', dismissed_by_record: null },
+      { id: 2, status: 'dropped', dismissed_by_record: null }, // left for another reason
+    ]);
+    expect(old.all('SELECT cadet_id, kind, referred_by, from_record, decision FROM committees')).toEqual([{ cadet_id: 1, kind: 'ועדת הערכה', referred_by: 1, from_record: 9, decision: null }]);
+    old.close();
   });
 });

@@ -132,6 +132,7 @@ export const CADET_STATUS_LABELS: Record<CadetStatus, string> = {
   dropped: 'הודח / פרש',
   graduated: 'סיים',
 };
+export const CADET_STATUS_TONES: Record<CadetStatus, Tone> = { active: 'green', dropped: 'red', graduated: 'blue' };
 
 export const RECORD_KINDS = ['note', 'talk', 'discipline', 'evaluation'] as const;
 export type RecordKind = (typeof RECORD_KINDS)[number];
@@ -146,8 +147,11 @@ export const RESTRICTED_RECORD_KINDS: readonly RecordKind[] = ['talk', 'discipli
 
 export const EVALUATION_CRITERIA = ['פיקוד והובלה', 'מקצועיות', 'ערכים ודוגמה אישית', 'עבודת צוות', 'יוזמה', 'כושר גופני'] as const;
 export const DISCIPLINE_SEVERITIES = ['קלה', 'בינונית', 'חמורה'] as const;
-/** A cadet who gets this many discipline notes (הערות משמעת) is dismissed from the course. */
+/** A cadet who gets this many discipline notes (הערות משמעת) goes to an evaluation committee. */
 export const DISCIPLINE_NOTE_LIMIT = 3;
+export const DISCIPLINE_COMMITTEE_KIND = 'ועדת הערכה';
+/** "ועדת הערכה" -> "לוועדת הערכה": after the prefix the vav doubles */
+export const committeeTo = (name: string) => `ל${name.startsWith('ו') && !name.startsWith('וו') ? `ו${name}` : name}`;
 export const TALK_TYPES = ['שיחת היכרות', 'שיחת אמצע', 'שיחת משוב', 'שיחה יזומה', 'שיחת סיום'] as const;
 
 // ---------------- evaluation files (תיקי הערכה) ----------------
@@ -165,7 +169,7 @@ export const EVAL_TONE_TONES: Record<EvalTone, string> = { positive: 'green', im
 /** What an evaluation entry is about: the evaluation criteria, conduct, and anything else. */
 export const EVAL_CATEGORIES = [...EVALUATION_CRITERIA, 'משמעת והתנהגות', 'אחר'] as const;
 
-export const COMMITTEE_KINDS = ['ועדת הדחה', 'ועדת מעבר שלב', 'ועדת חריגים', 'ועדת סיום', 'אחר'] as const;
+export const COMMITTEE_KINDS = ['ועדת הדחה', 'ועדת הערכה', 'ועדת מעבר שלב', 'ועדת חריגים', 'ועדת סיום', 'אחר'] as const;
 export const COMMITTEE_DECISIONS = ['continue', 'conditional', 'dismissed', 'other'] as const;
 export type CommitteeDecision = (typeof COMMITTEE_DECISIONS)[number];
 export const COMMITTEE_DECISION_LABELS: Record<CommitteeDecision, string> = {
