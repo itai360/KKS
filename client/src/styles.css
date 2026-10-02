@@ -659,8 +659,18 @@ input[type='datetime-local'] {
   text-align: right;
 }
 
-/* Safari on a phone draws the value in its own box (a separate rule: other
-   browsers drop a whole rule with a selector they do not know) */
+/* ...except on iPhone and iPad, which show the value as one piece of text
+   (like "4 באוק׳ 2026") that reads right only from right to left */
+@supports (-webkit-touch-callout: none) {
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'] {
+    direction: rtl;
+  }
+}
+
+/* there the value sits in its own box (a separate rule: other browsers drop
+   a whole rule with a selector they do not know) */
 input::-webkit-date-and-time-value {
   text-align: right;
 }
