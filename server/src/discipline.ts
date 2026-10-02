@@ -10,9 +10,11 @@
 // cover); a line starting with "*" and the list under it explains an offense;
 // each heading after the table with text under it is the wording of a note.
 
-import type { DisciplineGuide, DisciplineLetter, DisciplineOffense, DisciplineStep } from '../../shared/types';
+import { localDateKey, startOfWeek } from '../../shared/dates';
+import type { DisciplineGuide, DisciplineLetter, DisciplineOffense, DisciplineOverview, DisciplineStep } from '../../shared/types';
 import type { UserRow } from './auth';
-import { badRequest, nowIso } from './core';
+import { disciplineOrder, listCadets, RECORD_BASE, type RecordRow } from './cadets';
+import { badRequest, clock, nowIso, tz } from './core';
 import { db } from './db';
 import { changed, logActivity } from './journal';
 import { decode, googleFetch, unzip } from './sheets';
@@ -420,6 +422,47 @@ export function saveGuide(actor: UserRow, guide: { offenses: DisciplineOffense[]
   logActivity({ userId: actor.id, action: 'discipline_guide', text: `${actor.display_name} עדכן את מדרג האכיפה (${guide.offenses.length} מקרים, ${guide.letters.length} נוסחי הערות משמעת)` });
   changed('settings');
   return getGuide();
+}
+
+// ---------------- the picture for the commanders ----------------
+
+/** This week's discipline, the cadets with notes, and the latest records - of the active cadets the user manages. */
+export function disciplineOverview(actor: UserRow): DisciplineOverview {
+  const managed = listCadets(actor, { status: 'active' }).filter((c) => c.canManage);
+  const byId = new Map(managed.map((c) => [c.id, c]));
+  const rows = db()
+    .all<RecordRow>(`${RECORD_BASE} WHERE r.kind = 'discipline' ORDER BY r.occurred_on DESC, r.id DESC`)
+    .filter((r) => byId.has(r.cadet_id));
+  const order = disciplineOrder(rows);
+  const weekStart = startOfWeek(localDateKey(clock.now(), tz()));
+  const week = rows.filter((r) => r.occurred_on >= weekStart);
+  const categories = new Map<string, number>();
+  for (const r of week) {
+    const category = r.offense.includes(' · ') ? r.offense.split(' · ')[0] : 'אחר';
+    categories.set(category, (categories.get(category) ?? 0) + 1);
+  }
+  return {
+    managed: managed.length,
+    week: {
+      events: week.length,
+      notes: week.filter((r) => r.formal).length,
+      byCategory: [...categories].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category, 'he')),
+    },
+    cadets: managed
+      .filter((c) => c.disciplineNotes > 0 || (c.notesCommittee && !c.notesCommittee.decision))
+      .sort((a, b) => b.disciplineNotes - a.disciplineNotes || a.fullName.localeCompare(b.fullName, 'he'))
+      .map((c) => ({ id: c.id, fullName: c.fullName, teamName: c.teamName, notes: c.disciplineNotes, committee: c.notesCommittee })),
+    recent: rows.slice(0, 8).map((r) => ({
+      id: r.id,
+      cadetId: r.cadet_id,
+      cadetName: byId.get(r.cadet_id)!.fullName,
+      title: r.title || r.category || (r.formal ? 'הערת משמעת' : 'משמעת'),
+      formal: !!r.formal,
+      occurrence: order.get(r.id)?.occurrence ?? null,
+      occurredOn: r.occurred_on,
+      authorName: r.author_name,
+    })),
+  };
 }
 
 export function deleteGuide(actor: UserRow): void {

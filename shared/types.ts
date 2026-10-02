@@ -810,6 +810,15 @@ export interface DisciplineLetter {
   body: string;
 }
 
+/** Discipline across the cadets this user manages: this week, who has notes, the latest records. */
+export interface DisciplineOverview {
+  /** how many active cadets the user manages (0: nothing to show) */
+  managed: number;
+  week: { events: number; notes: number; byCategory: { category: string; count: number }[] };
+  cadets: { id: number; fullName: string; teamName: string | null; notes: number; committee: { id: number; decision: CommitteeDecision | null } | null }[];
+  recent: { id: number; cadetId: number; cadetName: string; title: string; formal: boolean; occurrence: number | null; occurredOn: string; authorName: string }[];
+}
+
 export interface DisciplineGuide {
   offenses: DisciplineOffense[];
   letters: DisciplineLetter[];

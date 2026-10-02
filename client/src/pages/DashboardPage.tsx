@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { AttentionItem, AttentionKind, DashboardData } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
+import { DisciplineCard } from '../components/DisciplineCard';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { useToast } from '../components/Toasts';
@@ -82,6 +83,7 @@ export function DashboardPage() {
             <Attention items={data.attention} />
             <div className="col gap-16 sticky-side">
               <WeekCard data={data} />
+              <DisciplineCard />
               <StaffHealth data={data} />
               <TodayEvents data={data} />
               <QuickActions />

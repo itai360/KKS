@@ -11,9 +11,12 @@ import { shortDate } from '@shared/dates';
 import { fmtAgo, fmtDateTime } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useApi } from '../lib/useApi';
+import { noteTone } from './DisciplineCard';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { ErrorBox, Modal } from './ui';
+
+export { NotesBadge, noteTone } from './DisciplineCard';
 
 export const useGuide = (enabled = true) => useApi<DisciplineGuide>(enabled ? '/api/discipline/guide' : null, ['settings']);
 
@@ -24,8 +27,6 @@ export const timeLabel = (n: number) => `פעם ${ORDINALS[n - 1] ?? n}`;
 /** The offense's own name, without its category. */
 export const offenseName = (key: string) => key.split(' · ').pop() ?? key;
 
-export const noteTone = (n: number) => (n >= DISCIPLINE_NOTE_LIMIT - 1 ? 't-red' : 't-orange');
-
 /** "2/3" as filled dots, for the cadet page. */
 export function NoteDots({ count }: { count: number }) {
   return (
@@ -33,16 +34,6 @@ export function NoteDots({ count }: { count: number }) {
       {Array.from({ length: DISCIPLINE_NOTE_LIMIT }, (_, i) => (
         <i key={i} className={i < count ? 'on' : ''} />
       ))}
-    </span>
-  );
-}
-
-/** A badge with a cadet's discipline notes, when there are any. */
-export function NotesBadge({ count }: { count: number }) {
-  if (!count) return null;
-  return (
-    <span className={`badge ${noteTone(count)}`}>
-      הערות משמעת {count}/{DISCIPLINE_NOTE_LIMIT}
     </span>
   );
 }

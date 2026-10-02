@@ -3,6 +3,7 @@
 import { useNavigate } from 'react-router';
 import { shortDate } from '@shared/dates';
 import type { MyTasksData, Task } from '@shared/types';
+import { DisciplineCard } from '../components/DisciplineCard';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkToggle } from '../components/Bulk';
@@ -101,6 +102,7 @@ export function MyTasksPage() {
               )}
             </div>
             <div className="col gap-16 sticky-side">
+              <DisciplineCard />
               {data.myWeeks.length > 0 && (
                 <div className="card">
                   <div className="card-head">

@@ -3245,6 +3245,43 @@ select.status-pill:disabled {
   opacity: 0.7;
 }
 
+.discipline-row {
+  color: inherit;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+/* picking a cadet in a dialog */
+.pick-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(50vh, 420px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  min-height: 48px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.pick-row:last-child {
+  border-bottom: 0;
+}
+.pick-row:hover,
+.pick-row:focus-visible {
+  background: var(--card-2);
+}
+
 /* discipline notes: the count on the cadet page, and the enforcement ladder */
 .note-dots {
   display: inline-flex;

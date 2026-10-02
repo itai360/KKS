@@ -2,7 +2,7 @@
 // enforcement ladder the commander imports from the course's document.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, EvaluationFile, EvaluationListItem } from '../../shared/types';
+import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, DisciplineOverview, EvaluationFile, EvaluationListItem } from '../../shared/types';
 import { Db, migrate } from '../src/db';
 import { guideFromFile, htmlBlocks, ordinalOf } from '../src/discipline';
 import { setSheetFetcher } from '../src/sheets';
@@ -212,6 +212,23 @@ describe('discipline notes', () => {
     file = (await c.cmd.get(`/api/evaluations/${cadet}`)).body as EvaluationFile;
     expect(file.committees.map((x) => x.decision)).toEqual(['dismissed']);
     expect((await detail()).cadet.status).toBe('dropped');
+  });
+
+  it('the commanders see this week, who has notes, and the latest records - of their own cadets', async () => {
+    await c.s1.post(`/api/cadets/${cadet}/records`, record({ offense: 'זמנים · איחור למסדר', occurredOn: '2026-09-28' }));
+    await c.s1.post(`/api/cadets/${cadet}/records`, record({ offense: 'זמנים · איחור למסדר', formal: true, occurredOn: '2026-09-30' }));
+    await c.s1.post(`/api/cadets/${cadet}/records`, record({ title: 'ישן', occurredOn: '2026-09-20' })); // last week
+    const o = (await c.s1.get('/api/discipline/overview')).body as DisciplineOverview;
+    expect(o).toMatchObject({ managed: 1, week: { events: 2, notes: 1, byCategory: [{ category: 'זמנים', count: 2 }] } });
+    expect(o.cadets).toEqual([{ id: cadet, fullName: 'נועם לוי', teamName: 'צוות 1', notes: 1, committee: null }]);
+    expect(o.recent.map((r) => [r.title, r.occurrence, r.formal])).toEqual([
+      ['איחור למסדר', 2, true],
+      ['איחור למסדר', 1, false],
+      ['ישן', null, false],
+    ]);
+    expect((await c.cmd.get('/api/discipline/overview')).body).toMatchObject({ managed: 1, week: { events: 2 } });
+    // staff without a team see nothing
+    expect((await c.s2.get('/api/discipline/overview')).body).toEqual({ managed: 0, week: { events: 0, notes: 0, byCategory: [] }, cadets: [], recent: [] });
   });
 
   it('a cadet who already left gets no committee', async () => {

@@ -56,7 +56,7 @@ import {
 import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
 import { getFile, sendStoredFile, uploadName } from './files';
 import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
-import { deleteGuide, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
+import { deleteGuide, disciplineOverview, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
 import { bulkSchema, runBulk } from './bulk';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
@@ -125,6 +125,7 @@ export function v3Router(): Router {
   // ---------------- enforcement ladder (from the course's document) ----------------
 
   r.get('/discipline/guide', (_req, res) => res.json(getGuide()));
+  r.get('/discipline/overview', (req, res) => res.json(disciplineOverview(me(req))));
   r.post('/discipline/guide/link', requireCommander, async (req, res) => {
     const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
     res.json(saveGuide(me(req), await guideFromLink(url, config.maxUploadMb * 1024 * 1024), url));

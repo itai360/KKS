@@ -42,15 +42,16 @@ export function CadetsPage() {
   const [params, setParams] = useSearchParams();
   const team = params.get('team') ?? '';
   const status = params.get('status') ?? 'active';
+  const notesOnly = params.get('notes') === '1';
   const [q, setQ] = useState('');
   const teams = useApi<Team[]>('/api/teams', ['cadets']);
   const cadets = useApi<Cadet[]>(`/api/cadets${qs({ team, status })}`, ['cadets']);
-  const [dialog, setDialog] = useState<null | 'cadet' | 'import' | 'teams' | 'guide'>(null);
+  const [dialog, setDialog] = useState<null | 'cadet' | 'import' | 'teams' | 'guide' | 'discipline'>(null);
   const guide = useGuide();
   const myTeams = (teams.data ?? []).filter((t) => t.commanderId === user.id);
   const canAdd = isCommander || myTeams.length > 0;
 
-  const shown = (cadets.data ?? []).filter((c) => !q || [c.fullName, c.personalNumber].some((f) => f.includes(q)));
+  const shown = (cadets.data ?? []).filter((c) => (!q || [c.fullName, c.personalNumber].some((f) => f.includes(q))) && (!notesOnly || c.disciplineNotes > 0));
   const grouped = useMemo(() => {
     const map = new Map<string, Cadet[]>();
     for (const c of shown) map.set(c.teamName ?? 'ללא צוות', [...(map.get(c.teamName ?? 'ללא צוות') ?? []), c]);
@@ -110,6 +111,11 @@ export function CadetsPage() {
             >
               <Icon name="download" /> ייצוא
             </button>
+            {canAdd && (
+              <button className="btn" onClick={() => setDialog('discipline')} title="רישום משמעת לצוער, בלי לפתוח את התיק">
+                <Icon name="shield" /> רישום משמעת
+              </button>
+            )}
             {!!guide.data?.offenses.length && (
               <button className="btn" onClick={() => setDialog('guide')} title="מה עושים בכל מקרה, לפי הפעם">
                 <Icon name="shield" /> מדרג אכיפה
@@ -153,6 +159,9 @@ export function CadetsPage() {
           ))}
           <option value="all">הכל</option>
         </select>
+        <button type="button" className={`chip${notesOnly ? ' on' : ''}`} onClick={() => set('notes', notesOnly ? '' : '1')} aria-pressed={notesOnly}>
+          עם הערות משמעת
+        </button>
       </div>
       <ErrorBox error={cadets.error} />
       {cadets.loading && !cadets.data ? (
@@ -179,6 +188,7 @@ export function CadetsPage() {
       {dialog === 'import' && <ImportCadets teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'teams' && <TeamsDialog teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'guide' && guide.data && <GuideModal guide={guide.data} onClose={() => setDialog(null)} />}
+      {dialog === 'discipline' && <QuickDiscipline onClose={() => setDialog(null)} />}
     </div>
     </BulkScope>
   );
@@ -650,12 +660,80 @@ function StatusPill({ cadet }: { cadet: Cadet }) {
 
 const KIND_TONE: Record<RecordKind, string> = { note: 'gray', talk: 'blue', discipline: 'orange', evaluation: 'green' };
 
-function RecordForm({ cadet, records }: { cadet: Cadet; records: CadetRecord[] }) {
+/** Discipline in one dialog, from anywhere: find the cadet, then the record with the enforcement ladder. */
+export function QuickDiscipline({ onClose }: { onClose: () => void }) {
+  const cadets = useApi<Cadet[]>('/api/cadets', ['cadets']);
+  const [q, setQ] = useState('');
+  const [picked, setPicked] = useState<number | null>(null);
+  const detail = useApi<CadetDetail>(picked ? `/api/cadets/${picked}` : null, ['cadets', 'tasks']);
+  const term = q.trim();
+  const mine = (cadets.data ?? []).filter((c) => c.canManage);
+  const matches = mine.filter((c) => !term || [c.fullName, c.personalNumber, c.teamName ?? ''].some((f) => f.includes(term)));
+  const d = picked && detail.data?.cadet.id === picked ? detail.data : undefined;
+  return (
+    <Modal title="רישום משמעת" onClose={onClose} wide>
+      {!picked ? (
+        <div className="col gap-6">
+          <input
+            className="input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && matches[0]) setPicked(matches[0].id);
+            }}
+            placeholder="שם הצוער, מספר אישי או צוות"
+            aria-label="חיפוש צוער"
+            data-autofocus
+          />
+          <ErrorBox error={cadets.error} />
+          {cadets.loading && !cadets.data && <Loading rows={3} />}
+          {cadets.data && !mine.length && <p className="small muted">אין צוערים פעילים בצוותים שלך.</p>}
+          {matches.length > 0 && (
+            <div className="pick-list">
+              {matches.slice(0, 40).map((c) => (
+                <button key={c.id} type="button" className="pick-row" onClick={() => setPicked(c.id)}>
+                  <span className="avatar">{initials(c.fullName)}</span>
+                  <span className="grow">
+                    <span className="strong">{c.fullName}</span> <span className="tiny muted">{c.teamName ?? 'ללא צוות'}</span>
+                  </span>
+                  <NotesBadge count={c.disciplineNotes} />
+                </button>
+              ))}
+            </div>
+          )}
+          {matches.length > 40 && <div className="tiny muted">ועוד {matches.length - 40} - אפשר לחפש לפי שם.</div>}
+          {cadets.data && mine.length > 0 && !matches.length && <p className="small muted">לא נמצא צוער כזה.</p>}
+        </div>
+      ) : !d ? (
+        <Loading rows={3} />
+      ) : (
+        <div className="col gap-16">
+          <div className="row wrap gap-6">
+            <span className="strong">{d.cadet.fullName}</span>
+            <span className="tiny muted">{d.cadet.teamName ?? 'ללא צוות'}</span>
+            <NotesBadge count={d.cadet.disciplineNotes} />
+            <span className="grow" />
+            <Link to={`/cadets/${d.cadet.id}`} className="small" onClick={onClose}>
+              לתיק הצוער
+            </Link>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPicked(null)}>
+              צוער אחר
+            </button>
+          </div>
+          <RecordForm cadet={d.cadet} records={d.records} only="discipline" onSaved={onClose} />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/** Recording in the cadet file; `only` keeps it to one kind (the quick discipline dialog). */
+function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: CadetRecord[]; only?: RecordKind; onSaved?: (d: CadetDetail) => void }) {
   const toast = useToast();
   const { user, users, settings, isCommander } = useSession();
   const guide = useGuide(cadet.canManage);
-  const kinds = RECORD_KINDS.filter((k) => cadet.canManage || !RESTRICTED_RECORD_KINDS.includes(k));
-  const [kind, setKind] = useState<RecordKind>('note');
+  const kinds = only ? [only] : RECORD_KINDS.filter((k) => cadet.canManage || !RESTRICTED_RECORD_KINDS.includes(k));
+  const [kind, setKind] = useState<RecordKind>(only ?? 'note');
   const [category, setCategory] = useState('');
   const [body, setBody] = useState('');
   const [score, setScore] = useState<number | null>(null);
@@ -736,6 +814,7 @@ function RecordForm({ cadet, records }: { cadet: Cadet; records: CadetRecord[] }
       else toast({ title: `${RECORD_KIND_LABELS[kind]} נשמרה בתיק`, tone: 'green' });
       reset();
       emitLocalChange('cadets', 'tasks');
+      onSaved?.(res);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -744,8 +823,8 @@ function RecordForm({ cadet, records }: { cadet: Cadet; records: CadetRecord[] }
   };
 
   return (
-    <div className="card card-pad col gap-16">
-      <Seg value={kind} onChange={(k) => (setKind(k), setCategory(''), pickOffense(''))} options={kinds.map((k) => ({ value: k, label: RECORD_KIND_LABELS[k] }))} />
+    <div className={only ? 'col gap-16' : 'card card-pad col gap-16'}>
+      {!only && <Seg value={kind} onChange={(k) => (setKind(k), setCategory(''), pickOffense(''))} options={kinds.map((k) => ({ value: k, label: RECORD_KIND_LABELS[k] }))} />}
       {categories.length > 0 && (
         <div className="chips">
           {categories.map((x) => (
