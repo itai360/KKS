@@ -48,10 +48,10 @@ export function MyTasksPage() {
       ) : data ? (
         <div className="fade-in">
           <div className="stats">
-            <MiniStat n={data.stats.today} label="היום" />
-            <MiniStat n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} />
-            <MiniStat n={data.stats.week} label="השבוע" />
-            <MiniStat n={data.stats.doneToday} label="הושלמו היום" />
+            <MiniStat n={data.stats.today} label="היום" target="group-today" />
+            <MiniStat n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
+            <MiniStat n={data.stats.week} label="השבוע" target="group-week" />
+            <MiniStat n={data.stats.doneToday} label="הושלמו היום" target="group-done" />
           </div>
 
           <div className="split mt-16">
@@ -59,13 +59,13 @@ export function MyTasksPage() {
               {total === 0 && <Empty title="אין משימות פתוחות" text="כל הכבוד. משימות חדשות יופיעו כאן ברגע שייפתחו." />}
               {data.overdue.length > 0 && (
                 <>
-                  <GroupTitle title="באיחור" count={data.overdue.length} tone="red" />
+                  <GroupTitle id="group-overdue" title="באיחור" count={data.overdue.length} tone="red" />
                   <TaskList tasks={data.overdue} showOwner={false} />
                 </>
               )}
               {data.today.length > 0 && (
                 <>
-                  <GroupTitle title="היום" count={data.today.length} tone="orange" />
+                  <GroupTitle id="group-today" title="היום" count={data.today.length} tone="orange" />
                   <TaskList tasks={data.today} showOwner={false} />
                 </>
               )}
@@ -77,7 +77,7 @@ export function MyTasksPage() {
               )}
               {data.week.length > 0 && (
                 <>
-                  <GroupTitle title="השבוע" count={data.week.length} tone="yellow" />
+                  <GroupTitle id="group-week" title="השבוע" count={data.week.length} tone="yellow" />
                   <TaskList tasks={data.week} showOwner={false} />
                 </>
               )}
@@ -95,7 +95,7 @@ export function MyTasksPage() {
               )}
               {data.recentDone.length > 0 && (
                 <>
-                  <GroupTitle title="הושלמו לאחרונה" count={data.recentDone.length} tone="green" />
+                  <GroupTitle id="group-done" title="הושלמו לאחרונה" count={data.recentDone.length} tone="green" />
                   <TaskList tasks={data.recentDone} showOwner={false} />
                 </>
               )}
@@ -137,11 +137,13 @@ export function MyTasksPage() {
   );
 }
 
-function MiniStat({ n, label, alert }: { n: number; label: string; alert?: boolean }) {
+/** A number at the top; a tap brings its group of tasks into view (when it has any). */
+function MiniStat({ n, label, alert, target }: { n: number; label: string; alert?: boolean; target: string }) {
+  const go = () => document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return (
-    <div className={`card stat${alert ? ' alert' : ''}`} style={{ cursor: 'default' }}>
+    <button type="button" className={`card stat${alert ? ' alert' : ''}`} style={{ textAlign: 'start', cursor: n ? 'pointer' : 'default' }} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
       <span className="stat-label">{label}</span>
       <span className="stat-num">{n}</span>
-    </div>
+    </button>
   );
 }

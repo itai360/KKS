@@ -136,9 +136,9 @@ export function TaskList({ tasks, empty, showOwner = true }: { tasks: Task[]; em
   );
 }
 
-export function GroupTitle({ title, count, tone }: { title: string; count?: number; tone?: string }) {
+export function GroupTitle({ title, count, tone, id }: { title: string; count?: number; tone?: string; id?: string }) {
   return (
-    <div className="group-title">
+    <div className="group-title" id={id}>
       {tone && <span className={`dot t-${tone}`} />}
       <span>{title}</span>
       {count !== undefined && <span className="n">{count}</span>}

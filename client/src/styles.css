@@ -3184,3 +3184,19 @@ tr.selected td {
 .snapshot-more {
   margin: 8px 16px 12px;
 }
+
+/* "המשימות שלי": the numbers at the top lead to their groups */
+.group-title {
+  scroll-margin-top: calc(var(--top-h) + 12px);
+}
+
+button.stat {
+  font: inherit;
+  color: inherit;
+}
+
+button.stat:disabled {
+  opacity: 1;
+  color: inherit;
+  transform: none;
+}
