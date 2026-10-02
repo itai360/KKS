@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { Tone } from '@shared/constants';
 import { Icon } from './Icon';
 
@@ -42,7 +43,9 @@ export function Modal({
     };
     // once per opening: re-running on every parent render would steal focus mid-typing
   }, []);
-  return (
+  // on the page body: a dialog opened inside an animated card or a sticky column would otherwise
+  // stay inside that box's layer, under the phone's bottom bar
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" ref={ref}>
         <div className="modal-head">
@@ -54,7 +57,8 @@ export function Modal({
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
