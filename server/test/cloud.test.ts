@@ -91,6 +91,31 @@ describe('serverless storage', () => {
     cdb.close();
   });
 
+  it('a shared copy saved in WAL mode still uploads every change', async () => {
+    // e.g. a database moved from a local server: SQLite keeps a file in WAL mode until told otherwise
+    const { DatabaseSync } = await import('node:sqlite');
+    const { writeFileSync, readFileSync } = await import('node:fs');
+    const file = join(process.env.DATA_DIR!, 'wal.db');
+    writeFileSync(file, decodeDb(store.state!.data));
+    const w = new DatabaseSync(file);
+    w.exec('PRAGMA journal_mode = WAL');
+    w.close();
+    expect(readFileSync(file)[18]).toBe(2);
+    store.state = { version: store.state!.version + 1, data: encodeDb(readFileSync(file)) };
+
+    const login = await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    const saved = decodeDb(store.state.data);
+    expect(saved[18]).toBe(1); // back to one file
+    const check = join(process.env.DATA_DIR!, 'wal-check.db');
+    writeFileSync(check, saved);
+    const c = new DatabaseSync(check);
+    const sessions = (c.prepare('SELECT count(*) AS n FROM sessions').get() as { n: number }).n;
+    c.close();
+    expect(sessions).toBeGreaterThan(0);
+    expect((await call('GET', '/api/auth/me', undefined, cookie)).statusCode).toBe(200);
+  });
+
   it('keeps uploaded files in the shared store', async () => {
     const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
     const up = await inject(handler as never, {

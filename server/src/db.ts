@@ -18,7 +18,8 @@ export class Db {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.raw = new DatabaseSync(path);
     this.raw.exec('PRAGMA foreign_keys = ON');
-    if (path !== ':memory:' && opts.wal !== false) this.raw.exec('PRAGMA journal_mode = WAL');
+    // a file saved in WAL mode stays in it unless told otherwise, and its changes would then sit in a side file
+    if (path !== ':memory:') this.raw.exec(`PRAGMA journal_mode = ${opts.wal === false ? 'DELETE' : 'WAL'}`);
     this.raw.exec('PRAGMA busy_timeout = 5000');
   }
 
@@ -544,7 +545,22 @@ const SCHEMA_V7 = `
 CREATE TABLE login_lockouts (key TEXT PRIMARY KEY, until INTEGER NOT NULL);
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7];
+// discipline notes (הערות משמעת) and the enforcement ladder the commander imports
+const SCHEMA_V8 = `
+ALTER TABLE cadet_records ADD COLUMN offense TEXT NOT NULL DEFAULT '';
+ALTER TABLE cadet_records ADD COLUMN formal INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE cadets ADD COLUMN dismissed_by_record INTEGER;
+CREATE TABLE discipline_guide (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  offenses TEXT NOT NULL,
+  letters TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  imported_at TEXT NOT NULL,
+  imported_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8];
 
 export function migrate(db: Db): void {
   const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");
