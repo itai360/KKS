@@ -195,7 +195,7 @@ function GroupCard({ group }: { group: NonNullable<TaskDetail['group']> }) {
           </div>
         </div>
         <div style={{ width: 200 }}>
-          <Bar value={pct} />
+          <Bar value={pct} label="השלימו את המשימה" />
         </div>
       </div>
       <div className="chips mt-12">
@@ -323,7 +323,7 @@ function Subtasks({ detail }: { detail: TaskDetail }) {
       <div className="card-body">
         {t.subtaskTotal > 0 && (
           <div className="mb-12">
-            <Bar value={Math.round((t.subtaskDone / t.subtaskTotal) * 100)} />
+            <Bar value={Math.round((t.subtaskDone / t.subtaskTotal) * 100)} label="משימות משנה שהושלמו" />
           </div>
         )}
         {detail.subtasks.length ? <TaskList tasks={detail.subtasks} /> : <p className="small muted">אפשר לפרק משימה מורכבת למשימות משנה - והמשימה הראשית תקבל אחוז התקדמות.</p>}

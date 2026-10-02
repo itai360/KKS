@@ -814,7 +814,7 @@ function Development({ detail }: { detail: CadetDetail }) {
           <>
             <div className="small muted mb-12">ציון ממוצע לפי תאריך הערכה (1-5)</div>
             <div style={{ position: 'relative' }}>
-              <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="ציוני הערכה לאורך הקורס" style={{ display: 'block', overflow: 'visible' }}>
+              <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="group" aria-label="ציוני הערכה לאורך הקורס" style={{ display: 'block', overflow: 'visible' }}>
                 {[1, 2, 3, 4, 5].map((v) => (
                   <g key={v}>
                     <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeWidth={1} />
@@ -825,7 +825,7 @@ function Development({ detail }: { detail: CadetDetail }) {
                 ))}
                 {points.length > 1 && <path d={path} fill="none" stroke="var(--ink)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
                 {points.map((p, i) => (
-                  <g key={p.date} onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)} tabIndex={0} aria-label={`${shortDate(p.date)}: ${p.avg}`}>
+                  <g key={p.date} onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)} tabIndex={0} role="img" aria-label={`${shortDate(p.date)}: ציון ממוצע ${p.avg}`}>
                     <circle cx={x(i)} cy={y(p.avg)} r={12} fill="transparent" />
                     <circle cx={x(i)} cy={y(p.avg)} r={hover === i ? 6 : 4.5} fill="var(--ink)" stroke="var(--card)" strokeWidth={2} />
                   </g>
@@ -860,7 +860,7 @@ function Development({ detail }: { detail: CadetDetail }) {
                       <div className="bar-fill" style={{ width: `${(cr.avg / 5) * 100}%`, background: 'var(--ink-2)' }} />
                     </div>
                     <span className="mono" style={{ width: 54, textAlign: 'left' }}>
-                      {cr.avg.toFixed(1)} <span className="faint">({cr.n})</span>
+                      {cr.avg.toFixed(1)} <span className="muted">({cr.n})</span>
                     </span>
                   </div>
                 ))}

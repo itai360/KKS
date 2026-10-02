@@ -392,7 +392,7 @@ export function WeekPage() {
                     {d.domain}
                   </span>
                   <div className="grow">
-                    <Bar value={d.readiness} />
+                    <Bar value={d.readiness} label={`מוכנות ${d.domain}`} />
                   </div>
                   <span className="mono" style={{ width: 90, textAlign: 'left' }}>
                     {d.readiness}% · {d.done}/{d.total}
@@ -545,7 +545,7 @@ function LeadWorkflow({ week }: { week: Week }) {
       <div className="card-body">
         <div className="timeline">
           {phases.map((p) => (
-            <div key={p.key} className="tl-item" style={p.active ? { fontWeight: 600 } : { opacity: 0.7 }}>
+            <div key={p.key} className="tl-item" style={p.active ? { fontWeight: 600 } : undefined}>
               <div className="row gap-6">
                 {p.label}
                 {p.active && <span className="badge t-orange">עכשיו</span>}

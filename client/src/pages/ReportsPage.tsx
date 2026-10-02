@@ -70,7 +70,7 @@ export function WeeklyReportPage() {
                         {d.domain}
                       </span>
                       <div className="grow">
-                        <Bar value={d.readiness} />
+                        <Bar value={d.readiness} label={`מוכנות ${d.domain}`} />
                       </div>
                       <span className="mono" style={{ width: 44, textAlign: 'left' }}>
                         {d.readiness}%
@@ -185,7 +185,7 @@ export function LookAheadPage() {
                       {s.name}
                     </span>
                     <div className="grow">
-                      <Bar value={(s.total / top) * 100} tone="gray" />
+                      <Bar value={(s.total / top) * 100} tone="gray" label={`משימות פתוחות של ${s.name}`} />
                     </div>
                     <span className="mono" style={{ width: 30, textAlign: 'left' }}>
                       {s.total}

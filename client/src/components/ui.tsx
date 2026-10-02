@@ -116,9 +116,9 @@ export function Ring({ value, size = 92, tone }: { value: number; size?: number;
   );
 }
 
-export function Bar({ value, tone }: { value: number; tone?: Tone }) {
+export function Bar({ value, tone, label }: { value: number; tone?: Tone; label: string }) {
   return (
-    <div className={`bar t-${tone ?? readinessTone(value)}`} role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
+    <div className={`bar t-${tone ?? readinessTone(value)}`} role="progressbar" aria-label={label} aria-valuenow={Math.round(value)} aria-valuemin={0} aria-valuemax={100}>
       <div className="bar-fill" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
   );
