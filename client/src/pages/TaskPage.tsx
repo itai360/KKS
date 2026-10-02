@@ -14,6 +14,7 @@ import { Bar, ErrorBox, PageError, Loading, Modal } from '../components/ui';
 import { api } from '../lib/api';
 import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
 import { useSession } from '../lib/session';
+import { usePageTitle } from '../lib/title';
 import { useApi, useTick } from '../lib/useApi';
 
 export function TaskPage() {
@@ -45,6 +46,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
   const { task: t } = detail;
   const navigate = useNavigate();
   const pendingRequests = detail.requests.filter((r) => r.status === 'pending');
+  usePageTitle(t.title);
 
   return (
     <div className="page">

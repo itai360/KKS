@@ -539,6 +539,7 @@ export function CadetPage() {
             {c.fullName} <StatusPill cadet={c} /> <NotesBadge count={c.disciplineNotes} />
           </>
         }
+        docTitle={c.fullName}
         sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, c.phone].filter(Boolean).join(' · ')}
         actions={
           <>

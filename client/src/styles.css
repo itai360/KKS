@@ -1230,6 +1230,13 @@ input::-webkit-date-and-time-value {
   margin-bottom: 4px;
 }
 
+.empty a {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .error-box {
   background: var(--red-bg);
   color: var(--red-ink);

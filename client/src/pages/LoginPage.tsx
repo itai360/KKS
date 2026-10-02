@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { IS_DEMO } from '../lib/demo';
+import { setTitleSuffix, usePageTitle } from '../lib/title';
 import { ErrorBox, Field } from '../components/ui';
 import { Icon } from '../components/Icon';
 
@@ -124,6 +125,10 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
 
   const setup = info?.needsSetup;
   const symbol = (setup ? courseSymbol : info?.courseSymbol) || 'קק"ס';
+  useEffect(() => {
+    if (info && !info.needsSetup) setTitleSuffix(info.courseSymbol || info.courseName);
+  }, [info]);
+  usePageTitle(info ? (setup ? 'הקמת קורס' : 'כניסה') : null);
 
   return (
     <div className="login">

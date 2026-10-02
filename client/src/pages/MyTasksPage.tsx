@@ -30,6 +30,7 @@ export function MyTasksPage() {
       <PageHead
         eyebrow={fmtLongDate(todayKey())}
         title={isCommander ? 'המשימות שלי' : `${greeting()}, ${greetName(user.displayName)}`}
+        docTitle={isCommander ? 'המשימות שלי' : 'דף הבית'}
         sub="היום, באיחור, השבוע ובהמשך - מה שאתה צריך לעשות."
         actions={
           <>

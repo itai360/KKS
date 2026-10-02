@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { Icon } from './Icon';
+import { usePageTitle } from '../lib/title';
 
 export function Modal({
   title,
@@ -118,11 +119,13 @@ export function PageError({
   back: string;
   backLabel: string;
 }) {
+  const missing = `${what} ${feminine ? 'לא נמצאה' : 'לא נמצא'}`;
+  usePageTitle(status === 404 ? missing : null);
   if (status !== 404) return <ErrorBox error={error} />;
   return (
     <Empty
       icon="search"
-      title={`${what} ${feminine ? 'לא נמצאה' : 'לא נמצא'}`}
+      title={missing}
       text={
         <>
           {feminine ? 'ייתכן שנמחקה' : 'ייתכן שנמחק'}, או שהקישור שגוי. <Link to={back}>{backLabel}</Link>
@@ -178,7 +181,8 @@ export function Seg<T extends string>({ value, options, onChange }: { value: T; 
   );
 }
 
-export function PageHead({ eyebrow, title, sub, actions }: { eyebrow?: ReactNode; title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {
+export function PageHead({ eyebrow, title, sub, actions, docTitle }: { eyebrow?: ReactNode; title: ReactNode; sub?: ReactNode; actions?: ReactNode; docTitle?: string }) {
+  usePageTitle(docTitle ?? (typeof title === 'string' ? title : null));
   return (
     <div className="page-head">
       <div className="titles">

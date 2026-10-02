@@ -41,6 +41,7 @@ export function DashboardPage() {
       <PageHead
         eyebrow={fmtLongDate(todayKey())}
         title={`${greeting()}, ${greetName(user.displayName)}`}
+        docTitle="דף הבית"
         sub="מה חייב להסתיים היום, מה באיחור, מה נתקע ואיפה נדרשת החלטה שלך."
         actions={
           <>

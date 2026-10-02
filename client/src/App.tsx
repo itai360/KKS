@@ -1,15 +1,16 @@
 import { Suspense, useEffect } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout';
 import { NewTaskProvider } from './components/NewTask';
 import { ToastProvider } from './components/Toasts';
-import { Loading } from './components/ui';
+import { Empty, Loading } from './components/ui';
 import { SessionGate, useSession } from './lib/session';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { lazyPage, prefetchPages } from './lib/lazyPage';
 import { ConfirmHost } from './components/Confirm';
+import { usePageTitle } from './lib/title';
 
 // The first screens come with the app; every other screen loads when it is
 // first opened, so a phone downloads far less up front (and after an update).
@@ -43,6 +44,24 @@ const TeamPage = lazyPage(() => import('./pages/TeamPage'), 'TeamPage');
 const TemplatesPage = lazyPage(() => import('./pages/TemplatesPage'), 'TemplatesPage');
 const WeekPage = lazyPage(() => import('./pages/WeeksPage'), 'WeekPage');
 const WeeksPage = lazyPage(() => import('./pages/WeeksPage'), 'WeeksPage');
+
+/** An address that isn't a screen - say so, rather than silently landing on the home page. */
+function NotFound() {
+  usePageTitle('הדף לא נמצא');
+  return (
+    <div className="page">
+      <Empty
+        icon="search"
+        title="הדף לא נמצא"
+        text={
+          <>
+            הכתובת שגויה, או שהדף הועבר. <Link to="/">לדף הבית</Link>
+          </>
+        }
+      />
+    </div>
+  );
+}
 
 function AuthedRoutes() {
   const { isCommander } = useSession();
@@ -94,7 +113,7 @@ function AuthedRoutes() {
               <Route path="/debriefs/:id" element={<DebriefPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/more" element={<MorePage />} />
-              <Route path="*" element={<Navigate to="/" />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </Layout>

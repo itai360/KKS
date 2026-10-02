@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { CourseSettings, User, Week } from '@shared/types';
 import { api, setUnauthorizedHandler } from './api';
 import { setTimezone } from './format';
+import { setTitleCount, setTitleSuffix } from './title';
 import { connectRealtime, disconnectRealtime, onNotification } from './realtime';
 import { useApi } from './useApi';
 
@@ -91,6 +92,13 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
   useEffect(() => {
     setTimezone(currentSettings.timezone);
   }, [currentSettings.timezone]);
+  useEffect(() => {
+    setTitleSuffix(currentSettings.courseSymbol || currentSettings.courseName);
+  }, [currentSettings.courseSymbol, currentSettings.courseName]);
+  useEffect(() => {
+    setTitleCount(unread);
+    return () => setTitleCount(0);
+  }, [unread]);
 
   const value = useMemo<Session>(() => {
     const list = users.data ?? [me.user];

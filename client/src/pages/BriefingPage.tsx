@@ -9,6 +9,7 @@ import { TaskList } from '../components/TaskRow';
 import { ErrorBox, Loading } from '../components/ui';
 import { fmtLongDate, fmtTime } from '../lib/format';
 import { useSession } from '../lib/session';
+import { usePageTitle } from '../lib/title';
 import { useApi, useTick } from '../lib/useApi';
 
 export function BriefingPage() {
@@ -17,6 +18,7 @@ export function BriefingPage() {
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   useTick(30_000);
+  usePageTitle('תדריך בוקר');
   const now = fmtTime(new Date().toISOString());
 
   const fullscreen = () => {
