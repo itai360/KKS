@@ -25,6 +25,7 @@ import { setFileStore } from './files';
 import { toNotification } from './journal';
 import { pushesSettled } from './push';
 import { setSnapshotProvider, storedSnapshots } from './snapshots';
+import { decodeDb, encodeDb } from './storedDb';
 
 const env = (k: string) => process.env[k] ?? '';
 process.env.KKS_REALTIME = 'poll';
@@ -94,7 +95,7 @@ function closeLocal(): void {
 function install(v: number, data: string): void {
   closeLocal();
   mkdirSync(config.dataDir, { recursive: true });
-  writeFileSync(dbPath(), Buffer.from(data, 'base64'));
+  writeFileSync(dbPath(), decodeDb(data));
   openDb(dbPath(), { wal: false }); // also applies schema migrations of a newer release
   version = v;
   stale = false;
@@ -132,7 +133,7 @@ async function bootstrap(): Promise<void> {
 
 /** Saves the local copy if nobody saved since it was loaded. */
 async function save(): Promise<boolean> {
-  const data = readFileSync(dbPath()).toString('base64');
+  const data = encodeDb(readFileSync(dbPath()));
   try {
     const ok = await rpc<boolean>('kks_save', { p_expected: version, p_data: data });
     if (ok) {

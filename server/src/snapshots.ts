@@ -18,6 +18,7 @@ import { badRequest, config, notFound, nowIso, resetSettingsCache } from './core
 import { db, Db, migrate } from './db';
 import { changed } from './journal';
 import type { Topic } from './realtime';
+import { decodeDb, encodeDb } from './storedDb';
 
 export const SNAPSHOT_LABELS: SnapshotLabel[] = ['auto', 'manual', 'before_delete', 'before_restore'];
 const AUTO_EVERY_MS = 30 * 60_000;
@@ -206,7 +207,7 @@ export function storedSnapshots(files: FileStorage, current: () => { data: Buffe
       const { data, version } = current();
       const now = new Date();
       const id = `${stampOf(now)}~${label}`;
-      await files.put(fileName(id), data.toString('base64'));
+      await files.put(fileName(id), encodeDb(data));
       db().run('INSERT OR REPLACE INTO snapshots(id, saved_at, label, bytes, version) VALUES (?, ?, ?, ?, ?)', id, nowIso(), label, data.length, version);
       for (const old of toPrune(list(), now)) {
         await files.remove(fileName(old));
@@ -217,7 +218,7 @@ export function storedSnapshots(files: FileStorage, current: () => { data: Buffe
       const known = db().get('SELECT 1 FROM snapshots WHERE id = ?', id);
       const data = known && ID.test(id) ? await files.get(fileName(id)) : null;
       if (!data) throw notFound('הגיבוי לא נמצא');
-      writeFileSync(path, Buffer.from(data, 'base64'));
+      writeFileSync(path, decodeDb(data));
     },
     /** an automatic snapshot is due: the last one is half an hour old and something was saved since */
     autoDue(now, version) {
