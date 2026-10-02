@@ -177,24 +177,30 @@ export function WeeklyReportPage() {
                 <div className="card-head">
                   <h3>ביצוע לפי איש סגל</h3>
                 </div>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>שם</th>
-                      <th className="num-cell">הושלמו</th>
-                      <th className="num-cell">מתוכן באיחור</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.completedByStaff.map((s) => (
-                      <tr key={s.userId}>
-                        <td>{s.name}</td>
-                        <td className="num-cell">{s.done}</td>
-                        <td className={`num-cell ${s.late ? 'text-red' : ''}`}>{s.late}</td>
+                {data.completedByStaff.length ? (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>שם</th>
+                        <th className="num-cell">הושלמו</th>
+                        <th className="num-cell">מתוכן באיחור</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {data.completedByStaff.map((s) => (
+                        <tr key={s.userId}>
+                          <td>{s.name}</td>
+                          <td className="num-cell">{s.done}</td>
+                          <td className={`num-cell ${s.late ? 'text-red' : ''}`}>{s.late}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="card-body">
+                    <p className="small muted">לא הושלמו משימות בשבוע זה.</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -216,7 +222,7 @@ function Num({ n, label, alert }: { n: number; label: string; alert?: boolean })
 
 export function LookAheadPage() {
   const { data, error, loading } = useApi<LookAheadData>('/api/reports/lookahead', ['tasks', 'weeks']);
-  const { users } = useSession();
+  const { staff } = useSession();
   const navigate = useNavigate();
   const max = Math.max(1, ...(data?.days.map((d) => d.total) ?? [1]));
   return (
@@ -266,6 +272,7 @@ export function LookAheadPage() {
                 );
               })}
             </div>
+            {data.days.every((d) => !d.total) && <p className="small muted" style={{ textAlign: 'center', margin: 0 }}>אין משימות פתוחות ב-14 הימים הקרובים.</p>}
           </div>
           <div className="card">
             <div className="card-head">
@@ -288,7 +295,7 @@ export function LookAheadPage() {
                   </Link>
                 );
               })}
-              {!users.length && <p className="small muted">אין אנשי סגל.</p>}
+              {!data.staffLoad.length && <p className="small muted">{staff.length ? 'לאף איש סגל אין משימות פתוחות ב-14 הימים הקרובים.' : 'עדיין לא הוגדרו אנשי סגל.'}</p>}
             </div>
           </div>
         </div>
@@ -300,7 +307,7 @@ export function LookAheadPage() {
 export function DayEndPage() {
   const { data, error, loading } = useApi<DayEndData>('/api/reports/day-end', ['tasks']);
   const navigate = useNavigate();
-  const pct = data && data.dueToday ? Math.round((data.doneToday / data.dueToday) * 100) : 100;
+  const pct = data && data.dueToday ? Math.round((data.doneToday / data.dueToday) * 100) : 0;
   return (
     <div className="page narrow">
       <PageHead eyebrow={data ? fmtLongDate(data.date) : undefined} title="סיכום היום" sub="אין צורך בדוח יומי נפרד - המידע כבר במערכת." />
@@ -310,15 +317,24 @@ export function DayEndPage() {
       ) : data ? (
         <div className="fade-in col gap-16">
           <div className="card card-pad row">
-            <Ring value={pct} size={110} />
+            {data.dueToday ? <Ring value={pct} size={110} /> : <Ring value={0} size={110} tone="gray" />}
             <div>
               <div className="label-caps">השלמת היום</div>
-              <div className="stat-num" style={{ fontSize: 56 }}>
-                {data.doneToday} מתוך {data.dueToday}
-              </div>
-              <div className="small muted">
-                משימות שהיו לביצוע היום · {data.completedToday.length} הושלמו היום בסך הכל
-              </div>
+              {data.dueToday ? (
+                <>
+                  <div className="stat-num" style={{ fontSize: 56 }}>
+                    {data.doneToday} מתוך {data.dueToday}
+                  </div>
+                  <div className="small muted">
+                    משימות שהיו לביצוע היום · {data.completedToday.length} הושלמו היום בסך הכל
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="strong" style={{ fontSize: 20 }}>לא היו משימות לביצוע היום</div>
+                  <div className="small muted">{data.completedToday.length} משימות הושלמו היום בסך הכל</div>
+                </>
+              )}
             </div>
           </div>
           <div>

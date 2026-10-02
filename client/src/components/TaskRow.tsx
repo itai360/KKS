@@ -9,6 +9,7 @@ import { DeadlineText, PriorityBadge, StatusBadge } from './Badges';
 import { BulkCheck, bulkClick, BulkScope, useBulk } from './Bulk';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
+import { useIncremental } from '../lib/incremental';
 import { Empty } from './ui';
 
 export function canQuickUpdate(t: Task, userId: number, commander: boolean): boolean {
@@ -126,13 +127,17 @@ export function TaskBulkScope({ tasks, children }: { tasks: Task[]; children: Re
 }
 
 export function TaskList({ tasks, empty, showOwner = true }: { tasks: Task[]; empty?: ReactNode; showOwner?: boolean }) {
+  const { shown, more } = useIncremental(tasks);
   if (!tasks.length) return <>{empty ?? <Empty title="אין משימות" />}</>;
   return (
-    <div className="list">
-      {tasks.map((t) => (
-        <TaskRow key={t.id} task={t} showOwner={showOwner} />
-      ))}
-    </div>
+    <>
+      <div className="list">
+        {shown.map((t) => (
+          <TaskRow key={t.id} task={t} showOwner={showOwner} />
+        ))}
+      </div>
+      {more}
+    </>
   );
 }
 

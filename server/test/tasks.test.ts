@@ -243,3 +243,18 @@ describe('attachments', () => {
     expect((await c.s1.post(`/api/tasks/${id}/links`, { url: 'javascript:alert(1)' })).status).toBe(400);
   });
 });
+
+describe('large answers', () => {
+  it('a long list goes compressed when the browser accepts it; a small one does not', async () => {
+    for (let i = 0; i < 12; i++) await newTask(c.cmd, { title: `משימה ${i}`, ownerIds: [c.ids.s1], description: 'פירוט '.repeat(80) });
+    const big = await c.cmd.get('/api/tasks').set('Accept-Encoding', 'gzip');
+    expect(big.headers['content-encoding']).toBe('gzip');
+    expect(big.headers['content-type']).toContain('application/json');
+    expect(big.body).toHaveLength(12);
+    const plain = await c.cmd.get('/api/tasks').set('Accept-Encoding', 'identity');
+    expect(plain.headers['content-encoding']).toBeUndefined();
+    expect(plain.body).toHaveLength(12);
+    const small = await c.cmd.get('/api/weeks').set('Accept-Encoding', 'gzip');
+    expect(small.headers['content-encoding']).toBeUndefined();
+  });
+});

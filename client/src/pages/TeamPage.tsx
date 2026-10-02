@@ -108,8 +108,8 @@ export function StaffPage() {
         sub={staffHealthLabel(s.overdue)}
         actions={
           isCommander && (
-            <button className="btn btn-primary" onClick={() => newTask({ ownerIds: [data.user.id] })}>
-              <Icon name="plus" /> משימה ל{data.user.displayName}
+            <button className="btn btn-primary" onClick={() => newTask({ ownerIds: [data.user.id] })} title={`משימה ל${data.user.displayName}`}>
+              <Icon name="plus" /> <span className="clip-text">משימה ל{data.user.displayName}</span>
             </button>
           )
         }

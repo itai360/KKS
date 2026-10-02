@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
 import { apiRouter } from './api';
@@ -11,6 +12,31 @@ function zodMessage(e: ZodError): string {
   if (!issue) return 'נתונים לא תקינים';
   const hebrew = /[֐-׿]/.test(issue.message);
   return hebrew ? issue.message : `שדה לא תקין: ${issue.path.join('.') || 'קלט'}`;
+}
+
+/**
+ * Large answers (a long course's task list) go compressed: about a tenth of
+ * the size on a phone's connection, and well inside the platform's response
+ * limit. Small ones are not worth the work.
+ */
+function compressJson(req: Request, res: Response, next: NextFunction) {
+  if (!/\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) return next();
+  const send = res.send.bind(res);
+  res.send = (body?: unknown) => {
+    if (typeof body === 'string' && body.length > 4096 && !res.getHeader('Content-Encoding') && /json/.test(String(res.getHeader('Content-Type') ?? ''))) {
+      try {
+        const zipped = gzipSync(body, { level: 6 });
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Vary', 'Accept-Encoding');
+        return send(zipped);
+      } catch {
+        /* sent as is */
+      }
+    }
+    return send(body);
+  };
+  next();
 }
 
 export function createApp(opts: { staticDir?: string } = {}) {
@@ -34,6 +60,7 @@ export function createApp(opts: { staticDir?: string } = {}) {
       next();
     },
     express.json({ limit: '1mb' }),
+    compressJson,
     loadUser,
     csrfGuard,
     apiRouter(),

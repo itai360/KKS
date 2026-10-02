@@ -220,8 +220,8 @@ function CadetRows({ list }: { list: Cadet[] }) {
           {c.status !== 'active' && <span className={`badge t-${CADET_STATUS_TONES[c.status]}`}>{CADET_STATUS_LABELS[c.status]}</span>}
           <NotesBadge count={c.disciplineNotes} />
           {c.exemptions.length > 0 && (
-            <span className="badge t-blue" title={`מוחרג מ: ${c.exemptions.join(', ')}`}>
-              החרגה{c.exemptions.length === 1 ? `: ${c.exemptions[0]}` : ` (${c.exemptions.length})`}
+            <span className="badge t-blue clip" title={`מוחרג מ: ${c.exemptions.join(', ')}`}>
+              <span className="clip-text">החרגה{c.exemptions.length === 1 ? `: ${c.exemptions[0]}` : ` (${c.exemptions.length})`}</span>
             </span>
           )}
           {c.disciplineCount > 0 && <span className="badge t-orange hide-mobile">{c.disciplineCount} משמעת</span>}

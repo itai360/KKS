@@ -73,6 +73,8 @@ body {
   background: var(--paper);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* a long link or ID wraps instead of widening the page */
+  overflow-wrap: break-word;
 }
 
 a {
@@ -115,7 +117,7 @@ p {
 
 .app {
   display: grid;
-  grid-template-columns: var(--rail-w) 1fr;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -502,6 +504,22 @@ p {
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.12s, border-color 0.12s, transform 0.06s;
+}
+
+.btn {
+  max-width: 100%;
+}
+
+/* a label that may be long (a name, a subject) ends in "..." rather than pushing the row */
+.clip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge.clip {
+  max-width: min(220px, 40%);
 }
 
 .btn svg {
@@ -929,7 +947,7 @@ input::-webkit-date-and-time-value {
 
 .task-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 11px 14px 11px 12px;
@@ -1012,6 +1030,11 @@ input::-webkit-date-and-time-value {
   color: var(--muted);
 }
 
+.task-meta > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .task-meta .sep::before {
   content: '·';
   margin-inline-end: 12px;
@@ -1073,7 +1096,7 @@ input::-webkit-date-and-time-value {
 
 .attn-item {
   display: grid;
-  grid-template-columns: 10px 1fr auto;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 11px 18px;
@@ -1101,6 +1124,16 @@ input::-webkit-date-and-time-value {
 
 .attn-title {
   font-weight: 600;
+}
+
+/* in a list a very long title shows its first lines; the full one is a click away */
+.attn-title,
+.task-row .task-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
 
 .attn-sub {
@@ -1230,6 +1263,28 @@ input::-webkit-date-and-time-value {
   margin-bottom: 4px;
 }
 
+.setup-nudge {
+  gap: 14px;
+  border-inline-start: 4px solid var(--orange);
+}
+
+.setup-nudge > svg {
+  width: 26px;
+  height: 26px;
+  color: var(--orange);
+  flex: none;
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding: 14px 0 4px;
+}
+
+.board-col .load-more {
+  padding: 6px 0;
+}
+
 .empty a {
   color: var(--ink);
   font-weight: 600;
@@ -1353,13 +1408,22 @@ input::-webkit-date-and-time-value {
 
 .seg {
   display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
   background: var(--paper-2);
   border-radius: 9px;
   padding: 3px;
   gap: 2px;
 }
 
+.seg::-webkit-scrollbar {
+  display: none;
+}
+
 .seg button {
+  flex: none;
+  white-space: nowrap;
   border: none;
   background: transparent;
   height: 32px;
@@ -1596,7 +1660,7 @@ input::-webkit-date-and-time-value {
 
 .kv {
   display: grid;
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: 110px minmax(0, 1fr);
   gap: 8px 12px;
   font-size: 14px;
   align-items: center;
@@ -1790,7 +1854,7 @@ input::-webkit-date-and-time-value {
 
 .event-row {
   display: grid;
-  grid-template-columns: 74px 1fr auto;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
   gap: 14px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
@@ -1901,7 +1965,7 @@ input::-webkit-date-and-time-value {
 
 .staff-nums {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin-top: 14px;
   text-align: center;
@@ -1941,7 +2005,7 @@ input::-webkit-date-and-time-value {
 .login {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   background: var(--paper);
 }
 
@@ -2288,13 +2352,13 @@ input::-webkit-date-and-time-value {
 
 @media (max-width: 1100px) {
   .split {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .sticky-side {
     position: static;
   }
   .grid-3 {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
@@ -2303,7 +2367,7 @@ input::-webkit-date-and-time-value {
     --top-h: 54px;
   }
   .app {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .rail {
     display: none;
@@ -2378,7 +2442,7 @@ input::-webkit-date-and-time-value {
   .grid-2,
   .grid-3,
   .form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .grid-3 > .grid-span-2 {
     grid-column: auto;
@@ -2401,7 +2465,7 @@ input::-webkit-date-and-time-value {
     flex: 1 1 140px;
   }
   .task-row {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     padding: 10px 12px 10px 10px;
   }
   .task-side {
@@ -2427,7 +2491,7 @@ input::-webkit-date-and-time-value {
   }
   .bottom-nav {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     position: fixed;
     bottom: 0;
     left: 0;
@@ -2484,7 +2548,7 @@ input::-webkit-date-and-time-value {
     line-height: 16px;
   }
   .login {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .login-art {
     padding: 28px 24px;
@@ -2495,10 +2559,10 @@ input::-webkit-date-and-time-value {
     display: none;
   }
   .kv {
-    grid-template-columns: 96px 1fr;
+    grid-template-columns: 96px minmax(0, 1fr);
   }
   .event-row {
-    grid-template-columns: 58px 1fr;
+    grid-template-columns: 58px minmax(0, 1fr);
   }
   .event-row > :last-child {
     grid-column: 2;

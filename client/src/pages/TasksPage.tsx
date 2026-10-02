@@ -16,6 +16,7 @@ import { saveCsv } from '../lib/csv';
 import { fmtDateTime } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
+import { useIncremental } from '../lib/incremental';
 import { useApi, useTick } from '../lib/useApi';
 
 type View = 'table' | 'list' | 'board';
@@ -213,6 +214,7 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
     else list.sort((a, b) => a.deadline.localeCompare(b.deadline));
     return list;
   }, [tasks, sort]);
+  const { shown, more } = useIncremental(sorted);
   const th = (key: typeof sort, label: string) => (
     <th>
       <button className="btn btn-ghost btn-sm" style={{ padding: 0, height: 'auto', fontSize: 12, color: sort === key ? 'var(--ink)' : undefined }} onClick={() => setSort(key)}>
@@ -237,7 +239,7 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((t) => (
+          {shown.map((t) => (
             <tr key={t.id} className={`click t-${t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}`} onClick={bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`))}>
               <td style={{ padding: 0, width: 6, background: 'var(--tone)' }} />
               <td style={{ maxWidth: 340 }}>
@@ -273,6 +275,7 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
           ))}
         </tbody>
       </table>
+      {more}
     </div>
   );
 }
@@ -281,7 +284,6 @@ const BOARD_COLUMNS: TaskStatus[] = ['todo', 'in_progress', 'waiting', 'pending_
 
 function Board({ tasks }: { tasks: Task[] }) {
   const navigate = useNavigate();
-  const bulk = useBulk();
   const toast = useToast();
   const { user, isCommander } = useSession();
   const [over, setOver] = useState<TaskStatus | null>(null);
@@ -327,35 +329,47 @@ function Board({ tasks }: { tasks: Task[] }) {
               <StatusBadge status={col} />
               <span className="mono tiny muted">{list.length}</span>
             </div>
-            {list.map((t) => (
-              <div
-                key={t.id}
-                className={`board-card t-${t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}`}
-                draggable={!bulk?.active}
-                onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
-                onClick={bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`))}
-              >
-                <div className="task-title row gap-6">
-                  <BulkCheck id={t.id} />
-                  {t.title}
-                </div>
-                <div className="task-meta">
-                  <span>{t.ownerName}</span>
-                  <span className="sep">
-                    <DeadlineText task={t} />
-                  </span>
-                </div>
-                <div className="row gap-4 mt-8 wrap">
-                  <PriorityBadge priority={t.priority} />
-                  {t.overdue && <span className="badge t-red">באיחור</span>}
-                  {t.domain && <span className="badge">{t.domain}</span>}
-                </div>
-              </div>
-            ))}
+            <BoardCards tasks={list} />
           </div>
         );
       })}
     </div>
+  );
+}
+
+function BoardCards({ tasks }: { tasks: Task[] }) {
+  const navigate = useNavigate();
+  const bulk = useBulk();
+  const { shown, more } = useIncremental(tasks, 60);
+  return (
+    <>
+      {shown.map((t) => (
+        <div
+          key={t.id}
+          className={`board-card t-${t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}`}
+          draggable={!bulk?.active}
+          onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
+          onClick={bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`))}
+        >
+          <div className="task-title row gap-6">
+            <BulkCheck id={t.id} />
+            {t.title}
+          </div>
+          <div className="task-meta">
+            <span>{t.ownerName}</span>
+            <span className="sep">
+              <DeadlineText task={t} />
+            </span>
+          </div>
+          <div className="row gap-4 mt-8 wrap">
+            <PriorityBadge priority={t.priority} />
+            {t.overdue && <span className="badge t-red">באיחור</span>}
+            {t.domain && <span className="badge">{t.domain}</span>}
+          </div>
+        </div>
+      ))}
+      {more}
+    </>
   );
 }
 

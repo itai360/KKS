@@ -59,6 +59,7 @@ export function DashboardPage() {
         <Loading rows={4} />
       ) : data ? (
         <div className="fade-in col gap-16">
+          <SetupNudge />
           <div className="stats">
             <Stat n={data.stats.today} label="לביצוע היום" hint="משימות שצריכות להסתיים היום" onClick={() => navigate('/tasks?scope=today')} />
             <Stat n={data.stats.overdue} label="באיחור" hint="עבר הדד-ליין ולא הושלמו" alert={data.stats.overdue > 0} onClick={() => navigate('/tasks?scope=overdue')} />
@@ -341,6 +342,32 @@ function QuickActions() {
           <Icon name="calendar" /> עדכון לו"ז
         </button>
       </div>
+    </div>
+  );
+}
+
+/** A new course: the few steps that make the system useful, until they are done. */
+function SetupNudge() {
+  const { settings, weeks, staff } = useSession();
+  const navigate = useNavigate();
+  const steps = [
+    { done: !!settings.startDate && !!settings.endDate, label: 'תאריכי הקורס' },
+    { done: staff.length > 0, label: 'אנשי הסגל' },
+    { done: weeks.length > 0, label: 'שבועות הקורס' },
+  ];
+  const next = steps.find((s) => !s.done);
+  if (!next) return null;
+  const done = steps.filter((s) => s.done).length;
+  return (
+    <div className="card card-pad row wrap setup-nudge">
+      <Icon name="flag" />
+      <div className="grow">
+        <div className="strong">הקמת הקורס - {done} מתוך {steps.length}</div>
+        <div className="small muted">הצעד הבא: {next.label}. אחרי ההקמה המערכת מתחילה לעבוד בשבילך - משימות, לו"ז ותמונת מצב.</div>
+      </div>
+      <button className="btn btn-primary" onClick={() => navigate('/settings')}>
+        להמשך ההקמה
+      </button>
     </div>
   );
 }
