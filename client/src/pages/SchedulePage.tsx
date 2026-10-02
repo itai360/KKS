@@ -3,9 +3,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { addDays, shortDate, startOfWeek, weekdayName } from '@shared/dates';
+import { type CalendarView as CalendarViewName, stepDate, viewDays, viewTitle } from '@shared/calendarGrid';
+import { addDays, shortDate, weekdayName } from '@shared/dates';
 import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
+import { CalendarView } from '../components/CalendarView';
 import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
@@ -16,21 +18,51 @@ import { api } from '../lib/api';
 import { fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
-import { useApi } from '../lib/useApi';
+import { useApi, useTick } from '../lib/useApi';
+
+type ScheduleView = 'list' | CalendarViewName;
+const VIEWS: { value: ScheduleView; label: string }[] = [
+  { value: 'list', label: 'רשימה' },
+  { value: 'day', label: 'יום' },
+  { value: 'week', label: 'שבוע' },
+  { value: 'month', label: 'חודש' },
+];
+const VIEW_KEY = 'kks.scheduleView';
+const isView = (v: unknown): v is ScheduleView => VIEWS.some((o) => o.value === v);
+// a remembered view is a convenience: storage can be missing or blocked
+function savedView(): ScheduleView {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    return isView(v) ? v : 'list';
+  } catch {
+    return 'list';
+  }
+}
+// keys by position, so they work with a Hebrew keyboard too (as in Google Calendar)
+const VIEW_KEYS: Record<string, ScheduleView> = { KeyA: 'list', KeyD: 'day', KeyW: 'week', KeyM: 'month' };
 
 export function SchedulePage() {
   const [params, setParams] = useSearchParams();
   const today = todayKey();
   const date = params.get('date') ?? today;
   const eventId = params.get('event');
-  const weekStart = startOfWeek(date);
-  const { data, error, loading } = useApi<ScheduleEvent[]>(`/api/events?from=${weekStart}&to=${addDays(weekStart, 6)}`, ['events', 'tasks']);
+  const viewParam = params.get('view');
+  const view: ScheduleView = isView(viewParam) ? viewParam : savedView();
+  // the list and the day view show the week's strip of days; the month view its whole weeks
+  const days = view === 'month' ? viewDays('month', date) : viewDays('week', date);
+  const from = days[0];
+  const to = days[days.length - 1];
+  const { data, error, loading, setData, reload } = useApi<ScheduleEvent[]>(`/api/events?from=${from}&to=${to}`, ['events', 'tasks']);
   // events of connected Google calendars (read-only); loaded on their own so the course schedule never waits for Google
-  const external = useApi<ExternalEvent[]>(`/api/calendar/external?from=${weekStart}&to=${addDays(weekStart, 6)}`, ['events']);
+  const external = useApi<ExternalEvent[]>(`/api/calendar/external?from=${from}&to=${to}`, ['events']);
   const { isCommander, weeks, user } = useSession();
-  const [creating, setCreating] = useState(params.get('new') === '1');
+  const toast = useToast();
+  const [creating, setCreating] = useState<{ date: string; start?: string; end?: string | null } | null>(params.get('new') === '1' ? { date } : null);
   const [editing, setEditing] = useState<ScheduleEvent | null>(null);
   const [google, setGoogle] = useState(false);
+  const [peek, setPeek] = useState<ExternalEvent | null>(null);
+  const [affected, setAffected] = useState<{ tasks: Task[]; delta: number; id: number } | null>(null);
+  useTick(60_000);
 
   const set = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
@@ -41,6 +73,36 @@ export function SchedulePage() {
     next.delete('new');
     setParams(next, { replace: true });
   };
+  const setView = (v: ScheduleView) => {
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* not remembered */
+    }
+    set({ view: v });
+  };
+  const step = (dir: 1 | -1) => set({ date: stepDate(view === 'list' ? 'day' : view, date, dir), event: null });
+
+  // t: today, j/k: next/previous, a/d/w/m: list/day/week/month (n stays "new task", everywhere)
+  const keys = useRef({ step, setView, set, today });
+  keys.current = { step, setView, set, today };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      if (document.querySelector('.modal')) return;
+      const k = keys.current;
+      if (e.code === 'KeyT') k.set({ date: k.today, event: null });
+      else if (e.code === 'KeyJ') k.step(1);
+      else if (e.code === 'KeyK') k.step(-1);
+      else if (VIEW_KEYS[e.code]) k.setView(VIEW_KEYS[e.code]);
+      else return;
+      e.preventDefault();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   const dayEvents = (data ?? []).filter((e) => e.date === date);
   const dayExternal = (external.data ?? []).filter((e) => e.date === date);
@@ -51,15 +113,41 @@ export function SchedulePage() {
     ...dayExternal.filter((e) => e.startTime).map((e) => ({ kind: 'external' as const, at: e.startTime!, e })),
   ].sort((a, b) => a.at.localeCompare(b.at));
   const week = weeks.find((w) => w.startDate <= date && w.endDate >= date);
+  const leadOn = (d: string) => weeks.find((w) => w.startDate <= d && w.endDate >= d)?.leadId === user.id;
   const canAdd = isCommander || week?.leadId === user.id;
+  const canAddOn = (d: string) => isCommander || leadOn(d);
+  const canMove = (e: ScheduleEvent) => isCommander || e.ownerId === user.id || leadOn(e.date);
   const nowTime = fmtTime(new Date().toISOString());
+  const shown = view === 'list' ? days : viewDays(view, date);
+  const shownEvents = (data ?? []).filter((e) => shown.includes(e.date));
+  const bulkIds = (view === 'list' ? dayEvents : shownEvents).map((e) => e.id);
+  const onToday = view === 'list' || view === 'day' ? date === today : shown.includes(today);
+
+  // dragged in the calendar: shown at once, saved, and put back if the server refuses
+  const move = async (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }) => {
+    if (data) setData(data.map((x) => (x.id === e.id ? { ...x, ...to } : x)));
+    try {
+      const res = await api.patch<EventDetail & { affectedTasks: Task[]; deltaMinutes: number }>(`/api/events/${e.id}`, to);
+      emitLocalChange('events');
+      if (res.affectedTasks.length) setAffected({ tasks: res.affectedTasks, delta: res.deltaMinutes, id: e.id });
+      else {
+        const when = `${to.startTime}${to.endTime ? ` - ${to.endTime}` : ''}`;
+        const title =
+          to.date !== e.date ? `"${e.title}" הוזז ליום ${weekdayName(to.date)} ${shortDate(to.date)}, ${when}` : to.startTime === e.startTime ? `"${e.title}" עודכן: ${when}` : `"${e.title}" הוזז ל-${when}`;
+        toast({ title, tone: 'green' });
+      }
+    } catch (err) {
+      toast({ title: (err as Error).message, tone: 'red' });
+      void reload();
+    }
+  };
 
   return (
     <BulkScope
       entity="events"
       noun="אירועים"
       topics={['events', 'tasks']}
-      ids={dayEvents.map((e) => e.id)}
+      ids={bulkIds}
       actions={[
         { key: 'shift', label: 'הזזה בימים', icon: 'calendar', ask: { title: 'הזזת אירועים', label: 'בכמה ימים להזיז (שלילי - להקדים)', type: 'number', initial: '1' } },
         { key: 'cancel', label: 'ביטול', confirm: 'לבטל {n} אירועים? המשימות המקושרות יישארו כפי שהן.' },
@@ -70,8 +158,8 @@ export function SchedulePage() {
     <div className="page">
       <PageHead
         eyebrow={week ? week.name : 'לו"ז'}
-        title={date === today ? `לו"ז היום` : 'לו"ז'}
-        sub={fmtLongDate(date)}
+        title={date === today && (view === 'list' || view === 'day') ? `לו"ז היום` : 'לו"ז'}
+        sub={view === 'list' || view === 'day' ? fmtLongDate(date) : viewTitle(view, date)}
         actions={
           <>
             {canAdd && <BulkToggle />}
@@ -82,20 +170,30 @@ export function SchedulePage() {
               <Icon name="print" /> הדפסה
             </button>
             {canAdd && (
-              <button className="btn btn-primary" onClick={() => setCreating(true)}>
+              <button className="btn btn-primary" onClick={() => setCreating({ date })}>
                 <Icon name="plus" /> אירוע
               </button>
             )}
           </>
         }
       />
-      <div className="row mb-12">
-        <button className="icon-btn" aria-label="שבוע קודם" onClick={() => set({ date: addDays(weekStart, -7) })}>
+      <div className="cal-toolbar mb-12">
+        <button className="btn btn-sm" onClick={() => set({ date: today, event: null })} disabled={onToday} title="היום (T)">
+          היום
+        </button>
+        <button className="icon-btn" aria-label={`${VIEW_STEP[view]} קודם`} title={`${VIEW_STEP[view]} קודם (K)`} onClick={() => step(-1)}>
           <Icon name="chevronRight" />
         </button>
-        <div className="day-strip grow">
-          {Array.from({ length: 7 }, (_, i) => {
-            const d = addDays(weekStart, i);
+        <button className="icon-btn" aria-label={`${VIEW_STEP[view]} הבא`} title={`${VIEW_STEP[view]} הבא (J)`} onClick={() => step(1)}>
+          <Icon name="chevronLeft" />
+        </button>
+        <h2 className="cal-title">{viewTitle(view === 'list' ? 'day' : view, date)}</h2>
+        <span className="grow" />
+        <Seg value={view} options={VIEWS} onChange={setView} />
+      </div>
+      {(view === 'list' || view === 'day') && (
+        <div className="day-strip mb-12">
+          {days.map((d) => {
             const n = (data ?? []).filter((e) => e.date === d && !e.cancelled).length + (external.data ?? []).filter((e) => e.date === d).length;
             return (
               <button key={d} className={`day-pill${d === date ? ' on' : ''}${d === today ? ' today' : ''}`} onClick={() => set({ date: d, event: null })}>
@@ -106,16 +204,32 @@ export function SchedulePage() {
             );
           })}
         </div>
-        <button className="icon-btn" aria-label="שבוע הבא" onClick={() => set({ date: addDays(weekStart, 7) })}>
-          <Icon name="chevronLeft" />
-        </button>
-        {date !== today && (
-          <button className="btn btn-sm" onClick={() => set({ date: today, event: null })}>
-            היום
-          </button>
-        )}
-      </div>
+      )}
       <ErrorBox error={error} />
+      {view !== 'list' ? (
+        loading && !data ? (
+          <div className="card card-body">
+            <Loading rows={6} />
+          </div>
+        ) : (
+          <CalendarView
+            view={view}
+            date={date}
+            today={today}
+            ready={!loading}
+            nowTime={nowTime}
+            events={data ?? []}
+            external={external.data ?? []}
+            canCreate={canAddOn}
+            canMove={canMove}
+            onOpen={(e) => set({ event: String(e.id) })}
+            onOpenExternal={setPeek}
+            onCreate={(d, start, end) => setCreating({ date: d, start, end })}
+            onMove={(e, to) => void move(e, to)}
+            onPickDay={(d) => set({ date: d, view: 'day', event: null })}
+          />
+        )
+      ) : (
       <div className="card">
         {loading && !data ? (
           <div className="card-body">
@@ -173,13 +287,57 @@ export function SchedulePage() {
           </>
         )}
       </div>
-      {creating && <EventForm defaultDate={date} onClose={() => setCreating(false)} />}
+      )}
+      {view !== 'list' && (
+        <div className="cal-hint small muted no-print">
+          {canAdd ? 'לחיצה או גרירה על זמן פנוי - אירוע חדש · גרירת אירוע - הזזה · גרירת הקצה התחתון - שינוי משך · ' : ''}
+          קיצורים: T היום, J/K הבא/הקודם, A/D/W/M רשימה/יום/שבוע/חודש
+        </div>
+      )}
+      {creating && <EventForm defaultDate={creating.date} defaultStart={creating.start} defaultEnd={creating.end} onClose={() => setCreating(null)} />}
       {google && <GoogleCalendarModal onClose={() => setGoogle(false)} />}
+      {peek && <ExternalEventModal event={peek} onClose={() => setPeek(null)} />}
+      {affected && <ShiftTasks {...affected} onClose={() => setAffected(null)} />}
       {eventId && <EventDrawer id={Number(eventId)} onClose={() => set({ event: null })} onEdit={(e) => setEditing(e)} />}
       {/* after the drawer so the edit form stacks on top of it */}
       {editing && <EventForm event={editing} onClose={() => setEditing(null)} />}
     </div>
     </BulkScope>
+  );
+}
+
+const VIEW_STEP: Record<ScheduleView, string> = { list: 'יום', day: 'יום', week: 'שבוע', month: 'חודש' };
+
+/** An event of a connected Google calendar: read-only, so just its details. */
+function ExternalEventModal({ event: e, onClose }: { event: ExternalEvent; onClose: () => void }) {
+  return (
+    <Modal
+      title={e.title}
+      onClose={onClose}
+      footer={
+        <button className="btn" onClick={onClose}>
+          סגירה
+        </button>
+      }
+    >
+      <dl className="kv">
+        <dt>מתי</dt>
+        <dd>
+          {fmtLongDate(e.date)} · {e.startTime ? `${e.startTime}${e.endTime ? ` - ${e.endTime}` : ''}` : 'כל היום'}
+        </dd>
+        {e.location && (
+          <>
+            <dt>מיקום</dt>
+            <dd>{e.location}</dd>
+          </>
+        )}
+        <dt>יומן</dt>
+        <dd>
+          {e.sourceName} <span className="badge t-blue">Google</span>
+        </dd>
+      </dl>
+      <p className="small muted mt-12">אירוע מיומן Google מחובר - לשינוי, ערכו אותו ב-Google Calendar.</p>
+    </Modal>
   );
 }
 
@@ -218,12 +376,24 @@ function CourseEventRow({ e, isNow, onOpen }: { e: ScheduleEvent; isNow: boolean
   );
 }
 
-function EventForm({ event, defaultDate, onClose }: { event?: ScheduleEvent; defaultDate?: string; onClose: () => void }) {
+function EventForm({
+  event,
+  defaultDate,
+  defaultStart,
+  defaultEnd,
+  onClose,
+}: {
+  event?: ScheduleEvent;
+  defaultDate?: string;
+  defaultStart?: string;
+  defaultEnd?: string | null;
+  onClose: () => void;
+}) {
   const { users } = useSession();
   const toast = useToast();
   const [date, setDate] = useState(event?.date ?? defaultDate ?? todayKey());
-  const [start, setStart] = useState(event?.startTime ?? '08:00');
-  const [end, setEnd] = useState(event?.endTime ?? '');
+  const [start, setStart] = useState(event?.startTime ?? defaultStart ?? '08:00');
+  const [end, setEnd] = useState(event?.endTime ?? defaultEnd ?? '');
   const [title, setTitle] = useState(event?.title ?? '');
   const [location, setLocation] = useState(event?.location ?? '');
   const [owner, setOwner] = useState<string>(event?.ownerId ? String(event.ownerId) : '');
