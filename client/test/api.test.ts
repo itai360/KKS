@@ -2,7 +2,7 @@
 // again (once, however many requests were refused) and then sends them again.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, setReauthHandler, setUnauthorizedHandler } from '../../client/src/lib/api';
+import { api, ApiError, setReauthHandler, setUnauthorizedHandler } from '../src/lib/api';
 
 type Call = { url: string; method: string; body: unknown };
 let calls: Call[];
@@ -81,5 +81,19 @@ describe('a session that ends while the app is open', () => {
     await expect(api.get('/api/auth/me')).rejects.toMatchObject({ status: 401 });
     expect(shown).toBe(true);
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe('a double click', () => {
+  it('sends the same change once while the first is on its way; a different one goes through', async () => {
+    signedIn = true;
+    const [a, b] = await Promise.all([api.post('/api/debriefs', { title: 'תחקיר' }), api.post('/api/debriefs', { title: 'תחקיר' })]);
+    expect(a).toEqual(b);
+    expect(calls).toHaveLength(1);
+    await Promise.all([api.post('/api/debriefs', { title: 'תחקיר' }), api.post('/api/debriefs', { title: 'תחקיר אחר' })]);
+    expect(calls).toHaveLength(3);
+    // once answered, the same change may be sent again on purpose
+    await api.post('/api/debriefs', { title: 'תחקיר' });
+    expect(calls).toHaveLength(4);
   });
 });

@@ -33,6 +33,7 @@ import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useApi } from '../lib/useApi';
+import { useDraft } from '../lib/draft';
 import { ask } from '../components/Confirm';
 
 const dateLabel = (d: string) => shortDate(d);
@@ -521,11 +522,12 @@ function Opinion({
 
 function EntryForm({ cadetId, onChange }: { cadetId: number; onChange: (f: EvaluationFile) => void }) {
   const toast = useToast();
-  const [open, setOpen] = useState(false);
   const [tone, setTone] = useState<EvalTone>('positive');
   const [category, setCategory] = useState<string>(EVAL_CATEGORIES[0]);
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [title, setTitle] = useDraft(`eval:${cadetId}:title`);
+  const [body, setBody] = useDraft(`eval:${cadetId}:body`);
+  // an unsaved entry from before: the form opens with it
+  const [open, setOpen] = useState(() => !!(title || body));
   const [occurredOn, setOccurredOn] = useState(todayKey());
   const [shown, setShown] = useState(false);
   const [error, setError] = useState<string | null>(null);

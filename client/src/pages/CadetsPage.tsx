@@ -35,6 +35,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { ExperienceCard, ExperienceForm } from './ExperiencesPage';
+import { useDraft } from '../lib/draft';
 import { ask } from '../components/Confirm';
 
 export function CadetsPage() {
@@ -823,6 +824,7 @@ export function QuickDiscipline({ onClose }: { onClose: () => void }) {
             placeholder="שם הצוער, מספר אישי או צוות"
             aria-label="חיפוש צוער"
             data-autofocus
+            data-transient
           />
           <ErrorBox error={cadets.error} />
           {cadets.loading && !cadets.data && <Loading rows={3} />}
@@ -874,7 +876,7 @@ function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: 
   const kinds = only ? [only] : RECORD_KINDS.filter((k) => cadet.canManage || !RESTRICTED_RECORD_KINDS.includes(k));
   const [kind, setKind] = useState<RecordKind>(only ?? 'note');
   const [category, setCategory] = useState('');
-  const [body, setBody] = useState('');
+  const [body, setBody] = useDraft(`record:${cadet.id}`);
   const [score, setScore] = useState<number | null>(null);
   const [followUp, setFollowUp] = useState('');
   const [priv, setPriv] = useState(false);
@@ -911,7 +913,7 @@ function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: 
   };
   const insertLetter = () => {
     const l = letter === null ? null : letters[letter];
-    if (l) setBody((b) => `${b.trim() ? `${b.trim()}\n\n` : ''}${l.title}\n${l.body}`);
+    if (l) setBody(`${body.trim() ? `${body.trim()}\n\n` : ''}${l.title}\n${l.body}`);
   };
   const categories = kind === 'evaluation' ? EVALUATION_CRITERIA : kind === 'discipline' ? DISCIPLINE_SEVERITIES : kind === 'talk' ? TALK_TYPES : [];
 

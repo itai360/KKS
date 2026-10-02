@@ -4,6 +4,12 @@ import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { Icon } from './Icon';
 import { usePageTitle } from '../lib/title';
+import { ask } from './Confirm';
+
+function fieldValue(el: Element): string {
+  if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) return String(el.checked);
+  return (el as HTMLInputElement).value.trim();
+}
 
 export function Modal({
   title,
@@ -27,15 +33,27 @@ export function Modal({
   const ref = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(closable ? onClose : () => undefined);
   onCloseRef.current = closable ? onClose : () => undefined;
+  // what each field held when first touched: closing by Escape, a click outside or the X
+  // after typing asks first, so a long text is not lost to a stray click
+  const initial = useRef(new Map<Element, string>());
+  const tryClose = useRef(async () => {
+    const changed = [...initial.current].some(([el, was]) => el.isConnected && fieldValue(el) !== was);
+    if (!changed || (await ask({ title: 'לסגור בלי לשמור?', body: 'מה שהוקלד בחלון הזה יימחק.', confirm: 'סגירה בלי שמירה', cancel: 'המשך עריכה', danger: true }))) onCloseRef.current();
+  });
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       // with nested dialogs only the topmost one closes
       const all = document.querySelectorAll('.modal');
-      if (all[all.length - 1] === ref.current) onCloseRef.current();
+      if (all[all.length - 1] === ref.current) void tryClose.current();
     };
     document.addEventListener('keydown', onKey);
+    const touched = (e: FocusEvent) => {
+      const el = e.target as Element;
+      if (el.matches('input, textarea, select') && !el.matches('[data-transient], [type=hidden], [type=file]') && !initial.current.has(el)) initial.current.set(el, fieldValue(el));
+    };
+    ref.current?.addEventListener('focusin', touched);
     // prefer an explicit autofocus target, then the first field - never the close button
     const body = ref.current?.querySelector('.modal-body');
     const first =
@@ -44,8 +62,10 @@ export function Modal({
       body?.querySelector<HTMLElement>('button');
     first?.focus();
     document.body.style.overflow = 'hidden';
+    const box = ref.current;
     return () => {
       document.removeEventListener('keydown', onKey);
+      box?.removeEventListener('focusin', touched);
       if (document.querySelectorAll('.modal').length === 0) document.body.style.overflow = '';
       prev?.focus?.();
     };
@@ -54,12 +74,12 @@ export function Modal({
   // on the page body: a dialog opened inside an animated card or a sticky column would otherwise
   // stay inside that box's layer, under the phone's bottom bar
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCloseRef.current()}>
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && void tryClose.current()}>
       <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}`} role="dialog" aria-modal="true" ref={ref}>
         <div className="modal-head">
           <h2>{title}</h2>
           {closable && (
-            <button className="icon-btn" onClick={onClose} aria-label="סגירה" type="button">
+            <button className="icon-btn" onClick={() => void tryClose.current()} aria-label="סגירה" type="button">
               <Icon name="x" />
             </button>
           )}

@@ -114,14 +114,28 @@ async function request<T>(method: string, url: string, body?: unknown, headers: 
   return data as T;
 }
 
+// A double click (or an impatient second tap) sends the same change twice; while the
+// first is on its way, the second one waits for its answer instead of creating a copy.
+const sending = new Map<string, Promise<unknown>>();
+function change<T>(method: string, url: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
+  const what = body instanceof File ? `${body.name}|${body.size}|${body.lastModified}` : body instanceof Blob || body instanceof ArrayBuffer ? null : JSON.stringify(body ?? null);
+  if (what === null) return request<T>(method, url, body, headers);
+  const key = `${method} ${url} ${what}`;
+  const pending = sending.get(key);
+  if (pending) return pending as Promise<T>;
+  const p = request<T>(method, url, body, headers).finally(() => sending.delete(key));
+  sending.set(key, p);
+  return p;
+}
+
 export const api = {
   get: <T>(url: string) => request<T>('GET', url),
-  post: <T>(url: string, body: unknown = {}) => request<T>('POST', url, body),
-  patch: <T>(url: string, body: unknown) => request<T>('PATCH', url, body),
-  put: <T>(url: string, body: unknown) => request<T>('PUT', url, body),
-  del: <T>(url: string) => request<T>('DELETE', url),
+  post: <T>(url: string, body: unknown = {}) => change<T>('POST', url, body),
+  patch: <T>(url: string, body: unknown) => change<T>('PATCH', url, body),
+  put: <T>(url: string, body: unknown) => change<T>('PUT', url, body),
+  del: <T>(url: string) => change<T>('DELETE', url),
   upload: <T>(url: string, file: File) =>
-    request<T>('POST', url, file, { 'content-type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name) }),
+    change<T>('POST', url, file, { 'content-type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name) }),
 };
 
 export function qs(params: Record<string, string | number | boolean | null | undefined>): string {

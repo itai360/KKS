@@ -19,11 +19,18 @@ export function useToast() {
 
 let seq = 0;
 
+let lastShown = { key: '', at: 0 };
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const navigate = useNavigate();
 
   const push = useCallback((t: Omit<Toast, 'id'>) => {
+    // the same message twice in a moment (a double click that was sent once) shows once
+    const key = `${t.tone ?? ''}|${t.title}|${t.body ?? ''}`;
+    const now = Date.now();
+    if (lastShown.key === key && now - lastShown.at < 1500) return;
+    lastShown = { key, at: now };
     const id = ++seq;
     setToasts((list) => [...list.slice(-3), { ...t, id }]);
     setTimeout(() => setToasts((list) => list.filter((x) => x.id !== id)), t.tone === 'red' ? 7000 : 4500);

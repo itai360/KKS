@@ -6,6 +6,7 @@ import { setTitleCount, setTitleSuffix } from './title';
 import { connectRealtime, disconnectRealtime, onNotification } from './realtime';
 import { useApi } from './useApi';
 import { ReauthDialog } from '../components/Reauth';
+import { clearDrafts } from './draft';
 
 interface MeResponse {
   user: User;
@@ -66,6 +67,7 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
       refresh={refresh}
       onLogout={() => {
         disconnectRealtime();
+        clearDrafts();
         setState({ status: 'anon' });
       }}
     >

@@ -15,6 +15,7 @@ import { api } from '../lib/api';
 import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
+import { useDraft } from '../lib/draft';
 import { useApi, useTick } from '../lib/useApi';
 
 export function TaskPage() {
@@ -392,7 +393,7 @@ function AddDependency({ detail, onClose, onChange }: { detail: TaskDetail; onCl
   const exclude = new Set([detail.task.id, ...detail.dependsOn.map((d) => d.id)]);
   return (
     <Modal title="המשימה תלויה ב..." onClose={onClose}>
-      <input className="input" placeholder="חיפוש משימה..." value={q} onChange={(e) => setQ(e.target.value)} data-autofocus />
+      <input className="input" placeholder="חיפוש משימה..." value={q} onChange={(e) => setQ(e.target.value)} data-autofocus data-transient />
       <div className="col gap-6 mt-12" style={{ maxHeight: 360, overflowY: 'auto' }}>
         {(data ?? [])
           .filter((t) => !exclude.has(t.id))
@@ -420,7 +421,7 @@ function AddDependency({ detail, onClose, onChange }: { detail: TaskDetail; onCl
 
 function Updates({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
   const { isCommander } = useSession();
-  const [body, setBody] = useState('');
+  const [body, setBody] = useDraft(`update:${detail.task.id}`);
   const [kind, setKind] = useState<'comment' | 'instruction'>('comment');
   const m = useTaskMutation(detail.task.id, onChange);
   const canInstruct = isCommander || detail.permissions.canEdit;
