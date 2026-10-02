@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout';
 import { NewTaskProvider } from './components/NewTask';
@@ -8,7 +8,7 @@ import { SessionGate, useSession } from './lib/session';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { MyTasksPage } from './pages/MyTasksPage';
-import { lazyPage } from './lib/lazyPage';
+import { lazyPage, prefetchPages } from './lib/lazyPage';
 
 // The first screens come with the app; every other screen loads when it is
 // first opened, so a phone downloads far less up front (and after an update).
@@ -45,6 +45,9 @@ const WeeksPage = lazyPage(() => import('./pages/WeeksPage'), 'WeeksPage');
 
 function AuthedRoutes() {
   const { isCommander } = useSession();
+  useEffect(() => {
+    prefetchPages();
+  }, []);
   return (
     <ToastProvider>
       <NewTaskProvider>
