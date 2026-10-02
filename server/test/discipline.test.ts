@@ -3,7 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, DisciplineLogEntry, DisciplineOverview, EvaluationFile, EvaluationListItem, WeeklyReport } from '../../shared/types';
-import { Db, migrate } from '../src/db';
+import { db, Db, migrate } from '../src/db';
 import { guideFromFile, htmlBlocks, ordinalOf } from '../src/discipline';
 import { setSheetFetcher } from '../src/sheets';
 import { notificationsOf, setup, zip, type Ctx } from './helpers';
@@ -283,5 +283,48 @@ describe('discipline notes', () => {
     ]);
     expect(old.all('SELECT cadet_id, kind, referred_by, from_record, decision FROM committees')).toEqual([{ cadet_id: 1, kind: 'ועדת הערכה', referred_by: 1, from_record: 9, decision: null }]);
     old.close();
+  });
+});
+
+describe('exemptions', () => {
+  let c: Ctx;
+  let cadet: number;
+  beforeEach(async () => {
+    c = await setup();
+    const team = (await c.cmd.post('/api/teams', { name: 'צוות 1', commanderId: c.ids.s1 })).body[0].id;
+    cadet = (await c.cmd.post('/api/cadets', { firstName: 'נועם', lastName: 'לוי', teamId: team })).body.cadet.id;
+  });
+  const shaving = { subject: 'דיגום', details: 'פטור גילוח', reason: 'אישור רפואי', until: '2026-10-15' };
+
+  it('the team commander records one; every staff member sees it and hears of it, the reason stays with the commanders', async () => {
+    expect((await c.s2.post(`/api/cadets/${cadet}/exemptions`, shaving)).status).toBe(403);
+    expect((await c.s1.post(`/api/cadets/${cadet}/exemptions`, { ...shaving, until: '2026-09-01' })).status).toBe(400);
+    const d = (await c.s1.post(`/api/cadets/${cadet}/exemptions`, shaving)).body as CadetDetail;
+    expect(d.cadet.exemptions).toEqual(['דיגום']);
+    expect(d.exemptions).toMatchObject([{ subject: 'דיגום', details: 'פטור גילוח', reason: 'אישור רפואי', until: '2026-10-15', active: true, canDelete: true, createdByName: 'מפק"צ 1' }]);
+    for (const id of [c.ids.s2, c.ids.s3, c.ids.cmd]) expect(notificationsOf(id).map((n) => n.title)).toContain('החרגה: נועם לוי - דיגום עד 15.10');
+    expect(notificationsOf(c.ids.s1)).toEqual([]);
+
+    // other staff: what and until when, not why
+    const seen = (await c.s2.get(`/api/cadets/${cadet}`)).body as CadetDetail;
+    expect(seen.exemptions).toMatchObject([{ subject: 'דיגום', details: 'פטור גילוח', reason: '', canDelete: false }]);
+    expect((await c.s2.get('/api/exemptions')).body).toHaveLength(1);
+    expect((await c.s2.get('/api/briefing')).body.exemptions).toMatchObject([{ cadetName: 'נועם לוי', subject: 'דיגום' }]);
+
+    expect((await c.s2.del(`/api/exemptions/${d.exemptions[0].id}`)).status).toBe(403);
+    expect(((await c.s1.del(`/api/exemptions/${d.exemptions[0].id}`)).body as CadetDetail).cadet.exemptions).toEqual([]);
+  });
+
+  it('an exemption past its last day stays in the file but is no longer current', async () => {
+    await c.s1.post(`/api/cadets/${cadet}/exemptions`, { subject: 'נשק', until: '2026-10-01' });
+    await c.s1.post(`/api/cadets/${cadet}/exemptions`, { subject: 'דיגום' }); // until further notice
+    db().run("UPDATE exemptions SET until = '2026-09-30' WHERE subject = 'נשק'");
+    const d = (await c.cmd.get(`/api/cadets/${cadet}`)).body as CadetDetail;
+    expect(d.cadet.exemptions).toEqual(['דיגום']);
+    expect(d.exemptions.map((x) => [x.subject, x.active])).toEqual([
+      ['דיגום', true],
+      ['נשק', false],
+    ]);
+    expect(((await c.cmd.get('/api/exemptions')).body as { subject: string }[]).map((x) => x.subject)).toEqual(['דיגום']);
   });
 });

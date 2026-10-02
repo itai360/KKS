@@ -577,7 +577,22 @@ const SCHEMA_V10 = `
 ALTER TABLE debriefs ADD COLUMN activity TEXT NOT NULL DEFAULT '';
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10];
+// exemptions: a cadet excused from a rule (the staff must know not to remark on it)
+const SCHEMA_V11 = `
+CREATE TABLE exemptions (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  until TEXT,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX exemptions_cadet ON exemptions(cadet_id);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

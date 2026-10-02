@@ -3251,6 +3251,21 @@ select.status-pill:disabled {
   border-top: 1px solid var(--line);
 }
 
+/* exemptions on the cadet page and in the briefing */
+.exemption-card {
+  border-color: var(--tone);
+}
+.exemption-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.exemption-row:first-child {
+  border-top: 0;
+}
+
 /* picking a cadet in a dialog */
 .pick-list {
   display: flex;

@@ -20,7 +20,7 @@ import {
   type RecordKind,
 } from '@shared/constants';
 import { shortDate } from '@shared/dates';
-import type { Cadet, CadetDetail, CadetRecord, Team } from '@shared/types';
+import type { Cadet, CadetDetail, CadetRecord, Exemption, Team } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
 import { Icon } from '../components/Icon';
@@ -218,6 +218,11 @@ function CadetRows({ list }: { list: Cadet[] }) {
           </div>
           {c.status !== 'active' && <span className={`badge t-${CADET_STATUS_TONES[c.status]}`}>{CADET_STATUS_LABELS[c.status]}</span>}
           <NotesBadge count={c.disciplineNotes} />
+          {c.exemptions.length > 0 && (
+            <span className="badge t-blue" title={`מוחרג מ: ${c.exemptions.join(', ')}`}>
+              החרגה{c.exemptions.length === 1 ? `: ${c.exemptions[0]}` : ` (${c.exemptions.length})`}
+            </span>
+          )}
           {c.disciplineCount > 0 && <span className="badge t-orange hide-mobile">{c.disciplineCount} משמעת</span>}
           {c.talkCount > 0 && <span className="badge t-blue">{c.talkCount} שיחות</span>}
           {c.avgScore !== null && (
@@ -582,6 +587,7 @@ export function CadetPage() {
           {(c.canManage || c.disciplineNotes > 0) && (
             <DisciplineSummary count={c.disciplineNotes} committee={c.notesCommittee} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
           )}
+          {(c.canManage || data.exemptions.length > 0) && <ExemptionsCard cadet={c} exemptions={data.exemptions} />}
           <Development detail={data} />
           {c.notes && (
             <div className="card card-pad">
@@ -659,6 +665,127 @@ function StatusPill({ cadet }: { cadet: Cadet }) {
 }
 
 const KIND_TONE: Record<RecordKind, string> = { note: 'gray', talk: 'blue', discipline: 'orange', evaluation: 'green' };
+
+const EXEMPTION_SUBJECTS = ['דיגום', 'נשק', 'טלפונים', 'זמנים', 'כושר גופני', 'שמירות', 'תורנויות', 'אוכל'];
+
+/**
+ * What the cadet is excused from - shaving, carrying a weapon - so nobody
+ * remarks on what was allowed. Every staff member sees what and until when;
+ * the reason stays with the team commander and the course commander.
+ */
+function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemption[] }) {
+  const toast = useToast();
+  const guide = useGuide(cadet.canManage);
+  const [adding, setAdding] = useState(false);
+  const [subject, setSubject] = useState('');
+  const [details, setDetails] = useState('');
+  const [reason, setReason] = useState('');
+  const [until, setUntil] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showPast, setShowPast] = useState(false);
+  const current = exemptions.filter((x) => x.active);
+  const past = exemptions.filter((x) => !x.active);
+  const subjects = [...new Set([...(guide.data?.offenses.map((o) => o.category).filter(Boolean) ?? []), ...EXEMPTION_SUBJECTS])];
+
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/api/cadets/${cadet.id}/exemptions`, { subject, details, reason, until: until || null });
+      toast({ title: 'ההחרגה נרשמה', body: 'כל הסגל קיבל עדכון', tone: 'green' });
+      setAdding(false);
+      setSubject('');
+      setDetails('');
+      setReason('');
+      setUntil('');
+      emitLocalChange('cadets');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (x: Exemption) => {
+    if (!confirm(`להסיר את ההחרגה "${x.subject}" של ${cadet.fullName}?`)) return;
+    await api.del(`/api/exemptions/${x.id}`);
+    emitLocalChange('cadets');
+  };
+  const row = (x: Exemption) => (
+    <div key={x.id} className="exemption-row">
+      <div className="grow">
+        <div className="small">
+          <b>{x.subject}</b>
+          {x.details && ` - ${x.details}`}
+        </div>
+        <div className="tiny muted">
+          {x.until ? `עד ${shortDate(x.until)}` : 'עד להודעה חדשה'}
+          {x.reason && ` · ${x.reason}`}
+          {x.createdByName && ` · ${x.createdByName}`}
+        </div>
+      </div>
+      {x.canDelete && (
+        <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label={`הסרת ההחרגה ${x.subject}`} onClick={() => void remove(x)}>
+          <Icon name="trash" size={14} />
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div className={`card${current.length ? ' t-blue exemption-card' : ''}`}>
+      <div className="card-head">
+        <Icon name="flag" />
+        <h3 className="grow">החרגות</h3>
+        {cadet.canManage && !adding && (
+          <button className="btn btn-sm" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={14} /> החרגה
+          </button>
+        )}
+      </div>
+      <div className="card-body col gap-6">
+        {current.length === 0 && !adding && <p className="small muted" style={{ margin: 0 }}>אין החרגות פעילות.</p>}
+        {current.map(row)}
+        {adding && (
+          <div className="col gap-6">
+            <Field label="ממה הצוער מוחרג" required>
+              <input className="input" list="exemption-subjects" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="לדוגמה: דיגום" data-autofocus />
+              <datalist id="exemption-subjects">
+                {subjects.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </Field>
+            <Field label="פירוט (גלוי לכל הסגל)">
+              <input className="input" value={details} onChange={(e) => setDetails(e.target.value)} placeholder="לדוגמה: פטור גילוח" />
+            </Field>
+            <Field label="סיבה (רק לך ולמפקד הקורס / מפקד הצוות)">
+              <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: אישור רפואי" />
+            </Field>
+            <Field label="עד תאריך" hint="ריק - עד להודעה חדשה">
+              <input className="input" type="date" value={until} min={todayKey()} onChange={(e) => setUntil(e.target.value)} />
+            </Field>
+            <ErrorBox error={error} />
+            <div className="row gap-6">
+              <button className="btn btn-primary btn-sm" disabled={busy || !subject.trim()} onClick={() => void add()}>
+                שמירה ועדכון הסגל
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>
+                ביטול
+              </button>
+            </div>
+          </div>
+        )}
+        {past.length > 0 && (
+          <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowPast(!showPast)} aria-expanded={showPast}>
+            {showPast ? 'הסתרת' : 'הצגת'} החרגות שהסתיימו ({past.length})
+          </button>
+        )}
+        {showPast && <div className="col gap-6 muted">{past.map(row)}</div>}
+      </div>
+    </div>
+  );
+}
 
 /** Discipline in one dialog, from anywhere: find the cadet, then the record with the enforcement ladder. */
 export function QuickDiscipline({ onClose }: { onClose: () => void }) {
@@ -760,6 +887,8 @@ function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: 
   /** what the ladder says for this time; past its last step, the last step */
   const stepFor = (o: typeof chosen, n: number) => (o ? (o.steps[n - 1] ?? (n > o.steps.length ? ([...o.steps].reverse().find(Boolean) ?? null) : null)) : null);
   const step = stepFor(chosen, occurrence);
+  // an exemption on this subject: maybe it is allowed
+  const exempted = chosen ? cadet.exemptions.find((x) => x === chosen.category || x === chosen.name || chosen.name.includes(x) || (chosen.category && x.includes(chosen.category))) : undefined;
   const beyond = !!chosen && occurrence > chosen.steps.length;
   const formal = formalSet ?? !!step?.note;
   const letter = letterSet !== undefined ? letterSet : beyond ? null : (step?.letter ?? null);
@@ -876,6 +1005,11 @@ function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: 
             </div>
           )}
           {prior.length > 0 && <div className="tiny muted">קודם: {prior.map((r) => shortDate(r.occurredOn)).join(', ')}</div>}
+          {exempted && (
+            <div className="strong" style={{ color: 'var(--blue)' }}>
+              שימו לב: ל{cadet.firstName} יש החרגה בנושא {exempted} - כדאי לבדוק בכרטיס ההחרגות לפני שרושמים.
+            </div>
+          )}
         </div>
       )}
       {kind === 'discipline' && (

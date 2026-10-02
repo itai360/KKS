@@ -462,6 +462,8 @@ export interface BriefingData {
   overdue: Task[];
   blocked: Task[];
   byOwner: { userId: number; name: string; dueToday: number; overdue: number; blocked: number }[];
+  /** cadets excused from a rule now - the staff must know */
+  exemptions: Exemption[];
 }
 
 /** One discipline record in the export (the cadets the user manages, any status). */
@@ -576,6 +578,8 @@ export interface Cadet {
   disciplineCount: number;
   /** discipline notes (הערות משמעת) - the third dismisses the cadet */
   disciplineNotes: number;
+  /** what the cadet is excused from now (exemptions), for every staff member to see */
+  exemptions: string[];
   /** the evaluation committee the third discipline note opened (deleting a note before it decides cancels it) */
   notesCommittee: { id: number; decision: CommitteeDecision | null } | null;
   talkCount: number;
@@ -729,8 +733,26 @@ export interface CommitteeDetail {
   file: EvaluationFile;
 }
 
+/** A cadet excused from a rule - shaving, carrying a weapon - until a date or further notice. */
+export interface Exemption {
+  id: number;
+  cadetId: number;
+  cadetName: string;
+  teamName: string | null;
+  subject: string;
+  details: string;
+  /** why: only for the team commander and the course commander (it may be medical) */
+  reason: string;
+  until: string | null;
+  active: boolean;
+  createdByName: string | null;
+  createdAt: string;
+  canDelete: boolean;
+}
+
 export interface CadetDetail {
   cadet: Cadet;
+  exemptions: Exemption[];
   records: CadetRecord[];
   experiences: Experience[];
   tasks: Task[];

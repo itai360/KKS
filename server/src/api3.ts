@@ -7,17 +7,20 @@ import express, { Router, type Request } from 'express';
 import { z } from 'zod';
 import { requireCommander, type UserRow } from './auth';
 import {
+  addExemption,
   addRecord,
   cadetDetail,
   createCadet,
   createExperience,
   deleteCadet,
+  deleteExemption,
   deleteExperience,
   deleteRecord,
   deleteTeam,
   giveFeedback,
   importCadets,
   listCadets,
+  listExemptions,
   listExperiences,
   listTeams,
   saveTeam,
@@ -117,6 +120,12 @@ export function v3Router(): Router {
     addRecord(me(req), id(req.params.id), req.body);
     res.json(cadetDetail(me(req), id(req.params.id)));
   });
+  r.get('/exemptions', (req, res) => res.json(listExemptions(me(req))));
+  r.post('/cadets/:id/exemptions', (req, res) => {
+    addExemption(me(req), id(req.params.id), req.body);
+    res.json(cadetDetail(me(req), id(req.params.id)));
+  });
+  r.delete('/exemptions/:id', (req, res) => res.json(cadetDetail(me(req), deleteExemption(me(req), id(req.params.id)))));
   r.delete('/records/:id', (req, res) => {
     deleteRecord(me(req), id(req.params.id));
     res.json({ ok: true });

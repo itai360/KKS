@@ -15,7 +15,7 @@ import {
   type RecordKind,
 } from '../../shared/constants';
 import { isDateKey, localDateKey, zonedIso } from '../../shared/dates';
-import type { Cadet, CadetDetail, CadetRecord, Experience, Team } from '../../shared/types';
+import type { Cadet, CadetDetail, CadetRecord, Exemption, Experience, Team } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
@@ -157,6 +157,14 @@ export function toCadet(actor: UserRow, c: CadetRow, records: RecordRow[]): Cade
     avgScore: scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null,
     disciplineCount: visible.filter((r) => r.kind === 'discipline').length,
     disciplineNotes: visible.filter((r) => r.kind === 'discipline' && r.formal).length,
+    exemptions: [
+      ...new Set(
+        db()
+          .all<{ subject: string; until: string | null }>('SELECT subject, until FROM exemptions WHERE cadet_id = ? ORDER BY created_at', c.id)
+          .filter((x) => exemptionActive(x.until))
+          .map((x) => x.subject),
+      ),
+    ],
     notesCommittee: canManageCadet(actor, c)
       ? (db().get<{ id: number; decision: CommitteeDecision | null }>('SELECT id, decision FROM committees WHERE cadet_id = ? AND from_record IS NOT NULL ORDER BY referred_at DESC, id DESC LIMIT 1', c.id) ?? null)
       : null,
@@ -557,6 +565,7 @@ export function cadetDetail(actor: UserRow, id: number): CadetDetail {
   const order = disciplineOrder(rows);
   return {
     cadet: toCadet(actor, c, rows),
+    exemptions: listExemptions(actor, { cadetId: id }),
     records: visible.map((r) => toRecord(actor, r, order)),
     experiences: listExperiences(actor, { cadetId: id }),
     tasks: visibleTasks(actor, 't.cadet_id = ?', id),
@@ -565,6 +574,93 @@ export function cadetDetail(actor: UserRow, id: number): CadetDetail {
       .map((r) => ({ date: r.occurred_on, criterion: r.category || 'כללי', score: r.score as number }))
       .sort((a, b) => a.date.localeCompare(b.date)),
   };
+}
+
+// ---------------- exemptions ----------------
+
+interface ExemptionRow {
+  id: number;
+  cadet_id: number;
+  cadet_name: string;
+  team_name: string | null;
+  team_commander_id: number | null;
+  subject: string;
+  details: string;
+  reason: string;
+  until: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+const EXEMPTION_BASE = `
+SELECT x.*, trim(c.first_name || ' ' || c.last_name) AS cadet_name, t.name AS team_name, t.commander_id AS team_commander_id, u.display_name AS created_by_name
+FROM exemptions x JOIN cadets c ON c.id = x.cadet_id LEFT JOIN teams t ON t.id = c.team_id LEFT JOIN users u ON u.id = x.created_by
+`;
+
+/** an exemption counts through its last day; without one, until further notice */
+function exemptionActive(until: string | null): boolean {
+  return !until || until >= today();
+}
+
+function toExemption(actor: UserRow, r: ExemptionRow): Exemption {
+  const manage = canManageCadet(actor, r);
+  return {
+    id: r.id,
+    cadetId: r.cadet_id,
+    cadetName: r.cadet_name,
+    teamName: r.team_name,
+    subject: r.subject,
+    details: r.details,
+    reason: manage ? r.reason : '',
+    until: r.until,
+    active: exemptionActive(r.until),
+    createdByName: r.created_by_name,
+    createdAt: r.created_at,
+    canDelete: manage,
+  };
+}
+
+/** One cadet's exemptions (current first), or the current ones of all active cadets. */
+export function listExemptions(actor: UserRow, filter: { cadetId?: number } = {}): Exemption[] {
+  const rows = filter.cadetId
+    ? db().all<ExemptionRow>(`${EXEMPTION_BASE} WHERE x.cadet_id = ? ORDER BY x.created_at DESC`, filter.cadetId)
+    : db().all<ExemptionRow>(`${EXEMPTION_BASE} WHERE c.status = 'active' ORDER BY t.sort, t.name, c.last_name, c.first_name, x.created_at`).filter((r) => exemptionActive(r.until));
+  return rows.map((r) => toExemption(actor, r)).sort((a, b) => Number(b.active) - Number(a.active));
+}
+
+export const exemptionSchema = z.object({
+  subject: z.string().trim().min(1, 'ממה הצוער מוחרג?').max(80),
+  details: z.string().trim().max(300).optional().default(''),
+  reason: z.string().trim().max(1000).optional().default(''),
+  until: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional().default(null),
+});
+
+/** Records an exemption; every staff member hears of it, so nobody remarks on what was allowed. */
+export function addExemption(actor: UserRow, cadetId: number, raw: z.input<typeof exemptionSchema>): number {
+  const c = cadetRow(cadetId);
+  if (!canManageCadet(actor, c)) throw forbidden('החרגות נרשמות על ידי מפקד הצוות או מפקד הקורס');
+  const x = exemptionSchema.parse(raw);
+  if (x.until && x.until < today()) throw badRequest('תאריך הסיום כבר עבר');
+  const name = `${c.first_name} ${c.last_name}`.trim();
+  const id = db().tx(() => {
+    const id = db().run('INSERT INTO exemptions(cadet_id, subject, details, reason, until, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', cadetId, x.subject, x.details, x.reason, x.until, actor.id, nowIso()).id;
+    const when = x.until ? ` עד ${x.until.split('-').reverse().slice(0, 2).join('.')}` : '';
+    logActivity({ userId: actor.id, action: 'exemption', text: `${actor.display_name} רשם החרגה ל${name}: ${x.subject}${when}` });
+    const staff = db().all<{ id: number }>('SELECT id FROM users WHERE active = 1').map((u) => u.id);
+    notify(staff, { type: 'exemption', category: 'info', title: `החרגה: ${name} - ${x.subject}${when}`, body: x.details, link: `/cadets/${cadetId}` }, actor.id);
+    return id;
+  });
+  changed('cadets');
+  return id;
+}
+
+export function deleteExemption(actor: UserRow, id: number): number {
+  const r = db().get<ExemptionRow>(`${EXEMPTION_BASE} WHERE x.id = ?`, id);
+  if (!r) throw notFound('ההחרגה לא נמצאה');
+  if (!canManageCadet(actor, r)) throw forbidden();
+  db().run('DELETE FROM exemptions WHERE id = ?', id);
+  changed('cadets');
+  return r.cadet_id;
 }
 
 // ---------------- experiences ----------------

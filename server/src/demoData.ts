@@ -13,7 +13,7 @@ import { createEvent } from './schedule';
 import { addDependency, addUpdate, createRequest, createTasks, respondOverdue, transition } from './taskService';
 import { saveTemplate, applyTemplate } from './templates';
 import { addLesson, approveWeek, closeWeek, generateWeeks, openWeek } from './weeks';
-import { addRecord, createExperience, giveFeedback, saveTeam } from './cadets';
+import { addExemption, addRecord, createExperience, giveFeedback, saveTeam } from './cadets';
 import { demoStep, linkLetters, saveGuide } from './discipline';
 import { addItem, createDebrief, itemToTask, updateDebrief } from './debriefs';
 import { createLinkDocument } from './documents';
@@ -372,6 +372,7 @@ export function seedDemoData(PASSWORD = 'kks12345'): { tasks: number; weeks: num
       'דוגמה',
     ),
   );
+  at(d(-4, '12:00'), () => addExemption(u(ids.s3), cadetIds[2], { subject: 'דיגום', details: 'פטור גילוח', reason: 'אישור רפואי', until: addDays(today, 10) }));
   at(d(-9, '08:30'), () => addRecord(u(ids.s3), cadetIds[2], { kind: 'discipline', offense: 'זמנים · איחור למסדר', body: 'איחור של 5 דקות למסדר בוקר.', occurredOn: addDays(today, -9) }));
   at(d(-3, '08:30'), () => addRecord(u(ids.s3), cadetIds[2], { kind: 'discipline', offense: 'זמנים · איחור למסדר', category: 'קלה', body: 'איחור של 10 דקות למסדר בוקר. שיחת בירור ואזהרה.' }));
   at(d(-8, '11:00'), () => addRecord(u(ids.s3), cadetIds[6], { kind: 'discipline', offense: 'טלפונים · שימוש בטלפון בשיעור', body: 'הודעות בטלפון באמצע שיעור.', occurredOn: addDays(today, -8) }));

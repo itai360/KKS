@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { useNavigate } from 'react-router';
+import { shortDate } from '@shared/dates';
 import type { BriefingData } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { TaskList } from '../components/TaskRow';
@@ -11,7 +12,7 @@ import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
 
 export function BriefingPage() {
-  const { data, error, loading } = useApi<BriefingData>('/api/briefing', ['tasks', 'events']);
+  const { data, error, loading } = useApi<BriefingData>('/api/briefing', ['tasks', 'events', 'cadets']);
   const { settings } = useSession();
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -101,6 +102,28 @@ export function BriefingPage() {
                 </div>
               ))}
             </div>
+            {data.exemptions.length > 0 && (
+              <div className="card">
+                <div className="card-head">
+                  <h3 className="grow">החרגות פעילות</h3>
+                  <span className="tiny mono muted">{data.exemptions.length}</span>
+                </div>
+                {data.exemptions.map((x) => (
+                  <div key={x.id} className="health" style={{ borderColor: '#2e352d', cursor: 'pointer' }} onClick={() => navigate(`/cadets/${x.cadetId}`)}>
+                    <div className="grow">
+                      <div className="strong">
+                        {x.cadetName} <span className="small muted">{x.teamName}</span>
+                      </div>
+                      <div className="small">
+                        {x.subject}
+                        {x.details && ` - ${x.details}`}
+                      </div>
+                    </div>
+                    <span className="small muted">{x.until ? `עד ${shortDate(x.until)}` : 'עד להודעה חדשה'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="card">
               <div className="card-head">
                 <h3>אחראים</h3>

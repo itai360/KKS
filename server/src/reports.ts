@@ -25,7 +25,7 @@ import { listEvents } from './schedule';
 import { getTaskRow, isCommander, visibleTasks, canApprove } from './taskRepo';
 import { pendingRequestsFor } from './taskService';
 import { listWeeks, weekContaining } from './weeks';
-import { listCadets } from './cadets';
+import { listCadets, listExemptions } from './cadets';
 import { listDebriefs } from './debriefs';
 import { listDocuments } from './documents';
 
@@ -301,7 +301,7 @@ export function briefing(actor: UserRow): BriefingData {
       blocked: blocked.filter((t) => t.ownerId === u.id).length,
     }))
     .filter((r) => r.dueToday + r.overdue + r.blocked > 0);
-  return { date: c.today, events: listEvents(c.today, c.today, false), critical, dueToday, overdue, blocked, byOwner };
+  return { date: c.today, events: listEvents(c.today, c.today, false), critical, dueToday, overdue, blocked, byOwner, exemptions: listExemptions(actor) };
 }
 
 export function weeklyReport(actor: UserRow, weekStartKey?: string): WeeklyReport {
