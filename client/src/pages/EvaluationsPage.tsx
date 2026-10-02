@@ -8,6 +8,7 @@ import {
   COMMITTEE_DECISION_LABELS,
   COMMITTEE_DECISIONS,
   COMMITTEE_KINDS,
+  DISCIPLINE_NOTE_LIMIT,
   EVAL_CATEGORIES,
   EVAL_TONE_LABELS,
   EVAL_TONE_TONES,
@@ -22,6 +23,7 @@ import {
 import { shortDate } from '@shared/dates';
 import type { Committee, CommitteeDetail, EvaluationEntry, EvaluationFile, EvaluationListItem, Team } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
+import { NoteDots, NotesBadge, noteTone, timeLabel } from '../components/Discipline';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
@@ -79,7 +81,7 @@ export function EvaluationsPage() {
             onClick={() =>
               void saveCsv(
                 'תיקי-הערכה',
-                ['שם מלא', 'מספר אישי', 'צוות', 'מצב', 'חיובי', 'לשיפור', 'חריג', 'לא הוצגו לצוער', 'רישום אחרון', 'ועדה'],
+                ['שם מלא', 'מספר אישי', 'צוות', 'מצב', 'חיובי', 'לשיפור', 'חריג', 'לא הוצגו לצוער', 'הערות משמעת', 'רישום אחרון', 'ועדה'],
                 shown.map((c) => [
                   c.fullName,
                   c.personalNumber,
@@ -89,6 +91,7 @@ export function EvaluationsPage() {
                   c.improve,
                   c.exception,
                   c.notShown,
+                  c.disciplineNotes,
                   c.lastEntryAt ? fmtDateTime(c.lastEntryAt) : '',
                   c.committee ? (c.committee.decision ? COMMITTEE_DECISION_LABELS[c.committee.decision] : 'ממתינה') : '',
                 ]),
@@ -152,6 +155,7 @@ export function EvaluationsPage() {
                     </div>
                   </div>
                   {c.status !== 'active' && <span className="badge">{CADET_STATUS_LABELS[c.status]}</span>}
+                  <NotesBadge count={c.disciplineNotes} />
                   {c.notShown > 0 && <span className="badge t-orange hide-mobile">{c.notShown} לא הוצגו לצוער</span>}
                   {c.committee && (
                     <span className={`badge ${c.committee.decision ? 't-gray' : 't-purple'}`}>
@@ -373,11 +377,7 @@ function FileView({ file, onChange, readOnly = false }: { file: EvaluationFile; 
             )}
           </div>
           <SideCard title="הערכות לפי קריטריון (מתיק הצוער)" empty="אין הערכות בציון בתיק הצוער." items={file.scores.map((s) => `${s.criterion}: ${s.average.toFixed(1)} (${s.count})`)} />
-          <SideCard
-            title="משמעת (מתיק הצוער)"
-            empty="אין רישומי משמעת."
-            items={file.discipline.map((r) => `${dateLabel(r.occurredOn)} · ${r.title || r.category}${r.body ? ` - ${r.body.slice(0, 80)}` : ''}`)}
-          />
+          <DisciplineCard file={file} />
           <SideCard title="שיחות אישיות (מתיק הצוער)" empty="אין שיחות מתועדות." items={file.talks.map((r) => `${dateLabel(r.occurredOn)} · ${r.title || 'שיחה'}${r.authorName ? ` (${r.authorName})` : ''}`)} />
           <SideCard
             title="התנסויות"
@@ -642,6 +642,42 @@ function EntryRow({ entry: e, file, editable, onChange }: { entry: EvaluationEnt
         )}
       </div>
       <ErrorBox error={error} />
+    </div>
+  );
+}
+
+/** Discipline from the cadet file, with the discipline notes counted toward dismissal. */
+function DisciplineCard({ file }: { file: EvaluationFile }) {
+  // a committee's copy from before discipline notes has no such field
+  const notes = file.discipline.filter((r) => r.formal).length;
+  return (
+    <div className={`card${notes ? ` discipline-card ${noteTone(notes)}` : ''}`}>
+      <div className="card-head">
+        <h3 className="grow">משמעת (מתיק הצוער)</h3>
+        {notes > 0 && <NoteDots count={notes} />}
+        <span className="mono tiny muted">{file.discipline.length}</span>
+      </div>
+      <div className="card-body col gap-6">
+        {notes > 0 && (
+          <div className="small strong">
+            הערות משמעת: {notes} מתוך {DISCIPLINE_NOTE_LIMIT}
+          </div>
+        )}
+        {file.discipline.length === 0 ? (
+          <p className="small muted" style={{ margin: 0 }}>
+            אין רישומי משמעת.
+          </p>
+        ) : (
+          file.discipline.map((r) => (
+            <div key={r.id} className="small">
+              {r.formal && <span className="badge t-red">הערת משמעת{r.noteNumber ? ` ${r.noteNumber}` : ''}</span>} {dateLabel(r.occurredOn)}
+              {r.title || r.category ? ` · ${r.title || r.category}` : ''}
+              {r.occurrence ? ` (${timeLabel(r.occurrence)})` : ''}
+              {r.body ? ` - ${r.body.slice(0, 80)}` : ''}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

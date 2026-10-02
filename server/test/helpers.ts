@@ -1,3 +1,4 @@
+import { crc32 } from 'node:zlib';
 import request from 'supertest';
 import type { Express } from 'express';
 import { zonedIso } from '../../shared/dates';
@@ -69,4 +70,40 @@ export async function newTask(agent: Agent, body: Record<string, unknown>): Prom
 
 export function notificationsOf(userId: number): { title: string; type: string; category: string }[] {
   return db().all('SELECT title, type, category FROM notifications WHERE user_id = ? ORDER BY id', userId);
+}
+
+/** A zip archive of stored (uncompressed) entries - enough for test .xlsx and .docx files. */
+export function zip(files: [string, string][]): Buffer {
+  const locals: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const [name, content] of files) {
+    const data = Buffer.from(content);
+    const n = Buffer.from(name);
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(n.length, 26);
+    locals.push(local, n, data);
+    const c = Buffer.alloc(46);
+    c.writeUInt32LE(0x02014b50, 0);
+    c.writeUInt32LE(crc, 16);
+    c.writeUInt32LE(data.length, 20);
+    c.writeUInt32LE(data.length, 24);
+    c.writeUInt16LE(n.length, 28);
+    c.writeUInt32LE(offset, 42);
+    central.push(c, n);
+    offset += 30 + n.length + data.length;
+  }
+  const cd = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(cd.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cd, end]);
 }

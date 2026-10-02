@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
 import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Template, User } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
+import { GuideImportCard } from '../components/Discipline';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { ErrorBox, Field, Modal, PageHead, Seg } from '../components/ui';
@@ -31,6 +32,7 @@ export function SettingsPage() {
             <StaffCard />
             <DomainsCard />
             <PermissionsCard />
+            <GuideImportCard />
             <BackupCard />
           </>
         )}

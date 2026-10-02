@@ -13,7 +13,7 @@ import { COMMITTEE_DECISIONS, COMMITTEE_DECISION_LABELS, COMMITTEE_KINDS, EVAL_T
 import { isDateKey, localDateKey } from '../../shared/dates';
 import type { Committee, CommitteeDetail, EvaluationEntry, EvaluationFile, EvaluationListItem } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
-import { cadetRow, canManageCadet, listExperiences, RECORD_BASE, toCadet, toRecord, type CadetRow, type RecordRow } from './cadets';
+import { cadetRow, canManageCadet, disciplineOrder, listExperiences, RECORD_BASE, toCadet, toRecord, type CadetRow, type RecordRow } from './cadets';
 import { badRequest, clock, forbidden, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
@@ -144,6 +144,7 @@ export function evaluationFile(actor: UserRow, cadetId: number): EvaluationFile 
     byCriterion.set(k, [...(byCriterion.get(k) ?? []), r.score]);
   }
   const opinion = (text: string | undefined, byName: string | null | undefined, at: string | null | undefined) => ({ text: text ?? '', byName: byName ?? null, at: at ?? null });
+  const order = disciplineOrder(records);
 
   return {
     cadet: toCadet(actor, c, records),
@@ -160,7 +161,7 @@ export function evaluationFile(actor: UserRow, cadetId: number): EvaluationFile 
           .filter((x) => x.status === 'done')
           .map((x) => ({ role: x.role, startDate: x.startDate, endDate: x.endDate, mentorName: x.mentorName, score: x.score, strengths: x.strengths, improvements: x.improvements }))
       : [],
-    discipline: full ? records.filter((r) => r.kind === 'discipline').map((r) => toRecord(actor, r)) : [],
+    discipline: full ? records.filter((r) => r.kind === 'discipline').map((r) => toRecord(actor, r, order)) : [],
     talks: full ? records.filter((r) => r.kind === 'talk').map((r) => toRecord(actor, r)) : [],
     committees: full ? db().all<CommitteeRow>(`${COMMITTEE_BASE} WHERE c.cadet_id = ? ORDER BY c.referred_at DESC`, cadetId).map(toCommittee) : [],
     full,
@@ -183,6 +184,11 @@ export function listEvaluations(actor: UserRow): EvaluationListItem[] {
   const entries = db().all<Pick<EntryRow, 'cadet_id' | 'tone' | 'shown_on' | 'author_id' | 'created_at'>>('SELECT cadet_id, tone, shown_on, author_id, created_at FROM evaluation_entries');
   const committees = new Map<number, CommitteeRow>();
   for (const r of db().all<CommitteeRow>('SELECT * FROM committees ORDER BY referred_at')) committees.set(r.cadet_id, r); // the latest one
+  const notes = new Map(
+    db()
+      .all<{ cadet_id: number; n: number }>("SELECT cadet_id, count(*) AS n FROM cadet_records WHERE kind = 'discipline' AND formal = 1 GROUP BY cadet_id")
+      .map((r) => [r.cadet_id, r.n]),
+  );
 
   return cadets.map((c) => {
     const full = canManageCadet(actor, c);
@@ -203,6 +209,7 @@ export function listEvaluations(actor: UserRow): EvaluationListItem[] {
       notShown: mine.filter((e) => !e.shown_on && e.tone !== 'positive').length,
       lastEntryAt: mine.reduce<string | null>((m, e) => (m && m > e.created_at ? m : e.created_at), null),
       hasOpinions: full && !!f?.opinions,
+      disciplineNotes: full ? (notes.get(c.id) ?? 0) : 0,
       committee: committee ? { id: committee.id, kind: committee.kind, decision: committee.decision } : null,
       full,
     };

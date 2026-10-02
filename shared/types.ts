@@ -546,6 +546,10 @@ export interface Cadet {
   lastRecordAt: string | null;
   avgScore: number | null;
   disciplineCount: number;
+  /** discipline notes (הערות משמעת) - the third dismisses the cadet */
+  disciplineNotes: number;
+  /** dismissed automatically by the third discipline note (deleting a note brings the cadet back) */
+  dismissedByNotes: boolean;
   talkCount: number;
   canManage: boolean;
 }
@@ -569,6 +573,14 @@ export interface CadetRecord {
   occurredOn: string;
   createdAt: string;
   canDelete: boolean;
+  /** discipline: the offense from the enforcement ladder ("קטגוריה · מקרה"), or '' */
+  offense: string;
+  /** discipline: which time this offense is for the cadet (1 = first) */
+  occurrence: number | null;
+  /** discipline: a discipline note (הערת משמעת) */
+  formal: boolean;
+  /** discipline note: its number among the cadet's notes (1-3) */
+  noteNumber: number | null;
 }
 
 export interface Experience {
@@ -677,6 +689,8 @@ export interface EvaluationListItem {
   notShown: number;
   lastEntryAt: string | null;
   hasOpinions: boolean;
+  /** discipline notes (for those who see the whole file) */
+  disciplineNotes: number;
   committee: { id: number; kind: string; decision: CommitteeDecision | null } | null;
   full: boolean;
 }
@@ -764,4 +778,43 @@ export interface SnapshotInfo {
   savedAt: string;
   label: SnapshotLabel;
   bytes: number;
+}
+
+// ---------------- enforcement ladder (מדרג אכיפה) ----------------
+
+/** What to do the n-th time: the text from the ladder, and what it calls for. */
+export interface DisciplineStep {
+  text: string;
+  /** the step is a discipline note */
+  note: boolean;
+  /** the step sends the cadet to an evaluation committee */
+  committee: boolean;
+  /** the wording for this discipline note, an index into letters */
+  letter: number | null;
+}
+
+export interface DisciplineOffense {
+  /** "קטגוריה · מקרה" - what records keep, so a re-import continues the count */
+  key: string;
+  category: string;
+  name: string;
+  /** examples of what counts, from the document's footnotes */
+  definition: string[];
+  /** by occurrence: [0] is the first time; null where the ladder has nothing */
+  steps: (DisciplineStep | null)[];
+}
+
+/** Ready wording for a discipline note ("איחור למסדר - פעם רביעית"). */
+export interface DisciplineLetter {
+  title: string;
+  body: string;
+}
+
+export interface DisciplineGuide {
+  offenses: DisciplineOffense[];
+  letters: DisciplineLetter[];
+  /** the link or file it came from */
+  source: string;
+  importedAt: string | null;
+  importedByName: string | null;
 }

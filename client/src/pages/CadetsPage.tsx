@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   CADET_STATUS_LABELS,
   CADET_STATUSES,
+  DISCIPLINE_NOTE_LIMIT,
   DISCIPLINE_SEVERITIES,
   EVALUATION_CRITERIA,
   RECORD_KIND_LABELS,
@@ -18,6 +19,7 @@ import {
 import { shortDate } from '@shared/dates';
 import type { Cadet, CadetDetail, CadetRecord, Team } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
+import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
@@ -40,7 +42,8 @@ export function CadetsPage() {
   const [q, setQ] = useState('');
   const teams = useApi<Team[]>('/api/teams', ['cadets']);
   const cadets = useApi<Cadet[]>(`/api/cadets${qs({ team, status })}`, ['cadets']);
-  const [dialog, setDialog] = useState<null | 'cadet' | 'import' | 'teams'>(null);
+  const [dialog, setDialog] = useState<null | 'cadet' | 'import' | 'teams' | 'guide'>(null);
+  const guide = useGuide();
   const myTeams = (teams.data ?? []).filter((t) => t.commanderId === user.id);
   const canAdd = isCommander || myTeams.length > 0;
 
@@ -84,7 +87,7 @@ export function CadetsPage() {
               onClick={() =>
                 void saveCsv(
                   'צוערים',
-                  ['שם מלא', 'מספר אישי', 'צוות', 'טלפון', 'סטטוס', 'רישומים', 'ציון ממוצע', 'משמעת', 'שיחות', 'רישום אחרון', 'הערות'],
+                  ['שם מלא', 'מספר אישי', 'צוות', 'טלפון', 'סטטוס', 'רישומים', 'ציון ממוצע', 'משמעת', 'הערות משמעת', 'שיחות', 'רישום אחרון', 'הערות'],
                   shown.map((c) => [
                     c.fullName,
                     c.personalNumber,
@@ -94,6 +97,7 @@ export function CadetsPage() {
                     c.recordCount,
                     c.avgScore === null ? '' : c.avgScore.toFixed(1),
                     c.disciplineCount,
+                    c.disciplineNotes,
                     c.talkCount,
                     c.lastRecordAt ? fmtDateTime(c.lastRecordAt) : '',
                     c.notes,
@@ -103,6 +107,11 @@ export function CadetsPage() {
             >
               <Icon name="download" /> ייצוא
             </button>
+            {!!guide.data?.offenses.length && (
+              <button className="btn" onClick={() => setDialog('guide')} title="מה עושים בכל מקרה, לפי הפעם">
+                <Icon name="shield" /> מדרג אכיפה
+              </button>
+            )}
             {isCommander && (
               <>
                 <button className="btn" onClick={() => setDialog('teams')}>
@@ -166,6 +175,7 @@ export function CadetsPage() {
       {dialog === 'cadet' && <CadetForm teams={isCommander ? (teams.data ?? []) : myTeams} defaultTeam={team ? Number(team) : undefined} onClose={() => setDialog(null)} />}
       {dialog === 'import' && <ImportCadets teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'teams' && <TeamsDialog teams={teams.data ?? []} onClose={() => setDialog(null)} />}
+      {dialog === 'guide' && guide.data && <GuideModal guide={guide.data} onClose={() => setDialog(null)} />}
     </div>
     </BulkScope>
   );
@@ -194,7 +204,8 @@ function CadetRows({ list }: { list: Cadet[] }) {
             </div>
           </div>
           {c.status !== 'active' && <span className="badge">{CADET_STATUS_LABELS[c.status]}</span>}
-          {c.disciplineCount > 0 && <span className="badge t-orange">{c.disciplineCount} משמעת</span>}
+          <NotesBadge count={c.disciplineNotes} />
+          {c.disciplineCount > 0 && <span className="badge t-orange hide-mobile">{c.disciplineCount} משמעת</span>}
           {c.talkCount > 0 && <span className="badge t-blue">{c.talkCount} שיחות</span>}
           {c.avgScore !== null && (
             <span className="mono strong" title="ממוצע הערכות (1-5)">
@@ -364,7 +375,7 @@ function ImportCadets({ teams, onClose }: { teams: Team[]; onClose: () => void }
               }}
             />
           </label>
-          <input className="input grow" dir="ltr" placeholder="או קישור ל-Google Sheets / Drive" value={link} onChange={(e) => setLink(e.target.value)} style={{ minWidth: 220 }} />
+          <input className="input grow" dir={link ? 'ltr' : undefined} placeholder="או קישור ל-Google Sheets / Drive" value={link} onChange={(e) => setLink(e.target.value)} style={{ minWidth: 220 }} />
           <button className="btn" disabled={busy || link.trim().length < 10} onClick={() => void read(() => api.post('/api/cadets/import/link', { url: link }))}>
             {busy ? 'קורא...' : 'קריאה מהקישור'}
           </button>
@@ -504,8 +515,12 @@ export function CadetPage() {
             צוערים · {c.teamName ?? 'ללא צוות'}
           </Link>
         }
-        title={c.fullName}
-        sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, c.phone, CADET_STATUS_LABELS[c.status]].filter(Boolean).join(' · ')}
+        title={
+          <>
+            {c.fullName} <NotesBadge count={c.disciplineNotes} />
+          </>
+        }
+        sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, c.phone, c.dismissedByNotes ? `הודח - ${DISCIPLINE_NOTE_LIMIT} הערות משמעת` : CADET_STATUS_LABELS[c.status]].filter(Boolean).join(' · ')}
         actions={
           <>
             {c.canManage && (
@@ -529,7 +544,7 @@ export function CadetPage() {
       />
       <div className="split">
         <div className="col gap-16">
-          <RecordForm cadet={c} />
+          <RecordForm cadet={c} records={data.records} />
           <div>
             <div className="row wrap mb-12">
               <div className="section-title grow" style={{ margin: 0 }}>
@@ -551,6 +566,9 @@ export function CadetPage() {
           </div>
         </div>
         <div className="col gap-16 sticky-side">
+          {(c.canManage || c.disciplineNotes > 0) && (
+            <DisciplineSummary count={c.disciplineNotes} dismissed={c.dismissedByNotes} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
+          )}
           <Development detail={data} />
           {c.notes && (
             <div className="card card-pad">
@@ -599,9 +617,10 @@ export function CadetPage() {
 
 const KIND_TONE: Record<RecordKind, string> = { note: 'gray', talk: 'blue', discipline: 'orange', evaluation: 'green' };
 
-function RecordForm({ cadet }: { cadet: Cadet }) {
+function RecordForm({ cadet, records }: { cadet: Cadet; records: CadetRecord[] }) {
   const toast = useToast();
-  const { user, users, settings } = useSession();
+  const { user, users, settings, isCommander } = useSession();
+  const guide = useGuide(cadet.canManage);
   const kinds = RECORD_KINDS.filter((k) => cadet.canManage || !RESTRICTED_RECORD_KINDS.includes(k));
   const [kind, setKind] = useState<RecordKind>('note');
   const [category, setCategory] = useState('');
@@ -617,6 +636,31 @@ function RecordForm({ cadet }: { cadet: Cadet }) {
   const [taskTime, setTaskTime] = useState(settings.defaultDeadlineTime);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // discipline: the offense on the enforcement ladder, and whether this is a discipline note
+  const [offense, setOffense] = useState('');
+  // what the user chose by hand; until then both follow the ladder for the current count
+  const [formalSet, setFormalSet] = useState<boolean | null>(null);
+  const [letterSet, setLetterSet] = useState<number | null | undefined>(undefined);
+  const offenses = guide.data?.offenses ?? [];
+  const letters = guide.data?.letters ?? [];
+  const chosen = offenses.find((o) => o.key === offense) ?? null;
+  const prior = offense ? records.filter((r) => r.kind === 'discipline' && r.offense === offense) : [];
+  const occurrence = prior.length + 1;
+  /** what the ladder says for this time; past its last step, the last step */
+  const stepFor = (o: typeof chosen, n: number) => (o ? (o.steps[n - 1] ?? (n > o.steps.length ? ([...o.steps].reverse().find(Boolean) ?? null) : null)) : null);
+  const step = stepFor(chosen, occurrence);
+  const beyond = !!chosen && occurrence > chosen.steps.length;
+  const formal = formalSet ?? !!step?.note;
+  const letter = letterSet !== undefined ? letterSet : beyond ? null : (step?.letter ?? null);
+  const pickOffense = (key: string) => {
+    setOffense(key);
+    setFormalSet(null);
+    setLetterSet(undefined);
+  };
+  const insertLetter = () => {
+    const l = letter === null ? null : letters[letter];
+    if (l) setBody((b) => `${b.trim() ? `${b.trim()}\n\n` : ''}${l.title}\n${l.body}`);
+  };
   const categories = kind === 'evaluation' ? EVALUATION_CRITERIA : kind === 'discipline' ? DISCIPLINE_SEVERITIES : kind === 'talk' ? TALK_TYPES : [];
 
   const reset = () => {
@@ -626,13 +670,25 @@ function RecordForm({ cadet }: { cadet: Cadet }) {
     setCategory('');
     setWithTask(false);
     setTaskTitle('');
+    pickOffense('');
   };
   const submit = async () => {
+    const note = kind === 'discipline' && formal;
+    const dismisses = note && cadet.status === 'active' && cadet.disciplineNotes + 1 >= DISCIPLINE_NOTE_LIMIT;
+    if (
+      dismisses &&
+      !confirm(
+        `זו הערת המשמעת ה-${cadet.disciplineNotes + 1} של ${cadet.fullName}.\n\nלפי הנוהל הוא מודח מהקורס: הסטטוס שלו ישתנה ל"הודח / פרש" ומפקד הקורס יקבל התראה. אם ההערה תימחק, הוא יחזור לסטטוס פעיל.\n\nלשמור?`,
+      )
+    )
+      return;
     setError(null);
     setBusy(true);
     try {
-      await api.post(`/api/cadets/${cadet.id}/records`, {
+      const res = await api.post<CadetDetail>(`/api/cadets/${cadet.id}/records`, {
         kind,
+        offense: kind === 'discipline' ? offense : '',
+        formal: note,
         category,
         body: body.trim(),
         score: kind === 'evaluation' ? score : null,
@@ -641,7 +697,10 @@ function RecordForm({ cadet }: { cadet: Cadet }) {
         occurredOn: date,
         followUpTask: withTask ? { title: taskTitle.trim() || `המשך: ${cadet.fullName}`, deadline: isoAt(taskDate, taskTime), ownerId: cadet.canManage ? taskOwner : user.id } : undefined,
       });
-      toast({ title: `${RECORD_KIND_LABELS[kind]} נשמרה בתיק`, tone: 'green' });
+      const n = res.cadet.disciplineNotes;
+      if (dismisses && res.cadet.dismissedByNotes) toast({ title: `${cadet.fullName} הודח מהקורס`, body: `הערת משמעת ${n} מתוך ${DISCIPLINE_NOTE_LIMIT}`, tone: 'red' });
+      else if (note) toast({ title: `הערת משמעת נשמרה בתיק (${n} מתוך ${DISCIPLINE_NOTE_LIMIT})`, tone: 'green' });
+      else toast({ title: `${RECORD_KIND_LABELS[kind]} נשמרה בתיק`, tone: 'green' });
       reset();
       emitLocalChange('cadets', 'tasks');
     } catch (e) {
@@ -653,7 +712,7 @@ function RecordForm({ cadet }: { cadet: Cadet }) {
 
   return (
     <div className="card card-pad col gap-16">
-      <Seg value={kind} onChange={(k) => (setKind(k), setCategory(''))} options={kinds.map((k) => ({ value: k, label: RECORD_KIND_LABELS[k] }))} />
+      <Seg value={kind} onChange={(k) => (setKind(k), setCategory(''), pickOffense(''))} options={kinds.map((k) => ({ value: k, label: RECORD_KIND_LABELS[k] }))} />
       {categories.length > 0 && (
         <div className="chips">
           {categories.map((x) => (
@@ -661,6 +720,77 @@ function RecordForm({ cadet }: { cadet: Cadet }) {
               {x}
             </button>
           ))}
+        </div>
+      )}
+      {kind === 'discipline' && offenses.length > 0 && (
+        <Field label="המקרה לפי מדרג האכיפה">
+          <select className="select" value={offense} onChange={(e) => pickOffense(e.target.value)}>
+            <option value="">אחר / לא מהמדרג</option>
+            {[...new Set(offenses.map((o) => o.category))].map((cat) => (
+              <optgroup key={cat || '-'} label={cat || 'מקרים'}>
+                {offenses
+                  .filter((o) => o.category === cat)
+                  .map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </Field>
+      )}
+      {kind === 'discipline' && offenses.length === 0 && isCommander && guide.data && (
+        <div className="tiny muted">
+          אפשר לטעון את מדרג האכיפה של הקורס ב<Link to="/settings">הגדרות</Link>, ואז המערכת תראה כאן איזו פעם זו ומה הצעד לפי המדרג.
+        </div>
+      )}
+      {chosen && (
+        <div className={`ladder-hint ${step?.note || step?.committee ? 't-red' : 't-orange'}`} role="status">
+          <div className="strong">
+            {timeLabel(occurrence)} של {cadet.firstName} · {chosen.name}
+          </div>
+          {step ? (
+            <div style={{ whiteSpace: 'pre-wrap' }}>
+              {beyond ? 'מעבר לשלבים שבמדרג. הצעד האחרון במדרג: ' : 'לפי המדרג: '}
+              {step.text}
+            </div>
+          ) : (
+            <div>אין במדרג צעד לפעם הזו.</div>
+          )}
+          {step?.committee && (
+            <div>
+              עולה לוועדת הערכה · <Link to={`/evaluations/${cadet.id}`}>לתיק ההערכה</Link>
+            </div>
+          )}
+          {prior.length > 0 && <div className="tiny muted">קודם: {prior.map((r) => shortDate(r.occurredOn)).join(', ')}</div>}
+        </div>
+      )}
+      {kind === 'discipline' && (
+        <label className="check">
+          <input type="checkbox" checked={formal} onChange={(e) => setFormalSet(e.target.checked)} />
+          <span>
+            <b>הערת משמעת</b>{' '}
+            <span className="small muted">
+              · עד עכשיו {cadet.disciplineNotes} מתוך {DISCIPLINE_NOTE_LIMIT}
+              {cadet.status === 'active' && cadet.disciplineNotes === DISCIPLINE_NOTE_LIMIT - 1 && ' - הערה נוספת תדיח אותו מהקורס'}
+            </span>
+          </span>
+        </label>
+      )}
+      {kind === 'discipline' && formal && letters.length > 0 && (
+        <div className="row wrap gap-6">
+          <select className="select grow" value={letter ?? ''} onChange={(e) => setLetterSet(e.target.value === '' ? null : Number(e.target.value))} aria-label="נוסח הערת המשמעת" style={{ minWidth: 200 }}>
+            <option value="">נוסח הערת המשמעת מהמסמך...</option>
+            {letters.map((l, i) => (
+              <option key={i} value={i}>
+                {l.title}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-sm" disabled={letter === null} onClick={insertLetter}>
+            הוספת הנוסח
+          </button>
         </div>
       )}
       {kind === 'evaluation' && (
@@ -724,7 +854,7 @@ function RecordForm({ cadet }: { cadet: Cadet }) {
         </div>
       )}
       <div className="row">
-        <button className="btn btn-primary" disabled={busy || !body.trim() || (kind === 'evaluation' && !score)} onClick={() => void submit()}>
+        <button className="btn btn-primary" disabled={busy || (!body.trim() && !(kind === 'discipline' && offense)) || (kind === 'evaluation' && !score)} onClick={() => void submit()}>
           שמור בתיק
         </button>
         <ErrorBox error={error} />
@@ -738,9 +868,19 @@ function Records({ records }: { records: CadetRecord[] }) {
   return (
     <div className="list">
       {records.map((r) => (
-        <div key={r.id} className={`card card-pad t-${KIND_TONE[r.kind]}`} style={{ borderRight: '4px solid var(--tone)', padding: 14 }}>
+        <div key={r.id} className={`card card-pad t-${r.formal ? 'red' : KIND_TONE[r.kind]}`} style={{ borderRight: '4px solid var(--tone)', padding: 14 }}>
           <div className="row wrap gap-6">
             <span className={`badge t-${KIND_TONE[r.kind]}`}>{RECORD_KIND_LABELS[r.kind]}</span>
+            {r.formal && (
+              <span className="badge t-red">
+                הערת משמעת{r.noteNumber ? ` ${r.noteNumber}/${DISCIPLINE_NOTE_LIMIT}` : ''}
+              </span>
+            )}
+            {r.occurrence && (
+              <span className="badge" title={r.offense}>
+                {timeLabel(r.occurrence)}
+              </span>
+            )}
             {r.category && <span className="badge">{r.category}</span>}
             {r.score !== null && <span className="badge t-gray mono">ציון {r.score}/5</span>}
             {r.private && (

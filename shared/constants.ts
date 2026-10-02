@@ -146,6 +146,8 @@ export const RESTRICTED_RECORD_KINDS: readonly RecordKind[] = ['talk', 'discipli
 
 export const EVALUATION_CRITERIA = ['פיקוד והובלה', 'מקצועיות', 'ערכים ודוגמה אישית', 'עבודת צוות', 'יוזמה', 'כושר גופני'] as const;
 export const DISCIPLINE_SEVERITIES = ['קלה', 'בינונית', 'חמורה'] as const;
+/** A cadet who gets this many discipline notes (הערות משמעת) is dismissed from the course. */
+export const DISCIPLINE_NOTE_LIMIT = 3;
 export const TALK_TYPES = ['שיחת היכרות', 'שיחת אמצע', 'שיחת משוב', 'שיחה יזומה', 'שיחת סיום'] as const;
 
 // ---------------- evaluation files (תיקי הערכה) ----------------

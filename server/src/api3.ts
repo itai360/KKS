@@ -56,6 +56,7 @@ import {
 import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
 import { getFile, sendStoredFile, uploadName } from './files';
 import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
+import { deleteGuide, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
 import { bulkSchema, runBulk } from './bulk';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
@@ -118,6 +119,24 @@ export function v3Router(): Router {
   });
   r.delete('/records/:id', (req, res) => {
     deleteRecord(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // ---------------- enforcement ladder (from the course's document) ----------------
+
+  r.get('/discipline/guide', (_req, res) => res.json(getGuide()));
+  r.post('/discipline/guide/link', requireCommander, async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    res.json(saveGuide(me(req), await guideFromLink(url, config.maxUploadMb * 1024 * 1024), url));
+  });
+  // a Word file, or the document pasted (its HTML)
+  r.post('/discipline/guide/file', requireCommander, express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    const name = req.headers['x-filename'] ? uploadName(req.headers['x-filename']) : '';
+    res.json(saveGuide(me(req), guideFromFile(req.body), name && name !== 'pasted.html' ? `קובץ: ${name}` : 'הדבקה מהמסמך'));
+  });
+  r.delete('/discipline/guide', requireCommander, (req, res) => {
+    deleteGuide(me(req));
     res.json({ ok: true });
   });
 

@@ -11,7 +11,7 @@ type Table = string[][];
 // ---------------- reading files ----------------
 
 /** The files inside a zip archive (stored or deflated entries). */
-function unzip(buf: Buffer): Map<string, Buffer> {
+export function unzip(buf: Buffer, invalid = 'הקובץ אינו קובץ אקסל תקין'): Map<string, Buffer> {
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) {
@@ -19,7 +19,7 @@ function unzip(buf: Buffer): Map<string, Buffer> {
       break;
     }
   }
-  if (eocd < 0) throw badRequest('הקובץ אינו קובץ אקסל תקין');
+  if (eocd < 0) throw badRequest(invalid);
   const count = buf.readUInt16LE(eocd + 10);
   let p = buf.readUInt32LE(eocd + 16);
   const files = new Map<string, Buffer>();
@@ -40,7 +40,8 @@ function unzip(buf: Buffer): Map<string, Buffer> {
   return files;
 }
 
-const decode = (s: string) =>
+/** XML and HTML character references. */
+export const decode = (s: string) =>
   s
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -227,6 +228,9 @@ export function googleDownloadUrls(raw: string): string[] {
 }
 
 let fetcher = async (url: string): Promise<Response> => fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15_000) });
+
+/** A request to Google (replaced in tests). */
+export const googleFetch = (url: string) => fetcher(url);
 
 /** Tests replace the network. */
 export function setSheetFetcher(fn: typeof fetcher): void {

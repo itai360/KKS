@@ -3211,6 +3211,77 @@ tr.selected td {
   margin: 8px 16px 12px;
 }
 
+/* discipline notes: the count on the cadet page, and the enforcement ladder */
+.note-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.note-dots i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line-2);
+}
+.note-dots i.on {
+  background: var(--tone, var(--red));
+  border-color: var(--tone, var(--red));
+}
+
+.discipline-card.t-orange,
+.discipline-card.t-red {
+  border-color: var(--tone);
+  background: linear-gradient(var(--tone-bg), var(--tone-bg)) top / 100% 4px no-repeat, var(--card);
+}
+
+.guide-offense {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+
+.guide-steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.guide-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13.5px;
+}
+.guide-steps li.note {
+  font-weight: 600;
+}
+.guide-time {
+  flex: 0 0 84px;
+  color: var(--muted);
+  font-size: 12.5px;
+  padding-top: 1px;
+}
+
+.guide-letter summary {
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+.ladder-hint {
+  border-right: 4px solid var(--tone);
+  background: var(--tone-bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13.5px;
+}
+.ladder-hint .strong {
+  color: var(--tone-ink);
+}
+
 /* "המשימות שלי": the numbers at the top lead to their groups */
 .group-title {
   scroll-margin-top: calc(var(--top-h) + 12px);

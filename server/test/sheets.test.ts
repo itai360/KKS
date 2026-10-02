@@ -1,10 +1,9 @@
 // Cadet lists from spreadsheets: Excel files in the common layouts, CSV, Google
 // links, and an import that moves cadets between teams instead of adding copies.
 
-import { crc32 } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cadetsFromSpreadsheet, googleDownloadUrls, readCsv, setSheetFetcher } from '../src/sheets';
-import { setup, type Ctx } from './helpers';
+import { setup, zip, type Ctx } from './helpers';
 
 /** A minimal .xlsx (stored zip entries): one sheet per array of rows. */
 function xlsx(sheets: Record<string, (string | number)[][]>): Buffer {
@@ -33,38 +32,7 @@ function xlsx(sheets: Record<string, (string | number)[][]>): Buffer {
     ]),
   ];
   files.push(['xl/sharedStrings.xml', `<sst>${strings.map((s) => `<si><t>${esc(s)}</t></si>`).join('')}</sst>`]);
-  const locals: Buffer[] = [];
-  const central: Buffer[] = [];
-  let offset = 0;
-  for (const [name, content] of files) {
-    const data = Buffer.from(content);
-    const n = Buffer.from(name);
-    const crc = crc32(data);
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(data.length, 22);
-    local.writeUInt16LE(n.length, 26);
-    locals.push(local, n, data);
-    const c = Buffer.alloc(46);
-    c.writeUInt32LE(0x02014b50, 0);
-    c.writeUInt32LE(crc, 16);
-    c.writeUInt32LE(data.length, 20);
-    c.writeUInt32LE(data.length, 24);
-    c.writeUInt16LE(n.length, 28);
-    c.writeUInt32LE(offset, 42);
-    central.push(c, n);
-    offset += 30 + n.length + data.length;
-  }
-  const cd = Buffer.concat(central);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(files.length, 8);
-  end.writeUInt16LE(files.length, 10);
-  end.writeUInt32LE(cd.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, cd, end]);
+  return zip(files);
 }
 
 // like a course grade sheet: the "צוות" column numbers the cadets, the team is a title row above them

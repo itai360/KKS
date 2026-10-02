@@ -14,6 +14,7 @@ import { addDependency, addUpdate, createRequest, createTasks, respondOverdue, t
 import { saveTemplate, applyTemplate } from './templates';
 import { addLesson, approveWeek, closeWeek, generateWeeks, openWeek } from './weeks';
 import { addRecord, createExperience, giveFeedback, saveTeam } from './cadets';
+import { demoStep, linkLetters, saveGuide } from './discipline';
 import { addItem, createDebrief, itemToTask, updateDebrief } from './debriefs';
 import { createLinkDocument } from './documents';
 
@@ -353,8 +354,30 @@ export function seedDemoData(PASSWORD = 'kks12345'): { tasks: number; weeks: num
       followUpTask: { title: 'שיחה חוזרת עם מאיה לוי', deadline: d(1, '20:00') },
     }),
   );
-  at(d(-3, '08:30'), () => addRecord(u(ids.s3), cadetIds[2], { kind: 'discipline', category: 'קלה', body: 'איחור של 10 דקות למסדר בוקר. שיחת בירור ואזהרה.' }));
-  at(d(-2, '22:00'), () => addRecord(u(ids.s3), cadetIds[6], { kind: 'discipline', category: 'בינונית', body: 'שימוש בטלפון בזמן שיעור לאחר אזהרה. ריתוק לסוף השבוע.' }));
+  // a short sample enforcement ladder (a real course imports its own document in the settings)
+  at(d(-12, '09:00'), () =>
+    saveGuide(
+      cmd,
+      linkLetters({
+        offenses: [
+          { key: 'זמנים · איחור למסדר', category: 'זמנים', name: 'איחור למסדר', definition: [], steps: ['הערה במקום', 'שיחת אזהרה עם מפקד הצוות', 'שעה ביציאה', 'הערת משמעת'].map(demoStep) },
+          { key: 'טלפונים · שימוש בטלפון בשיעור', category: 'טלפונים', name: 'שימוש בטלפון בשיעור', definition: ['הודעות, משחקים, גלישה'], steps: ['הערה במקום', 'שיחת אזהרה עם מפקד הצוות', 'הערת משמעת'].map(demoStep) },
+          { key: 'ציוד · שכחת ציוד אישי', category: 'ציוד', name: 'שכחת ציוד אישי', definition: [], steps: ['הערה במקום', 'השלמת הציוד ושיחה עם מפקד הצוות'].map(demoStep) },
+        ],
+        letters: [
+          { title: 'שימוש בטלפון בשיעור - פעם שלישית', body: '1. המעשה: שימוש בטלפון בשיעור, בפעם השלישית.\n2. ההשלכות: שלוש הערות משמעת מובילות להדחה מהקורס.\n3. הציפייה: להקפיד על הנוהל מעכשיו.' },
+          { title: 'איחור למסדר - פעם רביעית', body: '1. המעשה: איחור חוזר למסדר.\n2. ההשלכות: שלוש הערות משמעת מובילות להדחה מהקורס.\n3. הציפייה: להגיע בזמן, בלי תזכורות.' },
+        ],
+      }),
+      'דוגמה',
+    ),
+  );
+  at(d(-9, '08:30'), () => addRecord(u(ids.s3), cadetIds[2], { kind: 'discipline', offense: 'זמנים · איחור למסדר', body: 'איחור של 5 דקות למסדר בוקר.', occurredOn: addDays(today, -9) }));
+  at(d(-3, '08:30'), () => addRecord(u(ids.s3), cadetIds[2], { kind: 'discipline', offense: 'זמנים · איחור למסדר', category: 'קלה', body: 'איחור של 10 דקות למסדר בוקר. שיחת בירור ואזהרה.' }));
+  at(d(-8, '11:00'), () => addRecord(u(ids.s3), cadetIds[6], { kind: 'discipline', offense: 'טלפונים · שימוש בטלפון בשיעור', body: 'הודעות בטלפון באמצע שיעור.', occurredOn: addDays(today, -8) }));
+  at(d(-6, '10:00'), () => addRecord(u(ids.s3), cadetIds[6], { kind: 'discipline', formal: true, title: 'הערת משמעת - ציוד אישי בשטח', body: 'השאיר ציוד אישי ללא השגחה בשטח אחרי שתי אזהרות.', occurredOn: addDays(today, -6) }));
+  at(d(-5, '14:00'), () => addRecord(u(ids.s3), cadetIds[6], { kind: 'discipline', offense: 'טלפונים · שימוש בטלפון בשיעור', body: 'שוב טלפון בשיעור. שיחת אזהרה.', occurredOn: addDays(today, -5) }));
+  at(d(-2, '22:00'), () => addRecord(u(ids.s3), cadetIds[6], { kind: 'discipline', offense: 'טלפונים · שימוש בטלפון בשיעור', formal: true, category: 'בינונית', body: 'שימוש בטלפון בזמן שיעור לאחר אזהרה. ריתוק לסוף השבוע.' }));
   at(d(-1, '17:00'), () => addRecord(u(ids.s4), cadetIds[3], { kind: 'note', body: 'בלטה בתדריך הבטיחות - שאלות חכמות והכנה מעולה.' }));
   at(d(-1, '18:00'), () => addRecord(u(ids.s5), cadetIds[0], { kind: 'note', body: 'עזר לצוער אחר עם הציוד בניווט בלי שהתבקש.' }));
 

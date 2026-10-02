@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import {
   CADET_STATUSES,
+  DISCIPLINE_NOTE_LIMIT,
   RECORD_KINDS,
   RESTRICTED_RECORD_KINDS,
   type CadetStatus,
@@ -12,7 +13,7 @@ import {
 } from '../../shared/constants';
 import { isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import type { Cadet, CadetDetail, CadetRecord, Experience, Team } from '../../shared/types';
-import { getUserRow, type UserRow } from './auth';
+import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
@@ -81,6 +82,7 @@ export interface CadetRow {
   phone: string;
   notes: string;
   status: CadetStatus;
+  dismissed_by_record: number | null;
 }
 
 const CADET_BASE = `
@@ -106,6 +108,8 @@ export interface RecordRow {
   author_name: string;
   occurred_on: string;
   created_at: string;
+  offense: string;
+  formal: number;
 }
 
 export const RECORD_BASE = `
@@ -149,12 +153,31 @@ export function toCadet(actor: UserRow, c: CadetRow, records: RecordRow[]): Cade
     lastRecordAt: visible.reduce<string | null>((m, r) => (m && m > r.created_at ? m : r.created_at), null),
     avgScore: scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null,
     disciplineCount: visible.filter((r) => r.kind === 'discipline').length,
+    disciplineNotes: visible.filter((r) => r.kind === 'discipline' && r.formal).length,
+    dismissedByNotes: canManageCadet(actor, c) && c.dismissed_by_record !== null,
     talkCount: visible.filter((r) => r.kind === 'talk').length,
     canManage: canManageCadet(actor, c),
   };
 }
 
-export function toRecord(actor: UserRow, r: RecordRow): CadetRecord {
+/**
+ * For each discipline record of a cadet: which time its offense happened, and
+ * its number among the discipline notes - counted over the whole file, by date.
+ */
+export function disciplineOrder(rows: RecordRow[]): Map<number, { occurrence: number | null; noteNumber: number | null }> {
+  const sorted = rows.filter((r) => r.kind === 'discipline').sort((a, b) => a.occurred_on.localeCompare(b.occurred_on) || a.id - b.id);
+  const seen = new Map<string, number>();
+  let notes = 0;
+  const out = new Map<number, { occurrence: number | null; noteNumber: number | null }>();
+  for (const r of sorted) {
+    const occurrence = r.offense ? (seen.get(r.offense) ?? 0) + 1 : null;
+    if (r.offense) seen.set(r.offense, occurrence!);
+    out.set(r.id, { occurrence, noteNumber: r.formal ? ++notes : null });
+  }
+  return out;
+}
+
+export function toRecord(actor: UserRow, r: RecordRow, order?: Map<number, { occurrence: number | null; noteNumber: number | null }>): CadetRecord {
   return {
     id: r.id,
     cadetId: r.cadet_id,
@@ -174,6 +197,10 @@ export function toRecord(actor: UserRow, r: RecordRow): CadetRecord {
     occurredOn: r.occurred_on,
     createdAt: r.created_at,
     canDelete: isCommander(actor) || r.author_id === actor.id,
+    offense: r.offense,
+    occurrence: order?.get(r.id)?.occurrence ?? null,
+    formal: !!r.formal,
+    noteNumber: order?.get(r.id)?.noteNumber ?? null,
   };
 }
 
@@ -235,7 +262,7 @@ export function updateCadet(actor: UserRow, id: number, raw: Partial<z.input<typ
   if (p.teamId !== undefined && p.teamId !== cur.team_id && !isCommander(actor)) throw forbidden('העברת צוער בין צוותים שמורה למפקד הקורס');
   if (p.teamId) teamCommander(p.teamId);
   db().run(
-    'UPDATE cadets SET first_name = ?, last_name = ?, personal_number = ?, team_id = ?, phone = ?, notes = ?, status = ?, updated_at = ? WHERE id = ?',
+    'UPDATE cadets SET first_name = ?, last_name = ?, personal_number = ?, team_id = ?, phone = ?, notes = ?, status = ?, dismissed_by_record = ?, updated_at = ? WHERE id = ?',
     p.firstName ?? cur.first_name,
     p.lastName ?? cur.last_name,
     p.personalNumber ?? cur.personal_number,
@@ -243,6 +270,8 @@ export function updateCadet(actor: UserRow, id: number, raw: Partial<z.input<typ
     p.phone ?? cur.phone,
     p.notes ?? cur.notes,
     p.status ?? cur.status,
+    // a status set by hand replaces a dismissal by discipline notes
+    (p.status ?? cur.status) === cur.status ? cur.dismissed_by_record : null,
     nowIso(),
     id,
   );
@@ -400,12 +429,19 @@ export const recordSchema = z
     followUp: z.string().trim().max(2000).optional().default(''),
     private: z.boolean().optional().default(false),
     occurredOn: z.string().refine(isDateKey, 'תאריך לא תקין').optional(),
+    /** discipline: the offense from the enforcement ladder */
+    offense: z.string().trim().max(300).optional().default(''),
+    /** discipline: a discipline note (הערת משמעת) */
+    formal: z.boolean().optional().default(false),
     followUpTask: z
       .object({ title: z.string().trim().min(1).max(200), deadline: isoDateTime, ownerId: z.number().int().positive().optional() })
       .optional(),
   })
   .refine((r) => r.kind !== 'evaluation' || r.score !== null, { message: 'יש לתת ציון להערכה (1-5)', path: ['score'] })
-  .refine((r) => r.body || r.title, { message: 'יש לכתוב תוכן', path: ['body'] });
+  .refine((r) => r.body || r.title || (r.kind === 'discipline' && r.offense), { message: 'יש לכתוב תוכן', path: ['body'] });
+
+const formalNotes = (cadetId: number) =>
+  db().get<{ n: number }>("SELECT count(*) AS n FROM cadet_records WHERE cadet_id = ? AND kind = 'discipline' AND formal = 1", cadetId)!.n;
 
 export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof recordSchema>): number {
   const c = cadetRow(cadetId);
@@ -414,6 +450,9 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
   if (RESTRICTED_RECORD_KINDS.includes(r.kind) && !manage) throw forbidden('שיחות אישיות ומשמעת נרשמות על ידי מפקד הצוות או מפקד הקורס');
   const occurredOn = r.occurredOn ?? today();
   const name = `${c.first_name} ${c.last_name}`.trim();
+  const discipline = r.kind === 'discipline';
+  const offense = discipline ? r.offense : '';
+  const formal = discipline && r.formal;
   let id = 0;
   db().tx(() => {
     let taskId: number | null = null;
@@ -435,11 +474,11 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
       );
     }
     id = db().run(
-      `INSERT INTO cadet_records(cadet_id, kind, title, body, category, score, follow_up, private, task_id, week_id, author_id, occurred_on, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO cadet_records(cadet_id, kind, title, body, category, score, follow_up, private, task_id, week_id, author_id, occurred_on, created_at, offense, formal)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       cadetId,
       r.kind,
-      r.title,
+      r.title || (offense ? offense.split(' · ').pop()! : ''),
       r.body,
       r.category,
       r.kind === 'evaluation' ? r.score : null,
@@ -450,7 +489,10 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
       actor.id,
       occurredOn,
       nowIso(),
+      offense,
+      formal,
     ).id;
+    if (formal) disciplineNoteGiven(actor, c, name, id);
     if (c.team_commander_id && c.team_commander_id !== actor.id && (r.kind === 'evaluation' || r.kind === 'note')) {
       notify(
         [c.team_commander_id],
@@ -463,11 +505,36 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
   return id;
 }
 
+/**
+ * A discipline note was recorded: the commanders hear of it, and the note that
+ * reaches the limit dismisses an active cadet - remembered, so that deleting a
+ * note (a mistake) brings the cadet back.
+ */
+function disciplineNoteGiven(actor: UserRow, c: CadetRow, name: string, recordId: number): void {
+  const notes = formalNotes(c.id);
+  const to = [...commanderIds(), c.team_commander_id];
+  if (notes >= DISCIPLINE_NOTE_LIMIT && c.status === 'active') {
+    db().run("UPDATE cadets SET status = 'dropped', dismissed_by_record = ?, updated_at = ? WHERE id = ?", recordId, nowIso(), c.id);
+    logActivity({ userId: actor.id, action: 'cadet_status', text: `${name} קיבל הערת משמעת ${notes} והודח מהקורס` });
+    notify(to, { type: 'cadet_record', category: 'exception', title: `${name} קיבל הערת משמעת ${notes} מתוך ${DISCIPLINE_NOTE_LIMIT} והודח מהקורס`, link: `/cadets/${c.id}` }, actor.id);
+    return;
+  }
+  notify(to, { type: 'cadet_record', category: 'exception', title: `${actor.display_name} נתן הערת משמעת ל${name} (${notes} מתוך ${DISCIPLINE_NOTE_LIMIT})`, link: `/cadets/${c.id}` }, actor.id);
+}
+
 export function deleteRecord(actor: UserRow, id: number): void {
-  const r = db().get<{ author_id: number }>('SELECT author_id FROM cadet_records WHERE id = ?', id);
+  const r = db().get<{ author_id: number; cadet_id: number; formal: number }>('SELECT author_id, cadet_id, formal FROM cadet_records WHERE id = ?', id);
   if (!r) throw notFound();
   if (!isCommander(actor) && r.author_id !== actor.id) throw forbidden();
-  db().run('DELETE FROM cadet_records WHERE id = ?', id);
+  db().tx(() => {
+    db().run('DELETE FROM cadet_records WHERE id = ?', id);
+    // a dismissal by discipline notes ends when a note is deleted and fewer than the limit remain
+    const c = cadetRow(r.cadet_id);
+    if (r.formal && c.dismissed_by_record !== null && formalNotes(c.id) < DISCIPLINE_NOTE_LIMIT) {
+      db().run("UPDATE cadets SET status = 'active', dismissed_by_record = NULL, updated_at = ? WHERE id = ?", nowIso(), c.id);
+      logActivity({ userId: actor.id, action: 'cadet_status', text: `הערת משמעת של ${c.first_name} ${c.last_name} נמחקה - הצוער חזר לסטטוס פעיל` });
+    }
+  });
   changed('cadets');
 }
 
@@ -475,9 +542,10 @@ export function cadetDetail(actor: UserRow, id: number): CadetDetail {
   const c = cadetRow(id);
   const rows = db().all<RecordRow>(`${RECORD_BASE} WHERE r.cadet_id = ? ORDER BY r.occurred_on DESC, r.id DESC`, id);
   const visible = rows.filter((r) => canViewRecord(actor, r, c));
+  const order = disciplineOrder(rows);
   return {
     cadet: toCadet(actor, c, rows),
-    records: visible.map((r) => toRecord(actor, r)),
+    records: visible.map((r) => toRecord(actor, r, order)),
     experiences: listExperiences(actor, { cadetId: id }),
     tasks: visibleTasks(actor, 't.cadet_id = ?', id),
     scores: visible
