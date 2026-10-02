@@ -10,7 +10,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
+import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
 import { api } from '../lib/api';
 import { isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -192,7 +192,7 @@ type ItemDialog = null | { item: DebriefItem; to: 'task' | 'recurring' | 'templa
 
 export function DebriefPage() {
   const { id } = useParams();
-  const { data, error, loading, setData } = useApi<DebriefDetail>(`/api/debriefs/${id}`, ['debriefs', 'tasks']);
+  const { data, error, loading, setData, status } = useApi<DebriefDetail>(`/api/debriefs/${id}`, ['debriefs', 'tasks']);
   const { isCommander } = useSession();
   const toast = useToast();
   const navigate = useNavigate();
@@ -208,7 +208,7 @@ export function DebriefPage() {
   if (!data)
     return (
       <div className="page">
-        <ErrorBox error={error} />
+        <PageError error={error} status={status} what="התחקיר" back="/debriefs" backLabel="לרשימת התחקירים" />
       </div>
     );
   const d = data.debrief;

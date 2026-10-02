@@ -27,7 +27,7 @@ import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { NoteDots, NotesBadge, noteTone, timeLabel } from '../components/Discipline';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
+import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
 import { api } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
@@ -180,7 +180,7 @@ export function EvaluationsPage() {
 
 export function EvaluationFilePage() {
   const { cadetId } = useParams();
-  const { data, setData, error, loading } = useApi<EvaluationFile>(`/api/evaluations/${cadetId}`, ['cadets']);
+  const { data, setData, error, loading, status } = useApi<EvaluationFile>(`/api/evaluations/${cadetId}`, ['cadets']);
   const [dialog, setDialog] = useState<null | 'refer' | { decide: Committee }>(null);
   const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -194,7 +194,7 @@ export function EvaluationFilePage() {
   if (!data)
     return (
       <div className="page">
-        <ErrorBox error={error} />
+        <PageError error={error} status={status} what="תיק ההערכה" back="/evaluations" backLabel="לתיקי ההערכה" />
       </div>
     );
 
@@ -815,7 +815,7 @@ function DecisionDialog({ committee, name, onClose, onDone }: { committee: Commi
 
 export function CommitteePage() {
   const { id } = useParams();
-  const { data, error, loading } = useApi<CommitteeDetail>(`/api/evaluations/committees/${id}`, ['cadets']);
+  const { data, error, loading, status } = useApi<CommitteeDetail>(`/api/evaluations/committees/${id}`, ['cadets']);
   if (loading && !data)
     return (
       <div className="page">
@@ -825,7 +825,7 @@ export function CommitteePage() {
   if (!data)
     return (
       <div className="page">
-        <ErrorBox error={error} />
+        <PageError error={error} status={status} what="הוועדה" feminine back="/evaluations" backLabel="לתיקי ההערכה" />
       </div>
     );
   const { committee: x, file } = data;

@@ -27,7 +27,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
+import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
@@ -497,7 +497,7 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
 
 export function CadetPage() {
   const { id } = useParams();
-  const { data, error, loading } = useApi<CadetDetail>(`/api/cadets/${id}`, ['cadets', 'tasks']);
+  const { data, error, loading, status } = useApi<CadetDetail>(`/api/cadets/${id}`, ['cadets', 'tasks']);
   const teams = useApi<Team[]>('/api/teams', ['cadets']);
   const { isCommander, user } = useSession();
   const newTask = useNewTask();
@@ -514,7 +514,7 @@ export function CadetPage() {
   if (!data)
     return (
       <div className="page">
-        <ErrorBox error={error} />
+        <PageError error={error} status={status} what="הצוער" back="/cadets" backLabel="לרשימת הצוערים" />
       </div>
     );
   const c = data.cadet;

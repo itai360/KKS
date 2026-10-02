@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { Icon } from './Icon';
 
@@ -92,6 +93,39 @@ export function Loading({ rows = 3 }: { rows?: number }) {
         <div key={i} className="skeleton" />
       ))}
     </div>
+  );
+}
+
+/**
+ * A screen whose item could not be loaded: one that does not exist (or was
+ * deleted while the screen was open) says so and leads back to its list.
+ */
+export function PageError({
+  error,
+  status,
+  what,
+  feminine,
+  back,
+  backLabel,
+}: {
+  error: string | null;
+  status: number | null;
+  what: string;
+  feminine?: boolean;
+  back: string;
+  backLabel: string;
+}) {
+  if (status !== 404) return <ErrorBox error={error} />;
+  return (
+    <Empty
+      icon="search"
+      title={`${what} ${feminine ? 'לא נמצאה' : 'לא נמצא'}`}
+      text={
+        <>
+          {feminine ? 'ייתכן שנמחקה' : 'ייתכן שנמחק'}, או שהקישור שגוי. <Link to={back}>{backLabel}</Link>
+        </>
+      }
+    />
   );
 }
 

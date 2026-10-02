@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from './api';
+import { api, ApiError } from './api';
 import { onChange } from './realtime';
 
 export interface ApiState<T> {
   data: T | undefined;
   error: string | null;
+  /** the failed request's HTTP status (404: it does not exist, or no longer), 0 without a connection */
+  status: number | null;
   loading: boolean;
   reload: () => Promise<void>;
   setData: (d: T) => void;
@@ -17,6 +19,7 @@ export interface ApiState<T> {
 export function useApi<T>(url: string | null, topics: string[] = ['tasks']): ApiState<T> {
   const [data, setData] = useState<T | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(!!url);
   const urlRef = useRef(url);
   urlRef.current = url;
@@ -31,9 +34,15 @@ export function useApi<T>(url: string | null, topics: string[] = ['tasks']): Api
       if (mine === seq.current && urlRef.current === u) {
         setData(d);
         setError(null);
+        setStatus(null);
       }
     } catch (e) {
-      if (mine === seq.current) setError((e as Error).message);
+      if (mine === seq.current) {
+        setError((e as Error).message);
+        setStatus(e instanceof ApiError ? e.status : null);
+        // it no longer exists (deleted while the screen was open): do not keep showing it
+        if (e instanceof ApiError && e.status === 404) setData(undefined);
+      }
     } finally {
       if (mine === seq.current) setLoading(false);
     }
@@ -65,7 +74,7 @@ export function useApi<T>(url: string | null, topics: string[] = ['tasks']): Api
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, topicKey, load]);
 
-  return { data, error, loading, reload: load, setData };
+  return { data, error, status, loading, reload: load, setData };
 }
 
 /** Re-renders every `ms` so relative times ("לפני 3 דקות", overdue) stay fresh. */

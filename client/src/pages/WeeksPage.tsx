@@ -11,7 +11,7 @@ import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Bar, Empty, ErrorBox, Field, Loading, Modal, PageHead, Ring, Seg } from '../components/ui';
+import { Bar, Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Ring, Seg } from '../components/ui';
 import { api } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -282,7 +282,7 @@ type Dialog = null | 'edit' | 'open' | 'close';
 
 export function WeekPage() {
   const { id } = useParams();
-  const { data, error, loading } = useApi<WeekDetail>(`/api/weeks/${id}`, ['weeks', 'tasks', 'events']);
+  const { data, error, loading, status } = useApi<WeekDetail>(`/api/weeks/${id}`, ['weeks', 'tasks', 'events']);
   const { isCommander, user } = useSession();
   const newTask = useNewTask();
   const toast = useToast();
@@ -298,7 +298,7 @@ export function WeekPage() {
   if (!data)
     return (
       <div className="page">
-        <ErrorBox error={error} />
+        <PageError error={error} status={status} what="השבוע" back="/weeks" backLabel="לשבועות הקורס" />
       </div>
     );
   const w = data.week;

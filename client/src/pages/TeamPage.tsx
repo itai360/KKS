@@ -8,7 +8,7 @@ import { staffHealthLabel } from '@shared/taskLogic';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
-import { Empty, ErrorBox, Loading, PageHead, Ring, initials } from '../components/ui';
+import { Empty, ErrorBox, PageError, Loading, PageHead, Ring, initials } from '../components/ui';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
@@ -76,7 +76,7 @@ export function StaffPage() {
   const { id } = useParams();
   const { isCommander } = useSession();
   const newTask = useNewTask();
-  const { data, error, loading } = useApi<StaffPageData>(`/api/team/${id}`, ['tasks', 'weeks']);
+  const { data, error, loading, status } = useApi<StaffPageData>(`/api/team/${id}`, ['tasks', 'weeks']);
   const [tab, setTab] = useState<Tab>('open');
 
   if (loading && !data)
@@ -88,7 +88,7 @@ export function StaffPage() {
   if (!data)
     return (
       <div className="page">
-        <ErrorBox error={error} />
+        <PageError error={error} status={status} what="איש הסגל" back="/team" backLabel="לרשימת הסגל" />
       </div>
     );
   const s = data.stats;

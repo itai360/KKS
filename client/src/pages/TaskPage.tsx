@@ -10,7 +10,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskActions, useTaskMutation } from '../components/TaskActions';
 import { TaskList } from '../components/TaskRow';
-import { Bar, ErrorBox, Loading, Modal } from '../components/ui';
+import { Bar, ErrorBox, PageError, Loading, Modal } from '../components/ui';
 import { api } from '../lib/api';
 import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
 import { useSession } from '../lib/session';
@@ -19,7 +19,7 @@ import { useApi, useTick } from '../lib/useApi';
 export function TaskPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data, error, loading, setData } = useApi<TaskDetail>(`/api/tasks/${id}`, ['tasks']);
+  const { data, error, loading, setData, status } = useApi<TaskDetail>(`/api/tasks/${id}`, ['tasks']);
   useTick(30_000);
 
   if (loading && !data)
@@ -31,7 +31,7 @@ export function TaskPage() {
   if (error && !data)
     return (
       <div className="page narrow">
-        <ErrorBox error={error} />
+        <PageError error={error} status={status} what="המשימה" feminine back="/tasks" backLabel="לכל המשימות" />
         <button className="btn mt-16" onClick={() => navigate(-1)}>
           חזרה
         </button>
