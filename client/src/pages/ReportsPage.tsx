@@ -7,7 +7,7 @@ import type { ActivityEntry, DayEndData, DisciplineLogEntry, DisciplineSummary, 
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { GroupTitle, TaskList } from '../components/TaskRow';
-import { Bar, Empty, ErrorBox, Loading, PageHead, Ring } from '../components/ui';
+import { Bar, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtLongDate, todayKey } from '../lib/format';
 import { api, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
@@ -235,7 +235,7 @@ export function LookAheadPage() {
         <div className="fade-in col gap-16">
           <div className="grid-2">
             {data.weeks.map((w) => (
-              <div key={w.label} className="card card-pad row" style={{ cursor: w.week ? 'pointer' : 'default' }} onClick={() => w.week && navigate(`/weeks/${w.week.id}`)}>
+              <div key={w.label} className="card card-pad row" style={{ cursor: w.week ? 'pointer' : 'default' }} {...(w.week ? openable(() => navigate(`/weeks/${w.week!.id}`)) : {})}>
                 <div className="grow">
                   <div className="label-caps">{w.label}</div>
                   <div className="stat-num" style={{ fontSize: 58 }}>

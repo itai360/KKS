@@ -8,6 +8,7 @@ import { badRequest, forbidden, notFound, nowIso, patchSchema } from './core';
 import { db } from './db';
 import { putFile, removeFile } from './files';
 import { changed, logActivity } from './journal';
+import { matchesSearch } from '../../shared/search';
 import { isCommander } from './taskRepo';
 
 interface DocRow {
@@ -65,13 +66,13 @@ export function documentRow(actor: UserRow, id: number): DocRow {
 }
 
 export function listDocuments(actor: UserRow, f: { category?: string; weekId?: number; q?: string } = {}): CourseDocument[] {
-  const q = f.q?.trim().toLowerCase();
+  const q = f.q?.trim();
   return db()
     .all<DocRow>(`${BASE} ORDER BY d.pinned DESC, d.created_at DESC`)
     .filter((d) => canSee(actor, d))
     .filter((d) => !f.category || d.category === f.category)
     .filter((d) => !f.weekId || d.week_id === f.weekId)
-    .filter((d) => !q || [d.title, d.description, d.category, d.file_name].some((x) => x && x.toLowerCase().includes(q)))
+    .filter((d) => !q || matchesSearch(q, d.title, d.description, d.category, d.file_name))
     .map((d) => toDoc(actor, d));
 }
 

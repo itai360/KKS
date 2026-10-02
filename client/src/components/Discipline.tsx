@@ -15,6 +15,7 @@ import { noteTone } from './DisciplineCard';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { ErrorBox, Modal } from './ui';
+import { matchesSearch } from '@shared/search';
 import { ask } from './Confirm';
 
 export { NotesBadge, noteTone } from './DisciplineCard';
@@ -109,7 +110,7 @@ function OffenseSteps({ offense }: { offense: DisciplineOffense }) {
 export function GuideView({ guide }: { guide: DisciplineGuide }) {
   const [q, setQ] = useState('');
   const term = q.trim();
-  const offenses = guide.offenses.filter((o) => !term || o.key.includes(term) || o.definition.some((d) => d.includes(term)));
+  const offenses = guide.offenses.filter((o) => matchesSearch(term, o.key, o.category, ...o.definition));
   const categories = [...new Set(offenses.map((o) => o.category))];
   return (
     <div className="col gap-16">

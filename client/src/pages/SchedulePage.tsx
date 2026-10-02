@@ -13,7 +13,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
+import { Empty, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -376,7 +376,7 @@ function ExternalEventModal({ event: e, onClose }: { event: ExternalEvent; onClo
 function CourseEventRow({ e, isNow, onOpen }: { e: ScheduleEvent; isNow: boolean; onOpen: () => void }) {
   const bulk = useBulk();
   return (
-    <div className={`event-row${e.cancelled ? ' cancelled' : ''}${isNow ? ' now' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`} onClick={bulkClick(bulk, e.id, onOpen)}>
+    <div className={`event-row${e.cancelled ? ' cancelled' : ''}${isNow ? ' now' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, e.id, onOpen))}>
       <div className="event-time">
         <BulkCheck id={e.id} />
         {e.startTime}

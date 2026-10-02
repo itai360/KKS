@@ -11,7 +11,7 @@ import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Bar, Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Ring, Seg } from '../components/ui';
+import { Bar, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -83,7 +83,7 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
             const current = w.startDate <= today && w.endDate >= today;
             const until = diffDays(w.startDate, today);
             return (
-              <div key={w.id} className={`card week-card${current ? ' current' : ''}${bulk?.selected.has(w.id) ? ' selected' : ''}`} onClick={bulkClick(bulk, w.id, () => navigate(`/weeks/${w.id}`))} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && bulkClick(bulk, w.id, () => navigate(`/weeks/${w.id}`))()}>
+              <div key={w.id} className={`card week-card${current ? ' current' : ''}${bulk?.selected.has(w.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, w.id, () => navigate(`/weeks/${w.id}`)))}>
                 <span className="week-num">{w.number}</span>
                 <BulkCheck id={w.id} />
                 <div style={{ position: 'relative' }}>

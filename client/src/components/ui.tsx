@@ -1,10 +1,28 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { Icon } from './Icon';
 import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
+
+/**
+ * A row or card that opens on click is also reached with Tab and opened with
+ * Enter, like a link. Enter on a button inside it stays that button's.
+ * Table rows keep their row role ({ role: false }).
+ */
+export function openable(open: () => void, opts: { role?: boolean } = {}) {
+  return {
+    onClick: open,
+    tabIndex: 0,
+    ...(opts.role === false ? {} : { role: 'link' as const }),
+    onKeyDown: (e: ReactKeyboardEvent) => {
+      if (e.key !== 'Enter' || e.target !== e.currentTarget) return;
+      e.preventDefault();
+      open();
+    },
+  };
+}
 
 function fieldValue(el: Element): string {
   if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) return String(el.checked);

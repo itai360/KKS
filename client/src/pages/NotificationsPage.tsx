@@ -95,9 +95,6 @@ export function NotificationsPage() {
               className={`attn-item t-${TONE[n.category]}`}
               onOpen={() => void open(n)}
               style={{ background: n.read ? undefined : 'var(--card-2)' }}
-              role="link"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && void open(n)}
             >
               <span className="attn-bar" style={{ opacity: n.read ? 0.3 : 1 }} />
               <BulkCheck id={n.id} />

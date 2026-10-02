@@ -8,7 +8,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkToggle } from '../components/Bulk';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
-import { Empty, ErrorBox, Loading, PageHead, Ring } from '../components/ui';
+import { Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
@@ -110,7 +110,7 @@ export function MyTasksPage() {
                     <h3>השבועות שבאחריותי</h3>
                   </div>
                   {data.myWeeks.map((w) => (
-                    <div key={w.id} className="row" style={{ padding: '12px 18px', borderTop: '1px solid var(--line)', cursor: 'pointer' }} onClick={() => navigate(`/weeks/${w.id}`)}>
+                    <div key={w.id} className="row" style={{ padding: '12px 18px', borderTop: '1px solid var(--line)', cursor: 'pointer' }} {...openable(() => navigate(`/weeks/${w.id}`))}>
                       <div className="grow">
                         <div className="strong">{w.name}</div>
                         <div className="tiny muted">

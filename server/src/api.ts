@@ -74,6 +74,7 @@ import {
   updateTask,
 } from './taskService';
 import { applyTemplate, deleteTemplate, getTemplate, listTemplates, saveTemplate } from './templates';
+import { matchesSearch } from '../../shared/search';
 import {
   addLesson,
   approveWeek,
@@ -377,12 +378,8 @@ export function apiRouter(): Router {
         list = list.filter((t) => t.status === 'done');
         break;
     }
-    const text = str(q.q)?.toLowerCase();
-    if (text) {
-      list = list.filter((t) =>
-        [t.title, t.description, t.domain, t.weekName, t.ownerName].some((f) => f && f.toLowerCase().includes(text)),
-      );
-    }
+    const text = str(q.q);
+    if (text) list = list.filter((t) => matchesSearch(text, t.title, t.description, t.domain, t.weekName, t.ownerName));
     if (q.hideClosed === '1') list = list.filter((t) => isOpenStatus(t.status));
     // deadlines between two days, by the course's time zone (the calendar views of the schedule)
     if (isDateKey(q.from) && isDateKey(q.to)) {

@@ -10,7 +10,7 @@ import { BulkCheck, bulkClick, BulkScope, useBulk } from './Bulk';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { useIncremental } from '../lib/incremental';
-import { Empty } from './ui';
+import { Empty, openable } from './ui';
 
 export function canQuickUpdate(t: Task, userId: number, commander: boolean): boolean {
   return commander || t.ownerId === userId || t.participantIds.includes(userId) || t.createdBy === userId;
@@ -47,10 +47,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
   return (
     <div
       className={`task-row t-${task.tone}${task.status === 'done' ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}`}
-      onClick={bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`))}
-      role="link"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`))()}
+      {...openable(bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`)))}
     >
       {bulk?.active ? (
         <BulkCheck id={task.id} />

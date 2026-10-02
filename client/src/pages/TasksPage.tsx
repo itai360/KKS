@@ -10,7 +10,7 @@ import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
 import { canQuickUpdate, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Loading, PageHead, Seg } from '../components/ui';
+import { Empty, ErrorBox, Loading, openable, PageHead, Seg } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtDateTime } from '../lib/format';
@@ -240,7 +240,7 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
         </thead>
         <tbody>
           {shown.map((t) => (
-            <tr key={t.id} className={`click t-${t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}`} onClick={bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`))}>
+            <tr key={t.id} className={`click t-${t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)), { role: false })}>
               <td style={{ padding: 0, width: 6, background: 'var(--tone)' }} />
               <td style={{ maxWidth: 340 }}>
                 <div className="strong row gap-6" style={{ textDecoration: t.status === 'done' ? 'line-through' : undefined }}>
@@ -349,7 +349,7 @@ function BoardCards({ tasks }: { tasks: Task[] }) {
           className={`board-card t-${t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}`}
           draggable={!bulk?.active}
           onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
-          onClick={bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`))}
+          {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)))}
         >
           <div className="task-title row gap-6">
             <BulkCheck id={t.id} />

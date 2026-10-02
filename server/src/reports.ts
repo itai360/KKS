@@ -27,6 +27,7 @@ import { pendingRequestsFor } from './taskService';
 import { listWeeks, weekContaining } from './weeks';
 import { listCadets, listExemptions } from './cadets';
 import { listDebriefs } from './debriefs';
+import { matchesSearch, searchKey } from '../../shared/search';
 import { listDocuments } from './documents';
 
 const ms = (iso: string) => Date.parse(iso);
@@ -400,9 +401,8 @@ export function dayEnd(actor: UserRow): DayEndData {
 }
 
 export function search(actor: UserRow, q: string): SearchResults {
-  const needle = q.trim().replace(/[״]/g, '"').toLowerCase();
-  if (needle.length < 2) return { tasks: [], users: [], weeks: [], events: [], cadets: [], debriefs: [], documents: [] };
-  const has = (...fields: (string | null | undefined)[]) => fields.some((f) => f && f.replace(/[״]/g, '"').toLowerCase().includes(needle));
+  if (searchKey(q).length < 2) return { tasks: [], users: [], weeks: [], events: [], cadets: [], debriefs: [], documents: [] };
+  const has = (...fields: (string | null | undefined)[]) => matchesSearch(q, ...fields);
   const tasks = visibleTasks(actor)
     .filter((t) => has(t.title, t.description, t.domain, t.weekName, t.ownerName, t.eventTitle))
     .sort((a, b) => Number(isOpenStatus(b.status)) - Number(isOpenStatus(a.status)) || byDeadline(a, b))

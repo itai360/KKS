@@ -6,7 +6,7 @@ import { shortDate } from '@shared/dates';
 import type { BriefingData } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { TaskList } from '../components/TaskRow';
-import { ErrorBox, Loading } from '../components/ui';
+import { ErrorBox, Loading, openable } from '../components/ui';
 import { fmtLongDate, fmtTime } from '../lib/format';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
@@ -90,7 +90,7 @@ export function BriefingPage() {
               </div>
               {data.events.length === 0 && <div className="card-body muted small">אין אירועים בלו"ז היום.</div>}
               {data.events.map((e) => (
-                <div key={e.id} className={`event-row${e.startTime <= now && (e.endTime ?? '') > now ? ' now' : ''}`} onClick={() => navigate(`/schedule?date=${e.date}&event=${e.id}`)}>
+                <div key={e.id} className={`event-row${e.startTime <= now && (e.endTime ?? '') > now ? ' now' : ''}`} {...openable(() => navigate(`/schedule?date=${e.date}&event=${e.id}`))}>
                   <div className="event-time">{e.startTime}</div>
                   <div>
                     <div className="event-title">{e.title}</div>
@@ -111,7 +111,7 @@ export function BriefingPage() {
                   <span className="tiny mono muted">{data.exemptions.length}</span>
                 </div>
                 {data.exemptions.map((x) => (
-                  <div key={x.id} className="health" style={{ borderColor: '#2e352d', cursor: 'pointer' }} onClick={() => navigate(`/cadets/${x.cadetId}`)}>
+                  <div key={x.id} className="health" style={{ borderColor: '#2e352d', cursor: 'pointer' }} {...openable(() => navigate(`/cadets/${x.cadetId}`))}>
                     <div className="grow">
                       <div className="strong">
                         {x.cadetName} <span className="small muted">{x.teamName}</span>

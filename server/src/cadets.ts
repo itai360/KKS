@@ -22,6 +22,7 @@ import { db } from './db';
 import { referForDiscipline } from './evaluations';
 import { changed, logActivity, notify } from './journal';
 import { isCommander, visibleTasks } from './taskRepo';
+import { matchesSearch } from '../../shared/search';
 import { createTasks, isoDateTime, updateTask, weekForDate } from './taskService';
 
 const today = () => localDateKey(clock.now(), tz());
@@ -226,11 +227,11 @@ export function listCadets(actor: UserRow, filter: { teamId?: number; status?: s
   const records = db().all<RecordRow>(`${RECORD_BASE}`);
   const byCadet = new Map<number, RecordRow[]>();
   for (const r of records) byCadet.set(r.cadet_id, [...(byCadet.get(r.cadet_id) ?? []), r]);
-  const q = filter.q?.trim().toLowerCase();
+  const q = filter.q?.trim();
   return rows
     .filter((c) => !filter.teamId || c.team_id === filter.teamId)
     .filter((c) => !filter.status || filter.status === 'all' || c.status === filter.status)
-    .filter((c) => !q || [c.first_name, c.last_name, c.personal_number, c.team_name].some((f) => f && f.toLowerCase().includes(q)))
+    .filter((c) => !q || matchesSearch(q, c.first_name, c.last_name, c.personal_number, c.team_name))
     .map((c) => toCadet(actor, c, byCadet.get(c.id) ?? []));
 }
 

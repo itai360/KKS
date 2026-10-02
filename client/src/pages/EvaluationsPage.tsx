@@ -34,6 +34,7 @@ import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useApi } from '../lib/useApi';
 import { useDraft } from '../lib/draft';
+import { matchesSearch } from '@shared/search';
 import { ask } from '../components/Confirm';
 
 const dateLabel = (d: string) => shortDate(d);
@@ -61,7 +62,7 @@ export function EvaluationsPage() {
   const shown = (list.data ?? []).filter(
     (c) =>
       (!team || String(c.teamId ?? '') === team) &&
-      (!q || [c.fullName, c.personalNumber].some((f) => f.includes(q))) &&
+      matchesSearch(q, c.fullName, c.personalNumber) &&
       (view === 'watch' ? c.standing !== 'ok' : view === 'committee' ? !!c.committee && !c.committee.decision : view === 'unshown' ? c.notShown > 0 : true),
   );
   const grouped = useMemo(() => {

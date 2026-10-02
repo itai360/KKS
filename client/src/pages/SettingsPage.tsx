@@ -9,7 +9,7 @@ import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../compone
 import { GuideImportCard } from '../components/Discipline';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { ErrorBox, Field, Modal, PageHead, Seg } from '../components/ui';
+import { ErrorBox, Field, Modal, openable, PageHead, Seg } from '../components/ui';
 import { api } from '../lib/api';
 import { demoHooks, IS_DEMO } from '../lib/demo';
 import { emitLocalChange } from '../lib/realtime';
@@ -239,7 +239,7 @@ function StaffCard() {
 function StaffRow({ u, onOpen, children }: { u: User; onOpen: () => void; children: ReactNode }) {
   const bulk = useBulk();
   return (
-    <tr className={`click${bulk?.selected.has(u.id) ? ' selected' : ''}`} style={{ opacity: u.active ? 1 : 0.5 }} onClick={bulkClick(bulk, u.id, onOpen)}>
+    <tr className={`click${bulk?.selected.has(u.id) ? ' selected' : ''}`} style={{ opacity: u.active ? 1 : 0.5 }} {...openable(bulkClick(bulk, u.id, onOpen), { role: false })}>
       {children}
     </tr>
   );

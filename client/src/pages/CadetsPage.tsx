@@ -27,7 +27,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
+import { Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg } from '../components/ui';
 import { api, changedFields, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
@@ -36,6 +36,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { ExperienceCard, ExperienceForm } from './ExperiencesPage';
 import { useDraft } from '../lib/draft';
+import { matchesSearch } from '@shared/search';
 import { ask } from '../components/Confirm';
 
 export function CadetsPage() {
@@ -53,7 +54,7 @@ export function CadetsPage() {
   const myTeams = (teams.data ?? []).filter((t) => t.commanderId === user.id);
   const canAdd = isCommander || myTeams.length > 0;
 
-  const shown = (cadets.data ?? []).filter((c) => (!q || [c.fullName, c.personalNumber].some((f) => f.includes(q))) && (!notesOnly || c.disciplineNotes > 0));
+  const shown = (cadets.data ?? []).filter((c) => matchesSearch(q, c.fullName, c.personalNumber) && (!notesOnly || c.disciplineNotes > 0));
   const grouped = useMemo(() => {
     const map = new Map<string, Cadet[]>();
     for (const c of shown) map.set(c.teamName ?? 'ללא צוות', [...(map.get(c.teamName ?? 'ללא צוות') ?? []), c]);
@@ -202,7 +203,7 @@ function CadetRows({ list }: { list: Cadet[] }) {
   return (
     <div className="card">
       {list.map((c) => (
-        <div key={c.id} className={`health${bulk?.selected.has(c.id) ? ' selected' : ''}`} onClick={bulkClick(bulk, c.id, () => navigate(`/cadets/${c.id}`))} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && bulkClick(bulk, c.id, () => navigate(`/cadets/${c.id}`))()}>
+        <div key={c.id} className={`health${bulk?.selected.has(c.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, c.id, () => navigate(`/cadets/${c.id}`)))}>
           <BulkCheck id={c.id} />
           <div className="avatar">{initials(c.fullName)}</div>
           <div className="grow">
@@ -810,7 +811,7 @@ export function QuickDiscipline({ onClose }: { onClose: () => void }) {
   const detail = useApi<CadetDetail>(picked ? `/api/cadets/${picked}` : null, ['cadets', 'tasks']);
   const term = q.trim();
   const mine = (cadets.data ?? []).filter((c) => c.canManage);
-  const matches = mine.filter((c) => !term || [c.fullName, c.personalNumber, c.teamName ?? ''].some((f) => f.includes(term)));
+  const matches = mine.filter((c) => matchesSearch(term, c.fullName, c.personalNumber, c.teamName));
   const d = picked && detail.data?.cadet.id === picked ? detail.data : undefined;
   return (
     <Modal title="רישום משמעת" onClose={onClose} wide>

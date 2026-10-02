@@ -6,13 +6,7 @@ import { ZodError } from 'zod';
 import { apiRouter } from './api';
 import { csrfGuard, loadUser } from './auth';
 import { HttpError } from './core';
-
-function zodMessage(e: ZodError): string {
-  const issue = e.issues[0];
-  if (!issue) return 'נתונים לא תקינים';
-  const hebrew = /[֐-׿]/.test(issue.message);
-  return hebrew ? issue.message : `שדה לא תקין: ${issue.path.join('.') || 'קלט'}`;
-}
+import { zodMessage } from './validation';
 
 /**
  * Large answers (a long course's task list) go compressed: about a tenth of

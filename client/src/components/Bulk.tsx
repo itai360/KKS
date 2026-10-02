@@ -9,7 +9,7 @@ import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal } from './ui';
+import { ErrorBox, Field, Modal, openable } from './ui';
 import { ask } from './Confirm';
 
 export interface BulkAction {
@@ -193,7 +193,12 @@ export function bulkClick(b: BulkState | null, id: number, otherwise: () => void
 export function BulkRow({ itemId, onOpen, className = '', children, ...rest }: { itemId: number; onOpen?: () => void; className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, 'onClick' | 'id'>) {
   const b = useBulk();
   return (
-    <div {...rest} className={`${className}${b?.selected.has(itemId) ? ' selected' : ''}`} onClick={b?.active ? () => b.toggle(itemId) : onOpen}>
+    <div
+      {...(onOpen ? openable(() => (b?.active ? b.toggle(itemId) : onOpen())) : {})}
+      {...rest}
+      className={`${className}${b?.selected.has(itemId) ? ' selected' : ''}`}
+      onClick={b?.active ? () => b.toggle(itemId) : onOpen}
+    >
       {children}
     </div>
   );

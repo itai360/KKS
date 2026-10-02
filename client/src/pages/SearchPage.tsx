@@ -8,6 +8,7 @@ import { Icon } from '../components/Icon';
 import { GroupTitle, TaskList } from '../components/TaskRow';
 import { Empty, Loading, PageHead } from '../components/ui';
 import { useSession } from '../lib/session';
+import { matchesSearch } from '@shared/search';
 import { useApi } from '../lib/useApi';
 
 export function SearchPage() {
@@ -25,7 +26,7 @@ export function SearchPage() {
     return () => clearTimeout(t);
   }, [text, q, setParams]);
   const { data, loading } = useApi<SearchResults>(q.trim().length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null, ['tasks', 'weeks', 'events']);
-  const domainHits = q ? settings.domains.filter((d) => d.includes(q)) : [];
+  const domainHits = q ? settings.domains.filter((d) => matchesSearch(q, d)) : [];
   const total = data ? data.tasks.length + data.users.length + data.weeks.length + data.events.length + data.cadets.length + data.debriefs.length + data.documents.length : 0;
 
   return (

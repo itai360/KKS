@@ -8,7 +8,7 @@ import { DisciplineCard } from '../components/DisciplineCard';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Loading, PageHead, Ring } from '../components/ui';
+import { Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDeadline, fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -182,10 +182,7 @@ function Attention({ items }: { items: AttentionItem[] }) {
                 <div
                   key={`${i.kind}-${i.taskId ?? i.weekId ?? i.userId}-${i.requestId ?? idx}`}
                   className={`attn-item t-${i.tone}`}
-                  onClick={() => open(i)}
-                  role="link"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && open(i)}
+                  {...openable(() => open(i))}
                 >
                   <span className="attn-bar" />
                   <div style={{ minWidth: 0 }}>
@@ -248,7 +245,7 @@ function WeekCard({ data }: { data: DashboardData }) {
   return (
     <div className="card">
       {weeks.map(({ label, w }, i) => (
-        <div key={w.id} className="row" style={{ padding: '14px 18px', borderTop: i ? '1px solid var(--line)' : undefined, cursor: 'pointer' }} onClick={() => navigate(`/weeks/${w.id}`)}>
+        <div key={w.id} className="row" style={{ padding: '14px 18px', borderTop: i ? '1px solid var(--line)' : undefined, cursor: 'pointer' }} {...openable(() => navigate(`/weeks/${w.id}`))}>
           <div className="grow">
             <div className="label-caps">{label}</div>
             <div className="strong" style={{ fontSize: 17 }}>
@@ -280,7 +277,7 @@ function StaffHealth({ data }: { data: DashboardData }) {
       </div>
       {data.staff.length === 0 && <div className="card-body small muted">לא הוגדרו אנשי סגל.</div>}
       {data.staff.map((s) => (
-        <div key={s.userId} className="health" onClick={() => navigate(`/team/${s.userId}`)}>
+        <div key={s.userId} className="health" {...openable(() => navigate(`/team/${s.userId}`))}>
           <span className={`dot t-${s.overdue > 1 ? 'red' : s.overdue === 1 ? 'orange' : 'green'}`} />
           <span className="strong grow">{s.name}</span>
           <span className={`small ${s.overdue ? 'text-red strong' : 'muted'}`}>{staffHealthLabel(s.overdue)}</span>
@@ -305,7 +302,7 @@ function TodayEvents({ data }: { data: DashboardData }) {
         <div className="card-body small muted">אין אירועים בלו"ז להיום.</div>
       ) : (
         data.todayEvents.map((e) => (
-          <div key={e.id} className="health" onClick={() => navigate(`/schedule?date=${e.date}&event=${e.id}`)}>
+          <div key={e.id} className="health" {...openable(() => navigate(`/schedule?date=${e.date}&event=${e.id}`))}>
             <span className="mono strong" style={{ width: 48 }}>
               {e.startTime}
             </span>
