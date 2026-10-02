@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import '../client/src/styles.css';
 import { AppShell } from '../client/src/App';
+import { applyTheme } from '../client/src/lib/theme';
 import { boot } from './bridge';
 
 // The page's frame never shows confirm() dialogs (they always answer "no"),
@@ -12,6 +13,7 @@ import { boot } from './bridge';
 window.confirm = () => true;
 
 const root = document.getElementById('root')!;
+applyTheme();
 
 boot()
   .then(() =>

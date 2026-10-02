@@ -12,6 +12,9 @@ import { App } from './App';
 import { reportIssue } from './lib/api';
 import { dropUnusedServiceWorker } from './lib/push';
 import { watchForUpdates } from './lib/update';
+import { applyTheme } from './lib/theme';
+
+applyTheme();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

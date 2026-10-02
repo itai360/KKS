@@ -16,6 +16,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { fmtAgo, fmtDateTime } from '../lib/format';
 import { useApi } from '../lib/useApi';
+import { setThemePref, themePref, type ThemePref } from '../lib/theme';
 import { GenerateWeeks } from './WeeksPage';
 import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupported } from '../lib/push';
 import { ask } from '../components/Confirm';
@@ -37,6 +38,7 @@ export function SettingsPage() {
             <BackupCard />
           </>
         )}
+        <AppearanceCard />
         <BrowserNotificationsCard />
         <PasswordCard />
       </div>
@@ -599,6 +601,32 @@ function Backups() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function AppearanceCard() {
+  const [pref, setPref] = useState<ThemePref>(themePref);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3 className="grow">מראה</h3>
+      </div>
+      <div className="card-body row wrap">
+        <span className="grow small muted">בהיר, כהה (נוח בלילה ובשטח), או לפי ההגדרה של המכשיר. נשמר במכשיר הזה.</span>
+        <Seg<ThemePref>
+          value={pref}
+          onChange={(v) => {
+            setPref(v);
+            setThemePref(v);
+          }}
+          options={[
+            { value: 'auto', label: 'לפי המכשיר' },
+            { value: 'light', label: 'בהיר' },
+            { value: 'dark', label: 'כהה' },
+          ]}
+        />
+      </div>
     </div>
   );
 }
