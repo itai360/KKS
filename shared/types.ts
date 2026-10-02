@@ -755,3 +755,13 @@ export interface CourseDocument {
   createdAt: string;
   canEdit: boolean;
 }
+
+/** Why a snapshot of the database was taken (server/src/snapshots.ts). */
+export type SnapshotLabel = 'auto' | 'manual' | 'before_delete' | 'before_restore';
+
+export interface SnapshotInfo {
+  id: string;
+  savedAt: string;
+  label: SnapshotLabel;
+  bytes: number;
+}

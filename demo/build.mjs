@@ -32,6 +32,7 @@ const out = await build({
     'node:fs': shim('fs.ts'),
     'node:path': shim('path.ts'),
     'node:url': shim('url.ts'),
+    'node:zlib': shim('zlib.ts'),
     express: shim('express.ts'),
     'web-push': shim('web-push.ts'),
     '@shared': `${root}shared`,

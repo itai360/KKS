@@ -4,7 +4,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
-import type { CourseSettings, RecurringRule, Template, User } from '@shared/types';
+import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Template, User } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
@@ -13,6 +13,7 @@ import { api } from '../lib/api';
 import { demoHooks, IS_DEMO } from '../lib/demo';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
+import { fmtAgo, fmtDateTime } from '../lib/format';
 import { useApi } from '../lib/useApi';
 import { GenerateWeeks } from './WeeksPage';
 import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupported } from '../lib/push';
@@ -499,20 +500,96 @@ function DemoDataCard() {
 }
 
 function BackupCard() {
-  if (IS_DEMO) return <DemoDataCard />;
+  return IS_DEMO ? <DemoDataCard /> : <Backups />;
+}
+
+const SNAPSHOT_LABELS: Record<SnapshotLabel, string> = {
+  auto: 'אוטומטי',
+  manual: 'ידני',
+  before_delete: 'לפני מחיקה מרוכזת',
+  before_restore: 'לפני שחזור',
+};
+const ALL_TOPICS = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents'];
+
+/** Snapshots of the whole database: taken automatically, and restored from here (server/src/snapshots.ts). */
+function Backups() {
+  const toast = useToast();
+  const list = useApi<SnapshotInfo[]>('/api/admin/snapshots', ['settings']);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  const snaps = list.data ?? [];
+  const shown = all ? snaps : snaps.slice(0, 8);
+
+  const take = async () => {
+    setBusy('take');
+    try {
+      await api.post('/api/admin/snapshots', {});
+      toast({ title: 'נשמר גיבוי של המצב הנוכחי', tone: 'green' });
+      await list.reload();
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const restore = async (s: SnapshotInfo) => {
+    const when = `${fmtDateTime(s.savedAt)} (${fmtAgo(s.savedAt)})`;
+    if (!confirm(`לשחזר את המערכת למצב של ${when}?\n\nכל מה שנוסף או שונה מאז יבוטל, לכל המשתמשים. המצב הנוכחי נשמר כגיבוי "לפני שחזור", כך שאפשר לחזור אליו.`)) return;
+    setBusy(s.id);
+    try {
+      await api.post(`/api/admin/snapshots/${encodeURIComponent(s.id)}/restore`, {});
+      emitLocalChange(...ALL_TOPICS);
+      toast({ title: 'המערכת שוחזרה', body: `למצב של ${when}`, tone: 'green' });
+      await list.reload();
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="card">
       <div className="card-head">
         <Icon name="history" />
-        <h3 className="grow">גיבוי</h3>
-      </div>
-      <div className="card-body row wrap">
-        <p className="small grow">הורדת עותק מלא ועקבי של מסד הנתונים (משימות, שבועות, לו"ז, צוערים, תחקירים). מומלץ לגבות בסוף כל שבוע. קבצים מצורפים נשמרים בתיקיית uploads בשרת.</p>
+        <h3 className="grow">גיבויים ושחזור</h3>
+        <button className="btn btn-sm" onClick={() => void take()} disabled={!!busy}>
+          גיבוי עכשיו
+        </button>
         {/* the server sends it as an attachment, so following the link saves the file */}
-        <a className="btn" href="/api/admin/backup">
-          <Icon name="download" /> הורד גיבוי
+        <a className="btn btn-sm" href="/api/admin/backup">
+          <Icon name="download" /> הורדת עותק
         </a>
       </div>
+      <div className="card-body">
+        <p className="small muted" style={{ marginTop: 0 }}>
+          המערכת שומרת גיבוי של כל הנתונים כל חצי שעה של עבודה, גיבוי אחד לכל יום במשך חודש, וגם רגע לפני מחיקה של הרבה פריטים יחד. אם משהו נמחק או השתבש - אפשר להחזיר מכאן את המצב מכל אחת מהנקודות האלה.
+        </p>
+        <ErrorBox error={list.error} />
+        {list.data && snaps.length === 0 && <div className="small muted">עדיין אין גיבויים - הראשון יישמר אחרי השינוי הבא, או בלחיצה על "גיבוי עכשיו".</div>}
+      </div>
+      {shown.length > 0 && (
+        <div className="list-plain">
+          {shown.map((s) => (
+            <div key={s.id} className="row snapshot-row">
+              <div className="grow">
+                <div className="strong small">{fmtDateTime(s.savedAt)}</div>
+                <div className="tiny muted">
+                  {fmtAgo(s.savedAt)} · {SNAPSHOT_LABELS[s.label] ?? s.label} · {Math.max(1, Math.round(s.bytes / 1024))} KB
+                </div>
+              </div>
+              <button className="btn btn-sm" onClick={() => void restore(s)} disabled={!!busy}>
+                {busy === s.id ? 'משחזר...' : 'שחזור'}
+              </button>
+            </div>
+          ))}
+          {snaps.length > shown.length && (
+            <button className="btn btn-ghost btn-sm snapshot-more" onClick={() => setAll(true)}>
+              כל הגיבויים ({snaps.length})
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

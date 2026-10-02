@@ -528,7 +528,18 @@ CREATE TABLE committees (
 CREATE INDEX committees_cadet ON committees(cadet_id);
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5];
+// the snapshots of the serverless deployment, whose files are kept in its file storage (snapshots.ts)
+const SCHEMA_V6 = `
+CREATE TABLE snapshots (
+  id TEXT PRIMARY KEY,
+  saved_at TEXT NOT NULL,
+  label TEXT NOT NULL,
+  bytes INTEGER NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0
+);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6];
 
 export function migrate(db: Db): void {
   const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");

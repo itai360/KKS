@@ -56,7 +56,8 @@ import {
 import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
 import { getFile, sendStoredFile, uploadName } from './files';
 import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
-import { runBulk } from './bulk';
+import { bulkSchema, runBulk } from './bulk';
+import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { localDateKey } from '../../shared/dates';
 
@@ -122,7 +123,12 @@ export function v3Router(): Router {
 
   // ---------------- many items at once ----------------
 
-  r.post('/bulk', (req, res) => res.json(runBulk(me(req), req.body)));
+  r.post('/bulk', async (req, res) => {
+    // deleting many items at once can be undone from a snapshot taken just before
+    const parsed = bulkSchema.safeParse(req.body);
+    if (parsed.success && parsed.data.action === 'delete' && new Set(parsed.data.ids).size >= 5) await snapshotBefore('before_delete');
+    res.json(runBulk(me(req), req.body));
+  });
 
   // ---------------- evaluation files ----------------
   // every change answers with the cadet's file as the user may see it
@@ -294,6 +300,16 @@ export function v3Router(): Router {
   });
 
   // ---------------- backup ----------------
+
+  r.get('/admin/snapshots', requireCommander, async (_req, res) => res.json(await listSnapshots()));
+  r.post('/admin/snapshots', requireCommander, async (_req, res) => {
+    await takeSnapshot('manual');
+    res.json({ ok: true });
+  });
+  r.post('/admin/snapshots/:id/restore', requireCommander, async (req, res) => {
+    await restoreSnapshot(String(req.params.id));
+    res.json({ ok: true });
+  });
 
   r.get('/admin/backup', requireCommander, (_req, res) => {
     const file = join(config.dataDir, `backup-${Date.now()}.db`);

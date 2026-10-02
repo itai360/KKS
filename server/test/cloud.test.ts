@@ -173,4 +173,25 @@ describe('serverless storage', () => {
     expect(r.statusCode).toBe(204);
     expect((await call('GET', '/api/public/info')).statusCode).toBe(200); // nothing is stuck behind it
   });
+  it('takes a snapshot in storage and restores it as a new saved version', async () => {
+    const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
+    const make = (title: string) => call('POST', '/api/tasks', { title, ownerIds: [1], deadline: '2026-12-01T16:00:00.000Z' }, cookie);
+    await make('נשמרה בגיבוי');
+    expect((await call('POST', '/api/admin/snapshots', {}, cookie)).statusCode).toBe(200);
+    const [snap] = (await call('GET', '/api/admin/snapshots', undefined, cookie)).json();
+    expect(snap).toMatchObject({ label: 'manual' });
+    const ids = (await call('GET', '/api/tasks', undefined, cookie)).json().map((t: { id: number }) => t.id);
+    await call('POST', '/api/bulk', { entity: 'tasks', action: 'delete', ids }, cookie);
+    expect((await call('GET', '/api/tasks', undefined, cookie)).json()).toHaveLength(0);
+
+    const before = store.state!.version;
+    expect((await call('POST', `/api/admin/snapshots/${snap.id}/restore`, {}, cookie)).statusCode).toBe(200);
+    expect(store.state!.version).toBe(before + 1); // saved for every instance
+    const titles = (await call('GET', '/api/tasks', undefined, cookie)).json().map((t: { title: string }) => t.title);
+    expect(titles).toContain('נשמרה בגיבוי');
+    const labels = (await call('GET', '/api/admin/snapshots', undefined, cookie)).json().map((x: { label: string }) => x.label);
+    expect(labels).toEqual(expect.arrayContaining(['manual', 'before_restore']));
+    expect([...store.files.keys()].filter((k) => k.startsWith('snapshots/')).length).toBeGreaterThanOrEqual(2); // kept in file storage
+    expect((await call('POST', '/api/admin/snapshots/999/restore', {}, cookie)).statusCode).toBe(404);
+  });
 });

@@ -5,6 +5,7 @@ import { createUser } from './auth';
 import { startScheduler } from './automation';
 import { config } from './core';
 import { openDb } from './db';
+import { autoSnapshot } from './snapshots';
 
 const db = openDb(join(config.dataDir, 'kks.db'));
 
@@ -27,6 +28,8 @@ const staticDir = process.env.STATIC_DIR ?? resolve(here, '../client');
 const app = createApp({ staticDir });
 
 startScheduler();
+// a snapshot of the database every half hour while people work (settings -> backups)
+setInterval(() => void autoSnapshot().catch((e) => console.error('[snapshots]', e)), 60_000).unref();
 
 app.listen(config.port, () => {
   console.log(`KKS course manager listening on http://localhost:${config.port}`);

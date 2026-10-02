@@ -3174,3 +3174,13 @@ tr.selected td {
   font-size: 13.5px;
   font-weight: 500;
 }
+
+/* snapshots in settings */
+.snapshot-row {
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.snapshot-more {
+  margin: 8px 16px 12px;
+}

@@ -19,11 +19,12 @@ import type { Notification } from '../../shared/types';
 import { createApp } from './app';
 import { createUser, sessionToken, userForToken } from './auth';
 import { runAutomation } from './automation';
-import { config } from './core';
+import { clock, config } from './core';
 import { db, openDb } from './db';
 import { setFileStore } from './files';
 import { toNotification } from './journal';
 import { pushesSettled } from './push';
+import { setSnapshotProvider, storedSnapshots } from './snapshots';
 
 const env = (k: string) => process.env[k] ?? '';
 process.env.KKS_REALTIME = 'poll';
@@ -159,6 +160,7 @@ async function ensureFresh(maxAge = FRESH_MS): Promise<boolean> {
 // ---------------- requests ----------------
 
 let app: ReturnType<typeof createApp> | null = null;
+let snapshots: ReturnType<typeof storedSnapshots> | null = null;
 let chain: Promise<unknown> = Promise.resolve();
 
 /** One request at a time per instance: a reload must never swap the database under a running request. */
@@ -178,6 +180,16 @@ async function prepare(maxAge: number): Promise<boolean> {
       },
       remove: (name) => rpc('kks_delete_file', { p_name: name }),
     });
+    // snapshots of the shared copy, in the same file storage as uploads
+    snapshots = storedSnapshots(
+      {
+        put: (name, data) => rpc('kks_put_file', { p_name: name, p_data: data }),
+        get: (name) => rpc<string | null>('kks_get_file', { p_name: name }),
+        remove: (name) => rpc('kks_delete_file', { p_name: name }),
+      },
+      () => ({ data: readFileSync(dbPath()), version }),
+    );
+    setSnapshotProvider(snapshots);
     app = createApp();
   }
   const recent = await ensureFresh(maxAge);
@@ -186,6 +198,8 @@ async function prepare(maxAge: number): Promise<boolean> {
     lastAutomation = Date.now();
     const before = changes();
     runAutomation();
+    // a snapshot of the database every half hour while people work (settings -> backups)
+    if (snapshots?.autoDue(clock.now().getTime(), version)) await snapshots.take('auto').catch((e) => console.error('[snapshots]', e));
     if (changes() !== before && !(await save())) await ensureFresh(0);
   }
   return recent;

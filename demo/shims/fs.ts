@@ -45,6 +45,14 @@ export function statSync(path: string): { size: number } {
   if (!f) throw notFound(path);
   return { size: f.length };
 }
+export function copyFileSync(from: string, to: string): void {
+  writeFileSync(to, readFileSync(from));
+}
+/** the names of the files directly in a folder */
+export function readdirSync(path: string): string[] {
+  const prefix = path.endsWith('/') ? path : `${path}/`;
+  return [...files.keys()].filter((k) => k.startsWith(prefix) && !k.slice(prefix.length).includes('/')).map((k) => k.slice(prefix.length));
+}
 export function createReadStream(path: string) {
   return {
     pipe(res: { end(data: Uint8Array): void }) {
@@ -53,4 +61,4 @@ export function createReadStream(path: string) {
   };
 }
 
-export default { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, rmSync, statSync, createReadStream };
+export default { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, rmSync, statSync, copyFileSync, readdirSync, createReadStream };
