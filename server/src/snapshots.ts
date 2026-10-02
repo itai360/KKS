@@ -14,7 +14,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SnapshotInfo, SnapshotLabel } from '../../shared/types';
-import { badRequest, config, notFound, nowIso } from './core';
+import { badRequest, config, notFound, nowIso, resetSettingsCache } from './core';
 import { db, Db, migrate } from './db';
 import { changed } from './journal';
 import type { Topic } from './realtime';
@@ -172,6 +172,7 @@ export async function restoreSnapshot(id: string): Promise<void> {
       live.exec('PRAGMA foreign_keys = ON');
       live.exec('DETACH DATABASE snap');
     }
+    resetSettingsCache(); // the course settings came back with the rest
     changed(...ALL_TOPICS);
   } finally {
     rmSync(tmp, { force: true });

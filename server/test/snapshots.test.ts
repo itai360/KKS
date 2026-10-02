@@ -49,6 +49,16 @@ describe('snapshots', () => {
     const labels = ((await c.cmd.get('/api/admin/snapshots')).body as SnapshotInfo[]).map((s) => s.label);
     expect(labels).toContain('before_restore');
     expect((await c.cmd.post('/api/admin/snapshots/nope~manual/restore', {})).status).toBe(404);
+  });
+
+  it('brings back the course settings too, not a remembered copy of them', async () => {
+    const before = (await c.cmd.get('/api/settings')).body.courseName;
+    await c.cmd.post('/api/admin/snapshots', {});
+    const [snap] = (await c.cmd.get('/api/admin/snapshots')).body as SnapshotInfo[];
+    await c.cmd.patch('/api/settings', { courseName: 'שם אחר לגמרי' });
+    expect((await c.cmd.get('/api/settings')).body.courseName).toBe('שם אחר לגמרי');
+    await c.cmd.post(`/api/admin/snapshots/${snap.id}/restore`, {});
+    expect((await c.cmd.get('/api/settings')).body.courseName).toBe(before);
     expect((await c.cmd.post('/api/admin/snapshots/..%2F..%2Fkks~manual/restore', {})).status).toBe(404);
   });
 
