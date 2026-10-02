@@ -16,6 +16,7 @@ export interface UserRow {
   email: string | null;
   active: number;
   created_at: string;
+  must_change_password: number;
 }
 
 declare global {
@@ -204,9 +205,11 @@ export function createUser(input: {
   role: Role;
   phone?: string;
   email?: string;
+  /** someone else chose this password: ask for a personal one on first sign-in */
+  mustChangePassword?: boolean;
 }): number {
   return db().run(
-    'INSERT INTO users(username, password_hash, display_name, title, role, phone, email, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)',
+    'INSERT INTO users(username, password_hash, display_name, title, role, phone, email, active, created_at, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)',
     input.username.trim(),
     hashPassword(input.password),
     input.displayName.trim(),
@@ -215,5 +218,6 @@ export function createUser(input: {
     input.phone?.trim() ?? '',
     input.email?.trim().toLowerCase() || null,
     nowIso(),
+    input.mustChangePassword ? 1 : 0,
   ).id;
 }

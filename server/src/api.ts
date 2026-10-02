@@ -202,7 +202,7 @@ export function apiRouter(): Router {
 
   r.get('/auth/me', (req, res) => {
     const unread = db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', me(req).id)!.n;
-    res.json({ user: toUser(me(req)), settings: getSettings(), unread, serverTime: nowIso() });
+    res.json({ user: toUser(me(req)), settings: getSettings(), unread, serverTime: nowIso(), mustChangePassword: !!me(req).must_change_password });
   });
 
   r.post('/auth/password', (req, res) => {
@@ -210,10 +210,22 @@ export function apiRouter(): Router {
       .object({ current: z.string().min(1), next: z.string().min(6, 'הסיסמה החדשה חייבת להכיל לפחות 6 תווים').max(200) })
       .parse(req.body);
     if (!verifyPassword(current, me(req).password_hash)) throw badRequest('הסיסמה הנוכחית שגויה');
-    db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(next), me(req).id);
+    db().run('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?', hashPassword(next), me(req).id);
     // whoever knew the old password is signed out on their devices; this one stays in
     const others = endOtherSessions(me(req).id, sessionToken(req));
     res.json({ ok: true, others });
+  });
+
+  // first sign-in with a password someone else chose: pick a personal one. Signing in with
+  // that password just now is the proof, so the current one is not asked again.
+  r.post('/auth/password/first', (req, res) => {
+    const u = me(req);
+    if (!u.must_change_password) throw badRequest('הסיסמה כבר אישית');
+    const { next } = z.object({ next: z.string().min(6, 'הסיסמה חייבת להכיל לפחות 6 תווים').max(200) }).parse(req.body);
+    if (verifyPassword(next, u.password_hash)) throw badRequest('בחרו סיסמה שונה מהסיסמה שקיבלתם');
+    db().run('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?', hashPassword(next), u.id);
+    endOtherSessions(u.id, sessionToken(req));
+    res.json({ ok: true });
   });
 
   r.get('/auth/sessions', (req, res) => {
@@ -249,7 +261,7 @@ export function apiRouter(): Router {
     const input = userSchema.parse(req.body);
     if (db().get('SELECT 1 FROM users WHERE username = ?', input.username)) throw badRequest('שם המשתמש תפוס');
     if (input.email && db().get('SELECT 1 FROM users WHERE email = ?', input.email.toLowerCase())) throw badRequest('כתובת המייל כבר משויכת למשתמש אחר');
-    const newId = createUser(input);
+    const newId = createUser({ ...input, mustChangePassword: true });
     changed('users');
     res.json(toUser(getUserRow(newId)!));
   });
@@ -283,7 +295,7 @@ export function apiRouter(): Router {
       uid,
     );
     if (p.password) {
-      db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(p.password), uid);
+      db().run('UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?', hashPassword(p.password), uid === me(req).id ? 0 : 1, uid);
       db().run('DELETE FROM sessions WHERE user_id = ? ', uid);
     }
     if (p.active === false) db().run('DELETE FROM sessions WHERE user_id = ?', uid);

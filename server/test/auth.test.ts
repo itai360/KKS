@@ -102,4 +102,34 @@ describe('auth', () => {
     expect((await c.s2.get('/api/my')).status).toBe(200);
     expect((await c.s2.get('/api/auth/sessions')).body.others).toBe(0);
   });
+
+  it('an account the commander opened asks for a personal password on first sign-in', async () => {
+    const created = await c.cmd.post('/api/users', { username: 'newbie', password: 'temp123', displayName: 'מפק"צ חדש', role: 'staff' });
+    expect(created.status).toBe(200);
+    expect(created.body.mustChangePassword).toBeUndefined();
+    const newbie = await login(c.app, 'newbie', 'temp123');
+    expect((await newbie.get('/api/auth/me')).body.mustChangePassword).toBe(true);
+    // nobody else learns whose temporary password is still in use
+    expect((await c.s1.get('/api/users')).body.every((u: Record<string, unknown>) => !('mustChangePassword' in u))).toBe(true);
+    expect((await newbie.post('/api/auth/password/first', { next: 'temp123' })).body.error).toBe('בחרו סיסמה שונה מהסיסמה שקיבלתם');
+    expect((await newbie.post('/api/auth/password/first', { next: 'mine4567' })).status).toBe(200);
+    expect((await newbie.get('/api/auth/me')).body.mustChangePassword).toBe(false);
+    expect((await newbie.post('/api/auth/password/first', { next: 'again789' })).status).toBe(400);
+    const res = await request(c.app).post('/api/auth/login').set('x-kks', '1').send({ username: 'newbie', password: 'temp123' });
+    expect(res.status).toBe(401);
+    await login(c.app, 'newbie', 'mine4567');
+  });
+
+  it('a password the commander reset is temporary too; the person\'s own change makes it personal', async () => {
+    await c.cmd.patch(`/api/users/${c.ids.s2}`, { password: 'reset123' });
+    const s2 = await login(c.app, 's2', 'reset123');
+    expect((await s2.get('/api/auth/me')).body.mustChangePassword).toBe(true);
+    await s2.post('/api/auth/password', { current: 'reset123', next: 'personal9' });
+    expect((await s2.get('/api/auth/me')).body.mustChangePassword).toBe(false);
+    // existing accounts and the commander's own reset are not affected
+    expect((await c.s1.get('/api/auth/me')).body.mustChangePassword).toBe(false);
+    await c.cmd.patch(`/api/users/${c.ids.cmd}`, { password: 'cmdnew12' });
+    const cmd = await login(c.app, 'cmd', 'cmdnew12');
+    expect((await cmd.get('/api/auth/me')).body.mustChangePassword).toBe(false);
+  });
 });

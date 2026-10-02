@@ -296,7 +296,7 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
         <Field label="שם משתמש" required hint="אותיות לועזיות וספרות">
           <input className="input" dir="ltr" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
         </Field>
-        <Field label={user ? 'סיסמה חדשה (לאיפוס)' : 'סיסמה'} required={!user}>
+        <Field label={user ? 'סיסמה חדשה (לאיפוס)' : 'סיסמה זמנית'} required={!user} hint="בכניסה הראשונה המשתמש יתבקש לבחור סיסמה אישית">
           <input className="input" dir="ltr" type="text" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder={user ? 'השאר ריק ללא שינוי' : 'לפחות 6 תווים'} />
         </Field>
         <Field label="טלפון">

@@ -6,12 +6,15 @@ import { setTitleCount, setTitleSuffix } from './title';
 import { connectRealtime, disconnectRealtime, onNotification } from './realtime';
 import { useApi } from './useApi';
 import { ReauthDialog } from '../components/Reauth';
+import { FirstPasswordDialog } from '../components/FirstPassword';
 import { clearDrafts } from './draft';
 
 interface MeResponse {
   user: User;
   settings: CourseSettings;
   unread: number;
+  /** signed in with a password someone else chose */
+  mustChangePassword?: boolean;
 }
 
 export interface Session {
@@ -139,6 +142,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
     <Ctx.Provider value={value}>
       {children}
       {reauth && <ReauthDialog user={me.user} onDone={reauthDone} />}
+      {me.mustChangePassword && !reauth && <FirstPasswordDialog user={me.user} onDone={() => void refresh()} onLogout={() => void value.logout()} />}
     </Ctx.Provider>
   );
 }
