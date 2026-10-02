@@ -9,6 +9,7 @@ import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { ScreenBoundary } from './ScreenBoundary';
+import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
 
 interface NavItem {
@@ -275,6 +276,7 @@ export function Layout({ children }: { children: ReactNode }) {
         )}
         <main id="main" tabIndex={-1}>
           <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
+          <ShortcutsHelp />
         </main>
       </div>
 

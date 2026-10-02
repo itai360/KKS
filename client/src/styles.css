@@ -2351,6 +2351,21 @@ input::-webkit-date-and-time-value {
   background: var(--card);
 }
 
+.shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.shortcuts dt {
+  min-width: 120px;
+}
+
+.shortcuts dd {
+  margin: 0;
+}
+
 .parse-preview {
   display: flex;
   flex-wrap: wrap;
