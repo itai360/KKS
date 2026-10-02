@@ -11,6 +11,7 @@ import './styles.css';
 import { App } from './App';
 import { reportIssue } from './lib/api';
 import { dropUnusedServiceWorker } from './lib/push';
+import { watchForUpdates } from './lib/update';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -19,6 +20,7 @@ createRoot(document.getElementById('root')!).render(
 );
 
 void dropUnusedServiceWorker();
+watchForUpdates();
 
 // errors outside a screen still reach the server log
 window.addEventListener('error', (e) => reportIssue(`error: ${e.message}`, { at: `${e.filename}:${e.lineno}` }));

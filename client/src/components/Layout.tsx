@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import type { Task, TaskRequest } from '@shared/types';
 import { pendingRequests, reportIssue } from '../lib/api';
 import { onStatus } from '../lib/realtime';
 import { useSession } from '../lib/session';
+import { checkForUpdate, onUpdate, updateReady } from '../lib/update';
 import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
@@ -116,6 +117,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false);
 
   useEffect(() => onStatus(setLive), []);
+  const [update, setUpdate] = useState(updateReady());
+  useEffect(() => onUpdate(setUpdate), []);
+  // a new version waiting is loaded on moving to another screen (the address has already changed)
+  const lastPath = useRef(location.pathname);
+  useEffect(() => {
+    if (lastPath.current === location.pathname) return;
+    lastPath.current = location.pathname;
+    if (updateReady()) window.location.reload();
+    else void checkForUpdate();
+  }, [location.pathname]);
   // a block body on purpose: newer browsers return a promise from scrollTo, and an effect that returns
   // anything but a cleanup function makes React crash on the next screen change
   useEffect(() => {
@@ -211,6 +222,14 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
+        {update && (
+          <div className="update-bar no-print" role="status">
+            <Icon name="zap" size={16} /> יש גרסה חדשה של המערכת. היא תיטען במעבר הבא בין מסכים, או עכשיו:
+            <button className="btn btn-sm" onClick={() => window.location.reload()}>
+              רענון
+            </button>
+          </div>
+        )}
         <main id="main">
           <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
         </main>
