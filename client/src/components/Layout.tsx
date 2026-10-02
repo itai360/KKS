@@ -130,6 +130,21 @@ export function Layout({ children }: { children: ReactNode }) {
   const [update, setUpdate] = useState(updateReady());
   useEffect(() => onUpdate(setUpdate), []);
   // a new version waiting is loaded on moving to another screen (the address has already changed)
+  // "/" jumps to the search box, as on most sites
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      if (document.querySelector('.modal')) return;
+      e.preventDefault();
+      const input = document.querySelector<HTMLInputElement>('.topbar .search input');
+      if (input && input.offsetParent !== null) input.focus();
+      else navigate('/search');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [navigate]);
   const lastPath = useRef(location.pathname);
   useEffect(() => {
     if (lastPath.current === location.pathname) return;
@@ -225,7 +240,7 @@ export function Layout({ children }: { children: ReactNode }) {
             }}
           >
             <Icon name="search" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש משימה, איש סגל, שבוע, תחום..." aria-label="חיפוש" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש משימה, איש סגל, שבוע, תחום..." aria-label="חיפוש" aria-keyshortcuts="/" />
           </form>
           <div className="top-actions">
             <span className={`live hide-mobile${live ? ' on' : ''}`} title={live ? 'מחובר - עדכונים בזמן אמת' : 'מתחבר...'}>

@@ -105,6 +105,6 @@ describe('saving an edit', () => {
     expect(changedFields(before, { ...before })).toEqual({});
     // missing and empty-null count as the same
     expect(changedFields({ teamId: undefined }, { teamId: null })).toEqual({});
-    expect(changedFields({ leadId: 3 }, { leadId: null })).toEqual({ leadId: null });
+    expect(changedFields<{ leadId: number | null }>({ leadId: 3 }, { leadId: null })).toEqual({ leadId: null });
   });
 });
