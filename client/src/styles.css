@@ -649,6 +649,22 @@ p {
   font-size: 14px;
 }
 
+/* Times and dates run left to right even on a Hebrew page: Safari lays out
+   their parts in the page's direction, so 09:00 showed as 00:09. Still
+   aligned to the right, under the label. */
+input[type='date'],
+input[type='time'],
+input[type='datetime-local'] {
+  direction: ltr;
+  text-align: right;
+}
+
+/* Safari on a phone draws the value in its own box (a separate rule: other
+   browsers drop a whole rule with a selector they do not know) */
+input::-webkit-date-and-time-value {
+  text-align: right;
+}
+
 .select {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c7068' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
