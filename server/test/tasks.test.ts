@@ -74,6 +74,15 @@ describe('visibility (section 21)', () => {
     expect((await c.s3.get(`/api/tasks/${inWeek}`)).status).toBe(404);
     expect((await c.cmd.get('/api/tasks')).body).toHaveLength(5);
   });
+
+  it('lists deadlines between two days by the course time zone (the calendar view)', async () => {
+    const late = await newTask(c.cmd, { title: 'בלילה', ownerIds: [c.ids.s1], deadline: at('2026-10-05', '23:30') }); // 20:30 UTC
+    const next = await newTask(c.cmd, { title: 'למחרת', ownerIds: [c.ids.s1], deadline: at('2026-10-06', '00:30') }); // still the 5th in UTC
+    await newTask(c.cmd, { title: 'רחוקה', ownerIds: [c.ids.s1], deadline: at('2026-10-20') });
+    const ids = (await c.s1.get('/api/tasks?from=2026-10-04&to=2026-10-05&owner=me')).body.map((t: { id: number }) => t.id);
+    expect(ids).toEqual([late]);
+    expect((await c.s1.get('/api/tasks?from=2026-10-06&to=2026-10-06')).body.map((t: { id: number }) => t.id)).toEqual([next]);
+  });
 });
 
 describe('staff restrictions (section 2)', () => {
