@@ -12,6 +12,7 @@ export function Modal({
   footer,
   wide,
   narrow,
+  closable = true,
 }: {
   title: ReactNode;
   onClose: () => void;
@@ -20,10 +21,12 @@ export function Modal({
   wide?: boolean;
   /** a short question (the confirmation dialog) */
   narrow?: boolean;
+  /** false: no close button, Escape or outside click - the dialog's own buttons answer it */
+  closable?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const onCloseRef = useRef(closable ? onClose : () => undefined);
+  onCloseRef.current = closable ? onClose : () => undefined;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
@@ -51,13 +54,15 @@ export function Modal({
   // on the page body: a dialog opened inside an animated card or a sticky column would otherwise
   // stay inside that box's layer, under the phone's bottom bar
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCloseRef.current()}>
       <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}`} role="dialog" aria-modal="true" ref={ref}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="סגירה" type="button">
-            <Icon name="x" />
-          </button>
+          {closable && (
+            <button className="icon-btn" onClick={onClose} aria-label="סגירה" type="button">
+              <Icon name="x" />
+            </button>
+          )}
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}

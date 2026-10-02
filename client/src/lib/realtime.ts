@@ -1,7 +1,7 @@
 // Section 51 - changes made by anyone appear immediately for everyone.
 
 import type { Notification } from '@shared/types';
-import { noteVersion, versionHeaders } from './api';
+import { noteVersion, sessionLost, versionHeaders } from './api';
 
 type ChangeListener = (topics: string[]) => void;
 type NotificationListener = (n: Notification) => void;
@@ -49,6 +49,8 @@ async function poll(): Promise<void> {
   if (document.hidden || !wanted) return;
   try {
     const res = await fetch(`/api/sync${lastNotification === null ? '' : `?n=${lastNotification}`}`, { credentials: 'same-origin', cache: 'no-store', headers: versionHeaders() });
+    // the session ended (expired, or signed out elsewhere): not a network problem
+    if (res.status === 401) return void sessionLost();
     if (!res.ok) throw new Error(String(res.status));
     const d: { v: number; n: number; notifications: Notification[] } = await res.json();
     noteVersion(d.v);

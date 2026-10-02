@@ -23,6 +23,29 @@ export function setUnauthorizedHandler(fn: () => void): void {
   onUnauthorized = fn;
 }
 
+// While the app is open, an ended session asks to sign in again over the
+// current screen - so what was typed stays - and the request is then sent again.
+let reauthHandler: (() => Promise<boolean>) | null = null;
+let reauthPending: Promise<boolean> | null = null;
+export function setReauthHandler(fn: (() => Promise<boolean>) | null): void {
+  reauthHandler = fn;
+}
+
+/** The session ended: resolves true once the same person has signed in again. */
+export function sessionLost(): Promise<boolean> {
+  if (!reauthHandler) {
+    onUnauthorized?.();
+    return Promise.resolve(false);
+  }
+  reauthPending ??= reauthHandler().finally(() => {
+    reauthPending = null;
+  });
+  return reauthPending;
+}
+
+// answering 401 here means the sign-in itself failed, not that a session ended
+const SIGN_IN = /^\/api\/(auth\/(login|google|logout)|setup)\b/;
+
 // requests still waiting for an answer, for the stuck-screen report (see reportIssue)
 const inflight = new Map<number, { url: string; at: number }>();
 let requestSeq = 0;
@@ -61,7 +84,7 @@ async function attempt(url: string, init: RequestInit, timeoutMs: number | null)
   }
 }
 
-async function request<T>(method: string, url: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+async function request<T>(method: string, url: string, body?: unknown, headers: Record<string, string> = {}, retried = false): Promise<T> {
   const init: RequestInit = { method, credentials: 'same-origin', cache: 'no-store', headers: { 'x-kks': '1', ...versionHeaders(), ...headers } };
   if (body instanceof Blob || body instanceof ArrayBuffer) {
     init.body = body;
@@ -84,7 +107,8 @@ async function request<T>(method: string, url: string, body?: unknown, headers: 
   }
   const { res, text } = out!;
   noteVersion(res.headers.get('x-kks-v'));
-  if (res.status === 401 && !url.startsWith('/api/auth/login')) onUnauthorized?.();
+  // a 401 comes before the server acts on anything, so sending the request again is safe
+  if (res.status === 401 && !SIGN_IN.test(url) && !retried && (await sessionLost())) return request<T>(method, url, body, headers, true);
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) throw new ApiError(res.status, data?.error ?? 'אירעה שגיאה');
   return data as T;

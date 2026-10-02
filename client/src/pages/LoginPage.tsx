@@ -25,7 +25,7 @@ interface GoogleIdApi {
 }
 
 /** Section 3: optional "sign in with Google", rendered by Google's own button. */
-function GoogleButton({ clientId, onLogin, onError }: { clientId: string; onLogin: () => void; onError: (m: string) => void }) {
+export function GoogleButton({ clientId, onLogin, onError }: { clientId: string; onLogin: () => void; onError: (m: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const render = () => {

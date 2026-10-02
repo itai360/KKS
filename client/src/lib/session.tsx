@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { CourseSettings, User, Week } from '@shared/types';
-import { api, setUnauthorizedHandler } from './api';
+import { api, setReauthHandler, setUnauthorizedHandler } from './api';
 import { setTimezone } from './format';
 import { setTitleCount, setTitleSuffix } from './title';
 import { connectRealtime, disconnectRealtime, onNotification } from './realtime';
 import { useApi } from './useApi';
+import { ReauthDialog } from '../components/Reauth';
 
 interface MeResponse {
   user: User;
@@ -75,6 +76,17 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
 
 function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; refresh: () => Promise<void>; onLogout: () => void; children: ReactNode }) {
   const [unread, setUnread] = useState(me.unread);
+  const [reauth, setReauth] = useState<((ok: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    setReauthHandler(() => new Promise<boolean>((resolve) => setReauth(() => resolve)));
+    return () => setReauthHandler(null);
+  }, []);
+  const reauthDone = (ok: boolean) => {
+    reauth?.(ok);
+    setReauth(null);
+    if (!ok) onLogout();
+  };
   const users = useApi<User[]>('/api/users', ['users']);
   const weeks = useApi<Week[]>('/api/weeks', ['weeks', 'tasks']);
   const settings = useApi<CourseSettings>('/api/settings', ['settings']);
@@ -121,5 +133,10 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
     };
   }, [me, users.data, weeks.data, currentSettings, unread, refresh, onLogout]);
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      {reauth && <ReauthDialog user={me.user} onDone={reauthDone} />}
+    </Ctx.Provider>
+  );
 }
