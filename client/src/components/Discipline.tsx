@@ -15,6 +15,7 @@ import { noteTone } from './DisciplineCard';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { ErrorBox, Modal } from './ui';
+import { ask } from './Confirm';
 
 export { NotesBadge, noteTone } from './DisciplineCard';
 
@@ -191,7 +192,7 @@ export function GuideImportCard() {
     void load(() => api.upload<DisciplineGuide>('/api/discipline/guide/file', new File([lean], 'pasted.html', { type: 'text/html' })));
   };
   const remove = async () => {
-    if (!confirm('להסיר את מדרג האכיפה מהמערכת? הרישומים בתיקי הצוערים נשארים.')) return;
+    if (!(await ask({ title: 'להסיר את מדרג האכיפה?', body: 'הרישומים בתיקי הצוערים נשארים. אפשר לטעון את המסמך שוב בכל עת.', confirm: 'הסרה', danger: true }))) return;
     await api.del('/api/discipline/guide');
     emitLocalChange('settings');
     await guide.reload();

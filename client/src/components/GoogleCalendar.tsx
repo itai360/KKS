@@ -10,6 +10,7 @@ import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { ErrorBox, Field, Loading, Modal } from './ui';
+import { ask } from './Confirm';
 
 export function GoogleCalendarModal({ onClose }: { onClose: () => void }) {
   return (
@@ -48,7 +49,7 @@ function MyFeed() {
   };
 
   const rotate = async () => {
-    if (!confirm('ליצור קישור חדש? הקישור הקודם יפסיק לעבוד, וצריך יהיה להוסיף את היומן מחדש ב-Google.')) return;
+    if (!(await ask({ title: 'ליצור קישור חדש ליומן?', body: 'הקישור הקודם יפסיק לעבוד, וצריך יהיה להוסיף את היומן מחדש ב-Google.', confirm: 'קישור חדש' }))) return;
     try {
       feed.setData(await api.post<CalendarFeed>('/api/calendar/feed/rotate'));
       toast({ title: 'נוצר קישור חדש', tone: 'green' });
@@ -121,7 +122,7 @@ function Sources() {
   };
 
   const remove = async (s: CalendarSource) => {
-    if (!confirm(`להפסיק להציג את "${s.name}" בלו"ז?`)) return;
+    if (!(await ask({ title: `להפסיק להציג את "${s.name}" בלו"ז?`, body: 'האירועים שלו לא יופיעו עוד בלו"ז. אפשר לחבר אותו שוב בכל עת.', confirm: 'הפסקה', danger: true }))) return;
     try {
       sources.setData(await api.del<CalendarSource[]>(`/api/calendar/sources/${s.id}`));
       emitLocalChange('events');

@@ -13,6 +13,7 @@ import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { ask } from '../components/Confirm';
 
 const KIND_LABELS: Record<Template['kind'], string> = { week: 'פתיחת שבוע', activity: 'הכנת פעילות', general: 'כללית' };
 
@@ -126,7 +127,7 @@ function TemplateEditor({ template, onClose }: { template: Template | null; onCl
     }
   };
   const remove = async () => {
-    if (!template || !confirm(`למחוק את התבנית "${template.name}"?`)) return;
+    if (!template || !(await ask({ title: `למחוק את התבנית "${template.name}"?`, body: 'משימות שכבר נוצרו ממנה יישארו.', confirm: 'מחיקה', danger: true }))) return;
     await api.del(`/api/templates/${template.id}`);
     emitLocalChange('templates');
     onClose();

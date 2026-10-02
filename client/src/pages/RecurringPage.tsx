@@ -12,6 +12,7 @@ import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { ask } from '../components/Confirm';
 
 function describe(r: Pick<RecurringRule, 'frequency' | 'weekdays' | 'time'>): string {
   if (r.frequency === 'daily') return `כל יום · ${r.time}`;
@@ -147,7 +148,7 @@ function RuleEditor({ rule, onClose }: { rule: RecurringRule | null; onClose: ()
     }
   };
   const remove = async () => {
-    if (!rule || !confirm(`למחוק את "${rule.title}"? משימות שכבר נוצרו יישארו.`)) return;
+    if (!rule || !(await ask({ title: `למחוק את "${rule.title}"?`, body: 'משימות שכבר נוצרו יישארו.', confirm: 'מחיקה', danger: true }))) return;
     await api.del(`/api/recurring/${rule.id}`);
     emitLocalChange('recurring');
     onClose();

@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { lazyPage, prefetchPages } from './lib/lazyPage';
+import { ConfirmHost } from './components/Confirm';
 
 // The first screens come with the app; every other screen loads when it is
 // first opened, so a phone downloads far less up front (and after an update).
@@ -105,9 +106,12 @@ function AuthedRoutes() {
 /** The app without a router, so the demo build can use an in-memory one. */
 export function AppShell() {
   return (
-    <SessionGate anon={(onLogin) => <LoginPage onLogin={onLogin} />}>
-      <AuthedRoutes />
-    </SessionGate>
+    <>
+      <SessionGate anon={(onLogin) => <LoginPage onLogin={onLogin} />}>
+        <AuthedRoutes />
+      </SessionGate>
+      <ConfirmHost />
+    </>
   );
 }
 

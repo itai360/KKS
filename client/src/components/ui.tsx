@@ -10,12 +10,15 @@ export function Modal({
   children,
   footer,
   wide,
+  narrow,
 }: {
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  /** a short question (the confirmation dialog) */
+  narrow?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -48,7 +51,7 @@ export function Modal({
   // stay inside that box's layer, under the phone's bottom bar
   return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" ref={ref}>
+      <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}`} role="dialog" aria-modal="true" ref={ref}>
         <div className="modal-head">
           <h2>{title}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="סגירה" type="button">

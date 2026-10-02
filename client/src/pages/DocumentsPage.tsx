@@ -12,6 +12,7 @@ import { fileSize, fmtAgo } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { ask } from '../components/Confirm';
 
 export function DocumentsPage() {
   const [category, setCategory] = useState('');
@@ -172,7 +173,7 @@ function DocForm({ doc, onClose }: { doc?: CourseDocument; onClose: () => void }
     }
   };
   const remove = async () => {
-    if (!doc || !confirm(`למחוק את "${doc.title}"?`)) return;
+    if (!doc || !(await ask({ title: `למחוק את "${doc.title}"?`, confirm: 'מחיקה', danger: true }))) return;
     await api.del(`/api/documents/${doc.id}`);
     emitLocalChange('documents');
     onClose();

@@ -19,6 +19,7 @@ import { fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '..
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
+import { ask } from '../components/Confirm';
 
 type ScheduleView = 'list' | CalendarViewName;
 const VIEWS: { value: ScheduleView; label: string }[] = [
@@ -635,8 +636,11 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
               {isCommander && (
                 <button
                   className="btn btn-sm btn-ghost text-red"
-                  onClick={() => {
-                    if (confirm('למחוק את האירוע מהלו"ז? משימות מקושרות יישמרו כעצמאיות.')) void run(() => api.del(`/api/events/${e.id}`), 'האירוע נמחק').then(onClose);
+                  aria-label="מחיקת האירוע"
+                  title="מחיקת האירוע"
+                  onClick={async () => {
+                    if (await ask({ title: 'למחוק את האירוע מהלו"ז?', body: 'משימות מקושרות יישמרו כמשימות עצמאיות.', confirm: 'מחיקה', danger: true }))
+                      void run(() => api.del(`/api/events/${e.id}`), 'האירוע נמחק').then(onClose);
                   }}
                 >
                   <Icon name="trash" />

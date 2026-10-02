@@ -35,6 +35,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { ExperienceCard, ExperienceForm } from './ExperiencesPage';
+import { ask } from '../components/Confirm';
 
 export function CadetsPage() {
   const { isCommander, user } = useSession();
@@ -469,7 +470,7 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
             <button
               className="icon-btn"
               aria-label="מחיקת צוות"
-              onClick={() => confirm(`למחוק את ${t.name}? הצוערים יישארו ללא צוות.`) && void run(() => api.del(`/api/teams/${t.id}`))}
+              onClick={async () => (await ask({ title: `למחוק את ${t.name}?`, body: 'הצוערים שבו יישארו ללא צוות.', confirm: 'מחיקה', danger: true })) && void run(() => api.del(`/api/teams/${t.id}`))}
             >
               <Icon name="trash" size={16} />
             </button>
@@ -619,8 +620,14 @@ export function CadetPage() {
             <button
               className="btn btn-ghost btn-sm text-red"
               style={{ alignSelf: 'flex-start' }}
-              onClick={() => {
-                if (confirm(`למחוק את ${c.fullName} וכל התיק שלו? לסיום קורס או הדחה עדיף לשנות סטטוס.`)) void api.del(`/api/cadets/${c.id}`).then(() => navigate('/cadets'));
+              onClick={async () => {
+                const ok = await ask({
+                  title: `למחוק את ${c.fullName}?`,
+                  body: 'כל התיק שלו יימחק: רישומים, הערכות, התנסויות ותיק ההערכה. לסיום קורס או הדחה עדיף לשנות את הסטטוס - אז התיק נשמר.',
+                  confirm: 'מחיקה לצמיתות',
+                  danger: true,
+                });
+                if (ok) void api.del(`/api/cadets/${c.id}`).then(() => navigate('/cadets'));
               }}
             >
               <Icon name="trash" /> מחיקת צוער
@@ -641,7 +648,11 @@ function StatusPill({ cadet }: { cadet: Cadet }) {
   const tone = `status-pill t-${CADET_STATUS_TONES[cadet.status]}`;
   if (!cadet.canManage) return <span className={tone}>{CADET_STATUS_LABELS[cadet.status]}</span>;
   const change = async (status: CadetStatus) => {
-    if (status === 'dropped' && !confirm(`לסמן את ${cadet.fullName} כ"${CADET_STATUS_LABELS.dropped}"?`)) return;
+    if (
+      status === 'dropped' &&
+      !(await ask({ title: `לסמן את ${cadet.fullName} כ"${CADET_STATUS_LABELS.dropped}"?`, body: 'הצוער יצא מרשימת הצוערים הפעילים. התיק נשמר, ואפשר להחזיר אותו בכל עת.', confirm: 'סימון' }))
+    )
+      return;
     setBusy(true);
     try {
       await api.patch(`/api/cadets/${cadet.id}`, { status });
@@ -707,7 +718,7 @@ function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemp
     }
   };
   const remove = async (x: Exemption) => {
-    if (!confirm(`להסיר את ההחרגה "${x.subject}" של ${cadet.fullName}?`)) return;
+    if (!(await ask({ title: `להסיר את ההחרגה "${x.subject}"?`, body: `הסגל יפסיק לראות אותה אצל ${cadet.fullName}.`, confirm: 'הסרה', danger: true }))) return;
     await api.del(`/api/exemptions/${x.id}`);
     emitLocalChange('cadets');
   };
@@ -917,9 +928,11 @@ function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: 
     const refers = note && cadet.status === 'active' && cadet.disciplineNotes + 1 >= DISCIPLINE_NOTE_LIMIT && cadet.notesCommittee?.decision !== null;
     if (
       refers &&
-      !confirm(
-        `זו הערת המשמעת ה-${cadet.disciplineNotes + 1} של ${cadet.fullName}.\n\nלפי הנוהל הוא עולה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}: הוועדה תיפתח בתיק ההערכה שלו, עם התיק כפי שהוא עכשיו, ומפקד הקורס יקבל התראה. אם ההערה תימחק לפני החלטת הוועדה, ההעברה תבוטל.\n\nלשמור?`,
-      )
+      !(await ask({
+        title: `זו הערת המשמעת ה-${cadet.disciplineNotes + 1} של ${cadet.fullName}`,
+        body: `לפי הנוהל הוא עולה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}: הוועדה תיפתח בתיק ההערכה שלו, עם התיק כפי שהוא עכשיו, ומפקד הקורס יקבל התראה.\nאם ההערה תימחק לפני החלטת הוועדה, ההעברה תבוטל.`,
+        confirm: `שמירה והעברה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`,
+      }))
     )
       return;
     setError(null);
@@ -1144,8 +1157,8 @@ function Records({ records }: { records: CadetRecord[] }) {
                 className="icon-btn"
                 style={{ width: 28, height: 28 }}
                 aria-label="מחיקת רישום"
-                onClick={() =>
-                  confirm('למחוק את הרישום?') &&
+                onClick={async () =>
+                  (await ask({ title: 'למחוק את הרישום מהתיק?', confirm: 'מחיקה', danger: true })) &&
                   void api.del(`/api/records/${r.id}`).then(() => {
                     toast({ title: 'הרישום נמחק', tone: 'green' });
                     emitLocalChange('cadets');

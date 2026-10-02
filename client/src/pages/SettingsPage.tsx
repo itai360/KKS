@@ -18,6 +18,7 @@ import { fmtAgo, fmtDateTime } from '../lib/format';
 import { useApi } from '../lib/useApi';
 import { GenerateWeeks } from './WeeksPage';
 import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupported } from '../lib/push';
+import { ask } from '../components/Confirm';
 
 export function SettingsPage() {
   const { isCommander } = useSession();
@@ -536,7 +537,13 @@ function Backups() {
   };
   const restore = async (s: SnapshotInfo) => {
     const when = `${fmtDateTime(s.savedAt)} (${fmtAgo(s.savedAt)})`;
-    if (!confirm(`לשחזר את המערכת למצב של ${when}?\n\nכל מה שנוסף או שונה מאז יבוטל, לכל המשתמשים. המצב הנוכחי נשמר כגיבוי "לפני שחזור", כך שאפשר לחזור אליו.`)) return;
+    const ok = await ask({
+      title: `לשחזר את המערכת למצב של ${when}?`,
+      body: 'כל מה שנוסף או שונה מאז יבוטל, לכל המשתמשים. המצב הנוכחי נשמר כגיבוי "לפני שחזור", כך שאפשר לחזור אליו.',
+      confirm: 'שחזור',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(s.id);
     try {
       await api.post(`/api/admin/snapshots/${encodeURIComponent(s.id)}/restore`, {});

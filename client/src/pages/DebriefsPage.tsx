@@ -16,6 +16,7 @@ import { isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { ask } from '../components/Confirm';
 
 const ADD_PLACEHOLDER: Record<DebriefItemKind, string> = {
   fact: 'הוספת עובדה...',
@@ -309,7 +310,7 @@ export function DebriefPage() {
                   החזר לטיוטה
                 </button>
               )}
-              <button className="btn btn-ghost text-red" onClick={() => confirm('למחוק את התחקיר?') && void api.del(`/api/debriefs/${d.id}`).then(() => navigate('/debriefs'))} aria-label="מחיקה">
+              <button className="btn btn-ghost text-red" onClick={async () => (await ask({ title: 'למחוק את התחקיר?', body: 'הממצאים, המסקנות והלקחים שבו יימחקו. משימות ההמשך יישארו.', confirm: 'מחיקה', danger: true })) && void api.del(`/api/debriefs/${d.id}`).then(() => navigate('/debriefs'))} aria-label="מחיקה">
                 <Icon name="trash" />
               </button>
             </>
@@ -447,7 +448,7 @@ function ItemColumn({
                     >
                       <Icon name="edit" size={14} />
                     </button>
-                    <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label="מחיקה" onClick={() => confirm('למחוק?') && void onDelete(i)}>
+                    <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label="מחיקה" onClick={async () => (await ask({ title: 'למחוק את הפריט?', confirm: 'מחיקה', danger: true })) && void onDelete(i)}>
                       <Icon name="trash" size={14} />
                     </button>
                   </div>

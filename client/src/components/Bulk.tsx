@@ -10,6 +10,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { ErrorBox, Field, Modal } from './ui';
+import { ask } from './Confirm';
 
 export interface BulkAction {
   /** the server action (see OPS in server/src/bulk.ts) */
@@ -90,7 +91,7 @@ export function BulkScope({
   const run = async (a: BulkAction, value?: string | number | boolean | null) => {
     const list = [...selected];
     if (!list.length) return;
-    if (a.confirm && !confirm(a.confirm.replace('{n}', String(list.length)))) return;
+    if (a.confirm && !(await ask({ title: a.confirm.replace('{n}', String(list.length)), confirm: a.label, danger: a.danger }))) return;
     setBusy(true);
     try {
       const r = await api.post<{ done: number; failed: { id: number; error: string }[] }>('/api/bulk', { entity, action: a.key, ids: list, value: value ?? a.value });

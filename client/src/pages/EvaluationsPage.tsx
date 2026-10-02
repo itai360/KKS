@@ -33,6 +33,7 @@ import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useApi } from '../lib/useApi';
+import { ask } from '../components/Confirm';
 
 const dateLabel = (d: string) => shortDate(d);
 /** "ל" before a name: "ועדת הדחה" becomes "לוועדת הדחה" */
@@ -265,7 +266,7 @@ export function EvaluationFilePage() {
               </button>
               <button
                 className="btn btn-sm btn-ghost"
-                onClick={() => confirm('לבטל את ההעברה לוועדה?') && void act(() => api.del(`/api/evaluations/committees/${pending.id}`), 'ההעברה לוועדה בוטלה')}
+                onClick={async () => (await ask({ title: 'לבטל את ההעברה לוועדה?', body: 'אפשר להעביר שוב בכל עת.', confirm: 'ביטול ההעברה', cancel: 'חזרה' })) && void act(() => api.del(`/api/evaluations/committees/${pending.id}`), 'ההעברה לוועדה בוטלה')}
               >
                 ביטול
               </button>
@@ -637,7 +638,7 @@ function EntryRow({ entry: e, file, editable, onChange }: { entry: EvaluationEnt
           </button>
         )}
         {editable && e.canEdit && (
-          <button className="btn btn-ghost btn-sm text-red no-print" onClick={() => confirm('למחוק את הרישום?') && void run(() => api.del(`/api/evaluations/entries/${e.id}`))}>
+          <button className="btn btn-ghost btn-sm text-red no-print" onClick={async () => (await ask({ title: 'למחוק את הרישום מתיק ההערכה?', confirm: 'מחיקה', danger: true })) && void run(() => api.del(`/api/evaluations/entries/${e.id}`))}>
             מחיקה
           </button>
         )}
