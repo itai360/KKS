@@ -26,6 +26,7 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
 import { api } from '../lib/api';
+import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useApi } from '../lib/useApi';
@@ -70,6 +71,33 @@ export function EvaluationsPage() {
       <PageHead
         title="תיקי הערכה"
         sub="תמונה מפורטת על כל צוער לאורך הקורס: מה טוב, מה לשפר, חריגים וחוות דעת. אם צוער עולה לוועדה - זה התיק שהוועדה מקבלת."
+        actions={
+          <button
+            className="btn"
+            title="ייצוא הרשימה המסוננת לאקסל"
+            disabled={!shown.length}
+            onClick={() =>
+              void saveCsv(
+                'תיקי-הערכה',
+                ['שם מלא', 'מספר אישי', 'צוות', 'מצב', 'חיובי', 'לשיפור', 'חריג', 'לא הוצגו לצוער', 'רישום אחרון', 'ועדה'],
+                shown.map((c) => [
+                  c.fullName,
+                  c.personalNumber,
+                  c.teamName ?? '',
+                  STANDING_LABELS[c.standing],
+                  c.positive,
+                  c.improve,
+                  c.exception,
+                  c.notShown,
+                  c.lastEntryAt ? fmtDateTime(c.lastEntryAt) : '',
+                  c.committee ? (c.committee.decision ? COMMITTEE_DECISION_LABELS[c.committee.decision] : 'ממתינה') : '',
+                ]),
+              )
+            }
+          >
+            <Icon name="download" /> ייצוא
+          </button>
+        }
       />
       <div className="chips chips-scroll mb-12">
         <button className={`chip${!team ? ' on' : ''}`} onClick={() => set('team', '')}>

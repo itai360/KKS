@@ -24,7 +24,8 @@ import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { fmtAgo, isoAt, todayKey } from '../lib/format';
+import { saveCsv } from '../lib/csv';
+import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -32,6 +33,7 @@ import { ExperienceCard, ExperienceForm } from './ExperiencesPage';
 
 export function CadetsPage() {
   const { isCommander, user } = useSession();
+  const toast = useToast();
   const [params, setParams] = useSearchParams();
   const team = params.get('team') ?? '';
   const status = params.get('status') ?? 'active';
@@ -75,6 +77,32 @@ export function CadetsPage() {
         actions={
           <>
             {canAdd && <BulkToggle />}
+            <button
+              className="btn"
+              title="ייצוא הרשימה המסוננת לאקסל"
+              disabled={!shown.length}
+              onClick={() =>
+                void saveCsv(
+                  'צוערים',
+                  ['שם מלא', 'מספר אישי', 'צוות', 'טלפון', 'סטטוס', 'רישומים', 'ציון ממוצע', 'משמעת', 'שיחות', 'רישום אחרון', 'הערות'],
+                  shown.map((c) => [
+                    c.fullName,
+                    c.personalNumber,
+                    c.teamName ?? '',
+                    c.phone,
+                    CADET_STATUS_LABELS[c.status],
+                    c.recordCount,
+                    c.avgScore === null ? '' : c.avgScore.toFixed(1),
+                    c.disciplineCount,
+                    c.talkCount,
+                    c.lastRecordAt ? fmtDateTime(c.lastRecordAt) : '',
+                    c.notes,
+                  ]),
+                ).catch((e: Error) => toast({ title: e.message, tone: 'red' }))
+              }
+            >
+              <Icon name="download" /> ייצוא
+            </button>
             {isCommander && (
               <>
                 <button className="btn" onClick={() => setDialog('teams')}>

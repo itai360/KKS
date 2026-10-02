@@ -12,8 +12,8 @@ import { canQuickUpdate, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, PageHead, Seg } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { saveFile } from '../lib/download';
-import { fmtDateTime, todayKey } from '../lib/format';
+import { saveCsv } from '../lib/csv';
+import { fmtDateTime } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
@@ -359,12 +359,11 @@ function Board({ tasks }: { tasks: Task[] }) {
   );
 }
 
-/** Excel opens UTF-8 CSV correctly (Hebrew included) when it starts with a BOM. */
 function exportCsv(tasks: Task[]) {
-  const cell = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = [
+  return saveCsv(
+    'משימות',
     ['משימה', 'אחראי', 'משתתפים', 'יצר', 'תחום', 'שבוע', 'דד-ליין', 'עדיפות', 'סטטוס', 'באיחור', 'הושלמה'],
-    ...tasks.map((t) => [
+    tasks.map((t) => [
       t.title,
       t.ownerName,
       t.participantIds.length,
@@ -377,7 +376,5 @@ function exportCsv(tasks: Task[]) {
       t.overdue ? 'כן' : '',
       t.completedAt ? fmtDateTime(t.completedAt) : '',
     ]),
-  ];
-  const csv = '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n');
-  return saveFile(`משימות-${todayKey()}.csv`, new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  );
 }
