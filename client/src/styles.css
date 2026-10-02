@@ -1234,6 +1234,27 @@ input::-webkit-date-and-time-value {
   margin: 14px 0;
 }
 
+.skip-link {
+  position: absolute;
+  top: 8px;
+  inset-inline-start: 8px;
+  z-index: 1000;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+#main:focus {
+  outline: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

@@ -65,6 +65,11 @@ export function createSession(userId: number): string {
   return token;
 }
 
+/** Signs the person out everywhere but here (a lost phone, a shared computer); returns how many. */
+export function endOtherSessions(userId: number, keepToken: string | undefined): number {
+  return db().run('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?', userId, keepToken ? sha256(keepToken) : '').changes;
+}
+
 export function destroySession(token: string): void {
   db().run('DELETE FROM sessions WHERE token_hash = ?', sha256(token));
 }

@@ -161,6 +161,17 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="app">
+      {/* keyboard and screen-reader users skip the menu */}
+      <a
+        className="skip-link"
+        href="#main"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main')?.focus();
+        }}
+      >
+        דילוג לתוכן הראשי
+      </a>
       <aside className="rail" aria-label="ניווט ראשי">
         <div className="brand">
           <div className="brand-mark">{symbol.slice(0, 4)}</div>
@@ -247,7 +258,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </div>
         )}
-        <main id="main">
+        <main id="main" tabIndex={-1}>
           <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
         </main>
       </div>

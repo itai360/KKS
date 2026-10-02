@@ -9,6 +9,7 @@ import {
   createSession,
   createUser,
   destroySession,
+  endOtherSessions,
   getUserRow,
   hashPassword,
   loginFailed,
@@ -209,7 +210,18 @@ export function apiRouter(): Router {
       .parse(req.body);
     if (!verifyPassword(current, me(req).password_hash)) throw badRequest('הסיסמה הנוכחית שגויה');
     db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(next), me(req).id);
-    res.json({ ok: true });
+    // whoever knew the old password is signed out on their devices; this one stays in
+    const others = endOtherSessions(me(req).id, sessionToken(req));
+    res.json({ ok: true, others });
+  });
+
+  r.get('/auth/sessions', (req, res) => {
+    const n = db().get<{ n: number }>('SELECT count(*) AS n FROM sessions WHERE user_id = ? AND expires_at > ?', me(req).id, nowIso())!.n;
+    res.json({ others: Math.max(0, n - 1) });
+  });
+
+  r.post('/auth/sessions/end-others', (req, res) => {
+    res.json({ others: endOtherSessions(me(req).id, sessionToken(req)) });
   });
 
   r.get('/stream', streamHandler);

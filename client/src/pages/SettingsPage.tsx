@@ -603,21 +603,35 @@ function Backups() {
   );
 }
 
+const inDevices = (n: number) => (n === 1 ? 'במכשיר אחד נוסף' : `ב-${n} מכשירים נוספים`);
+
 function PasswordCard() {
   const toast = useToast();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const sessions = useApi<{ others: number }>('/api/auth/sessions');
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
-      await api.post('/api/auth/password', { current, next });
-      toast({ title: 'הסיסמה עודכנה', tone: 'green' });
+      const r = await api.post<{ others: number }>('/api/auth/password', { current, next });
+      toast({ title: 'הסיסמה עודכנה', body: r.others ? `החשבון נותק ${inDevices(r.others)} - שם צריך להתחבר עם הסיסמה החדשה.` : undefined, tone: 'green' });
       setCurrent('');
       setNext('');
+      sessions.setData({ others: 0 });
     } catch (err) {
       setError((err as Error).message);
+    }
+  };
+  const endOthers = async () => {
+    if (!(await ask({ title: 'להתנתק בכל המכשירים האחרים?', body: 'החיבור במכשיר הזה נשאר. בשאר המכשירים צריך יהיה להתחבר מחדש.', confirm: 'ניתוק', danger: true }))) return;
+    try {
+      const r = await api.post<{ others: number }>('/api/auth/sessions/end-others');
+      toast({ title: r.others ? `החשבון נותק ${inDevices(r.others)}` : 'לא היו מכשירים נוספים מחוברים', tone: 'green' });
+      sessions.setData({ others: 0 });
+    } catch (err) {
+      toast({ title: (err as Error).message, tone: 'red' });
     }
   };
   return (
@@ -637,6 +651,14 @@ function PasswordCard() {
             עדכן סיסמה
           </button>
           <ErrorBox error={error} />
+        </div>
+        <div className="span-2 row wrap small" style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+          <span className="grow muted">
+            {sessions.data?.others ? `החשבון מחובר גם ${inDevices(sessions.data.others)}.` : 'החשבון מחובר רק במכשיר הזה.'} מכשיר שאבד או מחשב משותף? אפשר לנתק אותו מכאן.
+          </span>
+          <button type="button" className="btn btn-sm" disabled={!sessions.data?.others} onClick={() => void endOthers()}>
+            ניתוק המכשירים האחרים
+          </button>
         </div>
       </div>
     </form>

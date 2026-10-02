@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { clock, resetSettingsCache } from '../src/core';
 import { openDb } from '../src/db';
-import { NOW, setup, type Ctx } from './helpers';
+import { login, NOW, setup, type Ctx } from './helpers';
 
 describe('first-run setup', () => {
   beforeEach(() => {
@@ -84,5 +84,22 @@ describe('auth', () => {
     expect((await c.s1.post('/api/auth/password', { current: 'secret123', next: 'newpass1' })).status).toBe(200);
     const res = await request(c.app).post('/api/auth/login').set('x-kks', '1').send({ username: 's1', password: 'newpass1' });
     expect(res.status).toBe(200);
+  });
+
+  it('a new password signs out the other devices, not this one; or sign them out without changing it', async () => {
+    const phone = await login(c.app, 's2');
+    const laptop = await login(c.app, 's2');
+    expect((await c.s2.get('/api/auth/sessions')).body.others).toBe(2);
+    const changed = await c.s2.post('/api/auth/password', { current: 'secret123', next: 'newpass1' });
+    expect(changed.body.others).toBe(2);
+    expect((await c.s2.get('/api/my')).status).toBe(200);
+    expect((await phone.get('/api/my')).status).toBe(401);
+    expect((await laptop.get('/api/my')).status).toBe(401);
+
+    const again = await login(c.app, 's2', 'newpass1');
+    expect((await c.s2.post('/api/auth/sessions/end-others')).body.others).toBe(1);
+    expect((await again.get('/api/my')).status).toBe(401);
+    expect((await c.s2.get('/api/my')).status).toBe(200);
+    expect((await c.s2.get('/api/auth/sessions')).body.others).toBe(0);
   });
 });
