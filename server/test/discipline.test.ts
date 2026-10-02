@@ -2,7 +2,7 @@
 // enforcement ladder the commander imports from the course's document.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, DisciplineOverview, EvaluationFile, EvaluationListItem, WeeklyReport } from '../../shared/types';
+import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, DisciplineLogEntry, DisciplineOverview, EvaluationFile, EvaluationListItem, WeeklyReport } from '../../shared/types';
 import { Db, migrate } from '../src/db';
 import { guideFromFile, htmlBlocks, ordinalOf } from '../src/discipline';
 import { setSheetFetcher } from '../src/sheets';
@@ -226,7 +226,18 @@ describe('discipline notes', () => {
       ['איחור למסדר', 1, false],
       ['ישן', null, false],
     ]);
-    expect((await c.cmd.get('/api/discipline/overview')).body).toMatchObject({ managed: 1, week: { events: 2 } });
+    // another cadet with the same offense: their own first time
+    const other = (await c.cmd.post('/api/cadets', { firstName: 'דנה', lastName: 'כץ', teamId: (await detail()).cadet.teamId })).body.cadet.id;
+    await c.s1.post(`/api/cadets/${other}/records`, record({ offense: 'זמנים · איחור למסדר', occurredOn: '2026-10-01' }));
+    const both = (await c.cmd.get('/api/discipline/overview')).body as DisciplineOverview;
+    expect(both).toMatchObject({ managed: 2, week: { events: 3 } });
+    expect(both.recent.map((r) => [r.cadetName, r.occurrence])).toEqual([
+      ['דנה כץ', 1],
+      ['נועם לוי', 2],
+      ['נועם לוי', 1],
+      ['נועם לוי', null],
+    ]);
+    await c.cmd.del(`/api/cadets/${other}`);
     // staff without a team see nothing
     expect((await c.s2.get('/api/discipline/overview')).body).toEqual({ managed: 0, week: { events: 0, notes: 0, byCategory: [] }, cadets: [], recent: [] });
 
@@ -240,6 +251,15 @@ describe('discipline notes', () => {
     });
     expect(await weekly(c.cmd, '2026-09-20')).toMatchObject({ events: 1, notes: 0, byCategory: [{ category: 'אחר', count: 1 }] });
     expect(await weekly(c.s2, '2026-09-27')).toBeNull();
+
+    // the log for export: oldest first, with the case split from its subject
+    const log = (await c.s1.get('/api/discipline/log?from=2026-09-27&to=2026-10-03')).body as DisciplineLogEntry[];
+    expect(log.map((r) => [r.occurredOn, r.category, r.offense, r.occurrence, r.formal, r.noteNumber, r.authorName])).toEqual([
+      ['2026-09-28', 'זמנים', 'איחור למסדר', 1, false, null, 'מפק"צ 1'],
+      ['2026-09-30', 'זמנים', 'איחור למסדר', 2, true, 1, 'מפק"צ 1'],
+    ]);
+    expect((await c.s1.get('/api/discipline/log')).body).toHaveLength(3);
+    expect((await c.s2.get('/api/discipline/log')).body).toEqual([]);
   });
 
   it('a cadet who already left gets no committee', async () => {

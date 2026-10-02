@@ -464,6 +464,24 @@ export interface BriefingData {
   byOwner: { userId: number; name: string; dueToday: number; overdue: number; blocked: number }[];
 }
 
+/** One discipline record in the export (the cadets the user manages, any status). */
+export interface DisciplineLogEntry {
+  id: number;
+  occurredOn: string;
+  cadetId: number;
+  cadetName: string;
+  teamName: string | null;
+  category: string;
+  offense: string;
+  occurrence: number | null;
+  formal: boolean;
+  noteNumber: number | null;
+  severity: string;
+  title: string;
+  body: string;
+  authorName: string;
+}
+
 /** Discipline over a range of days, among the cadets the user manages. */
 export interface DisciplineSummary {
   events: number;

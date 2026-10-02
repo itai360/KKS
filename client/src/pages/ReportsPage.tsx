@@ -3,16 +3,43 @@
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { addDays, shortDate, startOfWeek, weekdayName, weekdayOf } from '@shared/dates';
 import { DISCIPLINE_NOTE_LIMIT } from '@shared/constants';
-import type { ActivityEntry, DayEndData, DisciplineSummary, LookAheadData, WeeklyReport } from '@shared/types';
+import type { ActivityEntry, DayEndData, DisciplineLogEntry, DisciplineSummary, LookAheadData, WeeklyReport } from '@shared/types';
 import { Icon } from '../components/Icon';
+import { useToast } from '../components/Toasts';
 import { GroupTitle, TaskList } from '../components/TaskRow';
 import { Bar, Empty, ErrorBox, Loading, PageHead, Ring } from '../components/ui';
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtLongDate, todayKey } from '../lib/format';
+import { api, qs } from '../lib/api';
+import { saveCsv } from '../lib/csv';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
+/** The discipline records as a spreadsheet: one week, or the whole course. */
+async function exportDiscipline(from?: string, to?: string): Promise<void> {
+  const log = await api.get<DisciplineLogEntry[]>(`/api/discipline/log${qs({ from, to })}`);
+  await saveCsv(
+    from ? `משמעת-${from}` : 'משמעת-כל-הקורס',
+    ['תאריך', 'צוער', 'צוות', 'נושא', 'מקרה', 'פעם', 'הערת משמעת', 'חומרה', 'כותרת', 'פירוט', 'נרשם על ידי'],
+    log.map((r) => [
+      r.occurredOn.split('-').reverse().join('.'),
+      r.cadetName,
+      r.teamName ?? '',
+      r.category,
+      r.offense,
+      r.occurrence ?? '',
+      r.formal ? `כן (${r.noteNumber})` : '',
+      r.severity,
+      r.title,
+      r.body,
+      r.authorName,
+    ]),
+  );
+}
+
 /** The week's discipline among the cadets this user manages (the staff update it weekly). */
-function WeeklyDiscipline({ d }: { d: DisciplineSummary }) {
+function WeeklyDiscipline({ d, from, to }: { d: DisciplineSummary; from: string; to: string }) {
+  const toast = useToast();
+  const save = (a?: string, b?: string) => void exportDiscipline(a, b).catch((e: Error) => toast({ title: e.message, tone: 'red' }));
   return (
     <div className="card">
       <div className="card-head">
@@ -20,6 +47,14 @@ function WeeklyDiscipline({ d }: { d: DisciplineSummary }) {
         <h3 className="grow">משמעת</h3>
         <span className="small muted">
           {d.events} {d.events === 1 ? 'אירוע' : 'אירועים'} · {d.notes} {d.notes === 1 ? 'הערת משמעת' : 'הערות משמעת'}
+        </span>
+        <span className="row gap-4 no-print">
+          <button className="btn btn-sm" disabled={!d.events} onClick={() => save(from, to)} title="רישומי המשמעת של השבוע לאקסל">
+            <Icon name="download" size={14} /> ייצוא השבוע
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={() => save()} title="כל רישומי המשמעת מתחילת הקורס">
+            כל הקורס
+          </button>
         </span>
       </div>
       {d.events === 0 ? (
@@ -163,7 +198,7 @@ export function WeeklyReportPage() {
               </div>
             </div>
           </div>
-          {data.discipline && <WeeklyDiscipline d={data.discipline} />}
+          {data.discipline && <WeeklyDiscipline d={data.discipline} from={data.from} to={data.to} />}
         </div>
       ) : null}
     </div>

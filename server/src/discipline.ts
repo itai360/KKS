@@ -11,7 +11,7 @@
 // each heading after the table with text under it is the wording of a note.
 
 import { localDateKey, startOfWeek } from '../../shared/dates';
-import type { Cadet, DisciplineGuide, DisciplineLetter, DisciplineOffense, DisciplineOverview, DisciplineStep, DisciplineSummary } from '../../shared/types';
+import type { Cadet, DisciplineGuide, DisciplineLetter, DisciplineLogEntry, DisciplineOffense, DisciplineOverview, DisciplineStep, DisciplineSummary } from '../../shared/types';
 import type { UserRow } from './auth';
 import { disciplineOrder, listCadets, RECORD_BASE, type RecordRow } from './cadets';
 import { badRequest, clock, nowIso, tz } from './core';
@@ -426,9 +426,9 @@ export function saveGuide(actor: UserRow, guide: { offenses: DisciplineOffense[]
 
 // ---------------- the picture for the commanders ----------------
 
-/** The active cadets this user manages and their discipline records, newest first. */
-function managedDiscipline(actor: UserRow) {
-  const managed = listCadets(actor, { status: 'active' }).filter((c) => c.canManage);
+/** The cadets this user manages (active ones, unless asked for all) and their discipline records, newest first. */
+function managedDiscipline(actor: UserRow, status: 'active' | 'all' = 'active') {
+  const managed = listCadets(actor, { status }).filter((c) => c.canManage);
   const byId = new Map(managed.map((c) => [c.id, c]));
   const rows = db()
     .all<RecordRow>(`${RECORD_BASE} WHERE r.kind = 'discipline' ORDER BY r.occurred_on DESC, r.id DESC`)
@@ -460,6 +460,35 @@ function summarize(rows: RecordRow[], byId: Map<number, Cadet>, from: string, to
       })
       .sort((a, b) => b.notes - a.notes || b.events - a.events || a.fullName.localeCompare(b.fullName, 'he')),
   };
+}
+
+/** Every discipline record of the cadets the user manages - whatever their status now - between two days if given, oldest first. */
+export function disciplineLog(actor: UserRow, from?: string, to?: string): DisciplineLogEntry[] {
+  const { byId, rows } = managedDiscipline(actor, 'all');
+  const order = disciplineOrder(rows);
+  return rows
+    .filter((r) => (!from || r.occurred_on >= from) && (!to || r.occurred_on <= to))
+    .reverse()
+    .map((r) => {
+      const [category, offense] = r.offense.includes(' · ') ? r.offense.split(' · ') : ['', r.offense];
+      const c = byId.get(r.cadet_id)!;
+      return {
+        id: r.id,
+        occurredOn: r.occurred_on,
+        cadetId: r.cadet_id,
+        cadetName: c.fullName,
+        teamName: c.teamName,
+        category,
+        offense,
+        occurrence: order.get(r.id)?.occurrence ?? null,
+        formal: !!r.formal,
+        noteNumber: order.get(r.id)?.noteNumber ?? null,
+        severity: r.category,
+        title: r.title,
+        body: r.body,
+        authorName: r.author_name,
+      };
+    });
 }
 
 /** The weekly report's discipline section; null for someone who manages no cadets. */
