@@ -464,9 +464,19 @@ export interface BriefingData {
   byOwner: { userId: number; name: string; dueToday: number; overdue: number; blocked: number }[];
 }
 
+/** Discipline over a range of days, among the cadets the user manages. */
+export interface DisciplineSummary {
+  events: number;
+  notes: number;
+  byCategory: { category: string; count: number }[];
+  cadets: { id: number; fullName: string; teamName: string | null; events: number; notes: number; totalNotes: number }[];
+}
+
 export interface WeeklyReport {
   from: string;
   to: string;
+  /** null for someone who manages no cadets */
+  discipline: DisciplineSummary | null;
   opened: number;
   completed: number;
   carried: number;

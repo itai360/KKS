@@ -2,13 +2,72 @@
 
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { addDays, shortDate, startOfWeek, weekdayName, weekdayOf } from '@shared/dates';
-import type { ActivityEntry, DayEndData, LookAheadData, WeeklyReport } from '@shared/types';
+import { DISCIPLINE_NOTE_LIMIT } from '@shared/constants';
+import type { ActivityEntry, DayEndData, DisciplineSummary, LookAheadData, WeeklyReport } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { GroupTitle, TaskList } from '../components/TaskRow';
 import { Bar, Empty, ErrorBox, Loading, PageHead, Ring } from '../components/ui';
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtLongDate, todayKey } from '../lib/format';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+
+/** The week's discipline among the cadets this user manages (the staff update it weekly). */
+function WeeklyDiscipline({ d }: { d: DisciplineSummary }) {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="shield" />
+        <h3 className="grow">משמעת</h3>
+        <span className="small muted">
+          {d.events} {d.events === 1 ? 'אירוע' : 'אירועים'} · {d.notes} {d.notes === 1 ? 'הערת משמעת' : 'הערות משמעת'}
+        </span>
+      </div>
+      {d.events === 0 ? (
+        <div className="card-body">
+          <p className="small muted" style={{ margin: 0 }}>
+            לא נרשמה משמעת בשבוע הזה.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="card-body row wrap gap-4">
+            {d.byCategory.map((c) => (
+              <span key={c.category} className="badge">
+                {c.category} {c.count}
+              </span>
+            ))}
+          </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>צוער</th>
+                <th className="hide-mobile">צוות</th>
+                <th className="num-cell">אירועים</th>
+                <th className="num-cell">הערות משמעת</th>
+                <th className="num-cell">עד עכשיו</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.cadets.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <Link to={`/cadets/${c.id}`}>{c.fullName}</Link>
+                  </td>
+                  <td className="hide-mobile">{c.teamName ?? '-'}</td>
+                  <td className="num-cell">{c.events}</td>
+                  <td className={`num-cell${c.notes ? ' text-red' : ''}`}>{c.notes}</td>
+                  <td className="num-cell" title="הערות משמעת מתחילת הקורס">
+                    {c.totalNotes}/{DISCIPLINE_NOTE_LIMIT}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function WeeklyReportPage() {
   const [params, setParams] = useSearchParams();
@@ -104,6 +163,7 @@ export function WeeklyReportPage() {
               </div>
             </div>
           </div>
+          {data.discipline && <WeeklyDiscipline d={data.discipline} />}
         </div>
       ) : null}
     </div>

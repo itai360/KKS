@@ -20,6 +20,7 @@ import type {
 import { getUserRow, toUser, type UserRow } from './auth';
 import { clock, forbidden, getSettings, notFound, tz } from './core';
 import { db } from './db';
+import { disciplineSummary } from './discipline';
 import { listEvents } from './schedule';
 import { getTaskRow, isCommander, visibleTasks, canApprove } from './taskRepo';
 import { pendingRequestsFor } from './taskService';
@@ -336,6 +337,7 @@ export function weeklyReport(actor: UserRow, weekStartKey?: string): WeeklyRepor
   return {
     from,
     to,
+    discipline: disciplineSummary(actor, from, to),
     opened: tasks.filter((t) => inRange(t.createdAt)).length,
     completed: completed.length,
     carried,

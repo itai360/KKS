@@ -2,7 +2,7 @@
 // enforcement ladder the commander imports from the course's document.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, DisciplineOverview, EvaluationFile, EvaluationListItem } from '../../shared/types';
+import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, DisciplineOverview, EvaluationFile, EvaluationListItem, WeeklyReport } from '../../shared/types';
 import { Db, migrate } from '../src/db';
 import { guideFromFile, htmlBlocks, ordinalOf } from '../src/discipline';
 import { setSheetFetcher } from '../src/sheets';
@@ -229,6 +229,17 @@ describe('discipline notes', () => {
     expect((await c.cmd.get('/api/discipline/overview')).body).toMatchObject({ managed: 1, week: { events: 2 } });
     // staff without a team see nothing
     expect((await c.s2.get('/api/discipline/overview')).body).toEqual({ managed: 0, week: { events: 0, notes: 0, byCategory: [] }, cadets: [], recent: [] });
+
+    // the weekly report has the same, for the week it shows
+    const weekly = async (agent: Ctx['cmd'], from: string) => ((await agent.get(`/api/reports/weekly?from=${from}`)).body as WeeklyReport).discipline;
+    expect(await weekly(c.s1, '2026-09-27')).toEqual({
+      events: 2,
+      notes: 1,
+      byCategory: [{ category: 'זמנים', count: 2 }],
+      cadets: [{ id: cadet, fullName: 'נועם לוי', teamName: 'צוות 1', events: 2, notes: 1, totalNotes: 1 }],
+    });
+    expect(await weekly(c.cmd, '2026-09-20')).toMatchObject({ events: 1, notes: 0, byCategory: [{ category: 'אחר', count: 1 }] });
+    expect(await weekly(c.s2, '2026-09-27')).toBeNull();
   });
 
   it('a cadet who already left gets no committee', async () => {

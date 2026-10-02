@@ -11,7 +11,7 @@
 // each heading after the table with text under it is the wording of a note.
 
 import { localDateKey, startOfWeek } from '../../shared/dates';
-import type { DisciplineGuide, DisciplineLetter, DisciplineOffense, DisciplineOverview, DisciplineStep } from '../../shared/types';
+import type { Cadet, DisciplineGuide, DisciplineLetter, DisciplineOffense, DisciplineOverview, DisciplineStep, DisciplineSummary } from '../../shared/types';
 import type { UserRow } from './auth';
 import { disciplineOrder, listCadets, RECORD_BASE, type RecordRow } from './cadets';
 import { badRequest, clock, nowIso, tz } from './core';
@@ -426,28 +426,57 @@ export function saveGuide(actor: UserRow, guide: { offenses: DisciplineOffense[]
 
 // ---------------- the picture for the commanders ----------------
 
-/** This week's discipline, the cadets with notes, and the latest records - of the active cadets the user manages. */
-export function disciplineOverview(actor: UserRow): DisciplineOverview {
+/** The active cadets this user manages and their discipline records, newest first. */
+function managedDiscipline(actor: UserRow) {
   const managed = listCadets(actor, { status: 'active' }).filter((c) => c.canManage);
   const byId = new Map(managed.map((c) => [c.id, c]));
   const rows = db()
     .all<RecordRow>(`${RECORD_BASE} WHERE r.kind = 'discipline' ORDER BY r.occurred_on DESC, r.id DESC`)
     .filter((r) => byId.has(r.cadet_id));
-  const order = disciplineOrder(rows);
-  const weekStart = startOfWeek(localDateKey(clock.now(), tz()));
-  const week = rows.filter((r) => r.occurred_on >= weekStart);
+  return { managed, byId, rows };
+}
+
+/** Discipline between two days (inclusive): how much, by subject, and by cadet. */
+function summarize(rows: RecordRow[], byId: Map<number, Cadet>, from: string, to: string): DisciplineSummary {
+  const inRange = rows.filter((r) => r.occurred_on >= from && r.occurred_on <= to);
   const categories = new Map<string, number>();
-  for (const r of week) {
+  const cadets = new Map<number, { events: number; notes: number }>();
+  for (const r of inRange) {
     const category = r.offense.includes(' · ') ? r.offense.split(' · ')[0] : 'אחר';
     categories.set(category, (categories.get(category) ?? 0) + 1);
+    const e = cadets.get(r.cadet_id) ?? { events: 0, notes: 0 };
+    e.events++;
+    if (r.formal) e.notes++;
+    cadets.set(r.cadet_id, e);
   }
   return {
+    events: inRange.length,
+    notes: inRange.filter((r) => r.formal).length,
+    byCategory: [...categories].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category, 'he')),
+    cadets: [...cadets]
+      .map(([id, e]) => {
+        const c = byId.get(id)!;
+        return { id, fullName: c.fullName, teamName: c.teamName, ...e, totalNotes: c.disciplineNotes };
+      })
+      .sort((a, b) => b.notes - a.notes || b.events - a.events || a.fullName.localeCompare(b.fullName, 'he')),
+  };
+}
+
+/** The weekly report's discipline section; null for someone who manages no cadets. */
+export function disciplineSummary(actor: UserRow, from: string, to: string): DisciplineSummary | null {
+  const { managed, byId, rows } = managedDiscipline(actor);
+  return managed.length ? summarize(rows, byId, from, to) : null;
+}
+
+/** This week's discipline, the cadets with notes, and the latest records - of the active cadets the user manages. */
+export function disciplineOverview(actor: UserRow): DisciplineOverview {
+  const { managed, byId, rows } = managedDiscipline(actor);
+  const order = disciplineOrder(rows);
+  const today = localDateKey(clock.now(), tz());
+  const { events, notes, byCategory } = summarize(rows, byId, startOfWeek(today), today);
+  return {
     managed: managed.length,
-    week: {
-      events: week.length,
-      notes: week.filter((r) => r.formal).length,
-      byCategory: [...categories].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category, 'he')),
-    },
+    week: { events, notes, byCategory },
     cadets: managed
       .filter((c) => c.disciplineNotes > 0 || (c.notesCommittee && !c.notesCommittee.decision))
       .sort((a, b) => b.disciplineNotes - a.disciplineNotes || a.fullName.localeCompare(b.fullName, 'he'))
