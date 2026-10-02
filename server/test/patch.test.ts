@@ -70,4 +70,16 @@ describe('partial updates keep the fields they do not mention', () => {
     });
     expect((await c.cmd.get(`/api/events/${eventId}`)).body.debriefs.map((x: { id: number }) => x.id)).toEqual([id]);
   });
+
+  it('a debrief about an activity in the synced Google calendar keeps its name; a schedule event replaces it', async () => {
+    const d = await c.s1.post('/api/debriefs', { title: 'תחקיר מטווח', occurredOn: '2026-10-01', activity: 'מטווח 25 מ׳' });
+    const id = d.body.debrief.id;
+    expect(d.body.debrief).toMatchObject({ eventId: null, eventTitle: 'מטווח 25 מ׳' });
+    const ev = await c.cmd.post('/api/events', { date: '2026-10-01', startTime: '08:00', title: 'מטווח' });
+    await c.s1.patch(`/api/debriefs/${id}`, { eventId: ev.body.event.id, activity: 'מטווח 25 מ׳' });
+    expect(db().get('SELECT event_id, activity FROM debriefs WHERE id = ?', id)).toEqual({ event_id: ev.body.event.id, activity: '' });
+    await c.s1.patch(`/api/debriefs/${id}`, { eventId: null, activity: 'מטווח לילה' });
+    expect((await c.s1.get(`/api/debriefs/${id}`)).body.debrief).toMatchObject({ eventId: null, eventTitle: 'מטווח לילה' });
+    expect((await c.s1.patch(`/api/debriefs/${id}`, { eventId: 99999 })).status).toBe(400);
+  });
 });

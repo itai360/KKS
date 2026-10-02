@@ -21,6 +21,7 @@ interface DebriefRow {
   occurred_on: string;
   event_id: number | null;
   event_title: string | null;
+  activity: string;
   week_id: number | null;
   week_name: string | null;
   facilitator_id: number | null;
@@ -36,7 +37,7 @@ interface DebriefRow {
 }
 
 const BASE = `
-SELECT d.*, e.title AS event_title, w.name AS week_name, f.display_name AS facilitator_name, c.display_name AS created_by_name,
+SELECT d.*, coalesce(e.title, nullif(d.activity, '')) AS event_title, w.name AS week_name, f.display_name AS facilitator_name, c.display_name AS created_by_name,
   (SELECT count(*) FROM tasks t WHERE t.debrief_id = d.id AND t.status NOT IN ('done', 'cancelled')) AS open_tasks
 FROM debriefs d
 JOIN users c ON c.id = d.created_by
@@ -100,6 +101,8 @@ export const debriefSchema = z.object({
   title: z.string().trim().min(1, 'חובה לתת שם לתחקיר').max(200),
   occurredOn: z.string().refine(isDateKey, 'תאריך לא תקין'),
   eventId: z.number().int().positive().nullable().optional().default(null),
+  /** an activity from the synced Google calendar, by name (a schedule event goes by eventId) */
+  activity: z.string().trim().max(200).optional().default(''),
   facilitatorId: z.number().int().positive().nullable().optional().default(null),
   participants: z.string().max(2000).optional().default(''),
   summary: z.string().max(10000).optional().default(''),
@@ -111,11 +114,12 @@ export function createDebrief(actor: UserRow, raw: z.input<typeof debriefSchema>
   if (d.facilitatorId && !getUserRow(d.facilitatorId)?.active) throw badRequest('מנחה התחקיר אינו פעיל');
   const at = nowIso();
   const id = db().run(
-    `INSERT INTO debriefs(title, occurred_on, event_id, week_id, facilitator_id, participants, summary, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO debriefs(title, occurred_on, event_id, activity, week_id, facilitator_id, participants, summary, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     d.title,
     d.occurredOn,
     d.eventId,
+    d.eventId ? '' : d.activity,
     weekForDate(d.occurredOn),
     d.facilitatorId ?? actor.id,
     d.participants,
@@ -134,12 +138,15 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
   if (!canEditDebrief(actor, cur)) throw forbidden();
   const p = patchSchema(debriefSchema).extend({ status: z.enum(['draft', 'final']).optional() }).parse(raw);
   const occurredOn = p.occurredOn ?? cur.occurred_on;
+  const eventId = p.eventId !== undefined ? p.eventId : cur.event_id;
+  if (p.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', p.eventId)) throw badRequest('הפעילות לא נמצאה');
   db().tx(() => {
     db().run(
-      'UPDATE debriefs SET title = ?, occurred_on = ?, event_id = ?, week_id = ?, facilitator_id = ?, participants = ?, summary = ?, status = ?, updated_at = ? WHERE id = ?',
+      'UPDATE debriefs SET title = ?, occurred_on = ?, event_id = ?, activity = ?, week_id = ?, facilitator_id = ?, participants = ?, summary = ?, status = ?, updated_at = ? WHERE id = ?',
       p.title ?? cur.title,
       occurredOn,
-      p.eventId !== undefined ? p.eventId : cur.event_id,
+      eventId,
+      eventId ? '' : (p.activity ?? cur.activity),
       weekForDate(occurredOn),
       p.facilitatorId !== undefined ? p.facilitatorId : cur.facilitator_id,
       p.participants ?? cur.participants,

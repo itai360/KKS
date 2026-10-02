@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
-import type { Debrief, DebriefDetail, DebriefItem, ScheduleEvent, Template } from '@shared/types';
+import type { Debrief, DebriefDetail, DebriefItem, EventDetail, ExternalEvent, ScheduleEvent, Template } from '@shared/types';
 import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
@@ -99,26 +99,64 @@ export function DebriefsPage() {
   );
 }
 
+/** An activity to debrief: a schedule event (e:<id>), one from the synced Google calendar (x:<id>), or the name a debrief already keeps (a:<name>). */
+interface Activity {
+  key: string;
+  time: string | null;
+  title: string;
+}
+
 function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId?: number; onClose: () => void }) {
   const toast = useToast();
   const navigate = useNavigate();
   const { users, user } = useSession();
-  const today = todayKey();
-  const events = useApi<ScheduleEvent[]>(`/api/events?from=${addDays(today, -30)}&to=${today}`, ['events']);
-  const preset = events.data?.find((e) => e.id === eventId);
+  // opened from a schedule event: its day, until the date is changed here
+  const preset = useApi<EventDetail>(!debrief && eventId ? `/api/events/${eventId}` : null, ['events']).data?.event;
   const [title, setTitle] = useState(debrief?.title ?? '');
-  const [date, setDate] = useState(debrief?.occurredOn ?? today);
-  const [event, setEvent] = useState<string>(String(debrief?.eventId ?? eventId ?? ''));
+  const [dateSet, setDateSet] = useState<string | null>(debrief?.occurredOn ?? null);
+  const date = dateSet ?? preset?.date ?? todayKey();
+  const [pick, setPick] = useState<string>(debrief?.eventId ? `e:${debrief.eventId}` : debrief?.eventTitle ? `a:${debrief.eventTitle}` : eventId ? `e:${eventId}` : '');
   const [facilitator, setFacilitator] = useState<string>(String(debrief?.facilitatorId ?? user.id));
   const [participants, setParticipants] = useState(debrief?.participants ?? '');
   const [summary, setSummary] = useState(debrief?.summary ?? '');
   const [error, setError] = useState<string | null>(null);
-  const effectiveTitle = title || (preset ? `תחקיר ${preset.title}` : '');
-  const effectiveDate = debrief ? date : preset && !title ? preset.date : date;
+
+  // the activities of the chosen day: the course schedule and the synced Google calendar
+  const dayEvents = useApi<ScheduleEvent[]>(`/api/events?from=${date}&to=${date}`, ['events']);
+  const dayExternal = useApi<ExternalEvent[]>(`/api/calendar/external?from=${date}&to=${date}`, ['events']);
+  const byTime = (a: Activity, b: Activity) => (a.time ?? '').localeCompare(b.time ?? '') || a.title.localeCompare(b.title, 'he');
+  const schedule: Activity[] = (dayEvents.data ?? []).filter((e) => !e.cancelled).map((e) => ({ key: `e:${e.id}`, time: e.startTime, title: e.title })).sort(byTime);
+  const calendar: Activity[] = (dayExternal.data ?? []).map((e) => ({ key: `x:${e.id}`, time: e.startTime, title: e.title })).sort(byTime);
+  const known = [...schedule, ...calendar];
+  // a calendar activity the debrief keeps by name is that day's activity of the same name, when there is one
+  const current = pick.startsWith('a:') ? (calendar.find((a) => a.title === pick.slice(2))?.key ?? pick) : pick;
+  // what the debrief already points at, when it is not among the day's activities
+  const kept: Activity | null =
+    current && !known.some((a) => a.key === current)
+      ? current.startsWith('a:')
+        ? { key: current, time: null, title: current.slice(2) }
+        : current === `e:${debrief?.eventId}` && debrief?.eventTitle
+          ? { key: current, time: null, title: debrief.eventTitle }
+          : current === `e:${preset?.id}` && preset
+            ? { key: current, time: preset.startTime, title: preset.title }
+            : null
+      : null;
+  const chosen = known.find((a) => a.key === current) ?? kept;
+  const loadingDay = (dayEvents.loading && !dayEvents.data) || (dayExternal.loading && !dayExternal.data);
+  const effectiveTitle = title || (chosen ? `תחקיר ${chosen.title}` : '');
+  const label = (a: Activity) => (a.time ? `${a.time} · ${a.title}` : a.key.startsWith('x:') ? `כל היום · ${a.title}` : a.title);
 
   const save = async () => {
     setError(null);
-    const body = { title: effectiveTitle, occurredOn: effectiveDate, eventId: event ? Number(event) : null, facilitatorId: facilitator ? Number(facilitator) : null, participants, summary };
+    const body = {
+      title: effectiveTitle,
+      occurredOn: date,
+      eventId: chosen?.key.startsWith('e:') ? Number(chosen.key.slice(2)) : null,
+      activity: chosen && !chosen.key.startsWith('e:') ? chosen.title : '',
+      facilitatorId: facilitator ? Number(facilitator) : null,
+      participants,
+      summary,
+    };
     try {
       const created = debrief ? null : await api.post<DebriefDetail>('/api/debriefs', body);
       if (debrief) await api.patch(`/api/debriefs/${debrief.id}`, body);
@@ -153,16 +191,38 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
           <input className="input" value={effectiveTitle} onChange={(e) => setTitle(e.target.value)} placeholder="לדוגמה: תחקיר מטווח הפעלת כוח" data-autofocus />
         </Field>
         <Field label="תאריך האירוע">
-          <input className="input" type="date" value={effectiveDate} onChange={(e) => setDate(e.target.value)} />
+          <input
+            className="input"
+            type="date"
+            value={date}
+            onChange={(e) => {
+              setDateSet(e.target.value);
+              setPick(''); // the activities of the new day
+            }}
+          />
         </Field>
-        <Field label='פעילות בלו"ז'>
-          <select className="select" value={event} onChange={(e) => setEvent(e.target.value)}>
+        <Field label='פעילות בלו"ז' hint={loadingDay ? 'טוען את הפעילויות של היום...' : !known.length ? `אין פעילויות ב-${shortDate(date)} בלו"ז וביומן` : undefined}>
+          <select className="select" value={chosen?.key ?? ''} onChange={(e) => setPick(e.target.value)}>
             <option value="">ללא</option>
-            {(events.data ?? []).map((e) => (
-              <option key={e.id} value={e.id}>
-                {shortDate(e.date)} · {e.title}
-              </option>
-            ))}
+            {kept && <option value={kept.key}>{label(kept)}</option>}
+            {schedule.length > 0 && (
+              <optgroup label='לו"ז הקורס'>
+                {schedule.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {label(a)}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {calendar.length > 0 && (
+              <optgroup label="יומן Google">
+                {calendar.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {label(a)}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </Field>
         <Field label="מנחה">

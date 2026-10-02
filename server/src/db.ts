@@ -572,7 +572,12 @@ UPDATE cadets SET status = 'active' WHERE dismissed_by_record IS NOT NULL AND st
 UPDATE cadets SET dismissed_by_record = NULL WHERE dismissed_by_record IS NOT NULL;
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9];
+// a debrief about an activity in the synced Google calendar keeps its name (it has no event here)
+const SCHEMA_V10 = `
+ALTER TABLE debriefs ADD COLUMN activity TEXT NOT NULL DEFAULT '';
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {
