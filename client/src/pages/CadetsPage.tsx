@@ -28,7 +28,7 @@ import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Seg, initials } from '../components/ui';
-import { api, qs } from '../lib/api';
+import { api, changedFields, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -255,8 +255,10 @@ function CadetForm({ cadet, teams, defaultTeam, onClose }: { cadet?: Cadet; team
     setError(null);
     const body = { firstName, lastName, personalNumber, phone, notes, status, ...(isCommander || !cadet ? { teamId: teamId ? Number(teamId) : null } : {}) };
     try {
-      if (cadet) await api.patch(`/api/cadets/${cadet.id}`, body);
-      else {
+      if (cadet) {
+        const patch = changedFields<typeof body>(cadet, body);
+        if (Object.keys(patch).length) await api.patch(`/api/cadets/${cadet.id}`, patch);
+      } else {
         const d = await api.post<CadetDetail>('/api/cadets', body);
         navigate(`/cadets/${d.cadet.id}`);
       }

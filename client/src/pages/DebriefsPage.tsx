@@ -11,7 +11,7 @@ import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
-import { api } from '../lib/api';
+import { api, changedFields } from '../lib/api';
 import { isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -160,7 +160,13 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
     };
     try {
       const created = debrief ? null : await api.post<DebriefDetail>('/api/debriefs', body);
-      if (debrief) await api.patch(`/api/debriefs/${debrief.id}`, body);
+      if (debrief) {
+        const { eventId, activity, ...rest } = body;
+        const patch: Partial<typeof body> = changedFields<typeof rest>(debrief, rest);
+        // the activity is one choice - a schedule event or a calendar entry by name
+        if (eventId !== debrief.eventId || activity !== (debrief.eventId ? '' : (debrief.eventTitle ?? ''))) Object.assign(patch, { eventId, activity });
+        if (Object.keys(patch).length) await api.patch(`/api/debriefs/${debrief.id}`, patch);
+      }
       toast({ title: 'התחקיר נשמר', tone: 'green' });
       emitLocalChange('debriefs');
       // close first: closing clears ?event= from the list URL, and the

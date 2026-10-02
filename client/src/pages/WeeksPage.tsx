@@ -12,7 +12,7 @@ import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../compone
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Bar, Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Ring, Seg } from '../components/ui';
-import { api } from '../lib/api';
+import { api, changedFields } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -135,8 +135,10 @@ export function WeekForm({ week, onClose }: { week?: Week; onClose: () => void }
     setError(null);
     try {
       const body = isCommander ? { name, topic, goals, startDate: start, endDate: end, leadId: lead[0] ?? null } : { topic, goals };
-      if (week) await api.patch(`/api/weeks/${week.id}`, body);
-      else await api.post('/api/weeks', body);
+      if (week) {
+        const patch = changedFields<Record<string, unknown>>({ ...week }, body);
+        if (Object.keys(patch).length) await api.patch(`/api/weeks/${week.id}`, patch);
+      } else await api.post('/api/weeks', body);
       toast({ title: 'השבוע נשמר', tone: 'green' });
       emitLocalChange('weeks');
       onClose();

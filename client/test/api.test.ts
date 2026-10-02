@@ -2,7 +2,7 @@
 // again (once, however many requests were refused) and then sends them again.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, setReauthHandler, setUnauthorizedHandler } from '../src/lib/api';
+import { api, ApiError, changedFields, setReauthHandler, setUnauthorizedHandler } from '../src/lib/api';
 
 type Call = { url: string; method: string; body: unknown };
 let calls: Call[];
@@ -95,5 +95,16 @@ describe('a double click', () => {
     // once answered, the same change may be sent again on purpose
     await api.post('/api/debriefs', { title: 'תחקיר' });
     expect(calls).toHaveLength(4);
+  });
+});
+
+describe('saving an edit', () => {
+  it('sends only what the form changed, so a change made meanwhile by someone else stays', () => {
+    const before = { firstName: 'דנה', phone: '050', status: 'active', teamId: null, notes: '' };
+    expect(changedFields(before, { ...before, phone: '052' })).toEqual({ phone: '052' });
+    expect(changedFields(before, { ...before })).toEqual({});
+    // missing and empty-null count as the same
+    expect(changedFields({ teamId: undefined }, { teamId: null })).toEqual({});
+    expect(changedFields({ leadId: 3 }, { leadId: null })).toEqual({ leadId: null });
   });
 });

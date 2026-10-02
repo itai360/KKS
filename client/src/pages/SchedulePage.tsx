@@ -14,7 +14,7 @@ import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
-import { api } from '../lib/api';
+import { api, changedFields } from '../lib/api';
 import { fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -438,7 +438,9 @@ function EventForm({
     const body = { date, startTime: start, endTime: end || null, title, location, ownerId: owner ? Number(owner) : null, notes };
     try {
       if (event) {
-        const res = await api.patch<EventDetail & { affectedTasks: Task[]; deltaMinutes: number }>(`/api/events/${event.id}`, body);
+        const patch = changedFields<typeof body>({ ...event, endTime: event.endTime || null }, body);
+        if (!Object.keys(patch).length) return onClose();
+        const res = await api.patch<EventDetail & { affectedTasks: Task[]; deltaMinutes: number }>(`/api/events/${event.id}`, patch);
         emitLocalChange('events');
         if (res.affectedTasks.length) return setAffected({ tasks: res.affectedTasks, delta: res.deltaMinutes, id: event.id });
         toast({ title: 'האירוע עודכן', tone: 'green' });

@@ -138,6 +138,17 @@ export const api = {
     change<T>('POST', url, file, { 'content-type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name) }),
 };
 
+/**
+ * Only the fields a form changed. Saving an edit then leaves alone what someone
+ * else changed meanwhile (the commander marks a cadet dismissed while a team
+ * commander fixes the phone number - the status stays dismissed).
+ */
+export function changedFields<T extends Record<string, unknown>>(before: Partial<T>, after: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(after) as (keyof T)[]) if (JSON.stringify(after[k] ?? null) !== JSON.stringify(before[k] ?? null)) out[k] = after[k];
+  return out;
+}
+
 export function qs(params: Record<string, string | number | boolean | null | undefined>): string {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '' && v !== false) p.set(k, String(v));
