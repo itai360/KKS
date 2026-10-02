@@ -117,6 +117,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false);
 
   useEffect(() => onStatus(setLive), []);
+  // no connection for a while: say so (on a phone the "מעודכן" mark is hidden)
+  const [lost, setLost] = useState(false);
+  useEffect(() => {
+    if (live) {
+      setLost(false);
+      return;
+    }
+    const t = setTimeout(() => setLost(true), navigator.onLine === false ? 0 : 10_000);
+    return () => clearTimeout(t);
+  }, [live]);
   const [update, setUpdate] = useState(updateReady());
   useEffect(() => onUpdate(setUpdate), []);
   // a new version waiting is loaded on moving to another screen (the address has already changed)
@@ -222,9 +232,16 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
+        {lost && (
+          <div className="update-bar offline no-print" role="status">
+            <Icon name="alert" size={16} />
+            <span className="grow">אין חיבור לשרת - מנסה להתחבר מחדש. עד אז מה שמוצג אולי לא מעודכן, ושינויים לא יישמרו.</span>
+          </div>
+        )}
         {update && (
           <div className="update-bar no-print" role="status">
-            <Icon name="zap" size={16} /> יש גרסה חדשה של המערכת. היא תיטען במעבר הבא בין מסכים, או עכשיו:
+            <Icon name="zap" size={16} />
+            <span className="grow">יש גרסה חדשה של המערכת. היא תיטען במעבר הבא בין מסכים, או עכשיו:</span>
             <button className="btn btn-sm" onClick={() => window.location.reload()}>
               רענון
             </button>

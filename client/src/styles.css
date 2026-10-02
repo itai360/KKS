@@ -3162,7 +3162,7 @@ tr.selected td {
   }
 }
 
-/* a new version was deployed while this tab was open (lib/update.ts) */
+/* a new version was deployed while this tab was open (lib/update.ts); .offline: no connection */
 .update-bar {
   display: flex;
   align-items: center;
@@ -3199,4 +3199,13 @@ button.stat:disabled {
   opacity: 1;
   color: inherit;
   transform: none;
+}
+
+.update-bar svg {
+  flex: none;
+}
+
+.update-bar.offline {
+  background: var(--red-bg);
+  color: var(--red-ink);
 }

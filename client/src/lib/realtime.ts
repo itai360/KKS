@@ -62,11 +62,16 @@ async function poll(): Promise<void> {
   }
 }
 const onVisible = () => void poll();
+// the browser knows first when the network goes and comes back
+const onNetworkLost = () => setOnline(false);
+const onNetworkBack = () => void poll();
 
 function startPolling(): void {
   void poll();
   pollTimer = setInterval(() => void poll(), 8000);
   document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('offline', onNetworkLost);
+  window.addEventListener('online', onNetworkBack);
 }
 
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -103,6 +108,8 @@ export function disconnectRealtime(): void {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
   document.removeEventListener('visibilitychange', onVisible);
+  window.removeEventListener('offline', onNetworkLost);
+  window.removeEventListener('online', onNetworkBack);
   lastVersion = null;
   lastNotification = null;
   setOnline(false);
