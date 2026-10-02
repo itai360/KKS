@@ -608,10 +608,10 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
     <Modal title={e.title} onClose={onClose} wide>
       <div className="col gap-16">
         <div className="row wrap">
-          <div className="grow">
+          {/* at least 240px: on a phone the buttons go below rather than squeezing the details */}
+          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <div className="mono strong" style={{ fontSize: 18 }}>
-              {weekdayName(e.date)} {shortDate(e.date)} · {e.startTime}
-              {e.endTime && `-${e.endTime}`}
+              {weekdayName(e.date)} {shortDate(e.date)} · <span style={{ whiteSpace: 'nowrap' }}>{e.endTime ? `${e.startTime} - ${e.endTime}` : e.startTime}</span>
             </div>
             <div className="small muted">
               {[e.location && `מיקום: ${e.location}`, e.ownerName && `אחראי: ${e.ownerName}`, week?.name].filter(Boolean).join(' · ')}

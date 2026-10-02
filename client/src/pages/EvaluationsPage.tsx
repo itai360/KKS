@@ -1,7 +1,7 @@
 // Evaluation files (תיקי הערכה): a running assessment of each cadet, and the
 // version of it a committee receives (see server/src/evaluations.ts).
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   CADET_STATUS_LABELS,
@@ -427,7 +427,7 @@ function Standing({ file, editable, onChange }: { file: EvaluationFile; editable
   return (
     <div className="card card-pad">
       <div className="row wrap gap-6">
-        <div className="grow">
+        <div style={{ flex: '1 1 220px', minWidth: 0 }}>
           <div className="label-caps">מצב כללי</div>
           <div className="small muted">תקין, במעקב או בסיכון - איך הצוער עומד כרגע בקורס.</div>
         </div>
@@ -527,6 +527,13 @@ function EntryForm({ cadetId, onChange }: { cadetId: number; onChange: (f: Evalu
   const [occurredOn, setOccurredOn] = useState(todayKey());
   const [shown, setShown] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // the form opens at the end of the file: bring it into view (on a phone it is a screen away)
+  const formRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    formRef.current?.querySelector<HTMLInputElement>('[data-autofocus]')?.focus({ preventScroll: true });
+  }, [open]);
 
   const save = async () => {
     setError(null);
@@ -550,7 +557,7 @@ function EntryForm({ cadetId, onChange }: { cadetId: number; onChange: (f: Evalu
       </button>
     );
   return (
-    <div className="card card-pad col gap-12 no-print">
+    <div ref={formRef} className="card card-pad col gap-12 no-print" style={{ scrollMarginTop: 'calc(var(--top-h) + 12px)' }}>
       <div className="row wrap gap-6">
         <Seg<EvalTone> value={tone} options={EVAL_TONES.map((t) => ({ value: t, label: EVAL_TONE_LABELS[t] }))} onChange={setTone} />
         <select className="select" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="תחום" style={{ maxWidth: 220 }}>
