@@ -8,8 +8,8 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 
 const GZ = 'gz:';
 
-/** Writing compressed is switched on once every deployment can read it (see README, rolling back). */
-export const WRITE_COMPRESSED = false;
+/** On since every deployment from "step 1 of 2" reads it; one before that cannot (README, rolling back). */
+export const WRITE_COMPRESSED = true;
 
 export function encodeDb(file: Buffer): string {
   return WRITE_COMPRESSED ? GZ + gzipSync(file, { level: 6 }).toString('base64') : file.toString('base64');

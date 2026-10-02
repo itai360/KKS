@@ -86,6 +86,8 @@ insert into kks_secret values (1, encode(sha256(convert_to('הסוד-שלכם', 
 
 קובץ מצורף מוגבל ל-4MB (מגבלת Vercel). בתוכנית החינמית של Supabase פרויקט שלא נעשה בו שימוש שבוע נכנס להשהיה, ומחזירים אותו בלחיצה בלוח הבקרה.
 
+המסד נשמר באחסון דחוס (בערך פי 9 קטן יותר - כל שמירה וטעינה מעבירות פחות). **חזרה לגרסה קודמת ב-Vercel (Rollback):** אפשר לחזור לכל גרסה מ-"Read compressed copies of the database (step 1 of 2)" ואילך; גרסה ישנה ממנה לא יודעת לקרוא את המסד הדחוס.
+
 ### בלחיצה אחת (Render)
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/itai360/KKS)

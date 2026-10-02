@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inject } from 'light-my-request';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { decodeDb, encodeDb } from '../src/storedDb';
 
 const store: { state: { version: number; data: string } | null; files: Map<string, string> } = { state: null, files: new Map() };
 const rpcs: Record<string, (a: Record<string, unknown>) => unknown> = {
@@ -73,17 +74,17 @@ describe('serverless storage', () => {
     const { DatabaseSync } = await import('node:sqlite');
     const { writeFileSync, readFileSync } = await import('node:fs');
     const other = join(process.env.DATA_DIR!, 'other.db');
-    writeFileSync(other, Buffer.from(store.state!.data, 'base64'));
+    writeFileSync(other, decodeDb(store.state!.data));
     const odb = new DatabaseSync(other);
     odb.exec(`INSERT INTO meta(key, value) VALUES ('other_instance', 'was here')`);
     odb.close();
-    store.state = { version: store.state!.version + 1, data: readFileSync(other).toString('base64') };
+    store.state = { version: store.state!.version + 1, data: encodeDb(readFileSync(other)) };
 
     // this instance still holds the older copy until the next request reloads it
     const res = await call('POST', '/api/tasks', { title: 'בדיקה', ownerIds: [s1], deadline: new Date(Date.now() + 86_400_000).toISOString() }, cookie);
     expect(res.statusCode).toBe(200);
     const check = join(process.env.DATA_DIR!, 'check.db');
-    writeFileSync(check, Buffer.from(store.state!.data, 'base64'));
+    writeFileSync(check, decodeDb(store.state!.data));
     const cdb = new DatabaseSync(check);
     expect(cdb.prepare("SELECT value FROM meta WHERE key = 'other_instance'").get()).toEqual({ value: 'was here' });
     expect(cdb.prepare("SELECT title FROM tasks WHERE title = 'בדיקה'").get()).toEqual({ title: 'בדיקה' });
@@ -123,12 +124,12 @@ describe('serverless storage', () => {
     const { DatabaseSync } = await import('node:sqlite');
     const { writeFileSync, readFileSync } = await import('node:fs');
     const other = join(process.env.DATA_DIR!, 'other-session.db');
-    writeFileSync(other, Buffer.from(store.state!.data, 'base64'));
+    writeFileSync(other, decodeDb(store.state!.data));
     const odb = new DatabaseSync(other);
     const hash = createHash('sha256').update('token-from-elsewhere').digest('hex');
     odb.prepare('INSERT INTO sessions(token_hash, user_id, created_at, expires_at) VALUES (?, 1, ?, ?)').run(hash, new Date().toISOString(), new Date(Date.now() + 86_400_000).toISOString());
     odb.close();
-    store.state = { version: store.state!.version + 1, data: readFileSync(other).toString('base64') };
+    store.state = { version: store.state!.version + 1, data: encodeDb(readFileSync(other)) };
 
     const me = await call('GET', '/api/auth/me', undefined, 'kks_session=token-from-elsewhere');
     expect(me.statusCode).toBe(200); // the 401 from the older copy triggered a check and a second try
@@ -142,12 +143,12 @@ describe('serverless storage', () => {
     const { DatabaseSync } = await import('node:sqlite');
     const { writeFileSync, readFileSync } = await import('node:fs');
     const other = join(process.env.DATA_DIR!, 'other-settings.db');
-    writeFileSync(other, Buffer.from(store.state!.data, 'base64'));
+    writeFileSync(other, decodeDb(store.state!.data));
     const odb = new DatabaseSync(other);
     odb.prepare("INSERT INTO settings(key, value) VALUES ('courseName', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify('שם מהמופע השני'));
     odb.close();
     const newer = store.state!.version + 1;
-    store.state = { version: newer, data: readFileSync(other).toString('base64') };
+    store.state = { version: newer, data: encodeDb(readFileSync(other)) };
 
     // within the half minute this copy answers on its own...
     const stale = await call('GET', '/api/settings', undefined, cookie);
