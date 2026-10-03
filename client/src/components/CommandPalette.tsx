@@ -121,7 +121,9 @@ function Palette({ pages, onClose }: { pages: { to: string; label: string; icon:
   }, [q, found, pages, weeks, isCommander, navigate, newTask]);
 
   const at = Math.min(active, Math.max(0, items.length - 1));
-  useEffect(() => setActive(0), [q]);
+  useEffect(() => {
+    setActive(0);
+  }, [q]);
   useEffect(() => {
     list.current?.querySelector(`[data-i="${at}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [at]);
