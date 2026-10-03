@@ -44,6 +44,7 @@ const TeamPage = lazyPage(() => import('./pages/TeamPage'), 'TeamPage');
 const TemplatesPage = lazyPage(() => import('./pages/TemplatesPage'), 'TemplatesPage');
 const WeekPage = lazyPage(() => import('./pages/WeeksPage'), 'WeekPage');
 const WeeksPage = lazyPage(() => import('./pages/WeeksPage'), 'WeeksPage');
+const WeekOrderPage = lazyPage(() => import('./pages/WeekOrderPage'), 'WeekOrderPage');
 
 /** An address that isn't a screen - say so, rather than silently landing on the home page. */
 function NotFound() {
@@ -87,6 +88,7 @@ function AuthedRoutes() {
               <Route path="/tasks/:id" element={<TaskPage />} />
               <Route path="/weeks" element={<WeeksPage />} />
               <Route path="/weeks/:id" element={<WeekPage />} />
+              <Route path="/weeks/:id/order" element={<WeekOrderPage />} />
               <Route path="/schedule" element={<SchedulePage />} />
               <Route path="/team" element={isCommander ? <TeamPage /> : <Navigate to="/" />} />
               <Route path="/team/:id" element={<StaffPage />} />

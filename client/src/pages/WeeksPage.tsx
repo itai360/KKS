@@ -364,6 +364,9 @@ export function WeekPage() {
                 <Icon name="edit" /> עריכה
               </button>
             )}
+            <Link to={`/weeks/${w.id}/order`} className="btn btn-ghost">
+              <Icon name="file" /> פקודת שבוע
+            </Link>
             <button className="btn btn-primary" onClick={() => newTask({ weekId: w.id, deadline: isoAt(w.startDate < today ? today : addDays(w.startDate, -1), '18:00') })}>
               <Icon name="plus" /> משימה לשבוע
             </button>
