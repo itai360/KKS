@@ -72,32 +72,34 @@ function WeeklyDiscipline({ d, from, to }: { d: DisciplineSummary; from: string;
               </span>
             ))}
           </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>צוער</th>
-                <th className="hide-mobile">צוות</th>
-                <th className="num-cell">אירועים</th>
-                <th className="num-cell">הערות משמעת</th>
-                <th className="num-cell">עד עכשיו</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.cadets.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <Link to={`/cadets/${c.id}`}>{c.fullName}</Link>
-                  </td>
-                  <td className="hide-mobile">{c.teamName ?? '-'}</td>
-                  <td className="num-cell">{c.events}</td>
-                  <td className={`num-cell${c.notes ? ' text-red' : ''}`}>{c.notes}</td>
-                  <td className="num-cell" title="הערות משמעת מתחילת הקורס">
-                    {c.totalNotes}/{DISCIPLINE_NOTE_LIMIT}
-                  </td>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>צוער</th>
+                  <th className="hide-mobile">צוות</th>
+                  <th className="num-cell">אירועים</th>
+                  <th className="num-cell">הערות משמעת</th>
+                  <th className="num-cell">עד עכשיו</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {d.cadets.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <Link to={`/cadets/${c.id}`}>{c.fullName}</Link>
+                    </td>
+                    <td className="hide-mobile">{c.teamName ?? '-'}</td>
+                    <td className="num-cell">{c.events}</td>
+                    <td className={`num-cell${c.notes ? ' text-red' : ''}`}>{c.notes}</td>
+                    <td className="num-cell" title="הערות משמעת מתחילת הקורס">
+                      {c.totalNotes}/{DISCIPLINE_NOTE_LIMIT}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </div>
@@ -178,24 +180,26 @@ export function WeeklyReportPage() {
                   <h3>ביצוע לפי איש סגל</h3>
                 </div>
                 {data.completedByStaff.length ? (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>שם</th>
-                        <th className="num-cell">הושלמו</th>
-                        <th className="num-cell">מתוכן באיחור</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.completedByStaff.map((s) => (
-                        <tr key={s.userId}>
-                          <td>{s.name}</td>
-                          <td className="num-cell">{s.done}</td>
-                          <td className={`num-cell ${s.late ? 'text-red' : ''}`}>{s.late}</td>
+                  <div className="table-wrap">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>שם</th>
+                          <th className="num-cell">הושלמו</th>
+                          <th className="num-cell">מתוכן באיחור</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {data.completedByStaff.map((s) => (
+                          <tr key={s.userId}>
+                            <td>{s.name}</td>
+                            <td className="num-cell">{s.done}</td>
+                            <td className={`num-cell ${s.late ? 'text-red' : ''}`}>{s.late}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <div className="card-body">
                     <p className="small muted">לא הושלמו משימות בשבוע זה.</p>

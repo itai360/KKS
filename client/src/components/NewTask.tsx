@@ -203,6 +203,9 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   const quick = useMemo(() => quickDeadlines(defaultTime), [defaultTime]);
   const deadlineIso = date && time ? isoAt(date, time) : null;
   const hasMany = !allStaff && ownerIds.length > 1;
+  // what the form holds now - picked by hand or read from the sentence
+  const ownerNames = allStaff ? ['כל הסגל'] : ownerIds.map((id) => users.find((u) => u.id === id)?.displayName ?? '');
+  const missing = [!title.trim() && 'שם', !allStaff && !ownerIds.length && 'אחראי', !deadlineIso && 'דד-ליין'].filter((x): x is string => !!x);
 
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -243,23 +246,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   };
 
   return (
-    <Modal
-      title={initial.heading ?? 'משימה חדשה'}
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-primary btn-lg" onClick={() => void submit()} disabled={busy} type="button">
-            <Icon name="check" /> שלח
-          </button>
-          <button className="btn btn-ghost btn-lg" onClick={onClose} type="button">
-            ביטול
-          </button>
-          <span className="tiny muted hide-mobile" style={{ marginInlineStart: 'auto', alignSelf: 'center' }}>
-            <span className="kbd">Ctrl</span>+<span className="kbd">Enter</span> לשליחה
-          </span>
-        </>
-      }
-    >
+    <Modal title={initial.heading ?? 'משימה חדשה'} onClose={onClose}>
       <form
         onSubmit={submit}
         onKeyDown={(e) => {
@@ -282,18 +269,20 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
             </span>
           </div>
           {parsed && (
-            <div className="parse-preview">
-              {parsed.title && <span className="badge t-gray">משימה: {parsed.title}</span>}
-              {parsed.allStaff && <span className="badge t-blue">אחראי: כל הסגל</span>}
-              {parsed.ownerIds.map((id) => (
-                <span key={id} className="badge t-blue">
-                  אחראי: {users.find((u) => u.id === id)?.displayName}
+            <div className="parse-preview" aria-live="polite">
+              {title.trim() && <span className="badge t-gray">משימה: {title.trim()}</span>}
+              {ownerNames.map((n) => (
+                <span key={n} className="badge t-blue">
+                  אחראי: {n}
                 </span>
               ))}
-              {parsed.deadline && <span className="badge t-green">דד-ליין: {fmtDeadline(parsed.deadline)}</span>}
-              {parsed.priority && <span className="badge t-orange">עדיפות: {PRIORITY_LABELS[parsed.priority]}</span>}
-              {parsed.missing.includes('owner') && <span className="badge t-red">חסר אחראי</span>}
-              {parsed.missing.includes('deadline') && <span className="badge t-red">חסר דד-ליין</span>}
+              {deadlineIso && <span className="badge t-green">דד-ליין: {fmtDeadline(deadlineIso)}</span>}
+              {priority !== 'normal' && <span className="badge t-orange">עדיפות: {PRIORITY_LABELS[priority]}</span>}
+              {missing.map((m) => (
+                <span key={m} className="badge t-red">
+                  חסר {m}
+                </span>
+              ))}
             </div>
           )}
         </div>
@@ -307,6 +296,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
         </Field>
         {hasMany && (
           <Seg
+            wrap
             value={mode}
             onChange={setMode}
             options={[
@@ -386,7 +376,16 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
           </div>
         )}
         <ErrorBox error={error} />
-        <button type="submit" hidden />
+        {/* stays in view while the form scrolls */}
+        <div className="fab-dock">
+          <span className="tiny muted hide-mobile fab-hint">
+            <span className="kbd">Ctrl</span>+<span className="kbd">Enter</span> לשליחה
+          </span>
+          {missing.length > 0 && <span className="fab-missing">חסר: {missing.join(', ')}</span>}
+          <button className={`btn btn-primary fab-send${missing.length ? ' incomplete' : ''}`} type="submit" disabled={busy}>
+            <Icon name="check" /> {busy ? 'שולח...' : 'שלח'}
+          </button>
+        </div>
       </form>
     </Modal>
   );

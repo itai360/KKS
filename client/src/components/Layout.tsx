@@ -108,6 +108,18 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
   ];
 }
 
+const RAIL_KEY = 'kks.rail';
+const MEDIUM = '(max-width: 1279px)';
+
+function readRailPref(): 'collapsed' | 'expanded' | null {
+  try {
+    const v = localStorage.getItem(RAIL_KEY);
+    return v === 'collapsed' || v === 'expanded' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { user, settings, unread, logout, isCommander } = useSession();
   const sections = useNavSections();
@@ -175,8 +187,58 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const symbol = settings.courseSymbol || 'קק"ס';
 
+  // the side menu folds to icons on a medium screen (a tablet, a small laptop) unless
+  // the person pinned it; hovering a folded menu opens it over the content
+  const [railPref, setRailPref] = useState(readRailPref);
+  const [mediumScreen, setMediumScreen] = useState(() => window.matchMedia(MEDIUM).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(MEDIUM);
+    const on = () => setMediumScreen(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const folded = railPref ? railPref === 'collapsed' : mediumScreen;
+  const toggleRail = () => {
+    const next = folded ? 'expanded' : 'collapsed';
+    setRailPref(next);
+    try {
+      localStorage.setItem(RAIL_KEY, next);
+    } catch {
+      /* this visit only */
+    }
+  };
+
+  // the phone's bar steps aside while reading down, and returns on scrolling up,
+  // at the end of the page, or on moving to another screen
+  const [barAway, setBarAway] = useState(false);
+  useEffect(() => {
+    let last = window.scrollY;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const y = window.scrollY;
+        const atEnd = y + window.innerHeight >= document.documentElement.scrollHeight - 8;
+        if (atEnd || y < 60) setBarAway(false);
+        else if (Math.abs(y - last) > 6) setBarAway(y > last);
+        last = y;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  useEffect(() => {
+    setBarAway(false);
+  }, [location.pathname]);
+  const path = location.pathname;
+  const barIdx = path === '/' ? 0 : path.startsWith('/tasks') ? 1 : path.startsWith('/weeks') ? 3 : 4;
+
   return (
-    <div className="app">
+    <div className={`app${folded ? ' rail-collapsed' : ''}`}>
       {/* keyboard and screen-reader users skip the menu */}
       <a
         className="skip-link"
@@ -191,7 +253,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <aside className="rail" aria-label="ניווט ראשי">
         <div className="brand">
           <div className="brand-mark">{symbol.slice(0, 4)}</div>
-          <div>
+          <div className="brand-text">
             <div className="brand-name">{settings.courseName}</div>
             <div className="brand-sub">מערכת ניהול קורס</div>
           </div>
@@ -202,7 +264,7 @@ export function Layout({ children }: { children: ReactNode }) {
             {s.items.map((it) => (
               <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
                 <Icon name={it.icon} />
-                {it.label}
+                <span className="rail-label">{it.label}</span>
                 {!!it.count && <span className="count">{it.count}</span>}
               </NavLink>
             ))}
@@ -210,18 +272,21 @@ export function Layout({ children }: { children: ReactNode }) {
         ))}
         <NavLink to="/settings" className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`} style={{ marginTop: 14 }}>
           <Icon name="settings" />
-          {isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}
+          <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
         </NavLink>
         <div className="rail-foot">
           <div className="avatar">{initials(user.displayName)}</div>
-          <div className="grow">
+          <div className="grow rail-user">
             <div className="strong small">{user.displayName}</div>
             <div className="tiny" style={{ color: 'var(--rail-muted)' }}>
               {isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}
             </div>
           </div>
-          <button className="icon-btn" style={{ color: 'var(--rail-muted)' }} onClick={() => void logout()} aria-label="יציאה" title="יציאה">
+          <button className="icon-btn rail-logout" style={{ color: 'var(--rail-muted)' }} onClick={() => void logout()} aria-label="יציאה" title="יציאה">
             <Icon name="logout" />
+          </button>
+          <button className="icon-btn rail-toggle" onClick={toggleRail} aria-pressed={folded} aria-label={folded ? 'הרחבת התפריט' : 'כיווץ התפריט'} title={folded ? 'הרחבת התפריט' : 'כיווץ התפריט לסמלים'}>
+            <Icon name={folded ? 'chevronLeft' : 'chevronRight'} />
           </button>
         </div>
       </aside>
@@ -280,12 +345,14 @@ export function Layout({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      <nav className="bottom-nav" aria-label="ניווט">
-        <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
+      <nav className={`bottom-nav${barAway ? ' away' : ''}`} aria-label="ניווט" style={{ ['--idx' as string]: barIdx }}>
+        {/* slides to the current tab; on any other screen, "עוד" holds it */}
+        <span className="nav-ind" aria-hidden />
+        <NavLink to="/" end className={barIdx === 0 ? 'active' : ''}>
           <Icon name="home" />
           בית
         </NavLink>
-        <NavLink to="/tasks" className={({ isActive }) => (isActive ? 'active' : '')}>
+        <NavLink to="/tasks" className={barIdx === 1 ? 'active' : ''}>
           <Icon name="tasks" />
           משימות
         </NavLink>
@@ -294,11 +361,11 @@ export function Layout({ children }: { children: ReactNode }) {
             <Icon name="plus" />
           </span>
         </button>
-        <NavLink to="/weeks" className={({ isActive }) => (isActive ? 'active' : '')}>
+        <NavLink to="/weeks" className={barIdx === 3 ? 'active' : ''}>
           <Icon name="layers" />
           שבועות
         </NavLink>
-        <NavLink to="/more" className={({ isActive }) => (isActive ? 'active' : '')}>
+        <NavLink to="/more" className={barIdx === 4 ? 'active' : ''}>
           <Icon name="more" />
           עוד
         </NavLink>

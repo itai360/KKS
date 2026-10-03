@@ -211,9 +211,20 @@ export function Bar({ value, tone, label }: { value: number; tone?: Tone; label:
   );
 }
 
-export function Seg<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: ReactNode; icon?: string }[]; onChange: (v: T) => void }) {
+export function Seg<T extends string>({
+  value,
+  options,
+  onChange,
+  wrap,
+}: {
+  value: T;
+  options: { value: T; label: ReactNode; icon?: string }[];
+  onChange: (v: T) => void;
+  /** options that are sentences: they wrap and share the width */
+  wrap?: boolean;
+}) {
   return (
-    <div className="seg" role="tablist">
+    <div className={`seg${wrap ? ' seg-wrap' : ''}`} role="tablist">
       {options.map((o) => (
         <button key={o.value} type="button" className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)} role="tab" aria-selected={value === o.value}>
           {o.icon && <Icon name={o.icon} />}

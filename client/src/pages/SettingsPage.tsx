@@ -394,24 +394,26 @@ function PermissionsCard() {
         <Icon name="lock" />
         <h3>הרשאות</h3>
       </div>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>פעולה</th>
-            <th className="num-cell">מפקד הקורס</th>
-            <th className="num-cell">מפק"צ / איש סגל</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([label, c, s]) => (
-            <tr key={label}>
-              <td className="small">{label}</td>
-              <td className="num-cell">{c ? <Icon name="check" size={16} className="text-green" /> : '-'}</td>
-              <td className="num-cell">{s ? <Icon name="check" size={16} className="text-green" /> : <span className="muted tiny">בבקשה / לא</span>}</td>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>פעולה</th>
+              <th className="num-cell">מפקד הקורס</th>
+              <th className="num-cell">מפק"צ / איש סגל</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map(([label, c, s]) => (
+              <tr key={label}>
+                <td className="small">{label}</td>
+                <td className="num-cell">{c ? <Icon name="check" size={16} className="text-green" /> : '-'}</td>
+                <td className="num-cell">{s ? <Icon name="check" size={16} className="text-green" /> : <span className="muted tiny">בבקשה / לא</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
