@@ -64,6 +64,7 @@ import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
 import { deleteGuide, disciplineLog, disciplineOverview, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
 import { bulkSchema, runBulk } from './bulk';
 import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
+import { attendanceHistory, markAttendance, rollCall } from './attendance';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
@@ -221,6 +222,16 @@ export function v3Router(): Router {
     deleteExperience(me(req), id(req.params.id));
     res.json({ ok: true });
   });
+
+  // ---------------- the daily roll call ----------------
+
+  r.get('/attendance', (req, res) => res.json(rollCall(isDateKey(req.query.date) ? req.query.date : localDateKey(clock.now(), tz()), num(req.query.team))));
+  r.put('/attendance', (req, res) => {
+    markAttendance(me(req), req.body);
+    const date = String(req.body?.date ?? '');
+    res.json(rollCall(isDateKey(date) ? date : localDateKey(clock.now(), tz()), num(req.query.team)));
+  });
+  r.get('/cadets/:id/attendance', (req, res) => res.json(attendanceHistory(id(req.params.id))));
 
   // ---------------- availability ----------------
 

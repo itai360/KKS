@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ABSENCE_REASON_LABELS } from '@shared/constants';
+import { ABSENCE_REASON_LABELS, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, ATTENDANCE_TONES } from '@shared/constants';
 import type { AttentionItem, AttentionKind, DashboardData } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
 import { DisciplineCard } from '../components/DisciplineCard';
@@ -89,6 +89,7 @@ export function DashboardPage() {
             <Attention items={data.attention} />
             <div className="col gap-16 sticky-side">
               <WeekCard data={data} />
+              {data.roll && <RollCard roll={data.roll} />}
               <DisciplineCard />
               <StaffHealth data={data} />
               <TodayEvents data={data} />
@@ -267,6 +268,34 @@ function WeekCard({ data }: { data: DashboardData }) {
           <Ring value={w.readiness} size={72} tone={w.totalTasks === 0 ? 'gray' : undefined} />
         </div>
       ))}
+    </div>
+  );
+}
+
+/** today's roll call in a glance: who is in, who is not and why, which teams have not reported */
+function RollCard({ roll }: { roll: NonNullable<DashboardData['roll']> }) {
+  const navigate = useNavigate();
+  const inCourse = roll.counts.present + roll.counts.late;
+  return (
+    <div className="card" {...openable(() => navigate('/attendance'))} aria-label={`מצבה היום: ${roll.line}`}>
+      <div className="card-head">
+        <Icon name="check" />
+        <h3 className="grow">מצבה היום</h3>
+        <span className="mono strong">
+          {inCourse}/{roll.counts.total}
+        </span>
+      </div>
+      <div className="card-body col gap-6">
+        <div className="row wrap gap-6">
+          {ATTENDANCE_STATUSES.filter((s) => s !== 'present' && roll.counts[s] > 0).map((s) => (
+            <span key={s} className={`badge t-${ATTENDANCE_TONES[s]}`}>
+              {ATTENDANCE_LABELS[s]} {roll.counts[s]}
+            </span>
+          ))}
+          {roll.counts.unmarked > 0 && <span className="badge">לא סומנו {roll.counts.unmarked}</span>}
+        </div>
+        {roll.teamsMissing.length > 0 && <span className="small text-orange">עוד לא דיווחו: {roll.teamsMissing.join(', ')}</span>}
+      </div>
     </div>
   );
 }

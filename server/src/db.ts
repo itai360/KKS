@@ -648,7 +648,22 @@ CREATE TABLE absences (
 CREATE INDEX absences_dates ON absences(end_date, start_date);
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15];
+// the daily roll call (מצבה): where each cadet is on each day
+const SCHEMA_V16 = `
+CREATE TABLE attendance (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  status TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  marked_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  marked_at TEXT NOT NULL,
+  UNIQUE (cadet_id, date)
+);
+CREATE INDEX attendance_date ON attendance(date);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

@@ -3,6 +3,7 @@
 import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
 import type {
   AbsenceReason,
+  AttendanceStatus,
   CadetStatus,
   CarryAction,
   CommitteeDecision,
@@ -380,6 +381,34 @@ export interface AttentionItem {
   link?: string;
 }
 
+/** one cadet on the day's roll call */
+export interface RollEntry {
+  cadetId: number;
+  fullName: string;
+  teamId: number | null;
+  teamName: string | null;
+  status: AttendanceStatus | null;
+  note: string;
+  markedByName: string | null;
+  markedAt: string | null;
+  /** what they are excused from today (exemptions) */
+  exemptions: string[];
+}
+
+export interface RollCall {
+  date: string;
+  entries: RollEntry[];
+  /** by team: how many, how many marked, how many in */
+  teams: { teamId: number | null; name: string; total: number; marked: number; present: number; commanderName: string | null }[];
+  counts: Record<AttendanceStatus, number> & { total: number; unmarked: number };
+}
+
+/** a cadet's attendance over time */
+export interface AttendanceHistory {
+  days: { date: string; status: AttendanceStatus; note: string }[];
+  counts: Partial<Record<AttendanceStatus, number>>;
+}
+
 /** someone on the staff away for some days */
 export interface Absence {
   id: number;
@@ -421,6 +450,8 @@ export interface StaffStatus {
 
 export interface DashboardData {
   stats: { today: number; overdue: number; week: number; doneThisWeek: number; dueSoon: number; blocked: number };
+  /** today's roll call, when there are cadets */
+  roll: { line: string; counts: RollCall['counts']; teamsMissing: string[] } | null;
   attention: AttentionItem[];
   staff: StaffStatus[];
   currentWeek: Week | null;

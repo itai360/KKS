@@ -200,3 +200,18 @@ export const ABSENCE_REASON_LABELS: Record<AbsenceReason, string> = {
   duty: 'מילואים / תורנות',
   other: 'היעדרות',
 };
+
+/** the daily roll call (מצבה): where each cadet is today */
+export const ATTENDANCE_STATUSES = ['present', 'late', 'sick', 'leave', 'appointment', 'absent'] as const;
+export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
+export const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
+  present: 'נוכח',
+  late: 'איחור',
+  sick: 'גימלים',
+  leave: 'בית / חופשה',
+  appointment: 'תור / בדיקה',
+  absent: 'נעדר',
+};
+export const ATTENDANCE_TONES: Record<AttendanceStatus, Tone> = { present: 'green', late: 'yellow', sick: 'orange', leave: 'blue', appointment: 'purple', absent: 'red' };
+/** counted as in the course today (for the head count) */
+export const ATTENDANCE_IN: readonly AttendanceStatus[] = ['present', 'late'];

@@ -9,6 +9,7 @@ import { clock, nowIso, tz } from './core';
 import { db } from './db';
 import { learningReminders } from './debriefs';
 import { morningBrief } from './digest';
+import { rollCallReminders } from './attendance';
 import { changed, logActivity, notify } from './journal';
 import { generateRecurring } from './recurring';
 import { involvedIds, queryTasks } from './taskRepo';
@@ -22,12 +23,13 @@ export interface AutomationResult {
   templates: number;
   learning: number;
   briefs: number;
+  roll: number;
 }
 
 export function runAutomation(): AutomationResult {
   const now = clock.now();
   const nowS = now.toISOString();
-  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, briefs: 0 };
+  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, briefs: 0, roll: 0 };
 
   // 1. Deadline passed -> overdue (derived status) + alerts, once per deadline.
   for (const t of queryTasks("t.status NOT IN ('done', 'cancelled') AND t.overdue_notified = 0 AND t.deadline < ?", nowS)) {
@@ -121,6 +123,13 @@ export function runAutomation(): AutomationResult {
     res.briefs = morningBrief(now);
   } catch (e) {
     console.error('[automation] brief', e);
+  }
+
+  // 8. The roll call: a team not reported by 08:30 on a course day.
+  try {
+    res.roll = rollCallReminders(now);
+  } catch (e) {
+    console.error('[automation] roll call', e);
   }
 
   if (res.overdue || res.reminders24 || res.reminders2 || res.recurring || res.templates) changed('tasks', 'weeks');

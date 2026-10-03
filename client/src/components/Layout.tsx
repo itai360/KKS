@@ -53,6 +53,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         title: 'צוערים ולקחים',
         items: [
           { to: '/cadets', label: 'צוערים', icon: 'shield' },
+          { to: '/attendance', label: 'מצבה', icon: 'check' },
           { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
           { to: '/experiences', label: 'התנסויות', icon: 'target' },
           { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
@@ -93,6 +94,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       title: 'צוערים ולקחים',
       items: [
         { to: '/cadets', label: 'צוערים', icon: 'shield' },
+        { to: '/attendance', label: 'מצבה', icon: 'check' },
         { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
         { to: '/experiences', label: 'התנסויות', icon: 'target' },
         { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },

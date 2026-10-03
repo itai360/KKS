@@ -4,6 +4,9 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
+  ATTENDANCE_LABELS,
+  ATTENDANCE_STATUSES,
+  ATTENDANCE_TONES,
   CADET_STATUS_LABELS,
   CADET_STATUS_TONES,
   CADET_STATUSES,
@@ -20,7 +23,7 @@ import {
   type RecordKind,
 } from '@shared/constants';
 import { shortDate } from '@shared/dates';
-import type { Cadet, CadetDetail, CadetRecord, Exemption, Team } from '@shared/types';
+import type { AttendanceHistory, Cadet, CadetDetail, CadetRecord, Exemption, Team } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
 import { Icon } from '../components/Icon';
@@ -594,6 +597,7 @@ export function CadetPage() {
             <DisciplineSummary count={c.disciplineNotes} committee={c.notesCommittee} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
           )}
           {(c.canManage || data.exemptions.length > 0) && <ExemptionsCard cadet={c} exemptions={data.exemptions} />}
+          {c.status === 'active' && <AttendanceCard cadetId={c.id} />}
           <Development detail={data} />
           {c.notes && (
             <div className="card card-pad">
@@ -689,6 +693,44 @@ const EXEMPTION_SUBJECTS = ['דיגום', 'נשק', 'טלפונים', 'זמני�
  * remarks on what was allowed. Every staff member sees what and until when;
  * the reason stays with the team commander and the course commander.
  */
+/** the last two months on the roll call: how many days away, and why */
+function AttendanceCard({ cadetId }: { cadetId: number }) {
+  const { data } = useApi<AttendanceHistory>(`/api/cadets/${cadetId}/attendance`, ['cadets']);
+  if (!data) return null;
+  const marked = Object.values(data.counts).reduce((a, b) => a + (b ?? 0), 0);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="check" />
+        <h3 className="grow">מצבה - חודשיים אחרונים</h3>
+        <Link to="/attendance" className="btn btn-ghost btn-sm">
+          למצבה
+        </Link>
+      </div>
+      <div className="card-body col gap-6">
+        {!marked ? (
+          <p className="small muted">עוד לא סומנה מצבה לצוער.</p>
+        ) : (
+          <div className="row wrap gap-6">
+            {ATTENDANCE_STATUSES.filter((s) => data.counts[s]).map((s) => (
+              <span key={s} className={`badge t-${ATTENDANCE_TONES[s]}`}>
+                {ATTENDANCE_LABELS[s]} {data.counts[s]}
+              </span>
+            ))}
+          </div>
+        )}
+        {data.days.slice(0, 8).map((d) => (
+          <div key={d.date} className="small row gap-6">
+            <span className="mono muted">{shortDate(d.date)}</span>
+            <span className={`badge t-${ATTENDANCE_TONES[d.status]}`}>{ATTENDANCE_LABELS[d.status]}</span>
+            <span className="muted">{d.note}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemption[] }) {
   const toast = useToast();
   const guide = useGuide(cadet.canManage);

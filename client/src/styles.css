@@ -4754,3 +4754,139 @@ button.fab-missing {
     display: none;
   }
 }
+
+/* ---------- the daily roll call (pages/AttendancePage.tsx) ---------- */
+
+.roll-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.roll-bar .input[type='date'] {
+  width: auto;
+}
+
+.roll-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.roll-big {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.roll-team .card-head h2 {
+  font-size: 16px;
+}
+
+.roll-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.roll-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--line);
+  box-shadow: inset -3px 0 0 transparent;
+}
+
+.roll-row:first-child {
+  border-top: none;
+}
+
+.roll-row.is-green { box-shadow: inset -3px 0 0 var(--green); }
+.roll-row.is-yellow { box-shadow: inset -3px 0 0 var(--yellow); }
+.roll-row.is-orange { box-shadow: inset -3px 0 0 var(--orange); }
+.roll-row.is-blue { box-shadow: inset -3px 0 0 var(--blue); }
+.roll-row.is-purple { box-shadow: inset -3px 0 0 var(--purple); }
+.roll-row.is-red { box-shadow: inset -3px 0 0 var(--red); }
+
+.roll-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.roll-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.roll-choices button {
+  min-width: 52px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  background: var(--card);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.roll-choices button:hover {
+  border-color: var(--tone);
+}
+
+.roll-choices button[aria-pressed='true'] {
+  background: var(--tone-bg);
+  border-color: var(--tone);
+  box-shadow: inset 0 0 0 1px var(--tone);
+  color: var(--tone-ink, var(--tone));
+}
+
+.roll-note {
+  grid-column: 1 / -1;
+  height: 34px;
+  font-size: 13.5px;
+}
+
+.print-only {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .roll-row {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px 14px;
+  }
+  .roll-choices button {
+    flex: 1 1 calc(33% - 4px);
+    height: 40px;
+  }
+}
+
+@media print {
+  .print-only {
+    display: inline;
+  }
+  .roll-row {
+    grid-template-columns: 1fr;
+    padding: 4px 0;
+    box-shadow: none !important;
+  }
+  .roll-name {
+    justify-content: space-between;
+  }
+  .roll-team {
+    break-inside: avoid;
+  }
+}
