@@ -9,6 +9,7 @@ import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { ScreenBoundary } from './ScreenBoundary';
+import { BackButton } from './BackButton';
 import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
@@ -362,6 +363,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <ShortcutsHelp />
           <CommandPalette pages={sections.flatMap((s) => s.items)} />
         </main>
+        <BackButton />
       </div>
 
       <nav className={`bottom-nav${barAway ? ' away' : ''}`} aria-label="ניווט" style={{ ['--idx' as string]: barIdx }}>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parentPath } from '../src/components/BackButton';
 import { intlNumber, telHref, vcard, waHref } from '../src/lib/contact';
 
 describe('phone numbers for call and WhatsApp', () => {
@@ -20,5 +21,15 @@ describe('phone numbers for call and WhatsApp', () => {
     expect(v).toContain('TEL;TYPE=CELL:+972501234567');
     expect(v).toContain('ORG:קורס\\, מחזור 52');
     expect(v).not.toContain('undefined');
+  });
+});
+
+describe('back to the screen above', () => {
+  it('goes one level up, past a list that is not a screen', () => {
+    expect(parentPath('/tasks/12')).toBe('/tasks');
+    expect(parentPath('/weeks/3/order')).toBe('/weeks/3');
+    expect(parentPath('/evaluations/committee/5')).toBe('/evaluations');
+    expect(parentPath('/tasks')).toBe('/');
+    expect(parentPath('/')).toBe('/');
   });
 });

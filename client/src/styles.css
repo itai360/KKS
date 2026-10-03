@@ -279,59 +279,73 @@ p {
   background: var(--rail-2);
 }
 
-/* folded to icons: a medium screen, or the person's choice */
+/* folded to icons: a medium screen, or the person's choice. Opening it (hover) only widens it:
+   the icons keep their place, the words fade in, nothing changes height - so it opens smoothly. */
 .app.rail-collapsed {
   --rail-w: 68px;
+}
+
+.rail-collapsed .rail {
+  padding-inline: 12px;
+  transition: width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.26s ease;
+  will-change: width;
 }
 
 .rail-collapsed .rail:not(.no-peek):hover,
 .rail-collapsed .rail:not(.no-peek):has(:focus-visible) {
   width: 252px;
   box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.6);
-  transition-delay: 0.12s;
+  transition-delay: 0.1s;
 }
 
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) {
-  padding-inline: 10px;
+/* the same places open and folded: icons centred in the folded width */
+.rail-collapsed .rail .brand {
+  padding-inline: 2px;
 }
 
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) :is(.brand-text, .rail-user, .rail-logout, .rail-foot .avatar) {
-  display: none;
+.rail-collapsed .rail .rail-link {
+  padding-inline: 13px;
 }
 
-/* the label stays for screen readers, out of sight */
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+.rail-collapsed .rail .rail-foot {
+  padding-inline: 5px;
+}
+
+.rail-collapsed .rail :is(.brand-text, .rail-label, .rail-user, .rail-logout, .rail-toggle, .rail-section) {
+  transition: opacity 0.18s ease 0.12s, color 0.18s ease 0.12s;
+}
+
+.rail-collapsed .rail .rail-user {
+  min-width: 0;
   overflow: hidden;
-  clip-path: inset(50%);
 }
 
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-link,
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-foot {
-  justify-content: center;
-  padding-inline: 0;
+.rail-collapsed .rail .rail-user > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .brand {
-  justify-content: center;
-  padding-inline: 0;
+/* folded: the words are there (for screen readers) but out of sight, clipped by the width */
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) :is(.brand-text, .rail-label, .rail-user, .rail-logout, .rail-toggle) {
+  opacity: 0;
+  pointer-events: none;
+  transition-delay: 0s;
+  transition-duration: 0.1s;
 }
 
+/* a section title keeps its height, shown as a line */
 .rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-section {
-  height: 1px;
-  padding: 0;
-  margin: 10px 6px;
-  overflow: hidden;
   color: transparent;
-  background: var(--rail-2);
+  background: linear-gradient(var(--rail-2), var(--rail-2)) center calc(100% - 9px) / 70% 1px no-repeat;
+  transition-delay: 0s;
+  transition-duration: 0.1s;
 }
 
 .rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-link .count {
   position: absolute;
   top: 1px;
-  inset-inline-end: 3px;
+  inset-inline-start: 26px;
   padding: 0 4px;
   font-size: 9.5px;
   line-height: 15px;
@@ -4987,4 +5001,56 @@ button.fab-missing {
   flex-wrap: wrap;
   gap: 6px;
   padding: 2px 0 4px;
+}
+
+/* ---------- back, floating on every screen (components/BackButton.tsx) ---------- */
+
+.back-fab {
+  position: fixed;
+  bottom: 22px;
+  /* beside the side menu, on the reading side */
+  inset-inline-start: calc(var(--rail-w) + 34px);
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 10px 26px -10px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.12s, background 0.12s;
+}
+
+.back-fab:hover {
+  background: var(--gray-bg);
+}
+
+.back-fab:active {
+  transform: scale(0.94);
+}
+
+/* a bar of bulk actions takes the bottom of the screen */
+body:has(.bulk-bar) .back-fab {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  /* above the floating navigation bar - and down to the edge while it steps aside */
+  .back-fab {
+    inset-inline-start: 14px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+  body:has(.bottom-nav.away) .back-fab {
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  /* above a screen's own floating button row (summing up a debrief) */
+  body:has(.page-fab) .back-fab {
+    bottom: calc(150px + env(safe-area-inset-bottom));
+  }
+  body:has(.page-fab):has(.bottom-nav.away) .back-fab {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
 }

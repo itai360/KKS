@@ -15,6 +15,7 @@ const paths: Record<string, string> = {
   x: 'M6 6l12 12M18 6 6 18',
   chevronLeft: 'M15 6l-6 6 6 6',
   chevronRight: 'M9 6l6 6-6 6',
+  arrowRight: 'M4 12h15M13 6l6 6-6 6',
   chevronDown: 'M6 9l6 6 6-6',
   alert: 'M12 3 2 20h20zM12 10v4M12 17.5v.5',
   flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
