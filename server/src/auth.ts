@@ -143,6 +143,9 @@ export function requireCommander(req: Request, _res: Response, next: NextFunctio
  */
 export function csrfGuard(req: Request, _res: Response, next: NextFunction): void {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  // sharing from WhatsApp arrives as a plain form the phone opens like a link: it carries the
+  // sign-in cookie, while a form sent from another site does not (SameSite=Lax) - see alignment.ts
+  if (req.method === 'POST' && req.path === '/share-target') return next();
   if (req.headers['x-kks'] !== '1') return next(forbidden('בקשה לא תקינה'));
   next();
 }

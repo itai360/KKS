@@ -32,6 +32,7 @@ import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
 import { v3Router } from './api3';
+import { shareTarget } from './alignment';
 import { setCourseCookie, viewingName } from './courses';
 import {
   addCalendarSource,
@@ -203,6 +204,9 @@ export function apiRouter(): Router {
     setCourseCookie(res, null);
     res.json({ ok: true });
   });
+
+  // WhatsApp's "share" into the app (alignment.ts): signed in or not, it ends on the page
+  r.post('/share-target', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), shareTarget);
 
   r.use(requireAuth);
 

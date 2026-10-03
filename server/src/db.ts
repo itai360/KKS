@@ -746,8 +746,31 @@ CREATE TABLE course_archives (
 );
 `;
 
+// "יישור קו": the messages of the staff's WhatsApp group, from WhatsApp's chat export (alignment.ts)
+const SCHEMA_V23 = `
+CREATE TABLE alignment_messages (
+  id INTEGER PRIMARY KEY,
+  sent_at TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  body TEXT NOT NULL DEFAULT '',
+  media INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  fingerprint TEXT NOT NULL UNIQUE,
+  imported_at TEXT NOT NULL
+);
+CREATE INDEX alignment_messages_sent ON alignment_messages(sent_at);
+CREATE TABLE alignment_imports (
+  id INTEGER PRIMARY KEY,
+  at TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  added INTEGER NOT NULL,
+  found INTEGER NOT NULL
+);
+`;
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

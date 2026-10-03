@@ -68,6 +68,7 @@ import { attendanceHistory, markAttendance, rollCall } from './attendance';
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { coursesOverview, startNewCourse, viewCourse, viewingCourse } from './courses';
+import { alignmentFeed, deleteMessage, exportText, importAlignment, pinMessage } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
 
@@ -380,6 +381,28 @@ export function v3Router(): Router {
   r.post('/push/test', async (req, res) => {
     const sent = await sendPush(me(req).id, { id: 0, title: 'התראת בדיקה', body: 'ההתראות לטלפון פועלות', link: '/notifications', category: 'action' }, true);
     res.json({ sent });
+  });
+
+  // ---------------- "יישור קו" (the staff's WhatsApp group) ----------------
+
+  r.get('/alignment', (req, res) =>
+    res.json(alignmentFeed({ q: typeof req.query.q === 'string' ? req.query.q : undefined, before: typeof req.query.before === 'string' ? req.query.before : undefined, beforeId: num(req.query.id) })),
+  );
+  r.post('/alignment/import', (req, res) => {
+    const { text } = z.object({ text: z.string().min(1, 'הדביקו את ההודעות').max(900_000) }).parse(req.body);
+    res.json(importAlignment(me(req), text));
+  });
+  r.post('/alignment/import/file', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(importAlignment(me(req), exportText(req.body)));
+  });
+  r.post('/alignment/:id/pin', requireCommander, (req, res) => {
+    pinMessage(id(req.params.id), req.body);
+    res.json({ ok: true });
+  });
+  r.delete('/alignment/:id', requireCommander, (req, res) => {
+    deleteMessage(id(req.params.id));
+    res.json({ ok: true });
   });
 
   // ---------------- previous courses ----------------

@@ -5073,3 +5073,60 @@ body:has(.bulk-bar) .back-fab {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- יישור קו (pages/AlignmentPage.tsx) ---------- */
+
+.al-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.al-msg:last-child {
+  border-bottom: none;
+}
+
+.al-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.al-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14.5px;
+  margin-top: 2px;
+}
+
+.al-media {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.al-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0.55;
+}
+
+.al-msg:hover .al-actions,
+.al-actions:focus-within {
+  opacity: 1;
+}
+
+.al-actions .icon-btn.on {
+  color: var(--blue);
+}
+
+.al-steps {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: grid;
+  gap: 6px;
+}

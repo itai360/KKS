@@ -46,7 +46,7 @@ const CARRIED = new Set([
 /** kept in part: the debriefs with lessons for the next cycle, and the staff's absences still ahead */
 const IN_PART = new Set(['debriefs', 'debrief_items', 'absences']);
 
-const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements'];
+const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment'];
 
 interface ArchiveRow {
   id: number;
@@ -225,7 +225,7 @@ async function archiveDb(a: ArchiveRow): Promise<Db> {
 }
 
 /** the parts that always work on the current course, also while a previous one is open */
-const LIVE = [/^\/auth\//, /^\/courses(\/|$)/, /^\/notifications(\/|$)/, /^\/push\//, /^\/client-error$/, /^\/stream$/, /^\/sync$/, /^\/admin\/snapshots/];
+const LIVE = [/^\/share-target$/, /^\/auth\//, /^\/courses(\/|$)/, /^\/notifications(\/|$)/, /^\/push\//, /^\/client-error$/, /^\/stream$/, /^\/sync$/, /^\/admin\/snapshots/];
 
 export function viewingCourse(req: Request): number | null {
   const v = Number(parseCookies(req.headers.cookie)[COURSE_COOKIE]);

@@ -953,6 +953,40 @@ export interface SnapshotInfo {
   bytes: number;
 }
 
+// ---------------- "יישור קו" (the staff's WhatsApp group) ----------------
+
+export interface AlignmentMessage {
+  id: number;
+  sentAt: string;
+  /** the name (or number) as WhatsApp shows it */
+  sender: string;
+  /** the staff member it was matched to, by name or phone */
+  userId: number | null;
+  userName: string | null;
+  body: string;
+  /** had a photo, video or file that the export did not include */
+  media: boolean;
+  pinned: boolean;
+}
+
+export interface AlignmentFeed {
+  /** oldest first */
+  messages: AlignmentMessage[];
+  pinned: AlignmentMessage[];
+  /** older messages to load */
+  more: boolean;
+  total: number;
+  lastImport: { at: string; added: number; byName: string | null } | null;
+}
+
+export interface AlignmentImport {
+  found: number;
+  added: number;
+  existing: number;
+  from: string;
+  to: string;
+}
+
 // ---------------- previous courses ----------------
 
 export interface CourseStats {

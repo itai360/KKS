@@ -46,6 +46,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         items: [
           { to: '/requests', label: 'אישורים ובקשות', icon: 'inbox', count: pending },
           { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
+          { to: '/alignment', label: 'יישור קו', icon: 'message' },
           { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
           { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
           { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
@@ -94,6 +95,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
         { to: `/requests`, label: 'הבקשות שלי', icon: 'inbox' },
         { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
+        { to: '/alignment', label: 'יישור קו', icon: 'message' },
         { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
       ],
     },
