@@ -33,6 +33,9 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
 };
 export const PRIORITY_RANK: Record<Priority, number> = { low: 0, normal: 1, high: 2, critical: 3 };
 
+/** areas added later - a course that already keeps its own list gets them too (migration 19) */
+export const ADDED_DOMAINS = ['חינוך', 'אקדמיה', 'אימון גופני', 'שטח', 'ניווטים', 'דת', 'רכב'];
+
 export const DEFAULT_DOMAINS = [
   'הדרכה',
   'בטיחות',
@@ -43,6 +46,7 @@ export const DEFAULT_DOMAINS = [
   'תיאומים',
   'צוערים',
   'הערכה',
+  ...ADDED_DOMAINS,
   'אחר',
 ];
 

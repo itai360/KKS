@@ -1,6 +1,7 @@
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { ADDED_DOMAINS } from '../../shared/constants';
 
 type Param = SQLInputValue | boolean | undefined;
 
@@ -689,7 +690,27 @@ ALTER TABLE notifications ADD COLUMN snoozed_until TEXT;
 CREATE INDEX notifications_snoozed ON notifications(snoozed_until);
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18];
+// more areas of responsibility (education, academics, PT, field, navigation, religion, vehicles):
+// a course that keeps its own list of areas gets them too, before "אחר"
+function V19_DOMAINS(db: Db): void {
+  const row = db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'domains'");
+  if (!row) return; // the defaults already have them
+  let list: unknown;
+  try {
+    list = JSON.parse(row.value);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(list)) return;
+  const add = ADDED_DOMAINS.filter((d) => !list.includes(d));
+  if (!add.length) return;
+  const other = list.indexOf('אחר');
+  const next = other >= 0 ? [...list.slice(0, other), ...add, ...list.slice(other)] : [...list, ...add];
+  db.run("UPDATE settings SET value = ? WHERE key = 'domains'", JSON.stringify(next.slice(0, 40)));
+}
+
+/** a migration is SQL, or a step that changes data the way SQL alone can't */
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {
@@ -700,7 +721,9 @@ export function migrate(db: Db, upTo = MIGRATIONS.length): void {
   }
   for (let v = version; v < upTo; v++) {
     db.tx(() => {
-      db.exec(MIGRATIONS[v]);
+      const step = MIGRATIONS[v];
+      if (typeof step === 'string') db.exec(step);
+      else step(db);
       db.run("INSERT INTO meta(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", String(v + 1));
     });
   }

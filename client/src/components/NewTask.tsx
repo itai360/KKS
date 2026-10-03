@@ -86,6 +86,9 @@ export function quickDeadlines(defaultTime: string): { label: string; date: stri
   return out;
 }
 
+/** "שבוע 3 · שבוע שטח (27.9-3.10)" */
+const weekLabel = (w: { number: number; name: string; startDate: string; endDate: string }) => `שבוע ${w.number} · ${w.name} (${shortDate(w.startDate)}-${shortDate(w.endDate)})`;
+
 export function DateTimeInputs({ date, time, onDate, onTime }: { date: string; time: string; onDate: (v: string) => void; onTime: (v: string) => void }) {
   return (
     <div className="row gap-6">
@@ -231,7 +234,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
       if (p.priority) setPriority(p.priority);
       if (p.domain) setDomain(p.domain);
       if (p.weekId) setWeekId(String(p.weekId));
-      if (p.priority || p.domain || p.weekId) setMore(true);
+      if (p.priority || p.domain) setMore(true);
     },
     [users, weeks, settings.domains, defaultTime, isCommander],
   );
@@ -243,6 +246,8 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
 
   const quick = useMemo(() => quickDeadlines(defaultTime), [defaultTime]);
   const deadlineIso = date && time ? isoAt(date, time) : null;
+  // the week a task falls in by its deadline, when none is chosen
+  const autoWeek = date ? weeks.find((w) => w.startDate <= date && w.endDate >= date) : undefined;
   const hasMany = !allStaff && ownerIds.length > 1;
   // what the form holds now - picked by hand or read from the sentence
   const ownerNames = allStaff ? ['כל הסגל'] : ownerIds.map((id) => users.find((u) => u.id === id)?.displayName ?? '');
@@ -332,6 +337,20 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder='לדוגמה: לסגור לו"ז לשבוע התקפה' maxLength={200} />
         </Field>
 
+        <Field label="שבוע בקורס" hint={weekId === 'auto' ? (autoWeek ? `לפי הדד-ליין: ${weekLabel(autoWeek)}` : date ? 'הדד-ליין לא נופל באף שבוע' : 'נקבע לפי הדד-ליין') : undefined}>
+          <select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+            <option value="auto">{autoWeek ? `אוטומטי - ${autoWeek.name}` : 'אוטומטי לפי הדד-ליין'}</option>
+            <option value="none">ללא שבוע</option>
+            {[...weeks]
+              .sort((a, b) => a.startDate.localeCompare(b.startDate))
+              .map((w) => (
+                <option key={w.id} value={w.id}>
+                  {weekLabel(w)}
+                </option>
+              ))}
+          </select>
+        </Field>
+
         <Field label="אחראי" required hint={!isCommander ? 'ניתן לפתוח משימות לאחרים רק בשבוע שבאחריותך' : undefined}>
           <UserPicker value={ownerIds} onChange={setOwnerIds} allowAll={isCommander} all={allStaff} onAll={setAllStaff} date={date || undefined} />
         </Field>
@@ -384,17 +403,6 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
                 <option value="">ללא</option>
                 {settings.domains.map((d) => (
                   <option key={d}>{d}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="שבוע בקורס">
-              <select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
-                <option value="auto">אוטומטי לפי הדד-ליין</option>
-                <option value="none">ללא שבוע</option>
-                {weeks.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
                 ))}
               </select>
             </Field>
