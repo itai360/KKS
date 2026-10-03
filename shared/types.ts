@@ -944,13 +944,43 @@ export interface CourseDocument {
 }
 
 /** Why a snapshot of the database was taken (server/src/snapshots.ts). */
-export type SnapshotLabel = 'auto' | 'manual' | 'before_delete' | 'before_restore';
+export type SnapshotLabel = 'auto' | 'manual' | 'before_delete' | 'before_restore' | 'archive';
 
 export interface SnapshotInfo {
   id: string;
   savedAt: string;
   label: SnapshotLabel;
   bytes: number;
+}
+
+// ---------------- previous courses ----------------
+
+export interface CourseStats {
+  tasks: number;
+  doneTasks: number;
+  weeks: number;
+  events: number;
+  cadets: number;
+  debriefs: number;
+  /** lessons kept for the next cycle */
+  lessons: number;
+}
+
+export interface CourseArchive {
+  id: number;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  stats: CourseStats;
+  archivedAt: string;
+  archivedByName: string | null;
+}
+
+export interface CoursesOverview {
+  current: { name: string; startDate: string | null; endDate: string | null; stats: CourseStats };
+  archives: CourseArchive[];
+  /** the previous course open for reading, if any */
+  viewing: number | null;
 }
 
 // ---------------- enforcement ladder (מדרג אכיפה) ----------------

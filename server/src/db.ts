@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -731,8 +732,22 @@ const SCHEMA_V21 = `
 ALTER TABLE tasks ADD COLUMN domain_note TEXT NOT NULL DEFAULT '';
 `;
 
+// previous courses: a course that ended is kept whole as a snapshot (label 'archive', never pruned)
+const SCHEMA_V22 = `
+CREATE TABLE course_archives (
+  id INTEGER PRIMARY KEY,
+  snapshot_id TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  start_date TEXT,
+  end_date TEXT,
+  stats TEXT NOT NULL DEFAULT '{}',
+  archived_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  archived_at TEXT NOT NULL
+);
+`;
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {
@@ -752,6 +767,8 @@ export function migrate(db: Db, upTo = MIGRATIONS.length): void {
 }
 
 let current: Db | null = null;
+/** a request that reads an earlier course runs against that course's database (courses.ts) */
+const scoped = new AsyncLocalStorage<Db>();
 
 export function openDb(path: string, opts: { wal?: boolean } = {}): Db {
   const db = new Db(path, opts);
@@ -761,6 +778,13 @@ export function openDb(path: string, opts: { wal?: boolean } = {}): Db {
 }
 
 export function db(): Db {
+  const inScope = scoped.getStore();
+  if (inScope) return inScope;
   if (!current) throw new Error('Database not initialised');
   return current;
+}
+
+/** runs fn (and everything it awaits) with db() returning `d` */
+export function withDb<T>(d: Db, fn: () => T): T {
+  return scoped.run(d, fn);
 }

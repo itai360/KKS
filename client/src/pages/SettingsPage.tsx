@@ -518,6 +518,7 @@ const SNAPSHOT_LABELS: Record<SnapshotLabel, string> = {
   manual: 'ידני',
   before_delete: 'לפני מחיקה מרוכזת',
   before_restore: 'לפני שחזור',
+  archive: 'קורס קודם',
 };
 const ALL_TOPICS = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents'];
 

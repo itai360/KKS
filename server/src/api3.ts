@@ -67,6 +67,7 @@ import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
 import { attendanceHistory, markAttendance, rollCall } from './attendance';
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
+import { coursesOverview, startNewCourse, viewCourse, viewingCourse } from './courses';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
 
@@ -379,6 +380,20 @@ export function v3Router(): Router {
   r.post('/push/test', async (req, res) => {
     const sent = await sendPush(me(req).id, { id: 0, title: 'התראת בדיקה', body: 'ההתראות לטלפון פועלות', link: '/notifications', category: 'action' }, true);
     res.json({ sent });
+  });
+
+  // ---------------- previous courses ----------------
+
+  r.get('/courses', requireCommander, (req, res) => res.json(coursesOverview(viewingCourse(req))));
+  r.post('/courses/new', requireCommander, async (req, res) => {
+    const archive = await startNewCourse(me(req), req.body);
+    viewCourse(res, null);
+    res.json(archive);
+  });
+  r.post('/courses/view', requireCommander, (req, res) => {
+    const { id } = z.object({ id: z.number().int().positive().nullable() }).parse(req.body);
+    viewCourse(res, id);
+    res.json({ ok: true });
   });
 
   // ---------------- backup ----------------

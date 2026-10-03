@@ -32,6 +32,7 @@ import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
 import { v3Router } from './api3';
+import { setCourseCookie, viewingName } from './courses';
 import {
   addCalendarSource,
   applyCalendarWeeks,
@@ -154,6 +155,7 @@ export function apiRouter(): Router {
       return createUser({ username: input.username, password: input.password, displayName: input.displayName, title: 'מפקד הקורס', role: 'commander' });
     });
     setSessionCookie(res, createSession(created));
+    setCourseCookie(res, null);
     res.json({ user: toUser(getUserRow(created)!) });
   });
 
@@ -168,6 +170,7 @@ export function apiRouter(): Router {
     }
     loginSucceeded(key);
     setSessionCookie(res, createSession(u.id));
+    setCourseCookie(res, null);
     res.json({ user: toUser(u) });
   });
 
@@ -189,6 +192,7 @@ export function apiRouter(): Router {
     }
     loginSucceeded(key);
     setSessionCookie(res, createSession(u.id));
+    setCourseCookie(res, null);
     res.json({ user: toUser(u) });
   });
 
@@ -196,6 +200,7 @@ export function apiRouter(): Router {
     const token = sessionToken(req);
     if (token) destroySession(token);
     clearSessionCookie(res);
+    setCourseCookie(res, null);
     res.json({ ok: true });
   });
 
@@ -203,7 +208,7 @@ export function apiRouter(): Router {
 
   r.get('/auth/me', (req, res) => {
     const unread = db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', me(req).id)!.n;
-    res.json({ user: toUser(me(req)), settings: getSettings(), unread, serverTime: nowIso(), mustChangePassword: !!me(req).must_change_password });
+    res.json({ user: toUser(me(req)), settings: getSettings(), unread, serverTime: nowIso(), mustChangePassword: !!me(req).must_change_password, course: viewingName(req) });
   });
 
   r.post('/auth/password', (req, res) => {

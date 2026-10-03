@@ -48,6 +48,10 @@ export function statSync(path: string): { size: number } {
 export function copyFileSync(from: string, to: string): void {
   writeFileSync(to, readFileSync(from));
 }
+export function renameSync(from: string, to: string): void {
+  writeFileSync(to, readFileSync(from));
+  files.delete(from);
+}
 /** the names of the files directly in a folder */
 export function readdirSync(path: string): string[] {
   const prefix = path.endsWith('/') ? path : `${path}/`;
@@ -61,4 +65,4 @@ export function createReadStream(path: string) {
   };
 }
 
-export default { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, rmSync, statSync, copyFileSync, readdirSync, createReadStream };
+export default { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, rmSync, statSync, copyFileSync, renameSync, readdirSync, createReadStream };

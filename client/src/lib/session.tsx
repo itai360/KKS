@@ -15,6 +15,8 @@ interface MeResponse {
   unread: number;
   /** signed in with a password someone else chose */
   mustChangePassword?: boolean;
+  /** a previous course open for reading (the commander) */
+  course?: { id: number; name: string } | null;
 }
 
 export interface Session {
@@ -24,6 +26,8 @@ export interface Session {
   staff: User[];
   weeks: Week[];
   isCommander: boolean;
+  /** a previous course open for reading: every screen shows it, and nothing can be changed */
+  viewing: { id: number; name: string } | null;
   unread: number;
   setUnread: (n: number) => void;
   refresh: () => Promise<void>;
@@ -127,6 +131,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
       staff: list.filter((u) => u.role === 'staff'),
       weeks: weeks.data ?? [],
       isCommander: me.user.role === 'commander',
+      viewing: me.course ?? null,
       unread,
       setUnread,
       refresh,

@@ -220,4 +220,22 @@ describe('serverless storage', () => {
     expect([...store.files.keys()].filter((k) => k.startsWith('snapshots/')).length).toBeGreaterThanOrEqual(2); // kept in file storage
     expect((await call('POST', '/api/admin/snapshots/999/restore', {}, cookie)).statusCode).toBe(404);
   });
+
+  it('ends a course into storage and reads it back, read only, on the next request', async () => {
+    const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
+    await call('POST', '/api/tasks', { title: 'במחזור שהסתיים', ownerIds: [1], deadline: '2026-12-01T16:00:00.000Z' }, cookie);
+    const ended = await call('POST', '/api/courses/new', { archiveName: 'מחזור 52', name: 'מחזור 53' }, cookie);
+    expect(ended.statusCode).toBe(200);
+    expect([...store.files.keys()].some((k) => k.startsWith('snapshots/') && k.endsWith('~archive.db'))).toBe(true);
+    expect((await call('GET', '/api/tasks', undefined, cookie)).json()).toHaveLength(0);
+
+    const opened = await call('POST', '/api/courses/view', { id: ended.json().id }, cookie);
+    const both = `${cookie}; ${String(opened.headers['set-cookie']).split(';')[0]}`;
+    const titles = (await call('GET', '/api/tasks', undefined, both)).json().map((t: { title: string }) => t.title);
+    expect(titles).toContain('במחזור שהסתיים');
+    const version = store.state!.version;
+    expect((await call('POST', '/api/tasks', { title: 'x', ownerIds: [1], deadline: '2026-12-01T16:00:00.000Z' }, both)).statusCode).toBe(403);
+    expect(store.state!.version).toBe(version); // reading saved nothing
+    expect((await call('GET', '/api/settings', undefined, cookie)).json().courseName).toBe('מחזור 53');
+  });
 });

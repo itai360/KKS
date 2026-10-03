@@ -28,6 +28,7 @@ const out = await build({
   charset: 'utf8',
   alias: {
     'node:sqlite': shim('sqlite.ts'),
+    'node:async_hooks': shim('async_hooks.ts'),
     'node:crypto': shim('crypto.ts'),
     'node:fs': shim('fs.ts'),
     'node:path': shim('path.ts'),

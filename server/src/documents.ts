@@ -174,7 +174,9 @@ export function deleteDocument(actor: UserRow, id: number): void {
   const d = documentRow(actor, id);
   if (!canEditDoc(actor, d)) throw forbidden();
   db().run('DELETE FROM documents WHERE id = ?', id);
-  if (d.kind === 'file' && d.url) void removeFile(d.url);
+  // the library carries over to the next course: a previous course may still show this file
+  const archived = !!db().get('SELECT 1 FROM course_archives LIMIT 1');
+  if (d.kind === 'file' && d.url && !archived) void removeFile(d.url);
   logActivity({ userId: actor.id, action: 'document', text: `${actor.display_name} הסיר מספריית המסמכים: ${d.title}` });
   changed('documents');
 }

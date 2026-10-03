@@ -5,6 +5,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { ZodError } from 'zod';
 import { apiRouter } from './api';
 import { csrfGuard, loadUser } from './auth';
+import { courseScope } from './courses';
 import { HttpError } from './core';
 import { zodMessage } from './validation';
 
@@ -57,6 +58,7 @@ export function createApp(opts: { staticDir?: string } = {}) {
     compressJson,
     loadUser,
     csrfGuard,
+    courseScope,
     apiRouter(),
   );
 

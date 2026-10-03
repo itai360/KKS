@@ -2730,7 +2730,8 @@ input::-webkit-date-and-time-value {
     display: inline-grid;
   }
   .page {
-    padding: 16px 14px calc(110px + env(safe-area-inset-bottom));
+    /* the end of a screen scrolls clear of the floating bar and the back button above it */
+    padding: 16px 14px calc(150px + env(safe-area-inset-bottom));
   }
   .page-title {
     font-size: 38px;
@@ -4986,5 +4987,69 @@ body:has(.bulk-bar) .back-fab {
   }
   body:has(.page-fab):has(.bottom-nav.away) .back-fab {
     bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---------- previous courses (pages/CoursesPage.tsx) ---------- */
+
+.course-card.current {
+  border-inline-start: 3px solid var(--green);
+}
+
+.course-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.course-stats .chip {
+  height: 28px;
+  font-size: 13px;
+  cursor: default;
+}
+
+.course-stats .chip:hover {
+  border-color: var(--line-2);
+}
+
+.course-carry {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.course-carry > div {
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.course-carry p {
+  margin: 4px 0 0;
+}
+
+.check.course-sure {
+  align-items: flex-start;
+}
+
+.check.course-sure input {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* a previous course open for reading: said on every screen */
+.update-bar.course-bar {
+  background: var(--blue-bg);
+  color: var(--ink);
+}
+
+.app.viewing-past .bottom-nav button[aria-disabled='true'] {
+  opacity: 0.4;
+}
+
+@media (max-width: 640px) {
+  .course-carry {
+    grid-template-columns: 1fr;
   }
 }

@@ -13,6 +13,7 @@ import { BackButton } from './BackButton';
 import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
+import { switchCourse } from '../lib/courses';
 
 interface NavItem {
   to: string;
@@ -71,6 +72,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
           { to: '/templates', label: 'תבניות', icon: 'template' },
           { to: '/recurring', label: 'משימות חוזרות', icon: 'repeat' },
           { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
+          { to: '/courses', label: 'קורסים קודמים', icon: 'history' },
         ],
       },
     ];
@@ -129,7 +131,7 @@ function readRailPref(): 'collapsed' | 'expanded' | null {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, settings, unread, logout, isCommander } = useSession();
+  const { user, settings, unread, logout, isCommander, viewing } = useSession();
   const sections = useNavSections();
   const newTask = useNewTask();
   const navigate = useNavigate();
@@ -249,7 +251,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const barIdx = path === '/' ? 0 : path.startsWith('/tasks') ? 1 : path.startsWith('/weeks') ? 3 : 4;
 
   return (
-    <div className={`app${folded ? ' rail-collapsed' : ''}`}>
+    <div className={`app${folded ? ' rail-collapsed' : ''}${viewing ? ' viewing-past' : ''}`}>
       {/* keyboard and screen-reader users skip the menu */}
       <a
         className="skip-link"
@@ -338,11 +340,24 @@ export function Layout({ children }: { children: ReactNode }) {
               <Icon name="bell" />
               {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
             </NavLink>
-            <button className="btn btn-primary hide-mobile" onClick={() => newTask()} title="קיצור מקלדת: N">
-              <Icon name="plus" /> משימה
-            </button>
+            {!viewing && (
+              <button className="btn btn-primary hide-mobile" onClick={() => newTask()} title="קיצור מקלדת: N">
+                <Icon name="plus" /> משימה
+              </button>
+            )}
           </div>
         </header>
+        {viewing && (
+          <div className="update-bar course-bar no-print" role="status">
+            <Icon name="history" size={16} />
+            <span className="grow">
+              פתוח לקריאה: <b>{viewing.name}</b> - קורס קודם. אפשר לעבור בכל המסכים; שינויים נעשים רק בקורס הנוכחי.
+            </span>
+            <button className="btn btn-sm" onClick={() => void switchCourse(null)}>
+              חזרה לקורס הנוכחי
+            </button>
+          </div>
+        )}
         {lost && (
           <div className="update-bar offline no-print" role="status">
             <Icon name="alert" size={16} />
@@ -377,7 +392,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <Icon name="tasks" />
           משימות
         </NavLink>
-        <button onClick={() => newTask()} aria-label="משימה חדשה">
+        <button onClick={() => !viewing && newTask()} aria-label={viewing ? 'קורס קודם - לקריאה בלבד' : 'משימה חדשה'} aria-disabled={viewing ? 'true' : undefined}>
           <span className="plus">
             <Icon name="plus" />
           </span>

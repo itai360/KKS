@@ -20,14 +20,15 @@ import { changed } from './journal';
 import type { Topic } from './realtime';
 import { decodeDb, encodeDb } from './storedDb';
 
-export const SNAPSHOT_LABELS: SnapshotLabel[] = ['auto', 'manual', 'before_delete', 'before_restore'];
+export const SNAPSHOT_LABELS: SnapshotLabel[] = ['auto', 'manual', 'before_delete', 'before_restore', 'archive'];
 const AUTO_EVERY_MS = 30 * 60_000;
 const KEEP_RECENT = 48;
 const KEEP_DAYS = 30;
 
 export interface SnapshotProvider {
   list(): Promise<SnapshotInfo[]>;
-  take(label: SnapshotLabel): Promise<void>;
+  /** returns the new snapshot's id */
+  take(label: SnapshotLabel): Promise<string>;
   /** the snapshot as an SQLite file, written to `path` */
   fetch(id: string, path: string): Promise<void>;
 }
@@ -48,7 +49,7 @@ function localList(): SnapshotInfo[] {
     .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
-/** Keeps the latest automatic snapshots, the last of each day for a month, and the others for a month. */
+/** Keeps the latest automatic snapshots, the last of each day for a month, and the others for a month - a course archive always. */
 export function toPrune(list: SnapshotInfo[], now: Date): string[] {
   const cutoff = new Date(now.getTime() - KEEP_DAYS * 86_400_000).toISOString();
   const auto = list.filter((s) => s.label === 'auto').sort((a, b) => b.savedAt.localeCompare(a.savedAt));
@@ -61,7 +62,7 @@ export function toPrune(list: SnapshotInfo[], now: Date): string[] {
       keep.add(s.id);
     }
   }
-  return list.filter((s) => (s.label === 'auto' ? !keep.has(s.id) : s.savedAt < cutoff)).map((s) => s.id);
+  return list.filter((s) => s.label !== 'archive' && (s.label === 'auto' ? !keep.has(s.id) : s.savedAt < cutoff)).map((s) => s.id);
 }
 
 const local: SnapshotProvider = {
@@ -75,6 +76,7 @@ const local: SnapshotProvider = {
     const file = join(dir(), `${stamp}~${label}.db`);
     db().exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
     for (const id of toPrune(localList(), new Date())) rmSync(join(dir(), `${id}.db`), { force: true });
+    return `${stamp}~${label}`;
   },
   async fetch(id, path) {
     const file = join(dir(), `${id}.db`);
@@ -85,12 +87,15 @@ const local: SnapshotProvider = {
 
 let provider: SnapshotProvider = local;
 
-export function setSnapshotProvider(p: SnapshotProvider): void {
-  provider = p;
+/** null: back to files on this server */
+export function setSnapshotProvider(p: SnapshotProvider | null): void {
+  provider = p ?? local;
 }
 
-export const listSnapshots = () => provider.list();
+/** the backups (a course archive is listed with the previous courses) */
+export const listSnapshots = async () => (await provider.list()).filter((s) => s.label !== 'archive');
 export const takeSnapshot = (label: SnapshotLabel) => provider.take(label);
+export const fetchSnapshot = (id: string, path: string) => provider.fetch(id, path);
 
 /** A snapshot before a risky change; the change goes ahead even if storage cannot take one. */
 export async function snapshotBefore(label: SnapshotLabel): Promise<boolean> {
@@ -123,7 +128,7 @@ export async function autoSnapshot(now = Date.now()): Promise<boolean> {
 // ---------------- restoring ----------------
 
 /** Tables not restored from a snapshot: they stay as they are now. */
-const KEEP_CURRENT = new Set(['sessions', 'push_subscriptions', 'snapshots', 'login_lockouts']);
+const KEEP_CURRENT = new Set(['sessions', 'push_subscriptions', 'snapshots', 'login_lockouts', 'course_archives']);
 const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements'];
 
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`;
@@ -213,6 +218,7 @@ export function storedSnapshots(files: FileStorage, current: () => { data: Buffe
         await files.remove(fileName(old));
         db().run('DELETE FROM snapshots WHERE id = ?', old);
       }
+      return id;
     },
     async fetch(id, path) {
       const known = db().get('SELECT 1 FROM snapshots WHERE id = ?', id);
