@@ -36,6 +36,14 @@ export const PRIORITY_RANK: Record<Priority, number> = { low: 0, normal: 1, high
 /** areas added later - a course that already keeps its own list gets them too (migration 19) */
 export const ADDED_DOMAINS = ['חינוך', 'אקדמיה', 'אימון גופני', 'שטח', 'ניווטים', 'דת', 'רכב'];
 
+/** the area chosen when none fits - with a few words saying what it is */
+export const OTHER_DOMAIN = 'אחר';
+
+/** "אחר: תקשוב" - the area as shown, with its detail when it is "other" */
+export function domainLabel(domain: string, note?: string | null): string {
+  return domain === OTHER_DOMAIN && note ? `${domain}: ${note}` : domain;
+}
+
 export const DEFAULT_DOMAINS = [
   'הדרכה',
   'בטיחות',

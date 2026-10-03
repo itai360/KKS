@@ -17,6 +17,7 @@ export interface TaskRow {
   priority: Priority;
   status: TaskStatus;
   domain: string;
+  domain_note: string;
   week_id: number | null;
   event_id: number | null;
   parent_id: number | null;
@@ -115,6 +116,7 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     priority: r.priority,
     status: r.status,
     domain: r.domain,
+    domainNote: r.domain_note ?? '',
     weekId: r.week_id,
     weekName: r.week_name,
     eventId: r.event_id,

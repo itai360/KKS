@@ -3,7 +3,7 @@
 
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
+import { domainLabel, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
 import type { Task, TaskDetail } from '@shared/types';
 import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Icon } from '../components/Icon';
@@ -68,7 +68,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
             <div className="row gap-6 wrap mb-12">
               <StatusBadge status={t.status} overdue={t.overdue} />
               <PriorityBadge priority={t.priority} hideNormal={false} />
-              {t.domain && <span className="badge">{t.domain}</span>}
+              {t.domain && <span className="badge">{domainLabel(t.domain, t.domainNote)}</span>}
               {t.requiresApproval && <span className="badge t-blue">נדרש אישור מפקד</span>}
               {t.visibility !== 'normal' && <span className="badge">{t.visibility === 'team' ? 'כללית לכל הסגל' : 'מוגבלת'}</span>}
               {t.recurringRuleId && <span className="badge">משימה חוזרת</span>}
@@ -243,7 +243,7 @@ function Details({ task: t }: { task: Task }) {
           <dt>סטטוס</dt>
           <dd>{STATUS_LABELS[t.status]}</dd>
           <dt>תחום</dt>
-          <dd>{t.domain || '-'}</dd>
+          <dd>{domainLabel(t.domain, t.domainNote) || '-'}</dd>
           <dt>שבוע</dt>
           <dd>{t.weekId ? <Link to={`/weeks/${t.weekId}`}>{t.weekName}</Link> : '-'}</dd>
           {t.cadetId && (

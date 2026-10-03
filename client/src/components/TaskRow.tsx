@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/constants';
+import { domainLabel, isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/constants';
 import type { Task } from '@shared/types';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
@@ -75,7 +75,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
           <span className={showOwner ? 'sep' : ''}>
             <DeadlineText task={task} />
           </span>
-          {task.domain && <span className="sep">{task.domain}</span>}
+          {task.domain && <span className="sep">{domainLabel(task.domain, task.domainNote)}</span>}
           {task.weekName && <span className="sep">{task.weekName}</span>}
           {task.subtaskTotal > 0 && (
             <span className="sep mono">

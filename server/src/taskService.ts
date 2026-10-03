@@ -5,7 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   BLOCK_REASONS,
+  domainLabel,
   isOpenStatus,
+  OTHER_DOMAIN,
   OVERDUE_RESPONSE_LABELS,
   OVERDUE_RESPONSES,
   PRIORITIES,
@@ -57,6 +59,8 @@ export const createTaskSchema = z.object({
   deadline: isoDateTime,
   priority: z.enum(PRIORITIES).optional().default('normal'),
   domain: z.string().trim().max(60).optional().default(''),
+  /** the area "אחר": what it is */
+  domainNote: z.string().trim().max(120).optional().default(''),
   weekId: z.number().int().positive().nullable().optional(),
   eventId: z.number().int().positive().nullable().optional(),
   parentId: z.number().int().positive().nullable().optional(),
@@ -164,10 +168,10 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
       const at = nowIso();
       const flags = reminderFlags(input.deadline);
       const id = db().run(
-        `INSERT INTO tasks(title, description, owner_id, created_by, deadline, priority, status, domain, week_id, event_id,
+        `INSERT INTO tasks(title, description, owner_id, created_by, deadline, priority, status, domain, domain_note, week_id, event_id,
            parent_id, group_id, meeting_id, recurring_rule_id, cadet_id, experience_id, debrief_id, requires_approval, visibility,
            reminded_24h, reminded_2h, overdue_notified, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         input.title,
         input.description,
         unit.owner,
@@ -175,6 +179,7 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
         input.deadline,
         input.priority,
         input.domain,
+        input.domain === OTHER_DOMAIN ? input.domainNote : '',
         weekId ?? null,
         input.eventId ?? null,
         input.parentId ?? null,
@@ -241,6 +246,7 @@ export const updateTaskSchema = z
     description: z.string().max(5000),
     priority: z.enum(PRIORITIES),
     domain: z.string().trim().max(60),
+    domainNote: z.string().trim().max(120),
     weekId: z.number().int().positive().nullable(),
     eventId: z.number().int().positive().nullable(),
     parentId: z.number().int().positive().nullable(),
@@ -272,7 +278,7 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
   const t = mustTaskRow(id);
   if (!bypass && !canView(actor, t)) throw notFound('המשימה לא נמצאה');
 
-  const coreKeys = ['title', 'description', 'priority', 'domain', 'weekId', 'eventId', 'parentId', 'requiresApproval', 'visibility', 'participantIds'] as const;
+  const coreKeys = ['title', 'description', 'priority', 'domain', 'domainNote', 'weekId', 'eventId', 'parentId', 'requiresApproval', 'visibility', 'participantIds'] as const;
   if (!bypass && coreKeys.some((k) => patch[k] !== undefined) && !canEdit(actor, t)) {
     throw forbidden('רק מי שיצר את המשימה או מפקד הקורס יכולים לערוך אותה');
   }
@@ -306,9 +312,13 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
       set('priority', patch.priority);
       logs.push({ action: 'priority', text: `${who} שינה עדיפות ל"${PRIORITY_LABELS[patch.priority]}"` });
     }
-    if (patch.domain !== undefined && patch.domain !== t.domain) {
-      set('domain', patch.domain);
-      logs.push({ action: 'domain', text: `${who} שינה תחום ל"${patch.domain || 'ללא'}"` });
+    // the detail belongs to "אחר": another area clears it
+    const nextDomain = patch.domain ?? t.domain;
+    const nextNote = nextDomain === OTHER_DOMAIN ? (patch.domainNote ?? t.domain_note) : '';
+    if (patch.domain !== undefined && patch.domain !== t.domain) set('domain', patch.domain);
+    if (nextNote !== t.domain_note) set('domain_note', nextNote);
+    if (nextDomain !== t.domain || nextNote !== t.domain_note) {
+      logs.push({ action: 'domain', text: `${who} שינה תחום ל"${domainLabel(nextDomain, nextNote) || 'ללא'}"` });
     }
     if (patch.weekId !== undefined && patch.weekId !== t.week_id) {
       const w = patch.weekId ? db().get<{ name: string }>('SELECT name FROM weeks WHERE id = ?', patch.weekId) : null;

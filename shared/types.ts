@@ -62,6 +62,8 @@ export interface Task {
   priority: Priority;
   status: TaskStatus;
   domain: string;
+  /** the area "אחר": what it is */
+  domainNote: string;
   weekId: number | null;
   weekName: string | null;
   eventId: number | null;

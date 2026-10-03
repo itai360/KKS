@@ -2,19 +2,7 @@
 // blockers (43, 80), approval (45-46), overdue response (61), requests (62-63).
 
 import { useState, type ReactNode } from 'react';
-import {
-  BLOCK_REASONS,
-  OVERDUE_RESPONSE_LABELS,
-  OVERDUE_RESPONSES,
-  PRIORITIES,
-  PRIORITY_LABELS,
-  VISIBILITIES,
-  VISIBILITY_LABELS,
-  isOpenStatus,
-  type OverdueResponse,
-  type Priority,
-  type Visibility,
-} from '@shared/constants';
+import { BLOCK_REASONS, isOpenStatus, OTHER_DOMAIN, OVERDUE_RESPONSE_LABELS, OVERDUE_RESPONSES, PRIORITIES, PRIORITY_LABELS, VISIBILITIES, VISIBILITY_LABELS, type OverdueResponse, type Priority, type Visibility } from '@shared/constants';
 import type { TaskDetail } from '@shared/types';
 import { api } from '../lib/api';
 import { dateKeyOf, fmtTime, isoAt } from '../lib/format';
@@ -455,6 +443,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
   const [time, setTime] = useState(fmtTime(t.deadline));
   const [priority, setPriority] = useState<Priority>(t.priority);
   const [domain, setDomain] = useState(t.domain);
+  const [domainNote, setDomainNote] = useState(t.domainNote);
   const [weekId, setWeekId] = useState(t.weekId ? String(t.weekId) : '');
   const [visibility, setVisibility] = useState<Visibility>(t.visibility);
   const [requiresApproval, setRequiresApproval] = useState(t.requiresApproval);
@@ -466,6 +455,8 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
       if (description !== t.description) patch.description = description;
       if (priority !== t.priority) patch.priority = priority;
       if (domain !== t.domain) patch.domain = domain;
+      const note = domain === OTHER_DOMAIN ? domainNote.trim() : '';
+      if (note !== t.domainNote) patch.domainNote = note;
       const w = weekId ? Number(weekId) : null;
       if (w !== t.weekId) patch.weekId = w;
       if (visibility !== t.visibility) patch.visibility = visibility;
@@ -544,6 +535,11 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
                 ))}
               </select>
             </Field>
+            {domain === OTHER_DOMAIN && (
+              <Field label="איזה תחום?">
+                <input className="input" value={domainNote} onChange={(e) => setDomainNote(e.target.value)} maxLength={120} placeholder="לדוגמה: תקשוב, טקסים, רווחה" />
+              </Field>
+            )}
             <Field label="שבוע בקורס">
               <select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
                 <option value="">ללא שבוע</option>

@@ -30,3 +30,20 @@ describe('areas of responsibility', () => {
     old.close();
   });
 });
+
+describe('the area "אחר"', () => {
+  it('keeps a few words saying what it is, and drops them for another area', async () => {
+    const c = await setup();
+    const created = await c.cmd.post('/api/tasks', { title: 'הכנת טקס', ownerIds: [c.ids.s1], deadline: '2026-10-05T15:00:00.000Z', domain: 'אחר', domainNote: 'טקסים' });
+    const id = created.body.ids[0];
+    const get = async () => (await c.cmd.get(`/api/tasks/${id}`)).body.task as { domain: string; domainNote: string };
+    expect(await get()).toMatchObject({ domain: 'אחר', domainNote: 'טקסים' });
+    await c.cmd.patch(`/api/tasks/${id}`, { domainNote: 'טקסים ואירועים' });
+    expect((await get()).domainNote).toBe('טקסים ואירועים');
+    await c.cmd.patch(`/api/tasks/${id}`, { domain: 'שטח' });
+    expect(await get()).toMatchObject({ domain: 'שטח', domainNote: '' });
+    // a detail without "אחר" is not kept
+    const other = (await c.cmd.post('/api/tasks', { title: 'ניווט לילה', ownerIds: [c.ids.s1], deadline: '2026-10-05T15:00:00.000Z', domain: 'ניווטים', domainNote: 'x' })).body.ids[0];
+    expect((await c.cmd.get(`/api/tasks/${other}`)).body.task.domainNote).toBe('');
+  });
+});

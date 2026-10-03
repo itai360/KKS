@@ -2,7 +2,7 @@
 // name, owner, deadline, send. Section 27: or just write a sentence.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ABSENCE_REASON_LABELS, PRIORITIES, PRIORITY_LABELS, VISIBILITIES, VISIBILITY_LABELS, type Priority, type Visibility } from '@shared/constants';
+import { ABSENCE_REASON_LABELS, OTHER_DOMAIN, PRIORITIES, PRIORITY_LABELS, VISIBILITIES, VISIBILITY_LABELS, type Priority, type Visibility } from '@shared/constants';
 import { addDays, shortDate, startOfWeek, weekdayOf } from '@shared/dates';
 import type { UserLoad } from '@shared/types';
 import { parseTaskText, type ParsedTask } from '@shared/parser';
@@ -200,6 +200,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   const [description, setDescription] = useState(initial.description ?? '');
   const [priority, setPriority] = useState<Priority>(initial.priority ?? 'normal');
   const [domain, setDomain] = useState(initial.domain ?? '');
+  const [domainNote, setDomainNote] = useState('');
   const [weekId, setWeekId] = useState<string>(initial.weekId ? String(initial.weekId) : 'auto');
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [visibility, setVisibility] = useState<Visibility>('normal');
@@ -269,6 +270,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
         deadline: deadlineIso,
         priority,
         domain,
+        domainNote: domain === OTHER_DOMAIN ? domainNote.trim() : '',
         weekId: weekId === 'auto' ? undefined : weekId === 'none' ? null : Number(weekId),
         eventId: initial.eventId ?? null,
         parentId: initial.parentId ?? null,
@@ -406,6 +408,11 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
                 ))}
               </select>
             </Field>
+            {domain === OTHER_DOMAIN && (
+              <Field label="איזה תחום?">
+                <input className="input" value={domainNote} onChange={(e) => setDomainNote(e.target.value)} maxLength={120} placeholder="לדוגמה: תקשוב, טקסים, רווחה" data-autofocus />
+              </Field>
+            )}
             <Field label="נראות">
               <select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
                 {VISIBILITIES.map((v) => (

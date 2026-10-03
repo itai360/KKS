@@ -3,15 +3,17 @@
 import { Link } from 'react-router';
 import { Icon } from '../components/Icon';
 import { useNavSections } from '../components/Layout';
-import { initials, PageHead } from '../components/ui';
+import { initials } from '../components/ui';
+import { usePageTitle } from '../lib/title';
 import { useSession } from '../lib/session';
 
 export function MorePage() {
+  // no heading on screen; the browser tab still names the screen
+  usePageTitle('עוד');
   const sections = useNavSections();
   const { user, logout, isCommander } = useSession();
   return (
     <div className="page narrow">
-      <PageHead title="עוד" />
       <div className="card card-pad row mb-12">
         <div className="avatar">{initials(user.displayName)}</div>
         <div className="grow">
