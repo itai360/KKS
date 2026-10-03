@@ -30,7 +30,7 @@ export function BriefingPage() {
     <div className="briefing" ref={ref}>
       <div className="brief-head">
         <div>
-          <div className="label-caps" style={{ color: 'var(--rail-muted)' }}>
+          <div className="label-caps">
             {settings.courseName} · תדריך בוקר
           </div>
           <div className="brief-title">{data ? fmtLongDate(data.date) : 'תדריך בוקר'}</div>
@@ -46,11 +46,11 @@ export function BriefingPage() {
               <span>דד-ליינים היום</span>
             </div>
             <div>
-              <b style={{ color: data.overdue.length ? '#ff7a5c' : undefined }}>{data.overdue.length}</b>
+              <b style={{ color: data.overdue.length ? 'var(--red-ink)' : undefined }}>{data.overdue.length}</b>
               <span>באיחור</span>
             </div>
             <div>
-              <b style={{ color: data.blocked.length ? '#c9a7ff' : undefined }}>{data.blocked.length}</b>
+              <b style={{ color: data.blocked.length ? 'var(--purple)' : undefined }}>{data.blocked.length}</b>
               <span>חסמים</span>
             </div>
           </div>
@@ -59,7 +59,7 @@ export function BriefingPage() {
           <button className="btn btn-sm" onClick={fullscreen}>
             <Icon name="external" /> מסך מלא
           </button>
-          <button className="btn btn-sm btn-ghost" style={{ color: 'var(--rail-ink)' }} onClick={() => navigate('/')}>
+          <button className="btn btn-sm btn-ghost" onClick={() => navigate('/')}>
             <Icon name="x" /> סגירה
           </button>
         </div>
@@ -70,16 +70,16 @@ export function BriefingPage() {
       ) : data ? (
         <div className="split">
           <div className="col gap-16">
-            <Section title="משימות קריטיות" count={data.critical.length} tone="#ff7a5c">
+            <Section title="משימות קריטיות" count={data.critical.length} tone="var(--red-ink)">
               <TaskList tasks={data.critical} empty={<p className="muted small">אין משימות קריטיות להיום ולמחר.</p>} />
             </Section>
             <Section title="דד-ליינים היום" count={data.dueToday.length}>
               <TaskList tasks={data.dueToday} empty={<p className="muted small">אין דד-ליינים נוספים היום.</p>} />
             </Section>
-            <Section title="באיחור" count={data.overdue.length} tone="#ff7a5c">
+            <Section title="באיחור" count={data.overdue.length} tone="var(--red-ink)">
               <TaskList tasks={data.overdue} empty={<p className="muted small">אין משימות באיחור.</p>} />
             </Section>
-            <Section title="חסמים" count={data.blocked.length} tone="#c9a7ff">
+            <Section title="חסמים" count={data.blocked.length} tone="var(--purple)">
               <TaskList tasks={data.blocked} empty={<p className="muted small">אין חסמים פתוחים.</p>} />
             </Section>
           </div>
@@ -111,7 +111,7 @@ export function BriefingPage() {
                   <span className="tiny mono muted">{data.exemptions.length}</span>
                 </div>
                 {data.exemptions.map((x) => (
-                  <div key={x.id} className="health" style={{ borderColor: '#2e352d', cursor: 'pointer' }} {...openable(() => navigate(`/cadets/${x.cadetId}`))}>
+                  <div key={x.id} className="health" style={{ cursor: 'pointer' }} {...openable(() => navigate(`/cadets/${x.cadetId}`))}>
                     <div className="grow">
                       <div className="strong">
                         {x.cadetName} <span className="small muted">{x.teamName}</span>
@@ -132,11 +132,11 @@ export function BriefingPage() {
               </div>
               {data.byOwner.length === 0 && <div className="card-body muted small">אין פריטים פתוחים לאף איש סגל.</div>}
               {data.byOwner.map((o) => (
-                <div key={o.userId} className="health" style={{ borderColor: '#2e352d' }}>
+                <div key={o.userId} className="health">
                   <span className="strong grow">{o.name}</span>
                   {o.dueToday > 0 && <span className="small">{o.dueToday} היום</span>}
-                  {o.overdue > 0 && <span className="small" style={{ color: '#ff7a5c' }}>{o.overdue} באיחור</span>}
-                  {o.blocked > 0 && <span className="small" style={{ color: '#c9a7ff' }}>{o.blocked} חסמים</span>}
+                  {o.overdue > 0 && <span className="small" style={{ color: 'var(--red-ink)' }}>{o.overdue} באיחור</span>}
+                  {o.blocked > 0 && <span className="small" style={{ color: 'var(--purple)' }}>{o.blocked} חסמים</span>}
                 </div>
               ))}
             </div>
@@ -152,7 +152,7 @@ function Section({ title, count, tone, children }: { title: string; count: numbe
     <div>
       <div className="section-title" style={{ marginTop: 6 }}>
         <h2 style={{ color: count && tone ? tone : undefined }}>{title}</h2>
-        <span className="count-pill" style={{ color: 'var(--rail-muted)' }}>
+        <span className="count-pill">
           {count}
         </span>
       </div>

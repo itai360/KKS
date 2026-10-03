@@ -2411,78 +2411,12 @@ input::-webkit-date-and-time-value {
 
 /* ---------- briefing (section 50) ---------- */
 
+/* follows the light or dark theme like every other screen; its own background for full screen */
 .briefing {
   min-height: 100vh;
-  background: var(--rail);
-  color: var(--rail-ink);
+  background: var(--paper);
+  color: var(--ink);
   padding: 28px 36px 60px;
-}
-
-/* on the dark briefing screen, coloured text (not on a light badge) needs the bright tones */
-.briefing .badge-outline.t-red,
-.briefing .text-red {
-  color: #f0826d;
-}
-.briefing .badge-outline.t-orange,
-.briefing .text-orange {
-  color: #f0a058;
-}
-.briefing .badge-outline.t-yellow {
-  color: #e3c04f;
-}
-.briefing .badge-outline.t-green,
-.briefing .text-green {
-  color: #6cc98a;
-}
-.briefing .badge-outline.t-gray {
-  color: #b4b7ae;
-}
-.briefing .badge-outline.t-blue {
-  color: #8db4e8;
-}
-.briefing .badge-outline.t-purple {
-  color: #b99be6;
-}
-
-.briefing .card {
-  background: var(--rail-2);
-  border-color: #2e352d;
-  color: var(--rail-ink);
-  box-shadow: none;
-}
-
-.briefing .card-head {
-  border-color: #2e352d;
-}
-
-.briefing .muted {
-  color: var(--rail-muted);
-}
-
-.briefing .task-row {
-  background: #1b201a;
-  border-color: #2e352d;
-  border-right-color: var(--tone, var(--gray));
-  color: var(--rail-ink);
-  box-shadow: none;
-}
-
-.briefing .task-check {
-  background: transparent;
-  border-color: #4a5248;
-}
-
-.briefing .task-meta,
-.briefing .task-meta .deadline {
-  color: var(--rail-muted);
-}
-
-.briefing .event-row {
-  border-color: #2e352d;
-}
-
-.briefing .event-row:hover {
-  background: #262d25;
 }
 
 .brief-head {
@@ -2515,7 +2449,7 @@ input::-webkit-date-and-time-value {
 
 .brief-nums div span {
   font-size: 13px;
-  color: var(--rail-muted);
+  color: var(--muted);
 }
 
 /* ---------- misc ---------- */
