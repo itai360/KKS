@@ -348,6 +348,8 @@ export interface Notification {
   link: string | null;
   read: boolean;
   createdAt: string;
+  /** put off: comes back unread at this time */
+  snoozedUntil: string | null;
 }
 
 export type AttentionKind =

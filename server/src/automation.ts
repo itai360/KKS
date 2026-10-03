@@ -10,7 +10,7 @@ import { db } from './db';
 import { learningReminders } from './debriefs';
 import { morningBrief } from './digest';
 import { rollCallReminders } from './attendance';
-import { changed, logActivity, notify } from './journal';
+import { changed, logActivity, notify, wakeSnoozed } from './journal';
 import { generateRecurring } from './recurring';
 import { involvedIds, queryTasks } from './taskRepo';
 import { applyTemplate } from './templates';
@@ -125,7 +125,14 @@ export function runAutomation(): AutomationResult {
     console.error('[automation] brief', e);
   }
 
-  // 8. The roll call: a team not reported by 08:30 on a course day.
+  // 8. Notifications put off until now come back.
+  try {
+    wakeSnoozed(nowS);
+  } catch (e) {
+    console.error('[automation] snoozed', e);
+  }
+
+  // 9. The roll call: a team not reported by 08:30 on a course day.
   try {
     res.roll = rollCallReminders(now);
   } catch (e) {

@@ -26,7 +26,7 @@ import {
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { db } from './db';
 import { getFile, putFile, removeFile, sendStoredFile, uploadName } from './files';
-import { changed, logActivity, toNotification } from './journal';
+import { changed, logActivity, snoozeNotification, toNotification } from './journal';
 import { activeMeeting, endMeeting, getMeeting, listMeetings, startMeeting, updateMeeting } from './meetings';
 import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
@@ -58,6 +58,7 @@ import {
 } from './schedule';
 import { canEdit, canView, getTaskRow, isCommander, mustTaskRow, visibleTasks } from './taskRepo';
 import {
+  isoDateTime,
   addDependency,
   addUpdate,
   createRequest,
@@ -807,11 +808,22 @@ export function apiRouter(): Router {
   r.get('/notifications', (req, res) => {
     const u = me(req);
     const cat = str(req.query.category);
+    // put off for later: only in their own list ("נדחו")
+    const snoozed = req.query.snoozed === '1';
     const rows = db().all<Parameters<typeof toNotification>[0]>(
-      `SELECT * FROM notifications WHERE user_id = ? ${cat ? 'AND category = ?' : ''} ORDER BY created_at DESC, id DESC LIMIT 200`,
+      `SELECT * FROM notifications WHERE user_id = ? AND ${snoozed ? 'snoozed_until IS NOT NULL' : 'snoozed_until IS NULL'} ${cat ? 'AND category = ?' : ''}
+       ORDER BY ${snoozed ? 'snoozed_until' : 'created_at DESC'}, id DESC LIMIT 200`,
       ...(cat ? [u.id, cat] : [u.id]),
     );
     res.json(rows.map(toNotification));
+  });
+
+  r.post('/notifications/:id/snooze', (req, res) => {
+    const { until } = z.object({ until: isoDateTime.nullable() }).parse(req.body);
+    if (until && Date.parse(until) <= clock.now().getTime()) throw badRequest('הזמן שנבחר כבר עבר');
+    if (!snoozeNotification(me(req).id, id(req.params.id), until)) throw notFound('ההתראה לא נמצאה');
+    const unread = db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', me(req).id)!.n;
+    res.json({ unread });
   });
 
   r.post('/notifications/read', (req, res) => {

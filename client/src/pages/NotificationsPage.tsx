@@ -8,7 +8,9 @@ import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
-import { fmtAgo } from '../lib/format';
+import { fmtAgo, fmtDateTime, fmtTime, isoAt, todayKey } from '../lib/format';
+import { addDays, startOfWeek } from '@shared/dates';
+import { useToast } from '../components/Toasts';
 import { onNotification } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
@@ -16,9 +18,36 @@ import { useApi, useTick } from '../lib/useApi';
 const TONE: Record<NotificationCategory, string> = { action: 'blue', info: 'green', exception: 'red' };
 const ICON: Record<NotificationCategory, string> = { action: 'hand', info: 'bell', exception: 'alert' };
 
+/** when a notification put off comes back */
+function laterOptions(): { label: string; at: string }[] {
+  const now = new Date();
+  const today = todayKey();
+  const hour = Number(fmtTime(now.toISOString()).slice(0, 2));
+  const sunday = addDays(startOfWeek(today), 7);
+  return [
+    { label: 'בעוד 3 שעות', at: new Date(now.getTime() + 3 * 3600_000).toISOString() },
+    ...(hour < 17 ? [{ label: 'הערב 18:00', at: isoAt(today, '18:00') }] : []),
+    { label: 'מחר 08:00', at: isoAt(addDays(today, 1), '08:00') },
+    ...(addDays(today, 1) !== sunday ? [{ label: 'ראשון 08:00', at: isoAt(sunday, '08:00') }] : []),
+  ];
+}
+
 export function NotificationsPage() {
-  const [cat, setCat] = useState<NotificationCategory | ''>('');
-  const { data, error, loading, reload } = useApi<Notification[]>(`/api/notifications${cat ? `?category=${cat}` : ''}`, []);
+  const [cat, setCat] = useState<NotificationCategory | '' | 'snoozed'>('');
+  const { data, error, loading, reload } = useApi<Notification[]>(`/api/notifications${cat === 'snoozed' ? '?snoozed=1' : cat ? `?category=${cat}` : ''}`, []);
+  const toast = useToast();
+  const [later, setLater] = useState<number | null>(null);
+  const snooze = async (n: Notification, until: string | null, label?: string) => {
+    try {
+      const r = await api.post<{ unread: number }>(`/api/notifications/${n.id}/snooze`, { until });
+      setUnread(r.unread);
+      setLater(null);
+      toast({ title: until ? `תחזור ${label}` : 'ההתראה חזרה', tone: 'green' });
+      void reload();
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    }
+  };
   const { setUnread } = useSession();
   const navigate = useNavigate();
   useTick();
@@ -44,6 +73,7 @@ export function NotificationsPage() {
   useEffect(() => {
     if (data && !cat) setUnread(unreadCount);
   }, [data, cat, unreadCount, setUnread]);
+  const options = laterOptions();
 
   return (
     <BulkScope
@@ -80,12 +110,15 @@ export function NotificationsPage() {
             {NOTIFICATION_CATEGORY_LABELS[c]}
           </button>
         ))}
+        <button className={`tab${cat === 'snoozed' ? ' on' : ''}`} onClick={() => setCat('snoozed')}>
+          <Icon name="clock" size={13} /> נדחו
+        </button>
       </div>
       <ErrorBox error={error} />
       {loading && !data ? (
         <Loading rows={4} />
       ) : !data?.length ? (
-        <Empty icon="bell" title="אין התראות" />
+        <Empty icon={cat === 'snoozed' ? 'clock' : 'bell'} title={cat === 'snoozed' ? 'אין התראות שנדחו' : 'אין התראות'} text={cat === 'snoozed' ? 'בכל התראה - "אחר כך" מעלים אותה עד הזמן שבוחרים, ואז היא חוזרת כחדשה.' : undefined} />
       ) : (
         <div className="card">
           {data.map((n) => (
@@ -107,9 +140,29 @@ export function NotificationsPage() {
                 </div>
                 {n.body && <div className="attn-sub">{n.body}</div>}
               </div>
-              <span className="tiny muted" style={{ whiteSpace: 'nowrap' }}>
-                {fmtAgo(n.createdAt)}
+              <span className="col notif-side">
+                <span className="tiny muted" style={{ whiteSpace: 'nowrap' }}>
+                  {n.snoozedUntil ? `חוזרת ${fmtDateTime(n.snoozedUntil)}` : fmtAgo(n.createdAt)}
+                </span>
+                {n.snoozedUntil ? (
+                  <button className="btn btn-ghost btn-sm" onClick={(e) => (e.stopPropagation(), void snooze(n, null))}>
+                    החזר עכשיו
+                  </button>
+                ) : (
+                  <button className="icon-btn notif-later" aria-label="אחר כך" aria-expanded={later === n.id} title="להזכיר אחר כך" onClick={(e) => (e.stopPropagation(), setLater(later === n.id ? null : n.id))}>
+                    <Icon name="clock" size={15} />
+                  </button>
+                )}
               </span>
+              {later === n.id && (
+                <div className="notif-later-menu" role="group" aria-label="מתי להזכיר" onClick={(e) => e.stopPropagation()}>
+                  {options.map((o) => (
+                    <button key={o.label} className="chip chip-sm" onClick={() => void snooze(n, o.at, o.label)}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </BulkRow>
           ))}
         </div>

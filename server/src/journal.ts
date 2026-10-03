@@ -73,6 +73,7 @@ interface NotificationRow {
   link: string | null;
   read_at: string | null;
   created_at: string;
+  snoozed_until?: string | null;
 }
 
 export function toNotification(r: NotificationRow): Notification {
@@ -86,7 +87,32 @@ export function toNotification(r: NotificationRow): Notification {
     link: r.link ?? (r.task_id ? `/tasks/${r.task_id}` : null),
     read: !!r.read_at,
     createdAt: r.created_at,
+    snoozedUntil: r.snoozed_until ?? null,
   };
+}
+
+/** put off until a time: out of the list and the count until then */
+export function snoozeNotification(userId: number, id: number, until: string | null): boolean {
+  if (until === null) return resurface(db().all<NotificationRow>('SELECT * FROM notifications WHERE id = ? AND user_id = ? AND snoozed_until IS NOT NULL', id, userId)) > 0;
+  return db().run('UPDATE notifications SET snoozed_until = ?, read_at = ? WHERE id = ? AND user_id = ?', until, nowIso(), id, userId).changes > 0;
+}
+
+/** snoozed notifications whose time has come: back on top, unread, with the bell and the push again */
+export function wakeSnoozed(now: string): number {
+  return resurface(db().all<NotificationRow>('SELECT * FROM notifications WHERE snoozed_until IS NOT NULL AND snoozed_until <= ?', now));
+}
+
+function resurface(rows: NotificationRow[]): number {
+  const at = nowIso();
+  for (const r of rows) {
+    db().run('UPDATE notifications SET snoozed_until = NULL, read_at = NULL, created_at = ? WHERE id = ?', at, r.id);
+    const n = toNotification({ ...r, read_at: null, created_at: at, snoozed_until: null });
+    db().onCommit(() => {
+      pushNotification(r.user_id, n);
+      void sendPush(r.user_id, n).catch((e) => console.error('[push]', e));
+    });
+  }
+  return rows.length;
 }
 
 /** Sends a notification to each recipient except the actor who caused it. */

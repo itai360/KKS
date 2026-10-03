@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clock } from '../src/core';
+import { runAutomation } from '../src/automation';
 import { morningBrief, resetMorningBrief } from '../src/digest';
 import { at, notificationsOf, setup, type Ctx } from './helpers';
 
@@ -34,5 +35,34 @@ describe('morning brief', () => {
     // a server first woken in the afternoon sends no morning brief
     resetMorningBrief();
     expect(morningBrief(new Date(at('2026-10-04', '15:00')))).toBe(0);
+  });
+});
+
+describe('snoozed notifications', () => {
+  it('leave the list and the count until their time, then come back unread on top', async () => {
+    await c.cmd.post('/api/tasks', { title: 'להחזיר ציוד', ownerIds: [c.ids.s1], deadline: at('2026-10-05') });
+    const list = async (q = '') => (await c.s1.get(`/api/notifications${q}`)).body as { id: number; title: string; read: boolean; snoozedUntil: string | null }[];
+    const n = (await list())[0];
+    const unread = async () => (await c.s1.get('/api/auth/me')).body.unread as number;
+    expect(await unread()).toBe(1);
+
+    expect((await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-01', '09:00') })).status).toBe(400); // in the past
+    const res = await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-02', '08:00') });
+    expect(res.body.unread).toBe(0);
+    expect(await list()).toHaveLength(0);
+    expect((await list('?snoozed=1')).map((x) => x.snoozedUntil)).toEqual([at('2026-10-02', '08:00')]);
+    // someone else's: not found
+    expect((await c.s2.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-03') })).status).toBe(404);
+
+    clock.set(new Date(at('2026-10-02', '08:01')));
+    runAutomation();
+    const back = await list();
+    expect(back[0]).toMatchObject({ id: n.id, read: false, snoozedUntil: null });
+    expect(await unread()).toBe(1);
+
+    // and "now" brings one back at once
+    await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-09', '08:00') });
+    await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: null });
+    expect((await list())[0]).toMatchObject({ id: n.id, read: false });
   });
 });

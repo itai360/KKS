@@ -4951,3 +4951,23 @@ button.fab-missing {
   width: 38px;
   height: 38px;
 }
+
+/* ---------- putting a notification off (pages/NotificationsPage.tsx) ---------- */
+
+.notif-side {
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.notif-later {
+  width: 30px;
+  height: 30px;
+}
+
+.notif-later-menu {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0 4px;
+}
