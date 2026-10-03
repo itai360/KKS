@@ -2,7 +2,8 @@
 // commander can for anyone), so tasks are not given to someone who is not there and the
 // tasks that fall on those days are moved in time.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router';
 import { ABSENCE_REASON_LABELS, ABSENCE_REASONS, type AbsenceReason } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
 import type { Absence } from '@shared/types';
@@ -27,6 +28,13 @@ export function AbsencesCard({ userId, mine, canEdit }: { userId: number; mine: 
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const location = useLocation();
+  // opened as "#absences" (the quick command): straight to it, ready to add
+  useEffect(() => {
+    if (!mine || location.hash !== '#absences') return;
+    document.getElementById('absences')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setAdding(true);
+  }, [mine, location.hash]);
 
   const save = async () => {
     setError(null);
@@ -62,7 +70,7 @@ export function AbsencesCard({ userId, mine, canEdit }: { userId: number; mine: 
 
   const list = data ?? [];
   return (
-    <div className="card">
+    <div className="card" id={mine ? 'absences' : undefined}>
       <div className="card-head">
         <Icon name="calendar" />
         <h3 className="grow">{mine ? 'מתי אני לא כאן' : 'היעדרויות'}</h3>

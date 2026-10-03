@@ -9,6 +9,7 @@ import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { ScreenBoundary } from './ScreenBoundary';
+import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
 
@@ -307,6 +308,9 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <Icon name="search" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש משימה, איש סגל, שבוע, תחום..." aria-label="חיפוש" aria-keyshortcuts="/" />
+            <button type="button" className="search-palette" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))} aria-label="פקודה מהירה" aria-keyshortcuts="Control+K" title="פקודה מהירה: מסך, פעולה או פריט">
+              <span className="kbd">Ctrl K</span>
+            </button>
           </form>
           <div className="top-actions">
             <span className={`live hide-mobile${live ? ' on' : ''}`} title={live ? 'מחובר - עדכונים בזמן אמת' : 'מתחבר...'}>
@@ -342,6 +346,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <main id="main" tabIndex={-1}>
           <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
           <ShortcutsHelp />
+          <CommandPalette pages={sections.flatMap((s) => s.items)} />
         </main>
       </div>
 
