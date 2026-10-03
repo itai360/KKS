@@ -30,7 +30,7 @@ export function FirstPasswordDialog({ user, onDone, onLogout }: { user: User; on
 
   return (
     <Modal
-      title="בחירת סיסמה אישית"
+      title="בחירת סיסמה חדשה"
       narrow
       closable={false}
       onClose={() => undefined}
@@ -47,7 +47,7 @@ export function FirstPasswordDialog({ user, onDone, onLogout }: { user: User; on
     >
       <form id="first-password" className="col gap-12" onSubmit={(e) => void submit(e)}>
         <p className="small" style={{ margin: 0 }}>
-          שלום {user.displayName}. החשבון נפתח עבורך עם סיסמה זמנית - בחרו סיסמה שרק אתם יודעים, וממנה תתחברו מעכשיו.
+          שלום {user.displayName}. הסיסמה הנוכחית זמנית או חלשה מדי - בחרו סיסמה חדשה שרק אתם יודעים, וממנה תתחברו מעכשיו.
         </p>
         <ErrorBox error={error} />
         <input type="text" name="username" autoComplete="username" value={user.username} readOnly hidden />

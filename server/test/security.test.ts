@@ -5,6 +5,7 @@
 import { deflateRawSync } from 'node:zlib';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { hashPassword } from '../src/auth';
 import { db } from '../src/db';
 import { assertPublicUrl, isPrivateAddress, isPushEndpoint, safeFetch } from '../src/netguard';
 import { at, newTask, setup, type Ctx } from './helpers';
@@ -250,6 +251,18 @@ describe('guards', () => {
     expect((await c.s3.post('/api/auth/password', { current: 'secret123', next: 'Tavor-2026' })).status).toBe(429);
     // a request from another site, without the app's header, changes nothing
     expect((await request(c.app).post('/api/auth/logout').set('Cookie', cookie.split(';')[0])).status).toBe(403);
+  });
+
+  it('someone with an old weak password is asked for a new one at sign-in', async () => {
+    db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword('123456'), c.ids.s3);
+    const agent = request.agent(c.app);
+    expect((await agent.post('/api/auth/login').set('x-kks', '1').send({ username: 's3', password: '123456' })).status).toBe(200);
+    expect((await agent.get('/api/auth/me')).body.mustChangePassword).toBe(true);
+    expect((await agent.post('/api/auth/password/first').set('x-kks', '1').send({ next: 'Tavor-2026' })).status).toBe(200);
+    expect((await agent.get('/api/auth/me')).body.mustChangePassword).toBe(false);
+    // a strong one is left alone
+    await c.s1.get('/api/auth/me');
+    expect((await c.s1.get('/api/auth/me')).body.mustChangePassword).toBe(false);
   });
 
   it('a "zip bomb" is refused instead of filling the memory', async () => {

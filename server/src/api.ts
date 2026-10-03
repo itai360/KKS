@@ -182,6 +182,8 @@ export function apiRouter(): Router {
     }
     loginSucceeded(key);
     loginSucceeded(nameKey);
+    // a password from before today's rules that does not meet them: a new one is asked for right away
+    if (!newPassword.safeParse(password).success && !u.must_change_password) db().run('UPDATE users SET must_change_password = 1 WHERE id = ?', u.id);
     setSessionCookie(res, createSession(u.id));
     setCourseCookie(res, null);
     res.json({ user: toUser(u) });
