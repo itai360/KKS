@@ -205,8 +205,11 @@ export function Layout({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', on);
   }, []);
   const folded = railPref ? railPref === 'collapsed' : mediumScreen;
+  // just folded: it stays folded under the pointer (no opening on hover) until the pointer leaves it
+  const [noPeek, setNoPeek] = useState(false);
   const toggleRail = () => {
     const next = folded ? 'expanded' : 'collapsed';
+    setNoPeek(next === 'collapsed');
     setRailPref(next);
     try {
       localStorage.setItem(RAIL_KEY, next);
@@ -257,7 +260,12 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         דילוג לתוכן הראשי
       </a>
-      <aside className="rail" aria-label="ניווט ראשי">
+      <aside
+        className={`rail${noPeek ? ' no-peek' : ''}`}
+        aria-label="ניווט ראשי"
+        onMouseLeave={() => setNoPeek(false)}
+        onFocus={(e) => noPeek && !(e.target as HTMLElement).classList.contains('rail-toggle') && setNoPeek(false)}
+      >
         <div className="brand">
           <div className="brand-mark">{symbol.slice(0, 4)}</div>
           <div className="brand-text">

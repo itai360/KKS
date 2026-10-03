@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { CARRY_ACTIONS, isOpenStatus, LESSON_KINDS } from '../../shared/constants';
-import { addDays, DAY, isDateKey, zonedIso } from '../../shared/dates';
+import { addDays, DAY, diffDays, isDateKey, zonedIso } from '../../shared/dates';
 import { readinessPct } from '../../shared/taskLogic';
 import type { CloseCheck, DomainReadiness, Lesson, Week, WeekDetail } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
@@ -117,11 +117,24 @@ function checkLead(id: number | null | undefined): void {
   if (!u || !u.active) throw badRequest('המפק"צ שנבחר אינו פעיל');
 }
 
+/**
+ * The number of a week given none: counted on from the nearest week by date, so it follows the
+ * course's own numbering - 1, 2, 3, or the calendar's 38, 39, 40. The first week is 1.
+ */
+export function inferWeekNumber(startDate: string, known: { number: number; startDate: string }[] = weekNumbers()): number {
+  if (!known.length) return 1;
+  const near = known.reduce((a, b) => (Math.abs(diffDays(b.startDate, startDate)) < Math.abs(diffDays(a.startDate, startDate)) ? b : a));
+  const n = near.number + Math.round(diffDays(startDate, near.startDate) / 7);
+  return n >= 1 && n <= 100 ? n : Math.max(...known.map((k) => k.number)) + 1;
+}
+
+const weekNumbers = () => db().all<{ number: number; startDate: string }>('SELECT number, start_date AS startDate FROM weeks');
+
 export function createWeek(actor: UserRow, raw: z.input<typeof weekSchema>): number {
   const w = weekSchema.parse(raw);
   if (w.endDate < w.startDate) throw badRequest('תאריך הסיום לפני תאריך ההתחלה');
   checkLead(w.leadId);
-  const number = w.number ?? (db().get<{ n: number | null }>('SELECT max(number) AS n FROM weeks')?.n ?? 0) + 1;
+  const number = w.number ?? inferWeekNumber(w.startDate);
   const id = db().tx(() => {
     const id = db().run(
       'INSERT INTO weeks(number, name, topic, goals, start_date, end_date, lead_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',

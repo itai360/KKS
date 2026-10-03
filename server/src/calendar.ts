@@ -13,7 +13,7 @@ import type { UserRow } from './auth';
 import { badRequest, clock, getSettings, notFound, nowIso, tz, updateSettings } from './core';
 import { db } from './db';
 import { listEvents } from './schedule';
-import { createWeek, listWeeks, updateWeek } from './weeks';
+import { createWeek, inferWeekNumber, listWeeks, updateWeek } from './weeks';
 
 // ---------------- out: the schedule as an iCal feed ----------------
 
@@ -442,6 +442,10 @@ export interface ApplyWeek {
 /** Creates and updates the chosen weeks, each linked to its event for the next update. */
 export function applyCalendarWeeks(actor: UserRow, rawUrl: string, items: ApplyWeek[]): Week[] {
   const url = normalizeCalendarUrl(rawUrl);
+  // a week whose name has no number ("שבוע סף") is numbered from its neighbours that have one
+  // ("שבוע 39 ..." a week later -> 38), not as the next after all the others
+  const numbered = items.filter((it) => it.number !== null).map((it) => ({ number: it.number!, startDate: it.startDate }));
+  if (numbered.length) items = items.map((it) => (it.number === null ? { ...it, number: inferWeekNumber(it.startDate, numbered) } : it));
   db().tx(() => {
     for (const it of items) {
       let id = it.weekId;

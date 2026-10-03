@@ -270,7 +270,7 @@ export function LookAheadPage() {
                     <div className="col-fill" style={{ height: `${(d.total / max) * 130}px` }}>
                       {d.critical > 0 && <div className="crit" style={{ height: `${(d.critical / Math.max(1, d.total)) * 100}%` }} />}
                     </div>
-                    <span className="lbl">{weekdayName(d.date).slice(0, 2)}</span>
+                    <span className="lbl lbl-day">{weekdayName(d.date)}</span>
                     <span className="lbl">{shortDate(d.date)}</span>
                   </div>
                 );

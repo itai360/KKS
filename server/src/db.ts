@@ -709,8 +709,25 @@ function V19_DOMAINS(db: Db): void {
   db.run("UPDATE settings SET value = ? WHERE key = 'domains'", JSON.stringify(next.slice(0, 40)));
 }
 
+// a week imported without a number in its name ("שבוע סף") was numbered after all the others (1),
+// next to weeks that carry the calendar's numbers (39): it takes its neighbours' numbering (38).
+// Only a week that looks counted (no higher than the number of weeks), and only when such weeks
+// are no more than the ones in the other numbering - one stray high number renumbers nothing.
+function V20_WEEK_NUMBERS(db: Db): void {
+  const weeks = db.all<{ id: number; number: number; name: string; start_date: string }>('SELECT id, number, name, start_date FROM weeks ORDER BY start_date');
+  const high = weeks.filter((w) => w.number > weeks.length);
+  const counted = weeks.filter((w) => w.number <= weeks.length && !/שבוע\s*\d/.test(w.name));
+  if (!high.length || !counted.length || counted.length > high.length) return;
+  const days = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
+  for (const w of counted) {
+    const near = high.reduce((a, b) => (Math.abs(days(b.start_date, w.start_date)) < Math.abs(days(a.start_date, w.start_date)) ? b : a));
+    const n = near.number + Math.round(days(w.start_date, near.start_date) / 7);
+    if (n >= 1 && n <= 100 && n !== w.number) db.run('UPDATE weeks SET number = ? WHERE id = ?', n, w.id);
+  }
+}
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

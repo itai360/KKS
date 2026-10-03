@@ -284,23 +284,23 @@ p {
   --rail-w: 68px;
 }
 
-.rail-collapsed .rail:hover,
-.rail-collapsed .rail:has(:focus-visible) {
+.rail-collapsed .rail:not(.no-peek):hover,
+.rail-collapsed .rail:not(.no-peek):has(:focus-visible) {
   width: 252px;
   box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.6);
   transition-delay: 0.12s;
 }
 
-.rail-collapsed .rail:not(:hover):not(:has(:focus-visible)) {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) {
   padding-inline: 10px;
 }
 
-.rail-collapsed .rail:not(:hover):not(:has(:focus-visible)) :is(.brand-text, .rail-user, .rail-logout, .rail-foot .avatar) {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) :is(.brand-text, .rail-user, .rail-logout, .rail-foot .avatar) {
   display: none;
 }
 
 /* the label stays for screen readers, out of sight */
-.rail-collapsed .rail:not(:hover):not(:has(:focus-visible)) .rail-label {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -308,18 +308,18 @@ p {
   clip-path: inset(50%);
 }
 
-.rail-collapsed .rail:not(:hover):not(:has(:focus-visible)) .rail-link,
-.rail-collapsed .rail:not(:hover):not(:has(:focus-visible)) .rail-foot {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-link,
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-foot {
   justify-content: center;
   padding-inline: 0;
 }
 
-.rail-collapsed .rail:not(:hover):not(:has(:focus-visible)) .brand {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .brand {
   justify-content: center;
   padding-inline: 0;
 }
 
-.rail-collapsed .rail:not(:hover):not(:has(:focus-visible)) .rail-section {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-section {
   height: 1px;
   padding: 0;
   margin: 10px 6px;
@@ -328,7 +328,7 @@ p {
   background: var(--rail-2);
 }
 
-.rail-collapsed .rail:not(:hover):not(:has(:focus-visible)) .rail-link .count {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-link .count {
   position: absolute;
   top: 1px;
   inset-inline-end: 3px;
@@ -2652,6 +2652,23 @@ input::-webkit-date-and-time-value {
   font-size: 11px;
   color: var(--muted);
   font-family: var(--mono);
+}
+
+/* the day's full name ("רביעי"), in the text font */
+.bars .b .lbl-day {
+  font-family: var(--font);
+  white-space: nowrap;
+}
+
+/* fourteen days with full names don't fit a phone: the chart scrolls sideways */
+@media (max-width: 760px) {
+  .bars {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .bars .b {
+    flex: 0 0 46px;
+  }
 }
 
 .bars .b .val {
