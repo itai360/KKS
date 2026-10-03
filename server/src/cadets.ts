@@ -23,6 +23,7 @@ import { referForDiscipline } from './evaluations';
 import { changed, logActivity, notify } from './journal';
 import { isCommander, visibleTasks } from './taskRepo';
 import { matchesSearch } from '../../shared/search';
+import { cleanAnswers, isTalkType, talkText } from '../../shared/talks';
 import { createTasks, isoDateTime, updateTask, weekForDate } from './taskService';
 
 const today = () => localDateKey(clock.now(), tz());
@@ -114,6 +115,7 @@ export interface RecordRow {
   created_at: string;
   offense: string;
   formal: number;
+  form: string | null;
 }
 
 export const RECORD_BASE = `
@@ -219,7 +221,29 @@ export function toRecord(actor: UserRow, r: RecordRow, order?: Map<number, { occ
     occurrence: order?.get(r.id)?.occurrence ?? null,
     formal: !!r.formal,
     noteNumber: order?.get(r.id)?.noteNumber ?? null,
+    talk: r.kind === 'talk' ? talkAnswers(r.form) : null,
+    canEdit: r.kind === 'talk' && (isCommander(actor) || r.author_id === actor.id),
   };
+}
+
+function talkAnswers(form: string | null): Record<string, string> | null {
+  if (!form) return null;
+  try {
+    const v = JSON.parse(form) as { answers?: Record<string, string> };
+    return v.answers && typeof v.answers === 'object' ? v.answers : null;
+  } catch {
+    return null;
+  }
+}
+
+/** a talk filled in as a form: its text for search and the evaluation file, and what was agreed */
+function talkForm(category: string, raw: Record<string, string>): { body: string; form: string; next: string } {
+  if (!isTalkType(category)) throw badRequest('בחרו את סוג השיחה');
+  const answers = cleanAnswers(category, raw);
+  if (!Object.keys(answers).length) throw badRequest('השיחה ריקה - מלאו לפחות סעיף אחד');
+  const body = talkText(category, answers);
+  if (body.length > 30_000) throw badRequest('השיחה ארוכה מדי');
+  return { body, form: JSON.stringify({ answers }), next: answers.next ?? '' };
 }
 
 export function listCadets(actor: UserRow, filter: { teamId?: number; status?: string; q?: string } = {}): Cadet[] {
@@ -452,9 +476,11 @@ export const recordSchema = z
     followUpTask: z
       .object({ title: z.string().trim().min(1).max(200), deadline: isoDateTime, ownerId: z.number().int().positive().optional() })
       .optional(),
+    /** a personal talk filled in as a form: the answers by field (shared/talks.ts) */
+    answers: z.record(z.string(), z.string().max(4000)).optional(),
   })
   .refine((r) => r.kind !== 'evaluation' || r.score !== null, { message: 'יש לתת ציון להערכה (1-5)', path: ['score'] })
-  .refine((r) => r.body || r.title || (r.kind === 'discipline' && r.offense), { message: 'יש לכתוב תוכן', path: ['body'] });
+  .refine((r) => r.body || r.title || (r.kind === 'discipline' && r.offense) || (r.kind === 'talk' && r.answers), { message: 'יש לכתוב תוכן', path: ['body'] });
 
 const formalNotes = (cadetId: number) =>
   db().get<{ n: number }>("SELECT count(*) AS n FROM cadet_records WHERE cadet_id = ? AND kind = 'discipline' AND formal = 1", cadetId)!.n;
@@ -469,6 +495,7 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
   const discipline = r.kind === 'discipline';
   const offense = discipline ? r.offense : '';
   const formal = discipline && r.formal;
+  const talk = r.kind === 'talk' && r.answers ? talkForm(r.category, r.answers) : null;
   let id = 0;
   db().tx(() => {
     let taskId: number | null = null;
@@ -490,15 +517,15 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
       );
     }
     id = db().run(
-      `INSERT INTO cadet_records(cadet_id, kind, title, body, category, score, follow_up, private, task_id, week_id, author_id, occurred_on, created_at, offense, formal)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO cadet_records(cadet_id, kind, title, body, category, score, follow_up, private, task_id, week_id, author_id, occurred_on, created_at, offense, formal, form)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       cadetId,
       r.kind,
       r.title || (offense ? offense.split(' · ').pop()! : ''),
-      r.body,
+      talk ? talk.body : r.body,
       r.category,
       r.kind === 'evaluation' ? r.score : null,
-      r.followUp,
+      talk ? talk.next : r.followUp,
       r.private,
       taskId,
       weekForDate(occurredOn),
@@ -507,6 +534,7 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
       nowIso(),
       offense,
       formal,
+      talk?.form ?? null,
     ).id;
     if (formal) disciplineNoteGiven(actor, c, name, id);
     if (c.team_commander_id && c.team_commander_id !== actor.id && (r.kind === 'evaluation' || r.kind === 'note')) {
@@ -540,6 +568,28 @@ function disciplineNoteGiven(actor: UserRow, c: CadetRow, name: string, recordId
     return;
   }
   notify(to, { type: 'cadet_record', category: 'exception', title: `${actor.display_name} נתן הערת משמעת ל${name} (${notes} מתוך ${DISCIPLINE_NOTE_LIMIT})`, link: `/cadets/${c.id}` }, actor.id);
+}
+
+const talkEditSchema = z.object({
+  category: z.string().trim().max(60),
+  occurredOn: z.string().refine(isDateKey, 'תאריך לא תקין').optional(),
+  answers: z.record(z.string(), z.string().max(4000)),
+});
+
+/** a talk completed after it was first written: by its writer, or the course commander */
+export function updateTalk(actor: UserRow, id: number, raw: unknown): number {
+  const r = db().get<{ author_id: number; cadet_id: number; kind: string }>('SELECT author_id, cadet_id, kind FROM cadet_records WHERE id = ?', id);
+  if (!r || r.kind !== 'talk') throw notFound('השיחה לא נמצאה');
+  if (!isCommander(actor) && r.author_id !== actor.id) throw forbidden('את השיחה משלים מי שכתב אותה, או מפקד הקורס');
+  const p = talkEditSchema.parse(raw);
+  const talk = talkForm(p.category, p.answers);
+  const on = p.occurredOn;
+  db().run(
+    `UPDATE cadet_records SET category = ?, body = ?, form = ?, follow_up = ?${on ? ', occurred_on = ?, week_id = ?' : ''} WHERE id = ?`,
+    ...[p.category, talk.body, talk.form, talk.next, ...(on ? [on, weekForDate(on)] : []), id],
+  );
+  changed('cadets');
+  return r.cadet_id;
 }
 
 export function deleteRecord(actor: UserRow, id: number): void {

@@ -42,6 +42,7 @@ import { ExperienceCard, ExperienceForm } from './ExperiencesPage';
 import { useDraft } from '../lib/draft';
 import { matchesSearch } from '@shared/search';
 import { ask } from '../components/Confirm';
+import { TalkDialog, TalkHighlights, TalkView } from '../components/Talks';
 
 export function CadetsPage() {
   const { isCommander, user } = useSession();
@@ -516,7 +517,7 @@ export function CadetPage() {
   const { isCommander, user } = useSession();
   const newTask = useNewTask();
   const [kind, setKind] = useState<RecordKind | 'all'>('all');
-  const [dialog, setDialog] = useState<null | 'edit' | 'experience'>(null);
+  const [dialog, setDialog] = useState<null | 'edit' | 'experience' | 'talk'>(null);
   const navigate = useNavigate();
 
   if (loading && !data)
@@ -553,6 +554,11 @@ export function CadetPage() {
           <>
             <ContactButtons phone={c.phone} name={c.fullName} />
             {c.canManage && (
+              <button className="btn" onClick={() => setDialog('talk')}>
+                <Icon name="message" /> שיחה אישית
+              </button>
+            )}
+            {c.canManage && (
               <button className="btn" onClick={() => setDialog('edit')}>
                 <Icon name="edit" /> עריכה
               </button>
@@ -573,7 +579,7 @@ export function CadetPage() {
       />
       <div className="split">
         <div className="col gap-16">
-          <RecordForm cadet={c} records={data.records} />
+          <RecordForm cadet={c} records={data.records} onFullTalk={() => setDialog('talk')} />
           <div>
             <div className="row wrap mb-12">
               <div className="section-title grow" style={{ margin: 0 }}>
@@ -591,10 +597,11 @@ export function CadetPage() {
                 ))}
               </div>
             </div>
-            {records.length === 0 ? <Empty icon="file" title="אין רישומים" text="הערות, שיחות אישיות, משמעת והערכות יופיעו כאן לפי תאריך." /> : <Records records={records} />}
+            {records.length === 0 ? <Empty icon="file" title="אין רישומים" text="הערות, שיחות אישיות, משמעת והערכות יופיעו כאן לפי תאריך." /> : <Records records={records} cadet={c} all={data.records} />}
           </div>
         </div>
         <div className="col gap-16 sticky-side">
+          {(c.canManage || data.records.some((r) => r.kind === 'talk')) && <TalkHighlights cadet={c} records={data.records} onNew={c.canManage ? () => setDialog('talk') : undefined} />}
           {(c.canManage || c.disciplineNotes > 0) && (
             <DisciplineSummary count={c.disciplineNotes} committee={c.notesCommittee} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
           )}
@@ -648,6 +655,7 @@ export function CadetPage() {
       </div>
       {dialog === 'edit' && <CadetForm cadet={c} teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'experience' && <ExperienceForm cadetId={c.id} onClose={() => setDialog(null)} />}
+      {dialog === 'talk' && <TalkDialog cadet={c} records={data.records} onClose={() => setDialog(null)} />}
     </div>
   );
 }
@@ -916,7 +924,7 @@ export function QuickDiscipline({ onClose }: { onClose: () => void }) {
 }
 
 /** Recording in the cadet file; `only` keeps it to one kind (the quick discipline dialog). */
-function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: CadetRecord[]; only?: RecordKind; onSaved?: (d: CadetDetail) => void }) {
+function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cadet; records: CadetRecord[]; only?: RecordKind; onSaved?: (d: CadetDetail) => void; onFullTalk?: () => void }) {
   const toast = useToast();
   const { user, users, settings, isCommander } = useSession();
   const guide = useGuide(cadet.canManage);
@@ -1124,6 +1132,14 @@ function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: 
         style={{ minHeight: 80 }}
       />
       {kind === 'talk' && <input className="input" value={followUp} onChange={(e) => setFollowUp(e.target.value)} placeholder="על מה סוכם / צעדי המשך" />}
+      {kind === 'talk' && onFullTalk && (
+        <div className="row wrap gap-6 small">
+          <span className="muted grow">רישום קצר כאן, או השיחה המלאה לפי סעיפים (היכרות, אמצע, משוב...):</span>
+          <button type="button" className="btn btn-sm" onClick={onFullTalk}>
+            <Icon name="message" size={14} /> מילוי שיחה מלאה
+          </button>
+        </div>
+      )}
       <div className="row wrap">
         <label className="field" style={{ width: 170 }}>
           <span>תאריך</span>
@@ -1172,7 +1188,7 @@ function RecordForm({ cadet, records, only, onSaved }: { cadet: Cadet; records: 
   );
 }
 
-function Records({ records }: { records: CadetRecord[] }) {
+function Records({ records, cadet, all }: { records: CadetRecord[]; cadet: Cadet; all: CadetRecord[] }) {
   const toast = useToast();
   return (
     <div className="list">
@@ -1220,12 +1236,18 @@ function Records({ records }: { records: CadetRecord[] }) {
             )}
           </div>
           {r.title && <div className="strong mt-8">{r.title}</div>}
-          {r.body && (
-            <p className="mt-8" style={{ whiteSpace: 'pre-wrap', fontSize: 14.5 }}>
-              {r.body}
-            </p>
+          {r.talk ? (
+            <TalkView record={r} cadet={cadet} records={all} />
+          ) : (
+            <>
+              {r.body && (
+                <p className="mt-8" style={{ whiteSpace: 'pre-wrap', fontSize: 14.5 }}>
+                  {r.body}
+                </p>
+              )}
+              {r.followUp && <p className="small mt-8"><b>סוכם:</b> {r.followUp}</p>}
+            </>
           )}
-          {r.followUp && <p className="small mt-8"><b>סוכם:</b> {r.followUp}</p>}
           {r.taskId && (
             <Link to={`/tasks/${r.taskId}`} className="small mt-8" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
               <Icon name="tasks" size={14} /> {r.taskTitle}

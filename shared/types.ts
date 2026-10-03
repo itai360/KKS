@@ -707,6 +707,10 @@ export interface CadetRecord {
   formal: boolean;
   /** discipline note: its number among the cadet's notes (1-3) */
   noteNumber: number | null;
+  /** a personal talk filled in as a form (shared/talks.ts): the answers by field */
+  talk: Record<string, string> | null;
+  /** a talk its writer (or the course commander) can still complete */
+  canEdit: boolean;
 }
 
 export interface Experience {

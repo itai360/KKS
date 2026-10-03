@@ -18,7 +18,7 @@ import { useSession } from '../lib/session';
 import { fmtAgo, fmtDateTime } from '../lib/format';
 import { useApi } from '../lib/useApi';
 import { useHashScroll } from '../lib/hashScroll';
-import { setThemePref, themePref, type ThemePref } from '../lib/theme';
+import { onThemeChange, setThemePref, themePref, type ThemePref } from '../lib/theme';
 import { GenerateWeeks } from './WeeksPage';
 import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupported } from '../lib/push';
 import { ask } from '../components/Confirm';
@@ -691,6 +691,8 @@ function ContactCard() {
 
 function AppearanceCard() {
   const [pref, setPref] = useState<ThemePref>(themePref);
+  // the button in the top bar changes it too
+  useEffect(() => onThemeChange(() => setPref(themePref())), []);
   return (
     <div className="card">
       <div className="card-head">

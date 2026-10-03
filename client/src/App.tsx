@@ -52,6 +52,7 @@ const CoursesPage = lazyPage(() => import('./pages/CoursesPage'), 'CoursesPage')
 const AlignmentPage = lazyPage(() => import('./pages/AlignmentPage'), 'AlignmentPage');
 const PlansPage = lazyPage(() => import('./pages/PlansPage'), 'PlansPage');
 const PlanPage = lazyPage(() => import('./pages/PlansPage'), 'PlanPage');
+const TalkPage = lazyPage(() => import('./pages/TalkPage'), 'TalkPage');
 
 /** An address that isn't a screen - say so, rather than silently landing on the home page. */
 function NotFound() {
@@ -121,6 +122,7 @@ function AuthedRoutes() {
               <Route path="/courses" element={<CoursesPage />} />
               <Route path="/alignment" element={<AlignmentPage />} />
               <Route path="/cadets/:id" element={<CadetPage />} />
+              <Route path="/cadets/:id/talks/:recordId" element={<TalkPage />} />
               <Route path="/experiences" element={<ExperiencesPage />} />
               <Route path="/evaluations" element={<EvaluationsPage />} />
               <Route path="/evaluations/committee/:id" element={<CommitteePage />} />

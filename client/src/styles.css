@@ -4902,6 +4902,117 @@ button.fab-missing {
   }
 }
 
+/* ---------- personal talks (components/Talks.tsx, pages/TalkPage.tsx) ---------- */
+
+.talk-section {
+  margin: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.talk-section legend {
+  padding: 0 6px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.talk-section.after {
+  border: 1.5px solid var(--blue);
+  background: var(--blue-bg);
+}
+
+.talk-section textarea {
+  resize: vertical;
+  min-height: 0;
+}
+
+.talk-last div {
+  margin-top: 2px;
+}
+
+.talk-quick {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+
+.talk-quick > div {
+  display: contents;
+}
+
+.talk-quick dt {
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.talk-quick dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.talk-full {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.talk-full p,
+.talk-full ul {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+
+.talk-full ul {
+  padding-inline-start: 18px;
+}
+
+.talk-done {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.talk-answer {
+  white-space: pre-wrap;
+}
+
+.theme-btn svg {
+  transition: transform 0.35s ease;
+}
+
+.theme-btn:hover svg {
+  transform: rotate(-20deg);
+}
+
+@media (max-width: 760px) {
+  .talk-quick {
+    grid-template-columns: 1fr;
+    gap: 0 0;
+  }
+  .talk-quick dd {
+    margin-bottom: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-btn svg {
+    transition: none;
+  }
+}
+
 /* ---------- quick command, Ctrl+K (components/CommandPalette.tsx) ---------- */
 
 .search input {

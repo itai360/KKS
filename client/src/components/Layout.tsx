@@ -14,6 +14,7 @@ import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
 import { switchCourse } from '../lib/courses';
+import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 
 interface NavItem {
   to: string;
@@ -21,6 +22,19 @@ interface NavItem {
   icon: string;
   count?: number;
   end?: boolean;
+}
+
+/** light or dark in one tap, beside the bell; "as the device" stays in the settings */
+function ThemeButton() {
+  const [shown, setShown] = useState(shownTheme);
+  useEffect(() => onThemeChange(() => setShown(shownTheme())), []);
+  const next = shown === 'dark' ? 'light' : 'dark';
+  const label = next === 'dark' ? 'מעבר למצב כהה' : 'מעבר למצב בהיר';
+  return (
+    <button type="button" className="icon-btn theme-btn" onClick={() => setThemePref(next)} aria-label={label} title={label}>
+      <Icon name={shown === 'dark' ? 'sun' : 'moon'} />
+    </button>
+  );
 }
 
 export function useNavSections(): { title?: string; items: NavItem[] }[] {
@@ -348,6 +362,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <Icon name="bell" />
               {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
             </NavLink>
+            <ThemeButton />
             {!viewing && (
               <button className="btn btn-primary hide-mobile" onClick={() => newTask()} title="קיצור מקלדת: N">
                 <Icon name="plus" /> משימה

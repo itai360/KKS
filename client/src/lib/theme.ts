@@ -19,6 +19,9 @@ export function applyTheme(pref: ThemePref = themePref()): void {
   else root.dataset.theme = pref;
 }
 
+const CHANGED = 'kks-theme';
+const DARK = '(prefers-color-scheme: dark)';
+
 export function setThemePref(pref: ThemePref): void {
   try {
     if (pref === 'auto') localStorage.removeItem(KEY);
@@ -27,4 +30,23 @@ export function setThemePref(pref: ThemePref): void {
     /* applies to this visit only */
   }
   applyTheme(pref);
+  // the button in the top bar and the choice in the settings show the same thing
+  window.dispatchEvent(new Event(CHANGED));
+}
+
+/** what is on the screen now: the choice, or the device's own setting */
+export function shownTheme(pref: ThemePref = themePref()): 'light' | 'dark' {
+  if (pref !== 'auto') return pref;
+  return typeof matchMedia === 'function' && matchMedia(DARK).matches ? 'dark' : 'light';
+}
+
+/** calls back when the choice changes here, or the device switches while following it */
+export function onThemeChange(fn: () => void): () => void {
+  const media = typeof matchMedia === 'function' ? matchMedia(DARK) : null;
+  window.addEventListener(CHANGED, fn);
+  media?.addEventListener('change', fn);
+  return () => {
+    window.removeEventListener(CHANGED, fn);
+    media?.removeEventListener('change', fn);
+  };
 }

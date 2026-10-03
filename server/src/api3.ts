@@ -17,6 +17,7 @@ import {
   deleteExemption,
   deleteExperience,
   deleteRecord,
+  updateTalk,
   deleteTeam,
   giveFeedback,
   importCadets,
@@ -136,6 +137,7 @@ export function v3Router(): Router {
     res.json(cadetDetail(me(req), id(req.params.id)));
   });
   r.delete('/exemptions/:id', (req, res) => res.json(cadetDetail(me(req), deleteExemption(me(req), id(req.params.id)))));
+  r.patch('/records/:id', (req, res) => res.json(cadetDetail(me(req), updateTalk(me(req), id(req.params.id), req.body))));
   r.delete('/records/:id', (req, res) => {
     deleteRecord(me(req), id(req.params.id));
     res.json({ ok: true });
