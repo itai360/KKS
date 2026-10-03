@@ -8,6 +8,7 @@ import { commanderIds, getUserRow, type UserRow } from './auth';
 import { clock, nowIso, tz } from './core';
 import { db } from './db';
 import { learningReminders } from './debriefs';
+import { morningBrief } from './digest';
 import { changed, logActivity, notify } from './journal';
 import { generateRecurring } from './recurring';
 import { involvedIds, queryTasks } from './taskRepo';
@@ -20,12 +21,13 @@ export interface AutomationResult {
   recurring: number;
   templates: number;
   learning: number;
+  briefs: number;
 }
 
 export function runAutomation(): AutomationResult {
   const now = clock.now();
   const nowS = now.toISOString();
-  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0 };
+  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, briefs: 0 };
 
   // 1. Deadline passed -> overdue (derived status) + alerts, once per deadline.
   for (const t of queryTasks("t.status NOT IN ('done', 'cancelled') AND t.overdue_notified = 0 AND t.deadline < ?", nowS)) {
@@ -114,6 +116,13 @@ export function runAutomation(): AutomationResult {
     console.error('[automation] learning', e);
   }
 
+  // 7. The morning brief, once a day from 07:00.
+  try {
+    res.briefs = morningBrief(now);
+  } catch (e) {
+    console.error('[automation] brief', e);
+  }
+
   if (res.overdue || res.reminders24 || res.reminders2 || res.recurring || res.templates) changed('tasks', 'weeks');
   housekeeping(now);
   return res;
@@ -140,6 +149,8 @@ export function housekeeping(now: Date): number {
     removed += db().run('DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
     removed += db().run('DELETE FROM notifications WHERE created_at < ?', ago(ALL_NOTIFICATIONS_DAYS)).changes;
     removed += db().run('DELETE FROM login_lockouts WHERE until < ?', now.getTime()).changes;
+    // reminders and briefs sent once: their marks outlive what they were about
+    removed += db().run('DELETE FROM automation_marks WHERE at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
   });
   return removed;
 }

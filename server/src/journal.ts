@@ -7,6 +7,11 @@ import { db } from './db';
 import { sendPush } from './push';
 import { broadcast, pushNotification, type Topic } from './realtime';
 
+/** something automation does once (a reminder, a daily brief): true the first time for a key */
+export function firstTime(key: string): boolean {
+  return db().run('INSERT OR IGNORE INTO automation_marks(key, at) VALUES (?, ?)', key, nowIso()).changes > 0;
+}
+
 export function changed(...topics: Topic[]): void {
   db().onCommit(() => broadcast(...topics));
 }

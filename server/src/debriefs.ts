@@ -11,7 +11,7 @@ import type { BankLesson, Debrief, DebriefDetail, DebriefItem, LessonReview } fr
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
-import { changed, logActivity, notify } from './journal';
+import { changed, firstTime as once, logActivity, notify } from './journal';
 import { recurringSchema, saveRule } from './recurring';
 import { isCommander, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime, weekForDate } from './taskService';
@@ -660,11 +660,6 @@ export function weeksWithoutDebrief(today: string, days = 7): { weekId: number; 
       addDays(today, -days),
     )
     .map((w) => ({ weekId: w.id, name: w.name, leadId: w.lead_id, leadName: w.lead_name, endDate: w.end_date }));
-}
-
-/** a reminder automation sends once: true the first time for a key */
-function once(key: string): boolean {
-  return db().run('INSERT OR IGNORE INTO automation_marks(key, at) VALUES (?, ?)', key, nowIso()).changes > 0;
 }
 
 /**
