@@ -113,6 +113,28 @@ describe('two-step sign-in', () => {
     expect(secret).toBeTruthy();
   });
 
+  it('with a session and the password, the code still cannot be guessed to turn it off', async () => {
+    const { secret } = await turnOn(c.cmd);
+    for (let i = 0; i < 10; i++) expect((await c.cmd.post('/api/auth/2fa/disable', { password: 'secret123', code: String(100000 + i) })).status).toBe(400);
+    clock.set(later(30));
+    // locked for the person: even the right code waits
+    expect((await c.cmd.post('/api/auth/2fa/disable', { password: 'secret123', code: codeAt(secret, later(30)) })).status).toBe(429);
+    expect((await c.cmd.get('/api/auth/me')).body.user.twoFactor).toBe(true);
+  });
+
+  it('the first code is not guessed endlessly either', async () => {
+    await c.cmd.post('/api/auth/2fa/setup', { password: 'secret123' });
+    for (let i = 0; i < 10; i++) await c.cmd.post('/api/auth/2fa/enable', { code: String(200000 + i) });
+    expect((await c.cmd.post('/api/auth/2fa/enable', { code: '123456' })).status).toBe(429);
+  });
+
+  it('the person is told when the commander turns it off for them', async () => {
+    await turnOn(c.s1);
+    await c.cmd.patch(`/api/users/${c.ids.s1}`, { resetTwoFactor: true });
+    const n = db().all<{ title: string; link: string }>("SELECT title, link FROM notifications WHERE user_id = ? AND type = 'security'", c.ids.s1);
+    expect(n).toEqual([{ title: 'האימות הדו-שלבי שלך בוטל', link: '/settings#security' }]);
+  });
+
   it('new backup codes replace the old ones', async () => {
     const { secret, recovery } = await turnOn(c.cmd);
     clock.set(later(30));

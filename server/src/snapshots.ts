@@ -128,7 +128,19 @@ export async function autoSnapshot(now = Date.now()): Promise<boolean> {
 // ---------------- restoring ----------------
 
 /** Tables not restored from a snapshot: they stay as they are now. */
-const KEEP_CURRENT = new Set(['sessions', 'push_subscriptions', 'snapshots', 'login_lockouts', 'course_archives']);
+const KEEP_CURRENT = new Set(['sessions', 'push_subscriptions', 'snapshots', 'login_lockouts', 'course_archives', 'recovery_codes', 'login_challenges']);
+
+/** what keeps an account safe is never taken back by a restore */
+interface AccountSafety {
+  id: number;
+  password_hash: string;
+  must_change_password: number;
+  totp_secret: string | null;
+  totp_pending: string | null;
+  totp_last_step: number;
+  calendar_token: string | null;
+  active: number;
+}
 const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment'];
 
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`;
@@ -152,6 +164,7 @@ export async function restoreSnapshot(id: string): Promise<void> {
     live.exec('PRAGMA foreign_keys = OFF');
     try {
       live.tx(() => {
+        const safety = live.all<AccountSafety>('SELECT id, password_hash, must_change_password, totp_secret, totp_pending, totp_last_step, calendar_token, active FROM main.users');
         const tables = live
           .all<{ name: string }>("SELECT name FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
           .map((t) => t.name)
@@ -170,9 +183,26 @@ export async function restoreSnapshot(id: string): Promise<void> {
             .join(', ');
           if (cols) live.exec(`INSERT INTO main.${quote(t)} (${cols}) SELECT ${cols} FROM snap.${quote(t)}${where}`);
         }
+        // A password changed since the snapshot (perhaps because it leaked), two-step sign-in turned
+        // on since, a renewed calendar link and a closed account all stay as they are now
+        for (const a of safety) {
+          live.run(
+            'UPDATE main.users SET password_hash = ?, must_change_password = ?, totp_secret = ?, totp_pending = ?, totp_last_step = ?, calendar_token = ?, active = MIN(active, ?) WHERE id = ?',
+            a.password_hash,
+            a.must_change_password,
+            a.totp_secret,
+            a.totp_pending,
+            a.totp_last_step,
+            a.calendar_token,
+            a.active,
+            a.id,
+          );
+        }
         // sessions of accounts the snapshot does not have end here
         live.run('DELETE FROM sessions WHERE user_id NOT IN (SELECT id FROM users WHERE active = 1)');
         live.run('DELETE FROM push_subscriptions WHERE user_id NOT IN (SELECT id FROM users)');
+        live.run('DELETE FROM recovery_codes WHERE user_id NOT IN (SELECT id FROM users)');
+        live.run('DELETE FROM login_challenges WHERE user_id NOT IN (SELECT id FROM users WHERE active = 1)');
       });
     } finally {
       live.exec('PRAGMA foreign_keys = ON');

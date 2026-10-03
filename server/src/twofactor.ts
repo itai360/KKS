@@ -118,8 +118,15 @@ export function enable(user: UserRow, raw: unknown, keepToken: string | undefine
   const r = row(user.id);
   if (r.totp_secret) throw badRequest('אימות דו-שלבי כבר מופעל');
   if (!r.totp_pending) throw badRequest('התחילו מחדש את ההפעלה');
+  // the first code is guessed no faster than any other
+  const key = codeKey(user.id);
+  loginThrottle(key, NAME_LIMIT);
   const step = matchStep(r.totp_pending, code.replace(/\s/g, ''));
-  if (step === null) throw badRequest('הקוד שגוי. בדקו שהשעה בטלפון מדויקת ונסו את הקוד הבא.');
+  if (step === null) {
+    loginFailed(key, NAME_LIMIT);
+    throw badRequest('הקוד שגוי. בדקו שהשעה בטלפון מדויקת ונסו את הקוד הבא.');
+  }
+  loginSucceeded(key);
   const codes = db().tx(() => {
     db().run('UPDATE users SET totp_secret = totp_pending, totp_pending = NULL, totp_last_step = ? WHERE id = ?', step, user.id);
     return newRecoveryCodes(user.id);
@@ -134,7 +141,7 @@ export function disable(user: UserRow, raw: unknown): void {
   const { password, code } = z.object({ password: z.string().max(500), code: z.string().trim().max(40) }).parse(raw);
   requirePassword(user, password);
   if (!isEnabled(user.id)) throw badRequest('אימות דו-שלבי לא מופעל');
-  if (!checkSecondFactor(user.id, code)) throw badRequest('הקוד שגוי');
+  requireSecondFactor(user.id, code);
   turnOff(user.id);
 }
 
@@ -143,7 +150,7 @@ export function regenerateRecovery(user: UserRow, raw: unknown): { recoveryCodes
   const { password, code } = z.object({ password: z.string().max(500), code: z.string().trim().max(40) }).parse(raw);
   requirePassword(user, password);
   if (!isEnabled(user.id)) throw badRequest('אימות דו-שלבי לא מופעל');
-  if (!checkSecondFactor(user.id, code)) throw badRequest('הקוד שגוי');
+  requireSecondFactor(user.id, code);
   return { recoveryCodes: newRecoveryCodes(user.id) };
 }
 
@@ -165,6 +172,20 @@ function newRecoveryCodes(userId: number): string[] {
   db().run('DELETE FROM recovery_codes WHERE user_id = ?', userId);
   for (const c of codes) db().run('INSERT INTO recovery_codes(user_id, code_hash) VALUES (?, ?)', userId, sha256(normCode(c)));
   return codes;
+}
+
+/** wrong codes are counted for the person wherever a code is asked: in the settings as at sign-in */
+const codeKey = (userId: number) => `2fa|${userId}`;
+
+/** with a session and the password, still not without the phone: the code, with its misses counted */
+function requireSecondFactor(userId: number, code: string): void {
+  const key = codeKey(userId);
+  loginThrottle(key, NAME_LIMIT);
+  if (!checkSecondFactor(userId, code)) {
+    loginFailed(key, NAME_LIMIT);
+    throw badRequest('הקוד שגוי');
+  }
+  loginSucceeded(key);
 }
 
 /** a current code from the app (each works once) or an unused backup code */
@@ -203,7 +224,7 @@ export function completeSignIn(raw: unknown): { user: UserRow; token: string } {
   const user = getUserRow(c.user_id);
   if (!user || !user.active) throw new HttpError(401, 'פג תוקף הכניסה. התחברו שוב עם הסיסמה.');
   // whoever has the password can ask for new tickets: the misses are counted for the person too
-  const key = `2fa|${user.id}`;
+  const key = codeKey(user.id);
   loginThrottle(key, NAME_LIMIT);
   if (!checkSecondFactor(user.id, code)) {
     db().run('UPDATE login_challenges SET attempts = attempts + 1 WHERE token_hash = ?', sha256(ticket));

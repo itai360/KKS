@@ -1,6 +1,7 @@
 // Snapshots of the database (local server): taking, listing, keeping, restoring.
 
 import { mkdtempSync, readdirSync } from 'node:fs';
+import request from 'supertest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -8,6 +9,7 @@ import type { SnapshotInfo } from '../../shared/types';
 import { clock, config } from '../src/core';
 import { db } from '../src/db';
 import { autoSnapshot, storedSnapshots, toPrune } from '../src/snapshots';
+import { base32Decode, totp } from '../src/twofactor';
 import { newTask, setup, type Ctx } from './helpers';
 
 let c: Ctx;
@@ -49,6 +51,25 @@ describe('snapshots', () => {
     const labels = ((await c.cmd.get('/api/admin/snapshots')).body as SnapshotInfo[]).map((s) => s.label);
     expect(labels).toContain('before_restore');
     expect((await c.cmd.post('/api/admin/snapshots/nope~manual/restore', {})).status).toBe(404);
+  });
+
+  it('never takes back account safety: a newer password, two-step sign-in, a closed account', async () => {
+    await c.cmd.post('/api/admin/snapshots', {});
+    const [snap] = (await c.cmd.get('/api/admin/snapshots')).body as SnapshotInfo[];
+    // since the snapshot: a new password (the old one leaked), two-step sign-in, an account closed
+    expect((await c.s1.post('/api/auth/password', { current: 'secret123', next: 'NewPass-2026' })).status).toBe(200);
+    const { secret } = (await c.cmd.post('/api/auth/2fa/setup', { password: 'secret123' })).body;
+    const step = Math.floor(clock.now().getTime() / 30_000);
+    expect((await c.cmd.post('/api/auth/2fa/enable', { code: totp(base32Decode(secret), step) })).status).toBe(200);
+    await c.cmd.patch(`/api/users/${c.ids.s2}`, { active: false });
+
+    expect((await c.cmd.post(`/api/admin/snapshots/${snap.id}/restore`, {})).status).toBe(200);
+    const login = (username: string, password: string) => request(c.app).post('/api/auth/login').set('x-kks', '1').send({ username, password });
+    expect((await login('s1', 'secret123')).status).toBe(401);
+    expect((await login('s1', 'NewPass-2026')).body.user).toBeTruthy();
+    expect((await login('cmd', 'secret123')).body).toMatchObject({ twoFactor: true });
+    expect((await c.cmd.get('/api/auth/me')).body.recoveryLeft).toBe(10);
+    expect((await login('s2', 'secret123')).status).toBe(401);
   });
 
   it('brings back the course settings too, not a remembered copy of them', async () => {

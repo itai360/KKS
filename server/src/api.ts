@@ -29,7 +29,7 @@ import {
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { db } from './db';
 import { getFile, putFile, removeFile, sendStoredFile, uploadName } from './files';
-import { changed, logActivity, snoozeNotification, toNotification } from './journal';
+import { changed, logActivity, notify, snoozeNotification, toNotification } from './journal';
 import { activeMeeting, endMeeting, getMeeting, listMeetings, startMeeting, updateMeeting } from './meetings';
 import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
@@ -395,8 +395,22 @@ export function apiRouter(): Router {
       db().run('DELETE FROM sessions WHERE user_id = ? ', uid);
     }
     if (p.active === false) db().run('DELETE FROM sessions WHERE user_id = ?', uid);
-    // a lost phone: two-step sign-in off, to be set up again (not for oneself - that needs the code)
-    if (p.resetTwoFactor) turnOff(uid);
+    // a lost phone: two-step sign-in off, to be set up again (not for oneself - that needs the code).
+    // The person is told, so a reset they did not ask for does not go unnoticed.
+    if (p.resetTwoFactor && cur.totp_secret) {
+      turnOff(uid);
+      notify(
+        [uid],
+        {
+          type: 'security',
+          category: 'exception',
+          title: 'האימות הדו-שלבי שלך בוטל',
+          body: `${me(req).display_name} ביטל את האימות הדו-שלבי בחשבון שלך. עד שתפעילו אותו מחדש, הכניסה היא בסיסמה בלבד. אם לא ביקשתם את זה - פנו אליו והחליפו סיסמה.`,
+          link: '/settings#security',
+        },
+        me(req).id,
+      );
+    }
     changed('users', 'tasks');
     res.json(toUser(getUserRow(uid)!));
   });

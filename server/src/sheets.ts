@@ -5,6 +5,7 @@
 
 import { inflateRawSync } from 'node:zlib';
 import { badRequest, HttpError } from './core';
+import { readLimited } from './netguard';
 
 type Table = string[][];
 
@@ -267,10 +268,8 @@ export async function downloadGoogleSheet(raw: string, maxBytes: number): Promis
   for (const url of googleDownloadUrls(raw)) {
     const res = await fetcher(url).catch(() => null);
     if (!res?.ok) continue;
-    if (Number(res.headers.get('content-length')) > maxBytes) throw badRequest('הקובץ גדול מדי');
     const type = res.headers.get('content-type') ?? '';
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > maxBytes) throw badRequest('הקובץ גדול מדי');
+    const buf = await readLimited(res, maxBytes, () => badRequest('הקובץ גדול מדי'));
     if (/text\/html/.test(type) || buf.subarray(0, 200).toString('utf8').toLowerCase().includes('<html')) continue;
     return buf;
   }

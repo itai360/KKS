@@ -11,7 +11,7 @@ import type { CalendarFeed, CalendarSource, CalendarWeek, CalendarWeeksPreview, 
 import { addDays, diffDays, localDateKey, localTime, zonedToUtc } from '../../shared/dates';
 import type { UserRow } from './auth';
 import { badRequest, clock, getSettings, notFound, nowIso, tz, updateSettings } from './core';
-import { safeFetch } from './netguard';
+import { readLimited, safeFetch } from './netguard';
 import { db } from './db';
 import { listEvents } from './schedule';
 import { createWeek, inferWeekNumber, listWeeks, updateWeek } from './weeks';
@@ -150,10 +150,7 @@ let fetcher = async (url: string): Promise<string> => {
   // an address the commander pasted: it may not lead into the server's own network, redirects included
   const res = await safeFetch(url, { headers: { Accept: 'text/calendar' }, signal: AbortSignal.timeout(6000) });
   if (!res.ok) throw new Error(res.status === 404 ? 'היומן לא נמצא בכתובת הזו' : `שרת היומן החזיר שגיאה ${res.status}`);
-  if (Number(res.headers.get('content-length')) > MAX_BYTES) throw new Error('היומן גדול מדי');
-  const text = await res.text();
-  if (text.length > MAX_BYTES) throw new Error('היומן גדול מדי');
-  return text;
+  return (await readLimited(res, MAX_BYTES, () => new Error('היומן גדול מדי'))).toString('utf8');
 };
 
 /** Tests replace the network. */

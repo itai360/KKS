@@ -7,7 +7,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { hashPassword } from '../src/auth';
 import { db } from '../src/db';
-import { assertPublicUrl, isPrivateAddress, isPushEndpoint, safeFetch } from '../src/netguard';
+import { assertPublicUrl, isPrivateAddress, isPushEndpoint, readLimited, safeFetch } from '../src/netguard';
 import { at, newTask, setup, type Ctx } from './helpers';
 
 let c: Ctx;
@@ -184,6 +184,21 @@ describe('nobody changes what is not theirs', () => {
 });
 
 describe('guards', () => {
+  it('a download that does not say its size is cut off at the limit, not read to the end', async () => {
+    let sent = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(ctl) {
+        sent += 64 * 1024;
+        ctl.enqueue(new Uint8Array(64 * 1024));
+        if (sent > 50 * 1024 * 1024) ctl.close();
+      },
+    });
+    await expect(readLimited(new Response(endless), 1024 * 1024, () => new Error('too big'))).rejects.toThrow('too big');
+    expect(sent).toBeLessThan(2 * 1024 * 1024);
+    expect((await readLimited(new Response('small'), 1024, () => new Error('too big'))).toString()).toBe('small');
+    await expect(readLimited(new Response('x', { headers: { 'content-length': '999999' } }), 1024, () => new Error('too big'))).rejects.toThrow('too big');
+  });
+
   it('phone notifications go only to the browsers\' push services', async () => {
     const keys = { p256dh: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U', auth: 'tBHItJI5svbpez7KI4CCXg' };
     for (const endpoint of ['https://169.254.169.254/latest/meta-data', 'http://fcm.googleapis.com/fcm/send/x', 'https://evil.example.com/push', 'https://fcm.googleapis.com.evil.com/x']) {

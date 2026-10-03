@@ -15,6 +15,7 @@ import type { Cadet, DisciplineGuide, DisciplineLetter, DisciplineLogEntry, Disc
 import type { UserRow } from './auth';
 import { disciplineOrder, listCadets, RECORD_BASE, type RecordRow } from './cadets';
 import { badRequest, clock, nowIso, tz } from './core';
+import { readLimited } from './netguard';
 import { db } from './db';
 import { changed, logActivity } from './journal';
 import { decode, googleFetch, unzip } from './sheets';
@@ -385,8 +386,7 @@ export async function guideFromLink(raw: string, maxBytes: number): Promise<{ of
   for (const url of googleDocUrls(raw)) {
     const res = await googleFetch(url).catch(() => null);
     if (!res?.ok || /accounts\.google\.com|ServiceLogin/.test(res.url)) continue;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > maxBytes) throw badRequest('המסמך גדול מדי');
+    const buf = await readLimited(res, maxBytes, () => badRequest('המסמך גדול מדי'));
     if (/accounts\.google\.com\/(v3\/)?signin|ServiceLogin/.test(buf.subarray(0, 20_000).toString('utf8'))) continue;
     return guideFromFile(buf);
   }

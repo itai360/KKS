@@ -75,6 +75,29 @@ export async function safeFetch(raw: string, init: RequestInit = {}, maxRedirect
   throw badRequest('יותר מדי הפניות בכתובת');
 }
 
+/**
+ * The body of a download, stopping as soon as it passes the limit: a server that leaves out the
+ * length (or gives a false one) cannot fill the memory.
+ */
+export async function readLimited(res: Response, maxBytes: number, tooBig: () => Error): Promise<Buffer> {
+  if (Number(res.headers.get('content-length')) > maxBytes) throw tooBig();
+  if (!res.body) return Buffer.alloc(0);
+  const reader = res.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw tooBig();
+    }
+    parts.push(value);
+  }
+  return Buffer.concat(parts);
+}
+
 // ---------------- phone notifications ----------------
 
 /** the push services of the browsers: a registered address must be one of them */
