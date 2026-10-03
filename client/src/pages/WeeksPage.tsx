@@ -428,7 +428,7 @@ export function WeekPage() {
         </div>
         <div className="col gap-16 sticky-side">
           <LeadWorkflow week={w} />
-          <PriorLessons query={`week=${w.id}`} title="לקחים מהמחזור הקודם לשבוע הזה" />
+          <PriorLessons title="לקחים מהמחזור הקודם לשבוע הזה" context={{ weekId: w.id, canDecide: isCommander || w.leadId === user.id, owner: w.leadId, due: addDays(w.startDate, -2) }} />
           {(w.topic || w.goals) && (
             <div className="card card-pad">
               <div className="label-caps">נושא ומטרות</div>
@@ -546,11 +546,11 @@ function LeadWorkflow({ week }: { week: Week }) {
   const today = todayKey();
   const until = diffDays(week.startDate, today);
   const phases = [
-    { key: 'two', label: 'שבועיים לפני', items: ['קבלת אחריות', 'פתיחת תבנית השבוע', 'בניית משימות', 'תיאומים ראשוניים'], active: until <= 14 && until > 7 },
+    { key: 'two', label: 'שבועיים לפני', items: ['קבלת אחריות', 'לקחי המחזור הקודם', 'פתיחת תבנית השבוע', 'בניית משימות', 'תיאומים ראשוניים'], active: until <= 14 && until > 7 },
     { key: 'one', label: 'שבוע לפני', items: ['סגירת לו"ז', 'סגירת מדריכים', 'סגירת שטחים', 'וידוא לוגיסטיקה'], active: until <= 7 && until > 2 },
     { key: '48', label: '48 שעות לפני', items: ['וידוא אחרון', 'טיפול בפערים', 'תדרוך הסגל'], active: until <= 2 && until > 0 },
     { key: 'during', label: 'בזמן השבוע', items: ['ניהול ביצוע', 'עדכון חריגות', 'טיפול בשינויים'], active: until <= 0 && week.endDate >= today },
-    { key: 'end', label: 'בסוף השבוע', items: ['סגירת משימות', 'תחקיר', 'לקחים', 'העברת משימות המשך'], active: diffDays(week.endDate, today) <= 1 && week.endDate >= today },
+    { key: 'end', label: 'בסוף השבוע', items: ['סגירת משימות', 'תחקיר שבועי', 'לקחים להמשך ולמחזור הבא', 'העברת משימות המשך'], active: diffDays(week.endDate, today) <= 1 && week.endDate >= today },
   ];
   return (
     <div className="card">

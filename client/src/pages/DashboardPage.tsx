@@ -26,6 +26,8 @@ const KIND_LABEL: Record<AttentionKind, string> = {
   decision: 'נדרשת החלטה',
   readiness: 'מוכנות נמוכה',
   overload: 'עומס',
+  debrief: 'תחקיר שבועי',
+  lessons: 'לקחי המחזור הקודם',
 };
 
 export function DashboardPage() {
@@ -115,6 +117,7 @@ const LANES: { key: string; title: string; tone: string; kinds: AttentionKind[] 
   { key: 'soon', title: 'דד-ליין ב-24 השעות הקרובות', tone: 'orange', kinds: ['due_soon'] },
   { key: 'risk', title: 'שבועות בסיכון', tone: 'orange', kinds: ['readiness'] },
   { key: 'quiet', title: 'חסמים, עומס ומשימות שלא עודכנו', tone: 'yellow', kinds: ['blocked', 'stale', 'overload'] },
+  { key: 'learn', title: 'למידה ושיפור', tone: 'purple', kinds: ['debrief', 'lessons'] },
 ];
 const LANE_LIMIT = 4;
 
@@ -129,7 +132,8 @@ function Attention({ items }: { items: AttentionItem[] }) {
   const lanes = LANES.map((l) => ({ ...l, items: items.filter((i) => laneOf(i) === l.key) })).filter((l) => l.items.length);
 
   const open = (i: AttentionItem) => {
-    if (i.taskId) navigate(`/tasks/${i.taskId}`);
+    if (i.link) navigate(i.link);
+    else if (i.taskId) navigate(`/tasks/${i.taskId}`);
     else if (i.weekId) navigate(`/weeks/${i.weekId}`);
     else if (i.userId) navigate(`/team/${i.userId}`);
   };

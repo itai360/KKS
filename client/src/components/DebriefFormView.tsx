@@ -112,6 +112,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
   const sections = formFor(d.kind);
   const { all, set, flush, state } = useAnswers(d.id, d.answers, setData);
   const editable = d.canEdit && d.status === 'draft';
+  const { isCommander } = useSession();
   const [busy, setBusy] = useState(false);
 
   const lessons = data.items.filter((i) => i.kind === 'lesson');
@@ -169,7 +170,8 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
   };
 
   const about = d.kind === 'weekly' ? (data.week ? `שבוע ${data.week.number} · ${data.week.name}` : d.weekName) : d.eventTitle;
-  const prior = d.kind === 'weekly' && d.weekId ? `week=${d.weekId}` : d.kind === 'event' && d.eventId ? `event=${d.eventId}` : null;
+  // what earlier cycles kept for this week or event - decided about on the week page, or here by the commander
+  const prior = d.kind === 'weekly' && d.weekId ? { weekId: d.weekId } : d.kind === 'event' && d.eventId ? { eventId: d.eventId } : null;
 
   return (
     <div className="page dform-page">
@@ -237,7 +239,12 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
             )}
           </div>
 
-          {prior && <PriorLessons query={prior} title={d.kind === 'weekly' ? 'מה המחזור הקודם למד על השבוע הזה' : 'מה למדנו במופעים קודמים'} />}
+          {prior && (
+            <PriorLessons
+              title={d.kind === 'weekly' ? 'מה המחזור הקודם למד על השבוע הזה' : 'מה למדנו במופעים קודמים'}
+              context={{ ...prior, canDecide: isCommander && editable, owner: null, due: addDays(d.occurredOn, 3) }}
+            />
+          )}
 
           {sections.map((s, i) => (
             <Section key={s.id} section={s} n={i + 1} answers={all} editable={editable} onChange={set} onDone={() => void flush()} />

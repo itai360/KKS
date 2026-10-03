@@ -34,6 +34,7 @@ import {
   createDebrief,
   debriefDetail,
   lessonBank,
+  reviewLesson,
   deleteDebrief,
   deleteItem,
   itemToRecurring,
@@ -250,6 +251,11 @@ export function v3Router(): Router {
   });
   // lessons kept for the next cycle: all, or those for a week or an event
   r.get('/lessons', (req, res) => res.json(lessonBank({ weekId: num(req.query.week), eventId: num(req.query.event) })));
+  // on its week or event: a task, applied, or not relevant
+  r.post('/lessons/:id/review', (req, res) => {
+    reviewLesson(me(req), id(req.params.id), req.body);
+    res.json(lessonBank({ weekId: req.body?.weekId, eventId: req.body?.eventId }));
+  });
   r.delete('/debrief-items/:id', (req, res) => {
     const did = itemDebrief(id(req.params.id));
     deleteItem(me(req), id(req.params.id));

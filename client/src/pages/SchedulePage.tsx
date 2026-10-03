@@ -702,7 +702,7 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
           )}
         </div>
 
-        <PriorLessons query={`event=${e.id}`} title="לקחים ממופעים קודמים" card={false} onOpen={onClose} />
+        <PriorLessons title="לקחים ממופעים קודמים" context={{ eventId: e.id, canDecide: canManage, owner: e.ownerId, due: addDays(e.date, -2) }} card={false} onOpen={onClose} />
 
         <div>
           <h3 className="mb-12">קבצים וקישורים</h3>

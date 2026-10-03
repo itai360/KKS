@@ -68,8 +68,8 @@ export async function newTask(agent: Agent, body: Record<string, unknown>): Prom
   return res.body.ids[0];
 }
 
-export function notificationsOf(userId: number): { title: string; type: string; category: string }[] {
-  return db().all('SELECT title, type, category FROM notifications WHERE user_id = ? ORDER BY id', userId);
+export function notificationsOf(userId: number): { title: string; type: string; category: string; link: string | null }[] {
+  return db().all('SELECT title, type, category, link FROM notifications WHERE user_id = ? ORDER BY id', userId);
 }
 
 /** A zip archive of stored (uncompressed) entries - enough for test .xlsx and .docx files. */

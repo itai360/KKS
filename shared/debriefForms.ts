@@ -202,3 +202,13 @@ export function goalsFromText(text: string): GoalAnswer[] {
     .slice(0, 12)
     .map((goal) => ({ goal, status: '', note: '' }));
 }
+
+/** what was decided about a lesson an earlier cycle kept, when its week or event comes round */
+export const LESSON_DECISIONS = ['task', 'applied', 'skip'] as const;
+export type LessonDecision = (typeof LESSON_DECISIONS)[number];
+
+export const LESSON_DECISION_LABELS: Record<LessonDecision, string> = {
+  task: 'נפתחה משימה',
+  applied: 'יושם',
+  skip: 'לא רלוונטי',
+};

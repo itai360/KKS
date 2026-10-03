@@ -1,6 +1,6 @@
 // API data shapes shared by the server (producer) and the client (consumer).
 
-import type { DebriefAnswers, DebriefKind, LessonHorizon } from './debriefForms';
+import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
 import type {
   CadetStatus,
   CarryAction,
@@ -357,7 +357,9 @@ export type AttentionKind =
   | 'request'
   | 'decision'
   | 'readiness'
-  | 'overload';
+  | 'overload'
+  | 'debrief'
+  | 'lessons';
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -372,6 +374,8 @@ export interface AttentionItem {
   userId?: number;
   /** number of all-staff copies merged into this line */
   count?: number;
+  /** where it opens, when not the task, week or person */
+  link?: string;
 }
 
 export interface StaffStatus {
@@ -793,6 +797,18 @@ export interface BankLesson {
   debriefKind: DebriefKind;
   occurredOn: string;
   createdByName: string | null;
+  /** asked for a week or an event: what was decided about it there */
+  review?: LessonReview | null;
+}
+
+export interface LessonReview {
+  decision: LessonDecision;
+  note: string;
+  taskId: number | null;
+  taskTitle: string | null;
+  taskStatus: TaskStatus | null;
+  decidedByName: string | null;
+  decidedAt: string;
 }
 
 export interface Debrief {

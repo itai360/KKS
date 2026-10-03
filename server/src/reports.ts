@@ -2,7 +2,7 @@
 // briefing (50), weekly snapshot (24), look-ahead (25), end of day (52), search (19).
 
 import { isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_RANK } from '../../shared/constants';
-import { addDays, DAY, dayRange, daysSince, diffDays, localDateKey, startOfWeek, zonedToUtc } from '../../shared/dates';
+import { addDays, DAY, dayRange, daysSince, diffDays, localDateKey, shortDate, startOfWeek, zonedToUtc } from '../../shared/dates';
 import { readinessPct } from '../../shared/taskLogic';
 import type {
   AttentionItem,
@@ -26,7 +26,7 @@ import { getTaskRow, isCommander, visibleTasks, canApprove } from './taskRepo';
 import { pendingRequestsFor } from './taskService';
 import { listWeeks, weekContaining } from './weeks';
 import { listCadets, listExemptions } from './cadets';
-import { listDebriefs } from './debriefs';
+import { listDebriefs, pendingPriorLessons, weeksWithoutDebrief } from './debriefs';
 import { matchesSearch, searchKey } from '../../shared/search';
 import { listDocuments } from './documents';
 
@@ -166,6 +166,30 @@ export function dashboard(actor: UserRow): DashboardData {
       subtitle: `${w.totalTasks ? `${w.doneTasks} מתוך ${w.totalTasks} משימות הושלמו` : 'עדיין לא נפתחו משימות'} · מתחיל ${until === 0 ? 'היום' : until === 1 ? 'מחר' : `בעוד ${until} ימים`}`,
       weekId: w.id,
       ownerName: w.leadName ?? undefined,
+    });
+  }
+
+  // the learning loop: a week that ended without its weekly debrief, lessons an earlier cycle kept for a week ahead
+  for (const w of weeksWithoutDebrief(c.today)) {
+    attention.push({
+      kind: 'debrief',
+      tone: 'yellow',
+      title: `חסר תחקיר שבועי: ${w.name}`,
+      subtitle: w.endDate === c.today ? 'השבוע מסתיים היום' : `השבוע הסתיים ב-${shortDate(w.endDate)}`,
+      weekId: w.weekId,
+      ownerName: w.leadName ?? undefined,
+      link: `/debriefs?new=weekly&week=${w.weekId}`,
+    });
+  }
+  for (const w of pendingPriorLessons(c.today)) {
+    attention.push({
+      kind: 'lessons',
+      tone: 'blue',
+      title: `${w.name}: ${w.pending === 1 ? 'לקח אחד' : `${w.pending} לקחים`} מהמחזור הקודם`,
+      subtitle: `ממתינים להחלטה - משימה, יושם או לא רלוונטי · מתחיל ב-${shortDate(w.startDate)}`,
+      weekId: w.weekId,
+      ownerName: w.leadName ?? undefined,
+      link: `/weeks/${w.weekId}#prior`,
     });
   }
 

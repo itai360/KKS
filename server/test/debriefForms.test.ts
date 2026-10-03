@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { runAutomation } from '../src/automation';
+import { clock } from '../src/core';
 import { db } from '../src/db';
-import { notificationsOf, setup, type Ctx } from './helpers';
+import { at, notificationsOf, setup, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -113,5 +115,76 @@ describe('intensive event debrief', () => {
     expect((await c.s2.get(`/api/lessons?event=${next}`)).body.map((l: { body: string }) => l.body)).toEqual(['נקודת מים כל 4 ק"מ']);
     expect((await c.s2.get(`/api/lessons?event=${other}`)).body).toEqual([]);
     expect((await c.s2.get(`/api/lessons?event=${ev}`)).body).toEqual([]);
+  });
+});
+
+describe('closing the loop on lessons', () => {
+  it('reminds the week lead to hold the weekly debrief - from noon on the last day, once', async () => {
+    // NOW is Thursday 1.10 10:00; the week ends today
+    const w = await week('שבוע מטווחים', '2026-09-27', '2026-10-01');
+    const reminders = () => notificationsOf(c.ids.s1).filter((n) => n.title.startsWith('הגיע זמן התחקיר השבועי'));
+    runAutomation();
+    expect(reminders()).toHaveLength(0);
+    clock.set(new Date(at('2026-10-01', '12:05')));
+    runAutomation();
+    runAutomation();
+    expect(reminders()).toHaveLength(1);
+    expect(reminders()[0].link).toBe(`/debriefs?new=weekly&week=${w}`);
+    // and on the commander's dashboard, until it is held
+    const attn = () => (c.cmd.get('/api/dashboard') as Promise<{ body: { attention: { kind: string; weekId?: number; link?: string }[] } }>);
+    expect((await attn()).body.attention.find((a) => a.kind === 'debrief')).toMatchObject({ weekId: w, link: `/debriefs?new=weekly&week=${w}` });
+    await c.s1.post('/api/debriefs', { kind: 'weekly', weekId: w, title: 'תחקיר שבועי - מטווחים', occurredOn: '2026-10-01' });
+    expect((await attn()).body.attention.some((a) => a.kind === 'debrief')).toBe(false);
+  });
+
+  it('asks the lead to decide about each earlier-cycle lesson: a task, applied or not relevant', async () => {
+    const old = await week('שבוע ניווט', '2026-09-20', '2026-09-24');
+    const d = (await c.cmd.post('/api/debriefs', { kind: 'weekly', weekId: old, title: 'תחקיר ניווט', occurredOn: '2026-09-24' })).body.debrief.id;
+    const items = async (body: string) => (await c.cmd.post(`/api/debriefs/${d}/items`, { kind: 'lesson', horizon: 'next', body })).body.items;
+    await items('מפות יום מראש');
+    const all = await items('תרגיל לילה רק אחרי יום');
+    const [a, b] = all.map((i: { id: number }) => i.id);
+
+    // the next cycle's navigation week, ten days ahead, led by s2
+    const next = await week('שבוע ניווט', '2026-10-11', '2026-10-15');
+    await c.cmd.patch(`/api/weeks/${next}`, { leadId: c.ids.s2 });
+    runAutomation();
+    const asked = notificationsOf(c.ids.s2).filter((n) => n.title.includes('מהמחזור הקודם'));
+    expect(asked.map((n) => n.title)).toEqual(['2 לקחים מהמחזור הקודם לשבוע ניווט']);
+    expect(asked[0].link).toBe(`/weeks/${next}#prior`);
+    expect((await c.cmd.get('/api/dashboard')).body.attention.find((x: { kind: string }) => x.kind === 'lessons')).toMatchObject({ weekId: next, title: 'שבוע ניווט: 2 לקחים מהמחזור הקודם' });
+
+    // someone else's week: not theirs to decide
+    expect((await c.s1.post(`/api/lessons/${a}/review`, { weekId: next, decision: 'applied' })).status).toBe(403);
+    // the lead: one becomes a task in the week, one is applied
+    const res = await c.s2.post(`/api/lessons/${a}/review`, { weekId: next, decision: 'task', task: { title: 'להכין מפות יום מראש', ownerId: c.ids.s3, deadline: at('2026-10-09') } });
+    expect(res.status).toBe(200);
+    const reviewed = res.body.find((l: { id: number }) => l.id === a).review;
+    expect(reviewed).toMatchObject({ decision: 'task', taskTitle: 'להכין מפות יום מראש', decidedByName: 'מפק"צ 2' });
+    const task = db().get<{ owner_id: number; week_id: number; description: string }>('SELECT owner_id, week_id, description FROM tasks WHERE id = ?', reviewed.taskId);
+    expect(task).toMatchObject({ owner_id: c.ids.s3, week_id: next });
+    expect(task!.description).toContain('מפות יום מראש');
+    await c.s2.post(`/api/lessons/${b}/review`, { weekId: next, decision: 'applied' });
+    expect((await c.cmd.get('/api/dashboard')).body.attention.some((x: { kind: string }) => x.kind === 'lessons')).toBe(false);
+
+    // undo: back to waiting; the task opened stays
+    const undone = (await c.s2.post(`/api/lessons/${b}/review`, { weekId: next, decision: null })).body;
+    expect(undone.find((l: { id: number }) => l.id === b).review).toBeNull();
+    expect(db().get('SELECT 1 FROM tasks WHERE id = ?', reviewed.taskId)).toBeTruthy();
+    // the bank itself (no week) carries no decisions
+    expect((await c.cmd.get('/api/lessons')).body[0].review).toBeUndefined();
+  });
+
+  it('reminds an event owner a week before an event an earlier one left lessons for', async () => {
+    const ev = (await c.cmd.post('/api/events', { date: '2026-09-15', startTime: '22:00', title: 'מארס טורקי' })).body.event.id;
+    const d = (await c.cmd.post('/api/debriefs', { kind: 'event', eventId: ev, title: 'תחקיר מארס', occurredOn: '2026-09-16' })).body.debrief.id;
+    await c.cmd.post(`/api/debriefs/${d}/items`, { kind: 'lesson', horizon: 'next', body: 'נקודת מים כל 4 ק"מ' });
+    const far = (await c.cmd.post('/api/events', { date: '2026-10-20', startTime: '22:00', title: 'מארס טורקי', ownerId: c.ids.s3 })).body.event.id;
+    const soon = (await c.cmd.post('/api/events', { date: '2026-10-06', startTime: '22:00', title: 'מארס טורקי - מחזור 53', ownerId: c.ids.s3 })).body.event.id;
+    runAutomation();
+    const asked = notificationsOf(c.ids.s3).filter((n) => n.title.includes('ממופעים קודמים'));
+    expect(asked).toHaveLength(1);
+    expect(asked[0].link).toBe(`/schedule?date=2026-10-06&event=${soon}`);
+    expect(far).toBeTruthy();
   });
 });

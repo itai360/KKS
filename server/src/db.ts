@@ -611,7 +611,29 @@ ALTER TABLE debrief_items ADD COLUMN target_week INTEGER;
 CREATE INDEX debrief_items_horizon ON debrief_items(horizon);
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13];
+// closing the loop on lessons: what was decided about each lesson an earlier cycle kept for
+// a week or an event (a task, applied, not relevant), and the reminders automation sends once
+const SCHEMA_V14 = `
+CREATE TABLE lesson_reviews (
+  id INTEGER PRIMARY KEY,
+  item_id INTEGER NOT NULL REFERENCES debrief_items(id) ON DELETE CASCADE,
+  context TEXT NOT NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE CASCADE,
+  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  decision TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  decided_at TEXT NOT NULL,
+  UNIQUE (item_id, context)
+);
+CREATE TABLE automation_marks (
+  key TEXT PRIMARY KEY,
+  at TEXT NOT NULL
+);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

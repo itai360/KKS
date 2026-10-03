@@ -4,10 +4,10 @@
 
 import { z } from 'zod';
 import { DEBRIEF_ITEM_KINDS, PRIORITIES, isOpenStatus, type DebriefItemKind, type TaskStatus } from '../../shared/constants';
-import { isDateKey, zonedIso } from '../../shared/dates';
-import { answered, DEBRIEF_KINDS, DEBRIEF_KIND_LABELS, formFor, goalsFromText, LESSON_HORIZONS, type DebriefAnswers, type DebriefKind, type LessonHorizon } from '../../shared/debriefForms';
+import { addDays, isDateKey, localDateKey, localTime, zonedIso } from '../../shared/dates';
+import { answered, DEBRIEF_KINDS, DEBRIEF_KIND_LABELS, formFor, goalsFromText, LESSON_DECISIONS, LESSON_HORIZONS, type DebriefAnswers, type DebriefKind, type LessonDecision, type LessonHorizon } from '../../shared/debriefForms';
 import { searchKey } from '../../shared/search';
-import type { BankLesson, Debrief, DebriefDetail, DebriefItem } from '../../shared/types';
+import type { BankLesson, Debrief, DebriefDetail, DebriefItem, LessonReview } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
@@ -475,26 +475,24 @@ export function itemToTemplate(actor: UserRow, itemId: number, raw: z.input<type
   changed('debriefs', 'templates');
 }
 
-/**
- * The lessons bank: lessons kept for the next cycle. For a week - those written for a week of the
- * same number or name in an earlier cycle; for an event - those for an event of that name.
- */
-export function lessonBank(f: { weekId?: number; eventId?: number } = {}): BankLesson[] {
-  const rows = db().all<{
-    id: number;
-    body: string;
-    target: string;
-    target_key: string;
-    target_week: number | null;
-    owner_name: string | null;
-    debrief_id: number;
-    debrief_title: string;
-    kind: DebriefKind;
-    occurred_on: string;
-    week_id: number | null;
-    event_id: number | null;
-    created_by_name: string | null;
-  }>(
+interface BankRow {
+  id: number;
+  body: string;
+  target: string;
+  target_key: string;
+  target_week: number | null;
+  owner_name: string | null;
+  debrief_id: number;
+  debrief_title: string;
+  kind: DebriefKind;
+  occurred_on: string;
+  week_id: number | null;
+  event_id: number | null;
+  created_by_name: string | null;
+}
+
+function bankRows(): BankRow[] {
+  return db().all<BankRow>(
     `SELECT i.id, i.body, i.target, i.target_key, i.target_week, o.display_name AS owner_name, d.id AS debrief_id, d.title AS debrief_title,
        d.kind, d.occurred_on, d.week_id, d.event_id, c.display_name AS created_by_name
      FROM debrief_items i JOIN debriefs d ON d.id = i.debrief_id
@@ -502,18 +500,49 @@ export function lessonBank(f: { weekId?: number; eventId?: number } = {}): BankL
      WHERE i.kind = 'lesson' AND i.horizon = 'next'
      ORDER BY d.occurred_on DESC, i.id`,
   );
-  let list = rows;
-  if (f.weekId) {
-    const w = weekRow(f.weekId);
-    const key = searchKey(w.name);
-    // not the lessons this very week wrote for the next cycle
-    list = rows.filter((r) => r.week_id !== w.id && (r.target_week === w.number || (!!r.target_key && r.target_key === key)));
-  } else if (f.eventId) {
-    const e = db().get<{ title: string }>('SELECT title FROM events WHERE id = ?', f.eventId);
-    if (!e) throw notFound('הפעילות לא נמצאה');
-    const key = searchKey(e.title);
-    list = rows.filter((r) => r.event_id !== f.eventId && r.target_week === null && !!r.target_key && key && (key.includes(r.target_key) || r.target_key.includes(key)));
+}
+
+/** for a week: what an earlier cycle wrote for a week of the same number or name - not this week's own */
+function forWeek(rows: BankRow[], w: { id: number; number: number; name: string }): BankRow[] {
+  const key = searchKey(w.name);
+  return rows.filter((r) => r.week_id !== w.id && (r.target_week === w.number || (!!r.target_key && r.target_key === key)));
+}
+
+/** for an event: what was written for an event of that name - not by this very event */
+function forEvent(rows: BankRow[], e: { id: number; title: string }): BankRow[] {
+  const key = searchKey(e.title);
+  return rows.filter((r) => r.event_id !== e.id && r.target_week === null && !!r.target_key && !!key && (key.includes(r.target_key) || r.target_key.includes(key)));
+}
+
+const contextKey = (f: { weekId?: number; eventId?: number }) => (f.weekId ? `w:${f.weekId}` : `e:${f.eventId}`);
+
+function reviewsFor(context: string): Map<number, LessonReview> {
+  const out = new Map<number, LessonReview>();
+  for (const r of db().all<{ item_id: number; decision: LessonDecision; note: string; task_id: number | null; task_title: string | null; task_status: TaskStatus | null; decided_by_name: string | null; decided_at: string }>(
+    `SELECT r.item_id, r.decision, r.note, r.task_id, t.title AS task_title, t.status AS task_status, u.display_name AS decided_by_name, r.decided_at
+     FROM lesson_reviews r LEFT JOIN tasks t ON t.id = r.task_id LEFT JOIN users u ON u.id = r.decided_by WHERE r.context = ?`,
+    context,
+  )) {
+    out.set(r.item_id, { decision: r.decision, note: r.note, taskId: r.task_id, taskTitle: r.task_title, taskStatus: r.task_status, decidedByName: r.decided_by_name, decidedAt: r.decided_at });
   }
+  return out;
+}
+
+function eventRow(id: number): { id: number; title: string; date: string; owner_id: number | null; week_id: number | null } {
+  const e = db().get<{ id: number; title: string; date: string; owner_id: number | null; week_id: number | null }>('SELECT id, title, date, owner_id, week_id FROM events WHERE id = ?', id);
+  if (!e) throw notFound('הפעילות לא נמצאה');
+  return e;
+}
+
+/**
+ * The lessons bank: lessons kept for the next cycle. For a week - those written for a week of the
+ * same number or name in an earlier cycle; for an event - those for an event of that name; with
+ * what was decided about each there.
+ */
+export function lessonBank(f: { weekId?: number; eventId?: number } = {}): BankLesson[] {
+  const rows = bankRows();
+  const list = f.weekId ? forWeek(rows, weekRow(f.weekId)) : f.eventId ? forEvent(rows, eventRow(f.eventId)) : rows;
+  const reviews = f.weekId || f.eventId ? reviewsFor(contextKey(f)) : null;
   return list.map((r) => ({
     id: r.id,
     body: r.body,
@@ -525,7 +554,181 @@ export function lessonBank(f: { weekId?: number; eventId?: number } = {}): BankL
     debriefKind: DEBRIEF_KINDS.includes(r.kind) ? r.kind : 'general',
     occurredOn: r.occurred_on,
     createdByName: r.created_by_name,
+    ...(reviews ? { review: reviews.get(r.id) ?? null } : {}),
   }));
+}
+
+/** who decides about the lessons for a week (its lead) or an event (its owner, or its week's lead) - and the commander */
+function canDecideLessons(actor: UserRow, f: { weekId?: number; eventId?: number }): boolean {
+  if (isCommander(actor)) return true;
+  if (f.weekId) return weekRowLead(f.weekId) === actor.id;
+  const e = eventRow(f.eventId!);
+  return e.owner_id === actor.id || (!!e.week_id && weekRowLead(e.week_id) === actor.id);
+}
+
+const weekRowLead = (id: number) => db().get<{ lead_id: number | null }>('SELECT lead_id FROM weeks WHERE id = ?', id)?.lead_id ?? null;
+
+export const lessonReviewSchema = z
+  .object({
+    weekId: z.number().int().positive().optional(),
+    eventId: z.number().int().positive().optional(),
+    /** null: undo the decision (a task opened stays) */
+    decision: z.enum(LESSON_DECISIONS).nullable(),
+    note: z.string().trim().max(500).optional().default(''),
+    task: z
+      .object({
+        title: z.string().trim().min(1, 'חובה לתת שם למשימה').max(200),
+        ownerId: z.number().int().positive(),
+        deadline: isoDateTime,
+      })
+      .optional(),
+  })
+  .refine((v) => !!v.weekId !== !!v.eventId, 'לקח נבחן מול שבוע או מול פעילות')
+  .refine((v) => v.decision !== 'task' || !!v.task, 'חסרים פרטי המשימה');
+
+/** a lesson from an earlier cycle, on its week or event: turn it into a task, mark it applied, or not relevant */
+export function reviewLesson(actor: UserRow, itemId: number, raw: z.input<typeof lessonReviewSchema>): void {
+  const p = lessonReviewSchema.parse(raw);
+  const item = db().get<{ id: number; body: string; kind: string; horizon: string | null; debrief_title: string }>(
+    'SELECT i.id, i.body, i.kind, i.horizon, d.title AS debrief_title FROM debrief_items i JOIN debriefs d ON d.id = i.debrief_id WHERE i.id = ?',
+    itemId,
+  );
+  if (!item || item.kind !== 'lesson' || item.horizon !== 'next') throw notFound('הלקח לא נמצא');
+  const f = { weekId: p.weekId, eventId: p.eventId };
+  const event = p.eventId ? eventRow(p.eventId) : null;
+  if (p.weekId) weekRow(p.weekId);
+  if (!canDecideLessons(actor, f)) throw forbidden('על לקחי המחזור הקודם מחליטים מפקד הקורס ומפק"צ השבוע (או האחראי על הפעילות)');
+  const context = contextKey(f);
+  db().tx(() => {
+    if (p.decision === null) {
+      db().run('DELETE FROM lesson_reviews WHERE item_id = ? AND context = ?', itemId, context);
+      return;
+    }
+    let taskId: number | null = null;
+    if (p.decision === 'task' && p.task) {
+      [taskId] = createTasks(actor, {
+        title: p.task.title,
+        description: `לקח מהמחזור הקודם (${item.debrief_title}):\n${item.body}`,
+        ownerIds: [p.task.ownerId],
+        deadline: p.task.deadline,
+        ...(p.weekId ? { weekId: p.weekId } : { eventId: event!.id, weekId: event!.week_id }),
+      });
+    }
+    db().run(
+      `INSERT INTO lesson_reviews(item_id, context, week_id, event_id, decision, note, task_id, decided_by, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(item_id, context) DO UPDATE SET decision = excluded.decision, note = excluded.note, task_id = coalesce(excluded.task_id, lesson_reviews.task_id),
+         decided_by = excluded.decided_by, decided_at = excluded.decided_at`,
+      itemId,
+      context,
+      p.weekId ?? null,
+      p.eventId ?? null,
+      p.decision,
+      p.note,
+      taskId,
+      actor.id,
+      nowIso(),
+    );
+  });
+  changed('debriefs', 'tasks');
+}
+
+/** the weeks ahead whose earlier-cycle lessons are still waiting for a decision */
+export function pendingPriorLessons(today: string, days = 14): { weekId: number; name: string; leadId: number | null; leadName: string | null; startDate: string; pending: number }[] {
+  const rows = bankRows();
+  if (!rows.length) return [];
+  const weeks = db().all<{ id: number; number: number; name: string; lead_id: number | null; lead_name: string | null; start_date: string }>(
+    "SELECT w.id, w.number, w.name, w.lead_id, u.display_name AS lead_name, w.start_date FROM weeks w LEFT JOIN users u ON u.id = w.lead_id WHERE w.status <> 'closed' AND w.start_date >= ? AND w.start_date <= ? ORDER BY w.start_date",
+    today,
+    addDays(today, days),
+  );
+  return weeks
+    .map((w) => {
+      const reviews = reviewsFor(`w:${w.id}`);
+      return { weekId: w.id, name: w.name, leadId: w.lead_id, leadName: w.lead_name, startDate: w.start_date, pending: forWeek(rows, w).filter((r) => !reviews.has(r.id)).length };
+    })
+    .filter((w) => w.pending > 0);
+}
+
+/** weeks that ended in the last days without a weekly debrief */
+export function weeksWithoutDebrief(today: string, days = 7): { weekId: number; name: string; leadId: number | null; leadName: string | null; endDate: string }[] {
+  return db()
+    .all<{ id: number; name: string; lead_id: number | null; lead_name: string | null; end_date: string }>(
+      `SELECT w.id, w.name, w.lead_id, u.display_name AS lead_name, w.end_date FROM weeks w LEFT JOIN users u ON u.id = w.lead_id
+       WHERE w.end_date <= ? AND w.end_date >= ? AND NOT EXISTS (SELECT 1 FROM debriefs d WHERE d.week_id = w.id AND d.kind = 'weekly')
+       ORDER BY w.end_date DESC`,
+      today,
+      addDays(today, -days),
+    )
+    .map((w) => ({ weekId: w.id, name: w.name, leadId: w.lead_id, leadName: w.lead_name, endDate: w.end_date }));
+}
+
+/** a reminder automation sends once: true the first time for a key */
+function once(key: string): boolean {
+  return db().run('INSERT OR IGNORE INTO automation_marks(key, at) VALUES (?, ?)', key, nowIso()).changes > 0;
+}
+
+/**
+ * The learning loop, run by the automation: the week's lead is reminded to hold the weekly
+ * debrief on the week's last day (from noon), and to decide about the lessons an earlier cycle
+ * kept for a week two weeks before it starts - for an event, its owner a week before.
+ */
+export function learningReminders(now: Date): number {
+  const zone = tz();
+  const today = localDateKey(now, zone);
+  const afternoon = localTime(now, zone) >= '12:00';
+  let sent = 0;
+  const to = (leadId: number | null) => (leadId ? [leadId] : commanderIds());
+
+  for (const w of weeksWithoutDebrief(today, 3)) {
+    if (w.endDate === today && !afternoon) continue;
+    if (!once(`debrief:${w.weekId}`)) continue;
+    notify(to(w.leadId), {
+      type: 'debrief',
+      category: 'action',
+      title: `הגיע זמן התחקיר השבועי: ${w.name}`,
+      body: 'מה הושג, מה לשמר ומה לשפר - ולקחים עם אחראי, להמשך המחזור ולשבוע הזה במחזור הבא',
+      link: `/debriefs?new=weekly&week=${w.weekId}`,
+    });
+    sent++;
+  }
+
+  for (const w of pendingPriorLessons(today)) {
+    if (!once(`lessons:w:${w.weekId}`)) continue;
+    notify(to(w.leadId), {
+      type: 'lessons',
+      category: 'action',
+      title: `${w.pending === 1 ? 'לקח אחד' : `${w.pending} לקחים`} מהמחזור הקודם ל${w.name}`,
+      body: 'לפני שהשבוע מתחיל: לכל לקח - משימה, יושם או לא רלוונטי',
+      link: `/weeks/${w.weekId}#prior`,
+    });
+    sent++;
+  }
+
+  const rows = bankRows().filter((r) => r.target_week === null);
+  if (rows.length) {
+    const events = db().all<{ id: number; title: string; date: string; owner_id: number | null; week_id: number | null }>(
+      'SELECT id, title, date, owner_id, week_id FROM events WHERE cancelled = 0 AND date >= ? AND date <= ?',
+      today,
+      addDays(today, 7),
+    );
+    for (const e of events) {
+      const lessons = forEvent(rows, e);
+      if (!lessons.length) continue;
+      const reviews = reviewsFor(`e:${e.id}`);
+      const pending = lessons.filter((l) => !reviews.has(l.id)).length;
+      const who = e.owner_id ?? (e.week_id ? weekRowLead(e.week_id) : null);
+      if (!pending || !who || !once(`lessons:e:${e.id}`)) continue;
+      notify([who], {
+        type: 'lessons',
+        category: 'action',
+        title: `${pending === 1 ? 'לקח אחד' : `${pending} לקחים`} ממופעים קודמים: ${e.title}`,
+        body: 'לפני הפעילות: לכל לקח - משימה, יושם או לא רלוונטי',
+        link: `/schedule?date=${e.date}&event=${e.id}`,
+      });
+      sent++;
+    }
+  }
+  return sent;
 }
 
 export function debriefDetail(actor: UserRow, id: number): DebriefDetail {

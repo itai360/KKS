@@ -4314,13 +4314,25 @@ button.fab-missing {
   border-bottom: none;
 }
 
-.prior-lessons a {
+.prior-lessons a:not(.badge) {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .prior-card {
   border-top: 3px solid var(--blue);
+}
+
+.prior-lessons li.decided > .small {
+  color: var(--ink-2);
+}
+
+.prior-lessons .prior-actions {
+  margin-top: 4px;
+}
+
+#prior {
+  scroll-margin-top: calc(var(--top-h) + 16px);
 }
 
 @media print {
