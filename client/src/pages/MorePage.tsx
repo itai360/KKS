@@ -32,7 +32,7 @@ export function MorePage() {
               <Link key={it.to} to={it.to} className="health">
                 <Icon name={it.icon} size={20} />
                 <span className="grow strong">{it.label}</span>
-                {!!it.count && <span className="badge t-red">{it.count}</span>}
+                {!!it.count && <span className="badge t-red">{it.count > 99 ? '99+' : it.count}</span>}
                 <Icon name="chevronLeft" size={16} className="faint" />
               </Link>
             ))}

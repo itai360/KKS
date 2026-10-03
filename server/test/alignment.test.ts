@@ -86,6 +86,17 @@ describe('the יישור קו page', () => {
     expect((await c.s1.post('/api/alignment/import', { text: 'סתם טקסט בלי הודעות' })).body.error).toContain('ייצוא צ׳אט');
   });
 
+  it('the menu counts what came in since each person last looked', async () => {
+    const unseen = async (who: Ctx['s1']) => (await who.get('/api/alignment/unseen')).body.n as number;
+    await c.s1.post('/api/alignment/import', { text: ANDROID });
+    expect(await unseen(c.s1)).toBe(0); // what one brought in is not new to them
+    expect(await unseen(c.s2)).toBe(4);
+    await c.s2.post('/api/alignment/seen', {});
+    expect(await unseen(c.s2)).toBe(0);
+    await c.s1.post('/api/alignment/import', { text: IPHONE });
+    expect(await unseen(c.s2)).toBe(2);
+  });
+
   it('the commander pins and removes messages', async () => {
     await c.s1.post('/api/alignment/import', { text: ANDROID });
     const [msg] = (await feed()).messages;

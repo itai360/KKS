@@ -68,7 +68,7 @@ import { attendanceHistory, markAttendance, rollCall } from './attendance';
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { coursesOverview, startNewCourse, viewCourse, viewingCourse } from './courses';
-import { alignmentFeed, deleteMessage, exportText, importAlignment, pinMessage } from './alignment';
+import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
 
@@ -388,6 +388,11 @@ export function v3Router(): Router {
   r.get('/alignment', (req, res) =>
     res.json(alignmentFeed({ q: typeof req.query.q === 'string' ? req.query.q : undefined, before: typeof req.query.before === 'string' ? req.query.before : undefined, beforeId: num(req.query.id) })),
   );
+  r.get('/alignment/unseen', (req, res) => res.json({ n: unseenCount(me(req).id) }));
+  r.post('/alignment/seen', (req, res) => {
+    markSeen(me(req).id);
+    res.json({ ok: true });
+  });
   r.post('/alignment/import', (req, res) => {
     const { text } = z.object({ text: z.string().min(1, 'הדביקו את ההודעות').max(900_000) }).parse(req.body);
     res.json(importAlignment(me(req), text));

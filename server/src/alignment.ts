@@ -105,6 +105,7 @@ export function importAlignment(actor: UserRow, text: string): AlignmentImport {
       ).changes;
     }
     db().run('INSERT INTO alignment_imports(at, user_id, added, found) VALUES (?, ?, ?, ?)', now, actor.id, added, messages.length);
+    markSeen(actor.id); // what one brought in is not new to them
   });
   if (added) changed('alignment');
   const sorted = messages.map((m) => m.sentAt).sort();
@@ -121,6 +122,15 @@ export function exportText(buf: Buffer): string {
     return files.get(name)!.toString('utf8');
   }
   return buf.toString('utf8');
+}
+
+/** messages that came in since the person last opened the page (the menu's count) */
+export function unseenCount(userId: number): number {
+  return db().get<{ n: number }>('SELECT count(*) AS n FROM alignment_messages WHERE id > (SELECT alignment_seen_id FROM users WHERE id = ?)', userId)!.n;
+}
+
+export function markSeen(userId: number): void {
+  db().run('UPDATE users SET alignment_seen_id = (SELECT coalesce(max(id), 0) FROM alignment_messages) WHERE id = ?', userId);
 }
 
 export const pinSchema = z.object({ pinned: z.boolean() });

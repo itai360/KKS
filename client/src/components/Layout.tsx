@@ -28,6 +28,8 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
   const requests = useApi<TaskRequest[]>(isCommander ? '/api/requests' : null, ['requests', 'tasks']);
   const approvals = useApi<Task[]>(isCommander ? '/api/tasks?status=pending_approval' : null, ['tasks']);
   const pending = (requests.data?.length ?? 0) + (approvals.data?.length ?? 0);
+  // messages from the staff's WhatsApp group that came in since this person last looked
+  const alignment = useApi<{ n: number }>('/api/alignment/unseen', ['alignment', 'alignment-seen']).data?.n ?? 0;
 
   if (isCommander) {
     return [
@@ -46,7 +48,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         items: [
           { to: '/requests', label: 'אישורים ובקשות', icon: 'inbox', count: pending },
           { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
-          { to: '/alignment', label: 'יישור קו', icon: 'message' },
+          { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
           { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
           { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
           { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
@@ -95,7 +97,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
         { to: `/requests`, label: 'הבקשות שלי', icon: 'inbox' },
         { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
-        { to: '/alignment', label: 'יישור קו', icon: 'message' },
+        { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
         { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
       ],
     },
@@ -285,7 +287,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
                 <Icon name={it.icon} />
                 <span className="rail-label">{it.label}</span>
-                {!!it.count && <span className="count">{it.count}</span>}
+                {!!it.count && <span className="count">{it.count > 99 ? '99+' : it.count}</span>}
               </NavLink>
             ))}
           </nav>

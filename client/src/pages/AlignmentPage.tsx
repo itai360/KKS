@@ -8,6 +8,7 @@ import { useSearchParams } from 'react-router';
 import { longDate } from '@shared/dates';
 import type { AlignmentFeed, AlignmentImport, AlignmentMessage } from '@shared/types';
 import { ask } from '../components/Confirm';
+import { useNewTask } from '../components/NewTask';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, Modal, PageHead, initials } from '../components/ui';
@@ -46,7 +47,15 @@ export function AlignmentPage() {
   const [busyOlder, setBusyOlder] = useState(false);
   const [importing, setImporting] = useState(false);
   const toast = useToast();
+  const newTask = useNewTask();
   const canManage = isCommander && !viewing;
+  // an instruction in the group becomes a task: the message is read like a typed task (who, by when)
+  const toTask = (m: AlignmentMessage) =>
+    newTask({
+      heading: 'משימה מיישור קו',
+      text: m.body.replace(/\s+/g, ' ').trim().slice(0, 300),
+      description: `מתוך "יישור קו" - ${m.userName ?? m.sender}, ${longDate(dateKeyOf(m.sentAt))} ${fmtTime(m.sentAt)}:\n${m.body}`,
+    });
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(q.trim()), 250);
@@ -70,6 +79,18 @@ export function AlignmentPage() {
     else toast({ title: params.get('msg') || 'השיתוף לא הצליח', tone: 'red' });
     setParams({}, { replace: true });
   }, [params, setParams, toast]);
+
+  // on screen counts as seen: the menu's count of new messages clears
+  const seenAt = useRef('');
+  useEffect(() => {
+    const mark = data?.lastImport?.at ?? '';
+    if (!data || viewing || query || seenAt.current === mark) return;
+    seenAt.current = mark;
+    void api
+      .post('/api/alignment/seen', {})
+      .then(() => emitLocalChange('alignment-seen'))
+      .catch(() => (seenAt.current = ''));
+  }, [data, viewing, query]);
 
   const all = [...older, ...(data?.messages ?? [])];
   const hasMore = !query && (moreOlder ?? data?.more ?? false);
@@ -156,7 +177,7 @@ export function AlignmentPage() {
                 <h3 className="grow">מוצמדות</h3>
               </div>
               {data.pinned.map((m) => (
-                <Message key={m.id} m={m} withDay canManage={canManage} onPin={() => void pin(m)} onRemove={() => void remove(m)} />
+                <Message key={m.id} m={m} withDay canManage={canManage} onTask={viewing ? undefined : () => toTask(m)} onPin={() => void pin(m)} onRemove={() => void remove(m)} />
               ))}
             </section>
           )}
@@ -168,7 +189,7 @@ export function AlignmentPage() {
                 <span className="tiny mono muted">{list.length}</span>
               </div>
               {list.map((m) => (
-                <Message key={m.id} m={m} canManage={canManage} onPin={() => void pin(m)} onRemove={() => void remove(m)} />
+                <Message key={m.id} m={m} canManage={canManage} onTask={viewing ? undefined : () => toTask(m)} onPin={() => void pin(m)} onRemove={() => void remove(m)} />
               ))}
             </section>
           ))}
@@ -184,7 +205,7 @@ export function AlignmentPage() {
   );
 }
 
-function Message({ m, withDay, canManage, onPin, onRemove }: { m: AlignmentMessage; withDay?: boolean; canManage: boolean; onPin: () => void; onRemove: () => void }) {
+function Message({ m, withDay, canManage, onTask, onPin, onRemove }: { m: AlignmentMessage; withDay?: boolean; canManage: boolean; onTask?: () => void; onPin: () => void; onRemove: () => void }) {
   const name = m.userName ?? m.sender;
   return (
     <div className="al-msg">
@@ -206,14 +227,23 @@ function Message({ m, withDay, canManage, onPin, onRemove }: { m: AlignmentMessa
           </div>
         )}
       </div>
-      {canManage && (
+      {(onTask || canManage) && (
         <div className="al-actions">
-          <button className={`icon-btn${m.pinned ? ' on' : ''}`} onClick={onPin} aria-pressed={m.pinned} aria-label={m.pinned ? 'ביטול הצמדה' : 'הצמדה למעלה'} title={m.pinned ? 'ביטול הצמדה' : 'הצמדה למעלה'}>
-            <Icon name="pin" size={15} />
-          </button>
-          <button className="icon-btn" onClick={onRemove} aria-label="הסרה מהדף" title="הסרה מהדף">
-            <Icon name="trash" size={15} />
-          </button>
+          {onTask && m.body && (
+            <button className="icon-btn" onClick={onTask} aria-label="משימה מההודעה" title="משימה מההודעה">
+              <Icon name="tasks" size={15} />
+            </button>
+          )}
+          {canManage && (
+            <>
+              <button className={`icon-btn${m.pinned ? ' on' : ''}`} onClick={onPin} aria-pressed={m.pinned} aria-label={m.pinned ? 'ביטול הצמדה' : 'הצמדה למעלה'} title={m.pinned ? 'ביטול הצמדה' : 'הצמדה למעלה'}>
+                <Icon name="pin" size={15} />
+              </button>
+              <button className="icon-btn" onClick={onRemove} aria-label="הסרה מהדף" title="הסרה מהדף">
+                <Icon name="trash" size={15} />
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
