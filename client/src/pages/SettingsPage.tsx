@@ -300,7 +300,7 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
           <input className="input" dir="ltr" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
         </Field>
         <Field label={user ? 'סיסמה חדשה (לאיפוס)' : 'סיסמה זמנית'} required={!user} hint="בכניסה הראשונה המשתמש יתבקש לבחור סיסמה אישית">
-          <input className="input" dir="ltr" type="text" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder={user ? 'השאר ריק ללא שינוי' : 'לפחות 6 תווים'} />
+          <input className="input" dir="ltr" type="text" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder={user ? 'השאר ריק ללא שינוי' : 'לפחות 8 תווים, אותיות וספרה'} />
         </Field>
         <Field label="טלפון">
           <input className="input" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -736,7 +736,7 @@ function PasswordCard() {
           <input className="input" dir="ltr" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
         </Field>
         <div className="span-2 row">
-          <button className="btn" disabled={!current || next.length < 6}>
+          <button className="btn" disabled={!current || next.length < 8}>
             עדכן סיסמה
           </button>
           <ErrorBox error={error} />

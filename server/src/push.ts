@@ -7,6 +7,7 @@ import webpush from 'web-push';
 import type { Notification } from '../../shared/types';
 import { nowIso } from './core';
 import { db } from './db';
+import { isPushEndpoint } from './netguard';
 
 interface VapidKeys {
   publicKey: string;
@@ -76,7 +77,10 @@ export function sendPush(userId: number, n: Pick<Notification, 'id' | 'title' | 
 
 async function deliver(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>, force: boolean): Promise<number> {
   if (!force && n.category === 'info') return 0;
-  const subs = db().all<{ endpoint: string; p256dh: string; auth: string }>('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', userId);
+  // only to a browser's push service - never to an address of someone's choosing
+  const subs = db()
+    .all<{ endpoint: string; p256dh: string; auth: string }>('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', userId)
+    .filter((s) => isPushEndpoint(s.endpoint));
   if (!subs.length) return 0;
   const keys = vapidKeys();
   const payload = JSON.stringify({ title: n.title, body: n.body, link: n.link, tag: `kks-${n.id}`, category: n.category });

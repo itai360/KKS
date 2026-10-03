@@ -104,18 +104,18 @@ describe('auth', () => {
   });
 
   it('an account the commander opened asks for a personal password on first sign-in', async () => {
-    const created = await c.cmd.post('/api/users', { username: 'newbie', password: 'temp123', displayName: 'מפק"צ חדש', role: 'staff' });
+    const created = await c.cmd.post('/api/users', { username: 'newbie', password: 'temp1234', displayName: 'מפק"צ חדש', role: 'staff' });
     expect(created.status).toBe(200);
     expect(created.body.mustChangePassword).toBeUndefined();
-    const newbie = await login(c.app, 'newbie', 'temp123');
+    const newbie = await login(c.app, 'newbie', 'temp1234');
     expect((await newbie.get('/api/auth/me')).body.mustChangePassword).toBe(true);
     // nobody else learns whose temporary password is still in use
     expect((await c.s1.get('/api/users')).body.every((u: Record<string, unknown>) => !('mustChangePassword' in u))).toBe(true);
-    expect((await newbie.post('/api/auth/password/first', { next: 'temp123' })).body.error).toBe('בחרו סיסמה שונה מהסיסמה שקיבלתם');
+    expect((await newbie.post('/api/auth/password/first', { next: 'temp1234' })).body.error).toBe('בחרו סיסמה שונה מהסיסמה שקיבלתם');
     expect((await newbie.post('/api/auth/password/first', { next: 'mine4567' })).status).toBe(200);
     expect((await newbie.get('/api/auth/me')).body.mustChangePassword).toBe(false);
     expect((await newbie.post('/api/auth/password/first', { next: 'again789' })).status).toBe(400);
-    const res = await request(c.app).post('/api/auth/login').set('x-kks', '1').send({ username: 'newbie', password: 'temp123' });
+    const res = await request(c.app).post('/api/auth/login').set('x-kks', '1').send({ username: 'newbie', password: 'temp1234' });
     expect(res.status).toBe(401);
     await login(c.app, 'newbie', 'mine4567');
   });

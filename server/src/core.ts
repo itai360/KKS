@@ -89,7 +89,7 @@ export function getSettings(): CourseSettings {
 export function updateSettings(patch: Partial<CourseSettings>): CourseSettings {
   db().tx(() => {
     for (const [k, v] of Object.entries(patch)) {
-      if (v === undefined || !(k in DEFAULT_SETTINGS)) continue;
+      if (v === undefined || !Object.hasOwn(DEFAULT_SETTINGS, k)) continue;
       db().run(
         'INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         k,

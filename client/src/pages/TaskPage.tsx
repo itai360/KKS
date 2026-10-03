@@ -17,6 +17,7 @@ import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
 import { useDraft } from '../lib/draft';
 import { useApi, useTick } from '../lib/useApi';
+import { safeUrl } from '../lib/safeUrl';
 
 export function TaskPage() {
   const { id } = useParams();
@@ -500,7 +501,7 @@ function Attachments({ detail, onChange }: { detail: TaskDetail; onChange: (d: T
         {detail.attachments.map((a) => (
           <div key={a.id} className="row small">
             <Icon name={a.kind === 'file' ? 'file' : 'link'} size={18} className="muted" />
-            <a href={a.url} target="_blank" rel="noreferrer noopener" className="grow strong" style={{ wordBreak: 'break-all' }}>
+            <a href={safeUrl(a.url)} target="_blank" rel="noreferrer noopener" className="grow strong" style={{ wordBreak: 'break-all' }}>
               {a.title}
             </a>
             <span className="tiny muted">

@@ -10,6 +10,7 @@ import { Empty, Loading, PageHead } from '../components/ui';
 import { useSession } from '../lib/session';
 import { matchesSearch } from '@shared/search';
 import { useApi } from '../lib/useApi';
+import { safeUrl } from '../lib/safeUrl';
 
 export function SearchPage() {
   const [params, setParams] = useSearchParams();
@@ -126,7 +127,7 @@ export function SearchPage() {
                 <GroupTitle title="מסמכים" count={data.documents.length} />
                 <div className="chips">
                   {data.documents.map((d) => (
-                    <a key={d.id} href={d.url} target="_blank" rel="noreferrer noopener" className="chip">
+                    <a key={d.id} href={safeUrl(d.url)} target="_blank" rel="noreferrer noopener" className="chip">
                       <Icon name={d.kind === 'file' ? 'file' : 'link'} size={14} /> {d.title}
                       <span className="muted"> · {d.category}</span>
                     </a>

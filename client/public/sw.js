@@ -29,7 +29,9 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL((event.notification.data && event.notification.data.link) || '/', self.location.origin).href;
+  // only a screen of this site: a link elsewhere opens the home screen instead
+  const target = new URL((event.notification.data && event.notification.data.link) || '/', self.location.origin);
+  const url = target.origin === self.location.origin ? target.href : self.location.origin + '/';
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

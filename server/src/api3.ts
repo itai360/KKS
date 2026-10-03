@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
 import { requireCommander, type UserRow } from './auth';
+import { isCommander } from './taskRepo';
 import {
   addExemption,
   addRecord,
@@ -68,6 +69,7 @@ import { attendanceHistory, markAttendance, rollCall } from './attendance';
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { copyPreviousCycleTasks, coursesOverview, previousCycleWeek, startNewCourse, viewCourse, viewingCourse } from './courses';
+import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
@@ -255,7 +257,14 @@ export function v3Router(): Router {
 
   // ---------------- availability ----------------
 
-  r.get('/absences', (req, res) => res.json(listAbsences({ userId: num(req.query.user), from: isDateKey(req.query.from) ? req.query.from : undefined, to: isDateKey(req.query.to) ? req.query.to : undefined })));
+  r.get('/absences', (req, res) =>
+    res.json(
+      // who is away is for everyone; what they wrote about it is for them and the commander
+      listAbsences({ userId: num(req.query.user), from: isDateKey(req.query.from) ? req.query.from : undefined, to: isDateKey(req.query.to) ? req.query.to : undefined }).map((a) =>
+        isCommander(me(req)) || a.userId === me(req).id ? a : { ...a, note: '' },
+      ),
+    ),
+  );
   r.post('/absences', (req, res) => res.json(addAbsence(me(req), req.body)));
   r.delete('/absences/:id', (req, res) => {
     deleteAbsence(me(req), id(req.params.id));
@@ -365,7 +374,7 @@ export function v3Router(): Router {
   // ---------------- push ----------------
 
   const subSchema = z.object({
-    endpoint: z.string().url().max(2000),
+    endpoint: z.string().url().max(2000).refine(isPushEndpoint, 'כתובת התראות לא מוכרת'),
     keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(4).max(100) }),
   });
   r.get('/push/key', (req, res) => res.json({ publicKey: vapidPublicKey(), subscriptions: subscriptionCount(me(req).id) }));

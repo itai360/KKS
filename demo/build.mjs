@@ -29,6 +29,8 @@ const out = await build({
   alias: {
     'node:sqlite': shim('sqlite.ts'),
     'node:async_hooks': shim('async_hooks.ts'),
+    'node:dns/promises': shim('dns.ts'),
+    'node:net': shim('net.ts'),
     'node:crypto': shim('crypto.ts'),
     'node:fs': shim('fs.ts'),
     'node:path': shim('path.ts'),

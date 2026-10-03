@@ -20,6 +20,7 @@ import { fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '..
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
+import { safeUrl } from '../lib/safeUrl';
 import { ask } from '../components/Confirm';
 
 type ScheduleView = 'list' | CalendarViewName;
@@ -708,7 +709,7 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
           <h3 className="mb-12">קבצים וקישורים</h3>
           <div className="col gap-6">
             {data.attachments.map((a) => (
-              <a key={a.id} href={a.url} target="_blank" rel="noreferrer noopener" className="row small">
+              <a key={a.id} href={safeUrl(a.url)} target="_blank" rel="noreferrer noopener" className="row small">
                 <Icon name={a.kind === 'file' ? 'file' : 'link'} size={16} /> <b>{a.title}</b> <span className="tiny muted">{fileSize(a.size)}</span>
               </a>
             ))}

@@ -179,7 +179,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
           <Field label="שם משתמש" required>
             <input className="input" dir="ltr" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
           </Field>
-          <Field label="סיסמה" required hint={setup ? 'לפחות 6 תווים' : undefined}>
+          <Field label="סיסמה" required hint={setup ? 'לפחות 8 תווים, אותיות וגם ספרה או סימן' : undefined}>
             <input className="input" dir="ltr" type="password" autoComplete={setup ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)} required />
           </Field>
           <ErrorBox error={error} />

@@ -9,6 +9,7 @@ import {
   createSession,
   createUser,
   destroySession,
+  dummyHash,
   endOtherSessions,
   getUserRow,
   hashPassword,
@@ -21,6 +22,7 @@ import {
   setSessionCookie,
   toUser,
   verifyPassword,
+  NAME_LIMIT,
   type UserRow,
 } from './auth';
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
@@ -32,6 +34,7 @@ import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
 import { v3Router } from './api3';
+import { newPassword } from './netguard';
 import { shareTarget } from './alignment';
 import { setCourseCookie, viewingName } from './courses';
 import {
@@ -129,7 +132,9 @@ export function apiRouter(): Router {
     const e = z.object({ path: z.string().max(300), message: z.string().max(500), stack: z.string().max(2000).optional() }).parse(req.body);
     const minute = Math.floor(Date.now() / 60_000);
     if (clientErrors.minute !== minute) clientErrors = { minute, count: 0 };
-    if (++clientErrors.count <= 20) console.error(`[client] ${e.path}: ${e.message}\n${e.stack ?? ''}`);
+    // anyone can send this: control characters are taken out so a line in the log cannot be faked
+    const clean = (s: string) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ');
+    if (++clientErrors.count <= 20) console.error(`[client] ${clean(e.path)}: ${clean(e.message)}\n${clean(e.stack ?? '')}`);
     res.json({ ok: true });
   });
 
@@ -145,7 +150,7 @@ export function apiRouter(): Router {
     courseName: z.string().trim().min(1).max(120),
     courseSymbol: z.string().trim().max(12).optional(),
     username: z.string().trim().min(2).max(40),
-    password: z.string().min(6, 'הסיסמה חייבת להכיל לפחות 6 תווים').max(200),
+    password: newPassword,
     displayName: z.string().trim().min(1).max(80),
   });
   r.post('/setup', (req, res) => {
@@ -163,13 +168,20 @@ export function apiRouter(): Router {
   r.post('/auth/login', (req, res) => {
     const { username, password } = z.object({ username: z.string().trim().min(1), password: z.string().min(1) }).parse(req.body);
     const key = `${req.ip}|${username.toLowerCase()}`;
+    const nameKey = `name|${username.toLowerCase()}`; // the same name tried from many addresses
     loginThrottle(key);
+    loginThrottle(nameKey, NAME_LIMIT);
     const u = db().get<UserRow>('SELECT * FROM users WHERE username = ? AND active = 1', username);
-    if (!u || !verifyPassword(password, u.password_hash)) {
+    let valid = false;
+    if (u) valid = verifyPassword(password, u.password_hash);
+    else verifyPassword(password, dummyHash()); // a name that does not exist takes as long as a wrong password
+    if (!u || !valid) {
       loginFailed(key);
+      loginFailed(nameKey, NAME_LIMIT);
       throw new HttpError(401, 'שם משתמש או סיסמה שגויים');
     }
     loginSucceeded(key);
+    loginSucceeded(nameKey);
     setSessionCookie(res, createSession(u.id));
     setCourseCookie(res, null);
     res.json({ user: toUser(u) });
@@ -217,9 +229,16 @@ export function apiRouter(): Router {
 
   r.post('/auth/password', (req, res) => {
     const { current, next } = z
-      .object({ current: z.string().min(1), next: z.string().min(6, 'הסיסמה החדשה חייבת להכיל לפחות 6 תווים').max(200) })
+      .object({ current: z.string().min(1), next: newPassword })
       .parse(req.body);
-    if (!verifyPassword(current, me(req).password_hash)) throw badRequest('הסיסמה הנוכחית שגויה');
+    // the current password is guessed no faster here than at sign-in
+    const key = `password|${me(req).id}`;
+    loginThrottle(key);
+    if (!verifyPassword(current, me(req).password_hash)) {
+      loginFailed(key);
+      throw badRequest('הסיסמה הנוכחית שגויה');
+    }
+    loginSucceeded(key);
     db().run('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?', hashPassword(next), me(req).id);
     // whoever knew the old password is signed out on their devices; this one stays in
     const others = endOtherSessions(me(req).id, sessionToken(req));
@@ -231,7 +250,7 @@ export function apiRouter(): Router {
   r.post('/auth/password/first', (req, res) => {
     const u = me(req);
     if (!u.must_change_password) throw badRequest('הסיסמה כבר אישית');
-    const { next } = z.object({ next: z.string().min(6, 'הסיסמה חייבת להכיל לפחות 6 תווים').max(200) }).parse(req.body);
+    const { next } = z.object({ next: newPassword }).parse(req.body);
     if (verifyPassword(next, u.password_hash)) throw badRequest('בחרו סיסמה שונה מהסיסמה שקיבלתם');
     db().run('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?', hashPassword(next), u.id);
     endOtherSessions(u.id, sessionToken(req));
@@ -259,7 +278,7 @@ export function apiRouter(): Router {
 
   const userSchema = z.object({
     username: z.string().trim().min(2, 'שם משתמש קצר מדי').max(40).regex(/^[\w.\-@]+$/, 'שם משתמש באותיות לועזיות, ספרות ו-._-'),
-    password: z.string().min(6, 'הסיסמה חייבת להכיל לפחות 6 תווים').max(200),
+    password: newPassword,
     displayName: z.string().trim().min(1, 'חובה למלא שם').max(80),
     title: z.string().trim().max(80).optional().default(''),
     role: z.enum(ROLES),
@@ -284,7 +303,12 @@ export function apiRouter(): Router {
         email: z.string().trim().email('כתובת מייל לא תקינה').max(120).optional().or(z.literal('')),
       })
       .parse(req.body);
-    db().run('UPDATE users SET phone = coalesce(?, phone), email = coalesce(?, email) WHERE id = ?', p.phone ?? null, p.email ?? null, me(req).id);
+    if (p.phone !== undefined) db().run('UPDATE users SET phone = ? WHERE id = ?', p.phone, me(req).id);
+    if (p.email !== undefined) {
+      const email = p.email.toLowerCase() || null; // cleared: none
+      if (email && db().get('SELECT 1 FROM users WHERE email = ? AND id <> ?', email, me(req).id)) throw badRequest('כתובת המייל כבר משויכת למשתמש אחר');
+      db().run('UPDATE users SET email = ? WHERE id = ?', email, me(req).id);
+    }
     changed('users');
     res.json(toUser(getUserRow(me(req).id)!));
   });

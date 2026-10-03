@@ -17,7 +17,8 @@ export const waHref = (phone: string) => (intlNumber(phone) ? `https://wa.me/${i
 
 /** a vCard file of several people - opened on a phone, it adds them to the contacts */
 export function vcard(people: { name: string; phone?: string; email?: string; org?: string; title?: string }[]): string {
-  const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (m) => `\\${m}`);
+  // a line break of any kind (\r too) is escaped, so a name cannot add lines of its own
+  const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n').replace(/[,;]/g, (m) => `\\${m}`);
   return people
     .map((p) =>
       [

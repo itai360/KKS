@@ -45,6 +45,10 @@ export function createApp(opts: { staticDir?: string } = {}) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=()');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    // Google's sign-in opens a window of its own
+    res.setHeader('Cross-Origin-Opener-Policy', process.env.GOOGLE_CLIENT_ID ? 'same-origin-allow-popups' : 'same-origin');
     next();
   });
 
@@ -83,6 +87,10 @@ export function createApp(opts: { staticDir?: string } = {}) {
       `connect-src 'self'${g}`,
       `frame-src${g || " 'none'"}`,
       "worker-src 'self'",
+      "manifest-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
       "frame-ancestors 'none'",
     ].join('; ');
     app.get(/^(?!\/api\/).*/, (_req, res) => {

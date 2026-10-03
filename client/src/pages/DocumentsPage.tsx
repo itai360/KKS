@@ -12,6 +12,7 @@ import { fileSize, fmtAgo } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { safeUrl } from '../lib/safeUrl';
 import { ask } from '../components/Confirm';
 
 export function DocumentsPage() {
@@ -120,7 +121,7 @@ function DocGrid({ docs, onEdit }: { docs: CourseDocument[]; onEdit: (d: CourseD
               </button>
             )}
           </div>
-          <a href={d.url} target="_blank" rel="noreferrer noopener" className="strong" style={{ fontSize: 15.5 }}>
+          <a href={safeUrl(d.url)} target="_blank" rel="noreferrer noopener" className="strong" style={{ fontSize: 15.5 }}>
             {d.title}
           </a>
           {d.description && <p className="small muted">{d.description}</p>}

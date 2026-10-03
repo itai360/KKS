@@ -39,7 +39,7 @@ export function FirstPasswordDialog({ user, onDone, onLogout }: { user: User; on
           <button type="button" className="btn btn-ghost" onClick={onLogout}>
             יציאה
           </button>
-          <button type="submit" form="first-password" className="btn btn-primary" disabled={busy || next.length < 6 || next !== again}>
+          <button type="submit" form="first-password" className="btn btn-primary" disabled={busy || next.length < 8 || next !== again}>
             {busy ? 'שומר...' : 'שמירה והמשך'}
           </button>
         </>
@@ -51,7 +51,7 @@ export function FirstPasswordDialog({ user, onDone, onLogout }: { user: User; on
         </p>
         <ErrorBox error={error} />
         <input type="text" name="username" autoComplete="username" value={user.username} readOnly hidden />
-        <Field label="סיסמה חדשה" hint="לפחות 6 תווים">
+        <Field label="סיסמה חדשה" hint="לפחות 8 תווים, אותיות וגם ספרה או סימן">
           <input className="input" dir="ltr" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} data-autofocus required />
         </Field>
         <Field label="שוב, לאימות" hint={mismatch ? 'הסיסמאות לא זהות' : undefined}>

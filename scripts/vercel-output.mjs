@@ -54,7 +54,12 @@ const csp = [
   "connect-src 'self'",
   "frame-src 'none'",
   "worker-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
   "frame-ancestors 'none'",
+  'upgrade-insecure-requests',
 ].join('; ');
 
 writeFileSync(
@@ -69,8 +74,13 @@ writeFileSync(
             'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'same-origin',
             'X-Frame-Options': 'DENY',
-            'Strict-Transport-Security': 'max-age=31536000',
+            'Strict-Transport-Security': 'max-age=63072000; includeSubDomains',
             'Content-Security-Policy': csp,
+            // no camera, microphone, location or payment for this site - nor for anything it shows
+            'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=()',
+            // another site cannot hold a window of this one, nor read its files
+            'Cross-Origin-Opener-Policy': 'same-origin',
+            'Cross-Origin-Resource-Policy': 'same-origin',
           },
           continue: true,
         },

@@ -4,14 +4,26 @@
 // No spreadsheet library: an .xlsx is a zip of XML files.
 
 import { inflateRawSync } from 'node:zlib';
-import { badRequest } from './core';
+import { badRequest, HttpError } from './core';
 
 type Table = string[][];
 
 // ---------------- reading files ----------------
 
-/** The files inside a zip archive (stored or deflated entries). */
+/** what a zip may unpack to: a small file that expands to gigabytes (a "zip bomb") is refused */
+const MAX_UNZIPPED = 64 * 1024 * 1024;
+
+/** The text files inside a zip archive (stored or deflated entries): XML, relations and plain text. */
 export function unzip(buf: Buffer, invalid = 'הקובץ אינו קובץ אקסל תקין'): Map<string, Buffer> {
+  try {
+    return readZip(buf, invalid);
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    throw badRequest(invalid); // a damaged or crafted archive
+  }
+}
+
+function readZip(buf: Buffer, invalid: string): Map<string, Buffer> {
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) {
@@ -23,6 +35,7 @@ export function unzip(buf: Buffer, invalid = 'הקובץ אינו קובץ אק�
   const count = buf.readUInt16LE(eocd + 10);
   let p = buf.readUInt32LE(eocd + 16);
   const files = new Map<string, Buffer>();
+  let budget = MAX_UNZIPPED;
   for (let n = 0; n < count && p + 46 <= buf.length && buf.readUInt32LE(p) === 0x02014b50; n++) {
     const method = buf.readUInt16LE(p + 10);
     const size = buf.readUInt32LE(p + 20);
@@ -33,9 +46,21 @@ export function unzip(buf: Buffer, invalid = 'הקובץ אינו קובץ אק�
     const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
     const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
     const raw = buf.subarray(start, start + size);
-    if (method === 0) files.set(name, raw);
-    else if (method === 8) files.set(name, inflateRawSync(raw));
     p += 46 + nameLen + extraLen + commentLen;
+    // only what is read (spreadsheet and document XML, a chat's text) - not photos or other files
+    if (!/\.(xml|rels|txt)$/i.test(name)) continue;
+    let data: Buffer;
+    if (method === 0) data = raw;
+    else if (method === 8) {
+      try {
+        data = inflateRawSync(raw, { maxOutputLength: budget });
+      } catch {
+        throw badRequest('הקובץ גדול מדי או פגום');
+      }
+    } else continue;
+    budget -= data.length;
+    if (budget < 0) throw badRequest('הקובץ גדול מדי או פגום');
+    files.set(name, data);
   }
   return files;
 }

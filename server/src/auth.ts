@@ -49,6 +49,10 @@ export function hashPassword(password: string): string {
   return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
 }
 
+/** compared against when the name does not exist, so that answer takes as long as any other (made on first use) */
+let dummy = '';
+export const dummyHash = () => (dummy ||= hashPassword(randomBytes(12).toString('hex')));
+
 export function verifyPassword(password: string, stored: string): boolean {
   const [scheme, saltHex, hashHex] = stored.split('$');
   if (scheme !== 'scrypt' || !saltHex || !hashHex) return false;
@@ -154,21 +158,27 @@ export function csrfGuard(req: Request, _res: Response, next: NextFunction): voi
 // in memory; the fifth within a minute locks the name for a minute, and the
 // lock is kept in the database so every instance of a serverless deployment
 // honours it (one write per lock, not per attempt).
-const MAX_FAILURES = 5;
-const LOCK_MS = 60_000;
-const failures = new Map<string, { count: number; until: number }>();
-export function loginThrottle(key: string): void {
-  const f = failures.get(key);
-  const locked = (f && f.count >= MAX_FAILURES && f.until > Date.now()) || (db().get<{ until: number }>('SELECT until FROM login_lockouts WHERE key = ?', key)?.until ?? 0) > Date.now();
-  if (locked) throw new HttpError(429, 'יותר מדי ניסיונות כניסה. נסה שוב בעוד דקה.');
+interface Limit {
+  max: number;
+  ms: number;
+  message: string;
 }
-export function loginFailed(key: string): void {
+const ADDRESS_LIMIT: Limit = { max: 5, ms: 60_000, message: 'יותר מדי ניסיונות כניסה. נסה שוב בעוד דקה.' };
+/** a name tried from many addresses (a spread-out guessing attack): 10 misses lock it for 10 minutes */
+export const NAME_LIMIT: Limit = { max: 10, ms: 10 * 60_000, message: 'יותר מדי ניסיונות כניסה לשם המשתמש הזה. נסו שוב בעוד 10 דקות.' };
+const failures = new Map<string, { count: number; until: number }>();
+export function loginThrottle(key: string, limit: Limit = ADDRESS_LIMIT): void {
+  const f = failures.get(key);
+  const locked = (f && f.count >= limit.max && f.until > Date.now()) || (db().get<{ until: number }>('SELECT until FROM login_lockouts WHERE key = ?', key)?.until ?? 0) > Date.now();
+  if (locked) throw new HttpError(429, limit.message);
+}
+export function loginFailed(key: string, limit: Limit = ADDRESS_LIMIT): void {
   const f = failures.get(key);
   const count = f && f.until > Date.now() ? f.count + 1 : 1;
-  failures.set(key, { count, until: Date.now() + LOCK_MS });
-  if (count === MAX_FAILURES) {
+  failures.set(key, { count, until: Date.now() + limit.ms });
+  if (count === limit.max) {
     db().run('DELETE FROM login_lockouts WHERE until < ?', Date.now());
-    db().run('INSERT INTO login_lockouts(key, until) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until', key, Date.now() + LOCK_MS);
+    db().run('INSERT INTO login_lockouts(key, until) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until', key, Date.now() + limit.ms);
   }
 }
 export function loginSucceeded(key: string): void {

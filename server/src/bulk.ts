@@ -149,7 +149,8 @@ export interface BulkResult {
 
 export function runBulk(actor: UserRow, raw: z.input<typeof bulkSchema>): BulkResult {
   const { entity, action, ids, value } = bulkSchema.parse(raw);
-  const op = OPS[entity]?.[action];
+  // own entries only: a name like "constructor" is not an operation
+  const op = Object.hasOwn(OPS, entity) && Object.hasOwn(OPS[entity], action) ? OPS[entity][action] : undefined;
   if (!op) throw badRequest('פעולה לא מוכרת');
   if (op.commander && !isCommander(actor)) throw forbidden('הפעולה הזו שמורה למפקד הקורס');
   const result: BulkResult = { done: 0, failed: [] };
