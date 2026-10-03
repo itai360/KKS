@@ -105,6 +105,12 @@ export function Modal({
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
+      {/* a screen opened over a screen has the floating back arrow too: it closes this one */}
+      {closable && !narrow && (
+        <button type="button" className="modal-back no-print" onClick={() => void tryClose.current()} aria-label="חזרה" title="חזרה">
+          <Icon name="arrowRight" size={20} />
+        </button>
+      )}
     </div>,
     document.body,
   );

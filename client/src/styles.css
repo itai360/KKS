@@ -4940,7 +4940,8 @@ button.fab-missing {
 
 /* ---------- back, floating on every screen (components/BackButton.tsx) ---------- */
 
-.back-fab {
+.back-fab,
+.modal-back {
   position: fixed;
   bottom: 22px;
   /* beside the side menu, on the reading side */
@@ -4959,11 +4960,13 @@ button.fab-missing {
   transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.12s, background 0.12s;
 }
 
-.back-fab:hover {
+.back-fab:hover,
+.modal-back:hover {
   background: var(--gray-bg);
 }
 
-.back-fab:active {
+.back-fab:active,
+.modal-back:active {
   transform: scale(0.94);
 }
 
@@ -4987,6 +4990,23 @@ body:has(.bulk-bar) .back-fab {
   }
   body:has(.page-fab):has(.bottom-nav.away) .back-fab {
     bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+/* the same arrow on a dialog, in the same place: it closes the dialog */
+.modal-back {
+  z-index: 2;
+}
+
+@media (max-width: 860px) {
+  /* the dialog rises from the bottom of the screen: its arrow floats just above it */
+  .modal-back {
+    top: calc(12px + env(safe-area-inset-top));
+    bottom: auto;
+    inset-inline-start: 14px;
+  }
+  .modal-backdrop:has(.modal-back) .modal {
+    max-height: calc(100dvh - 70px - env(safe-area-inset-top));
   }
 }
 
