@@ -267,6 +267,7 @@ export async function downloadGoogleSheet(raw: string, maxBytes: number): Promis
   for (const url of googleDownloadUrls(raw)) {
     const res = await fetcher(url).catch(() => null);
     if (!res?.ok) continue;
+    if (Number(res.headers.get('content-length')) > maxBytes) throw badRequest('הקובץ גדול מדי');
     const type = res.headers.get('content-type') ?? '';
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > maxBytes) throw badRequest('הקובץ גדול מדי');

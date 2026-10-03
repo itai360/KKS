@@ -166,7 +166,7 @@ export function apiRouter(): Router {
   });
 
   r.post('/auth/login', (req, res) => {
-    const { username, password } = z.object({ username: z.string().trim().min(1), password: z.string().min(1) }).parse(req.body);
+    const { username, password } = z.object({ username: z.string().trim().min(1).max(120), password: z.string().min(1).max(500) }).parse(req.body);
     const key = `${req.ip}|${username.toLowerCase()}`;
     const nameKey = `name|${username.toLowerCase()}`; // the same name tried from many addresses
     loginThrottle(key);
@@ -218,7 +218,8 @@ export function apiRouter(): Router {
   });
 
   // WhatsApp's "share" into the app (alignment.ts): signed in or not, it ends on the page
-  r.post('/share-target', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), shareTarget);
+  // the body is read only for someone signed in: a stranger cannot make the server hold large uploads
+  r.post('/share-target', (req, res, next) => (req.user ? next() : res.redirect(303, '/alignment?share=login')), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), shareTarget);
 
   r.use(requireAuth);
 
