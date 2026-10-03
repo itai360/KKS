@@ -99,7 +99,13 @@ function Palette({ pages, onClose }: { pages: { to: string; label: string; icon:
         : []),
       { id: 'a:weekly', group: 'פעולות', label: 'תחקיר שבועי חדש', icon: 'calendar', run: go('/debriefs?new=weekly') },
       { id: 'a:eventdebrief', group: 'פעולות', label: 'תחקיר מופע עצים חדש', icon: 'zap', run: go('/debriefs?new=event') },
-      ...(isCommander ? [{ id: 'a:event', group: 'פעולות', label: 'אירוע חדש בלו"ז', icon: 'calendar', run: go('/schedule?new=1') }] : []),
+      ...(isCommander
+        ? [
+            { id: 'a:event', group: 'פעולות', label: 'אירוע חדש בלו"ז', icon: 'calendar', run: go('/schedule?new=1') },
+            { id: 'a:announce', group: 'פעולות', label: 'הודעה לסגל', icon: 'flag', run: go('/announcements') },
+          ]
+        : []),
+      { id: 'a:roll', group: 'פעולות', label: 'מצבה להיום', icon: 'check', run: go('/attendance') },
       { id: 'a:away', group: 'פעולות', label: 'סימון היעדרות (חופשה, מחלה, השתלמות)', icon: 'calendar', run: go('/settings#absences') },
       { id: 'a:bank', group: 'פעולות', label: 'בנק לקחים', icon: 'history', run: go('/debriefs?tab=bank') },
       { id: 'a:dark', group: 'פעולות', label: 'מצב כהה', icon: 'moon', run: () => setThemePref('dark') },

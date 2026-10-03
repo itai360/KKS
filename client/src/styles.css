@@ -4890,3 +4890,44 @@ button.fab-missing {
     break-inside: avoid;
   }
 }
+
+/* ---------- announcements (components/Announcements.tsx, pages/AnnouncementsPage.tsx) ---------- */
+
+.announce-pin {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-inline-start: 4px solid var(--tone);
+  background: var(--card);
+}
+
+.announce-pin > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--tone);
+}
+
+.announce-body {
+  margin: 4px 0;
+  max-height: 7.5em;
+  overflow: hidden;
+}
+
+.announce {
+  border-top: 3px solid var(--tone);
+}
+
+.announce .card-head h2 {
+  font-size: 16px;
+}
+
+@media (max-width: 760px) {
+  .announce-pin {
+    flex-wrap: wrap;
+  }
+  .announce-pin .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

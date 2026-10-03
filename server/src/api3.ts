@@ -65,6 +65,7 @@ import { deleteGuide, disciplineLog, disciplineOverview, getGuide, guideFromFile
 import { bulkSchema, runBulk } from './bulk';
 import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
 import { attendanceHistory, markAttendance, rollCall } from './attendance';
+import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
@@ -221,6 +222,23 @@ export function v3Router(): Router {
   r.delete('/experiences/:id', (req, res) => {
     deleteExperience(me(req), id(req.params.id));
     res.json({ ok: true });
+  });
+
+  // ---------------- announcements to the staff ----------------
+
+  r.get('/announcements', (req, res) => res.json(listAnnouncements(me(req), { pending: req.query.pending === '1' })));
+  r.post('/announcements', (req, res) => {
+    postAnnouncement(me(req), req.body);
+    res.json(listAnnouncements(me(req)));
+  });
+  r.post('/announcements/:id/read', (req, res) => {
+    markAnnouncement(me(req), id(req.params.id), req.body?.ack === true);
+    res.json(listAnnouncements(me(req)));
+  });
+  r.post('/announcements/:id/remind', (req, res) => res.json({ reminded: remindAnnouncement(me(req), id(req.params.id)) }));
+  r.delete('/announcements/:id', (req, res) => {
+    deleteAnnouncement(me(req), id(req.params.id));
+    res.json(listAnnouncements(me(req)));
   });
 
   // ---------------- the daily roll call ----------------

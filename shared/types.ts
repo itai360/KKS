@@ -381,6 +381,23 @@ export interface AttentionItem {
   link?: string;
 }
 
+/** an announcement to the staff, and (for whoever posted it) who confirmed reading it */
+export interface Announcement {
+  id: number;
+  title: string;
+  body: string;
+  requireAck: boolean;
+  urgent: boolean;
+  createdBy: number | null;
+  createdByName: string | null;
+  createdAt: string;
+  /** this person: when they read and confirmed */
+  readAt: string | null;
+  ackedAt: string | null;
+  /** the commander and the author: everyone it went to */
+  audience?: { userId: number; name: string; readAt: string | null; ackedAt: string | null }[];
+}
+
 /** one cadet on the day's roll call */
 export interface RollEntry {
   cadetId: number;

@@ -663,7 +663,27 @@ CREATE TABLE attendance (
 CREATE INDEX attendance_date ON attendance(date);
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16];
+// announcements to the staff, and who read and confirmed each one
+const SCHEMA_V17 = `
+CREATE TABLE announcements (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  require_ack INTEGER NOT NULL DEFAULT 1,
+  urgent INTEGER NOT NULL DEFAULT 0,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE announcement_reads (
+  announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  read_at TEXT NOT NULL,
+  acked_at TEXT,
+  PRIMARY KEY (announcement_id, user_id)
+);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

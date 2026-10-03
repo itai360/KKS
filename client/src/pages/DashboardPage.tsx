@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { ABSENCE_REASON_LABELS, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, ATTENDANCE_TONES } from '@shared/constants';
 import type { AttentionItem, AttentionKind, DashboardData } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
+import { PendingAnnouncements } from '../components/Announcements';
 import { DisciplineCard } from '../components/DisciplineCard';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
@@ -64,6 +65,7 @@ export function DashboardPage() {
       ) : data ? (
         <div className="fade-in col gap-16">
           <SetupNudge />
+          <PendingAnnouncements />
           <div className="stats">
             <Stat n={data.stats.today} label="לביצוע היום" hint="משימות שצריכות להסתיים היום" onClick={() => navigate('/tasks?scope=today')} />
             <Stat n={data.stats.overdue} label="באיחור" hint="עבר הדד-ליין ולא הושלמו" alert={data.stats.overdue > 0} onClick={() => navigate('/tasks?scope=overdue')} />

@@ -43,6 +43,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         title: 'בקרה',
         items: [
           { to: '/requests', label: 'אישורים ובקשות', icon: 'inbox', count: pending },
+          { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
           { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
           { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
           { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
@@ -88,6 +89,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
         { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
         { to: `/requests`, label: 'הבקשות שלי', icon: 'inbox' },
+        { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
       ],
     },
     {

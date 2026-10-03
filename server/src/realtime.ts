@@ -17,7 +17,8 @@ export type Topic =
   | 'requests'
   | 'cadets'
   | 'debriefs'
-  | 'documents';
+  | 'documents'
+  | 'announcements';
 
 const clients = new Map<number, Set<Response>>();
 let pending = new Set<Topic>();

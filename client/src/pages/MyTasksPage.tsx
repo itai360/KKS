@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import { shortDate } from '@shared/dates';
 import type { MyTasksData, Task } from '@shared/types';
 import { DisciplineCard } from '../components/DisciplineCard';
+import { PendingAnnouncements } from '../components/Announcements';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkToggle } from '../components/Bulk';
@@ -49,6 +50,7 @@ export function MyTasksPage() {
         <Loading rows={5} />
       ) : data ? (
         <div className="fade-in">
+          <PendingAnnouncements spaced />
           <div className="stats">
             <MiniStat n={data.stats.today} label="היום" target="group-today" />
             <MiniStat n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
