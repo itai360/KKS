@@ -2,7 +2,7 @@
 // system already knows - goals, the schedule day by day, who is responsible for what and
 // by when, who on the staff is away, and what the previous cycle learned about this week.
 
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { ABSENCE_REASON_LABELS, STATUS_LABELS, WEEK_STATUS_LABELS } from '@shared/constants';
 import { addDays, shortDate, weekdayName } from '@shared/dates';
 import { goalsFromText, LESSON_DECISION_LABELS } from '@shared/debriefForms';
@@ -50,9 +50,6 @@ export function WeekOrderPage() {
   return (
     <div className="page doc-page">
       <div className="doc-toolbar no-print">
-        <Link to={`/weeks/${w.id}`} className="btn btn-ghost">
-          <Icon name="chevronRight" /> לשבוע
-        </Link>
         <span className="grow small muted hide-mobile">המסמך נבנה מהנתונים במערכת ומתעדכן איתם. להדפסה או לשמירה כ-PDF:</span>
         <span className="grow only-mobile" />
         <button className="btn btn-primary" onClick={() => window.print()}>

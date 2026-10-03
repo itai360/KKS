@@ -315,6 +315,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="main">
         <header className="topbar">
+          <BackButton />
           <NavLink to="/" className="top-brand">
             <div className="brand-mark">{symbol.slice(0, 3)}</div>
             <span className="small">{settings.courseName}</span>
@@ -382,7 +383,6 @@ export function Layout({ children }: { children: ReactNode }) {
           <ShortcutsHelp />
           <CommandPalette pages={sections.flatMap((s) => s.items)} />
         </main>
-        <BackButton />
       </div>
 
       <nav className={`bottom-nav${barAway ? ' away' : ''}`} aria-label="ניווט" style={{ ['--idx' as string]: barIdx }}>

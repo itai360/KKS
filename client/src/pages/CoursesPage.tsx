@@ -84,7 +84,7 @@ export function CoursesPage() {
               <div className="row wrap gap-6">
                 {viewing ? (
                   <button className="btn btn-primary" onClick={() => void open(null)}>
-                    <Icon name="arrowRight" /> חזרה לקורס הנוכחי
+                    <Icon name="home" /> חזרה לקורס הנוכחי
                   </button>
                 ) : (
                   <button className="btn" onClick={() => setEnding(true)}>
@@ -131,7 +131,7 @@ function ArchiveCard({ a, open, onOpen, onBack }: { a: CourseArchive; open: bool
         <div className="row wrap gap-6">
           {open ? (
             <button className="btn" onClick={onBack}>
-              <Icon name="arrowRight" /> חזרה לקורס הנוכחי
+              <Icon name="home" /> חזרה לקורס הנוכחי
             </button>
           ) : (
             <button className="btn btn-primary" onClick={onOpen}>

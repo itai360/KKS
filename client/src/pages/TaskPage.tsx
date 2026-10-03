@@ -34,9 +34,6 @@ export function TaskPage() {
     return (
       <div className="page narrow">
         <PageError error={error} status={status} what="המשימה" feminine back="/tasks" backLabel="לכל המשימות" />
-        <button className="btn mt-16" onClick={() => navigate(-1)}>
-          חזרה
-        </button>
       </div>
     );
   if (!data) return null;
@@ -45,16 +42,12 @@ export function TaskPage() {
 
 function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChange: (d: TaskDetail) => void; onDeleted: () => void }) {
   const { task: t } = detail;
-  const navigate = useNavigate();
   const pendingRequests = detail.requests.filter((r) => r.status === 'pending');
   usePageTitle(t.title);
 
   return (
     <div className="page">
       <div className="row mb-12">
-        <button className="btn btn-ghost btn-sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/tasks'))}>
-          <Icon name="chevronRight" /> חזרה
-        </button>
         {detail.parent && (
           <Link to={`/tasks/${detail.parent.id}`} className="small muted">
             משימת משנה של: <b>{detail.parent.title}</b>

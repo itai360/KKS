@@ -2730,8 +2730,7 @@ input::-webkit-date-and-time-value {
     display: inline-grid;
   }
   .page {
-    /* the end of a screen scrolls clear of the floating bar and the back button above it */
-    padding: 16px 14px calc(150px + env(safe-area-inset-bottom));
+    padding: 16px 14px calc(110px + env(safe-area-inset-bottom));
   }
   .page-title {
     font-size: 38px;
@@ -4938,75 +4937,54 @@ button.fab-missing {
   padding: 2px 0 4px;
 }
 
-/* ---------- back, floating on every screen (components/BackButton.tsx) ---------- */
+/* ---------- back, at the start of the top bar (components/BackButton.tsx) ---------- */
 
-.back-fab,
+.back-top,
 .modal-back {
-  position: fixed;
-  bottom: 22px;
-  /* beside the side menu, on the reading side */
-  inset-inline-start: calc(var(--rail-w) + 34px);
-  z-index: 45;
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  flex: none;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 1px solid var(--line-2);
   background: var(--card);
   color: var(--ink);
-  box-shadow: 0 10px 26px -10px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.45);
   cursor: pointer;
-  transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.12s, background 0.12s;
+  transition: transform 0.12s, background 0.12s;
 }
 
-.back-fab:hover,
+.back-top:hover,
 .modal-back:hover {
   background: var(--gray-bg);
 }
 
-.back-fab:active,
+.back-top:active,
 .modal-back:active {
   transform: scale(0.94);
 }
 
-/* a bar of bulk actions takes the bottom of the screen */
-body:has(.bulk-bar) .back-fab {
-  display: none;
-}
-
-@media (max-width: 860px) {
-  /* above the floating navigation bar - and down to the edge while it steps aside */
-  .back-fab {
-    inset-inline-start: 14px;
-    bottom: calc(88px + env(safe-area-inset-bottom));
-  }
-  body:has(.bottom-nav.away) .back-fab {
-    bottom: calc(14px + env(safe-area-inset-bottom));
-  }
-  /* above a screen's own floating button row (summing up a debrief) */
-  body:has(.page-fab) .back-fab {
-    bottom: calc(150px + env(safe-area-inset-bottom));
-  }
-  body:has(.page-fab):has(.bottom-nav.away) .back-fab {
-    bottom: calc(76px + env(safe-area-inset-bottom));
-  }
-}
-
-/* the same arrow on a dialog, in the same place: it closes the dialog */
+/* a dialog covers the top bar: its own arrow sits right where the bar's is - one arrow - and closes it */
 .modal-back {
+  position: fixed;
   z-index: 2;
+  top: calc((var(--top-h) - 40px) / 2);
+  inset-inline-start: calc(var(--rail-w) + 40px);
+}
+
+body:has(.app.rail-collapsed) .modal-back {
+  inset-inline-start: calc(68px + 40px);
 }
 
 @media (max-width: 860px) {
-  /* the dialog rises from the bottom of the screen: its arrow floats just above it */
-  .modal-back {
-    top: calc(12px + env(safe-area-inset-top));
-    bottom: auto;
-    inset-inline-start: 14px;
+  .modal-back,
+  body:has(.app.rail-collapsed) .modal-back {
+    inset-inline-start: 12px;
   }
+  /* the dialog rises from the bottom of the screen: the arrow stays clear above it */
   .modal-backdrop:has(.modal-back) .modal {
-    max-height: calc(100dvh - 70px - env(safe-area-inset-top));
+    max-height: calc(100dvh - var(--top-h) - 6px);
   }
 }
 

@@ -1,6 +1,7 @@
-// A floating "back" on every screen but the home screen: step by step to the screens before,
-// until home - where it is gone until another screen is opened. A screen opened from a link,
-// with no screen before it in the app, goes up instead (a task -> the tasks -> home).
+// "Back" at the start of the top bar (which stays at the top of the screen) on every screen
+// but the home screen: step by step to the screens before, until home - where it is gone until
+// another screen is opened. A screen opened from a link, with no screen before it in the app,
+// goes up instead (a task -> the tasks -> home). The only back arrow on a screen.
 
 import { useLocation, useNavigate } from 'react-router';
 import { Icon } from './Icon';
@@ -25,8 +26,8 @@ export function BackButton() {
   // going up takes this screen's place, so the next "back" goes on up rather than down to it again
   const back = () => (idx > 0 ? navigate(-1) : navigate(parentPath(location.pathname), { replace: true }));
   return (
-    <button type="button" className="back-fab no-print" aria-label="חזרה למסך הקודם" title="חזרה" onClick={back}>
-      <Icon name="arrowRight" size={20} />
+    <button type="button" className="back-top no-print" aria-label="חזרה למסך הקודם" title="חזרה" onClick={back}>
+      <Icon name="arrowRight" size={19} />
     </button>
   );
 }
