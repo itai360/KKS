@@ -2,7 +2,7 @@
 // recurring tasks, permissions) and personal settings.
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
 import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Template, User } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
@@ -17,10 +17,12 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { fmtAgo, fmtDateTime } from '../lib/format';
 import { useApi } from '../lib/useApi';
+import { useHashScroll } from '../lib/hashScroll';
 import { setThemePref, themePref, type ThemePref } from '../lib/theme';
 import { GenerateWeeks } from './WeeksPage';
 import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupported } from '../lib/push';
 import { ask } from '../components/Confirm';
+import { TwoFactorSettings } from '../components/TwoFactor';
 
 export function SettingsPage() {
   const { isCommander, user } = useSession();
@@ -44,6 +46,7 @@ export function SettingsPage() {
         <AppearanceCard />
         <BrowserNotificationsCard />
         <PasswordCard />
+        <TwoFactorSettings />
       </div>
     </div>
   );
@@ -252,7 +255,7 @@ function StaffRow({ u, onOpen, children }: { u: User; onOpen: () => void; childr
 
 function UserEditor({ user, onClose }: { user: User | null; onClose: () => void }) {
   const toast = useToast();
-  const { staff } = useSession();
+  const { staff, user: self } = useSession();
   const [displayName, setDisplayName] = useState(user?.displayName ?? `מפק"צ ${staff.length + 1}`);
   const [title, setTitle] = useState(user?.title ?? '');
   const [username, setUsername] = useState(user?.username ?? '');
@@ -316,6 +319,29 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
             משתמש פעיל (משתמש לא פעיל לא יכול להיכנס ולא מופיע בבחירת אחראי)
           </label>
+        )}
+        {user?.twoFactor && user.id !== self.id && (
+          <div className="span-2 row wrap gap-6 two-step-reset">
+            <Icon name="shield" size={16} />
+            <span className="small grow">אימות דו-שלבי פעיל. אם הטלפון אבד ואין קודי גיבוי - אפשר לבטל, והמשתמש יפעיל מחדש.</span>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={async () => {
+                if (!(await ask({ title: `לבטל את האימות הדו-שלבי של ${user.displayName}?`, body: 'עד שיפעיל אותו מחדש, הכניסה תהיה בסיסמה בלבד.', confirm: 'ביטול האימות', danger: true }))) return;
+                try {
+                  await api.patch(`/api/users/${user.id}`, { resetTwoFactor: true });
+                  toast({ title: 'האימות הדו-שלבי בוטל', tone: 'green' });
+                  emitLocalChange('users');
+                  onClose();
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            >
+              ביטול האימות
+            </button>
+          </div>
         )}
       </div>
       <div className="mt-12">
@@ -618,10 +644,7 @@ function ContactCard() {
   const [phone, setPhone] = useState(user.phone);
   const [email, setEmail] = useState(user.email);
   const [error, setError] = useState<string | null>(null);
-  const location = useLocation();
-  useEffect(() => {
-    if (location.hash === '#contact') document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [location.hash]);
+  useHashScroll('contact');
   const dirty = phone !== user.phone || email !== user.email;
   const save = async () => {
     setError(null);

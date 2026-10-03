@@ -33,6 +33,15 @@ export interface User {
   active: boolean;
   phone: string;
   email: string;
+  /** two-step sign-in is on (only for oneself, and in the commander's list of users) */
+  twoFactor?: boolean;
+}
+
+/** signing in: a session, or - with two-step sign-in - a ticket for the code step */
+export interface LoginResult {
+  user?: User;
+  twoFactor?: boolean;
+  ticket?: string;
 }
 
 export interface CourseSettings {

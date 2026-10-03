@@ -65,6 +65,7 @@ export function DashboardPage() {
       ) : data ? (
         <div className="fade-in col gap-16">
           <SetupNudge />
+          <TwoStepNudge />
           <PendingAnnouncements />
           <div className="stats">
             <Stat n={data.stats.today} label="לביצוע היום" hint="משימות שצריכות להסתיים היום" onClick={() => navigate('/tasks?scope=today')} />
@@ -386,6 +387,45 @@ function QuickActions() {
 }
 
 /** A new course: the few steps that make the system useful, until they are done. */
+const NUDGE_KEY = 'kks.twoStepNudge';
+
+/** the commander's account opens everything: until two-step sign-in is on, a reminder (can wait a week) */
+function TwoStepNudge() {
+  const { user, viewing, isCommander } = useSession();
+  const navigate = useNavigate();
+  const [later, setLater] = useState(() => {
+    try {
+      return Number(localStorage.getItem(NUDGE_KEY) ?? 0) > Date.now();
+    } catch {
+      return false;
+    }
+  });
+  if (!isCommander || user.twoFactor || viewing || later) return null;
+  const wait = () => {
+    try {
+      localStorage.setItem(NUDGE_KEY, String(Date.now() + 7 * 86_400_000));
+    } catch {
+      /* this visit only */
+    }
+    setLater(true);
+  };
+  return (
+    <div className="card card-pad row wrap setup-nudge">
+      <Icon name="shield" />
+      <div className="grow">
+        <div className="strong">אימות דו-שלבי לחשבון מפקד הקורס</div>
+        <div className="small muted">החשבון שלך פותח את כל נתוני הקורס. עם קוד מאפליקציה בטלפון, גם מי שיודע את הסיסמה לא ייכנס. לוקח דקה.</div>
+      </div>
+      <button className="btn btn-primary" onClick={() => navigate('/settings#security')}>
+        הפעלה
+      </button>
+      <button className="btn btn-ghost" onClick={wait}>
+        בשבוע הבא
+      </button>
+    </div>
+  );
+}
+
 function SetupNudge() {
   const { settings, weeks, staff } = useSession();
   const navigate = useNavigate();

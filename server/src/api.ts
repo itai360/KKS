@@ -23,6 +23,7 @@ import {
   toUser,
   verifyPassword,
   NAME_LIMIT,
+  CODE_LIMIT,
   type UserRow,
 } from './auth';
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
@@ -35,6 +36,7 @@ import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, tea
 import { streamHandler } from './realtime';
 import { v3Router } from './api3';
 import { newPassword } from './netguard';
+import { completeSignIn, disable, enable, issueTicket, recoveryLeft, regenerateRecovery, startSetup, turnOff } from './twofactor';
 import { shareTarget } from './alignment';
 import { setCourseCookie, viewingName } from './courses';
 import {
@@ -184,6 +186,8 @@ export function apiRouter(): Router {
     loginSucceeded(nameKey);
     // a password from before today's rules that does not meet them: a new one is asked for right away
     if (!newPassword.safeParse(password).success && !u.must_change_password) db().run('UPDATE users SET must_change_password = 1 WHERE id = ?', u.id);
+    // two-step sign-in: the password only earns the code step
+    if (u.totp_secret) return res.json({ twoFactor: true, ticket: issueTicket(u.id) });
     setSessionCookie(res, createSession(u.id));
     setCourseCookie(res, null);
     res.json({ user: toUser(u) });
@@ -206,9 +210,26 @@ export function apiRouter(): Router {
       throw new HttpError(403, `החשבון ${identity.email} לא מוגדר במערכת. פנה למפקד הקורס.`);
     }
     loginSucceeded(key);
+    if (u.totp_secret) return res.json({ twoFactor: true, ticket: issueTicket(u.id) });
     setSessionCookie(res, createSession(u.id));
     setCourseCookie(res, null);
     res.json({ user: toUser(u) });
+  });
+
+  // the code from the authenticator app (or a backup code) after the password
+  r.post('/auth/2fa/verify', (req, res) => {
+    const key = `${req.ip}|2fa`;
+    loginThrottle(key, CODE_LIMIT);
+    try {
+      const { user, token } = completeSignIn(req.body);
+      loginSucceeded(key);
+      setSessionCookie(res, token);
+      setCourseCookie(res, null);
+      res.json({ user: toUser(user) });
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 401) loginFailed(key, CODE_LIMIT);
+      throw e;
+    }
   });
 
   r.post('/auth/logout', (req, res) => {
@@ -227,8 +248,31 @@ export function apiRouter(): Router {
 
   r.get('/auth/me', (req, res) => {
     const unread = db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', me(req).id)!.n;
-    res.json({ user: toUser(me(req)), settings: getSettings(), unread, serverTime: nowIso(), mustChangePassword: !!me(req).must_change_password, course: viewingName(req) });
+    res.json({
+      user: { ...toUser(me(req)), twoFactor: !!me(req).totp_secret },
+      settings: getSettings(),
+      unread,
+      serverTime: nowIso(),
+      mustChangePassword: !!me(req).must_change_password,
+      course: viewingName(req),
+      recoveryLeft: me(req).totp_secret ? recoveryLeft(me(req).id) : null,
+    });
   });
+
+  // ---------------- two-step sign-in (twofactor.ts) ----------------
+
+  r.post('/auth/2fa/setup', (req, res) => res.json(startSetup(me(req), req.body)));
+  r.post('/auth/2fa/enable', (req, res) => {
+    const out = enable(me(req), req.body, sessionToken(req));
+    changed('users');
+    res.json(out);
+  });
+  r.post('/auth/2fa/disable', (req, res) => {
+    disable(me(req), req.body);
+    changed('users');
+    res.json({ ok: true });
+  });
+  r.post('/auth/2fa/recovery', (req, res) => res.json(regenerateRecovery(me(req), req.body)));
 
   r.post('/auth/password', (req, res) => {
     const { current, next } = z
@@ -276,7 +320,8 @@ export function apiRouter(): Router {
   r.get('/users', (req, res) => {
     const all = req.query.all === '1' && isCommander(me(req));
     const rows = db().all<UserRow>(`SELECT * FROM users ${all ? '' : 'WHERE active = 1'} ORDER BY role, display_name`);
-    res.json(rows.map(toUser));
+    // who has two-step sign-in: the commander's business only
+    res.json(rows.map((r) => (isCommander(me(req)) ? { ...toUser(r), twoFactor: !!r.totp_secret } : toUser(r))));
   });
 
   const userSchema = z.object({
@@ -320,7 +365,8 @@ export function apiRouter(): Router {
     const uid = id(req.params.id);
     const cur = getUserRow(uid);
     if (!cur) throw notFound('המשתמש לא נמצא');
-    const p = patchSchema(userSchema).extend({ active: z.boolean().optional() }).parse(req.body);
+    const p = patchSchema(userSchema).extend({ active: z.boolean().optional(), resetTwoFactor: z.literal(true).optional() }).parse(req.body);
+    if (p.resetTwoFactor && uid === me(req).id) throw badRequest('את האימות הדו-שלבי שלך מבטלים בהגדרות, עם קוד מהאפליקציה');
     const willBeCommander = (p.role ?? cur.role) === 'commander' && (p.active ?? !!cur.active);
     if (cur.role === 'commander' && cur.active && !willBeCommander) {
       const others = db().get<{ n: number }>("SELECT count(*) AS n FROM users WHERE role = 'commander' AND active = 1 AND id <> ?", uid)!.n;
@@ -349,6 +395,8 @@ export function apiRouter(): Router {
       db().run('DELETE FROM sessions WHERE user_id = ? ', uid);
     }
     if (p.active === false) db().run('DELETE FROM sessions WHERE user_id = ?', uid);
+    // a lost phone: two-step sign-in off, to be set up again (not for oneself - that needs the code)
+    if (p.resetTwoFactor) turnOff(uid);
     changed('users', 'tasks');
     res.json(toUser(getUserRow(uid)!));
   });

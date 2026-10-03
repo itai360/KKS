@@ -32,6 +32,7 @@ const CARRIED = new Set([
   'meta',
   'users',
   'sessions',
+  'recovery_codes',
   'push_subscriptions',
   'snapshots',
   'login_lockouts',

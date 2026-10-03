@@ -4,10 +4,11 @@
 // request that was refused is then sent again.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { User } from '@shared/types';
+import type { LoginResult, User } from '@shared/types';
 import { api, versionHeaders } from '../lib/api';
 import { IS_DEMO } from '../lib/demo';
 import { GoogleButton } from '../pages/LoginPage';
+import { CodeStep, ticketOf } from './TwoFactor';
 import { ErrorBox, Field, Modal } from './ui';
 
 export function ReauthDialog({ user, onDone }: { user: User; onDone: (ok: boolean) => void }) {
@@ -15,6 +16,8 @@ export function ReauthDialog({ user, onDone }: { user: User; onDone: (ok: boolea
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [googleId, setGoogleId] = useState<string | null>(null);
+  // two-step sign-in: after the password, the code
+  const [ticket, setTicket] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -31,14 +34,23 @@ export function ReauthDialog({ user, onDone }: { user: User; onDone: (ok: boolea
   // Google's button is set up once; it reaches the latest handler through a ref
   const signedInRef = useRef(signedIn);
   signedInRef.current = signedIn;
-  const onGoogle = useCallback(() => void whoAmI().then((who) => signedInRef.current(who)), []);
+  const onGoogle = useCallback((r: LoginResult) => {
+    const t = ticketOf(r);
+    if (t) setTicket(t);
+    else void whoAmI().then((who) => signedInRef.current(who));
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      signedIn(await api.post<{ user: User }>('/api/auth/login', { username: user.username, password }));
+      const r = await api.post<LoginResult>('/api/auth/login', { username: user.username, password });
+      const t = ticketOf(r);
+      if (t) {
+        setTicket(t);
+        setBusy(false);
+      } else signedIn(r.user ? { user: r.user } : null);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -52,16 +64,33 @@ export function ReauthDialog({ user, onDone }: { user: User; onDone: (ok: boolea
       closable={false}
       onClose={() => undefined}
       footer={
-        <>
+        ticket ? (
           <button type="button" className="btn btn-ghost" onClick={() => onDone(false)}>
             יציאה
           </button>
-          <button type="submit" form="reauth-form" className="btn btn-primary" disabled={busy || !password}>
-            {busy ? 'מתחבר...' : 'התחברות'}
-          </button>
-        </>
+        ) : (
+          <>
+            <button type="button" className="btn btn-ghost" onClick={() => onDone(false)}>
+              יציאה
+            </button>
+            <button type="submit" form="reauth-form" className="btn btn-primary" disabled={busy || !password}>
+              {busy ? 'מתחבר...' : 'התחברות'}
+            </button>
+          </>
+        )
       }
     >
+      {ticket ? (
+        <CodeStep
+          ticket={ticket}
+          onSignedIn={(r) => signedIn(r)}
+          onRestart={() => {
+            setTicket(null);
+            setPassword('');
+            setError('צריך להזין שוב את הסיסמה');
+          }}
+        />
+      ) : (
       <form id="reauth-form" className="col gap-12" onSubmit={(e) => void submit(e)}>
         <p className="small" style={{ margin: 0 }}>
           החיבור של <b>{user.displayName}</b> הסתיים. מה שהקלדתם נשמר במסך - אחרי ההתחברות הפעולה תישלח שוב ואפשר להמשיך מאותה נקודה.
@@ -74,6 +103,7 @@ export function ReauthDialog({ user, onDone }: { user: User; onDone: (ok: boolea
         </Field>
         {googleId && !IS_DEMO && <GoogleButton clientId={googleId} onLogin={onGoogle} onError={setError} />}
       </form>
+      )}
     </Modal>
   );
 }

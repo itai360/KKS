@@ -8,11 +8,25 @@ export class ApiError extends Error {
 }
 
 // The serverless deployment numbers every saved change. The app sends back the
-// newest number it has seen, so no server copy answers with older data.
-let seenVersion = 0;
+// newest number it has seen, so no server copy answers with older data - also
+// after a reload of the tab (kept for the tab's life).
+const VERSION_KEY = 'kks.v';
+let seenVersion = (() => {
+  try {
+    return Number(sessionStorage.getItem(VERSION_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+})();
 export function noteVersion(v: unknown): void {
   const n = Number(v);
-  if (Number.isFinite(n) && n > seenVersion) seenVersion = n;
+  if (!Number.isFinite(n) || n <= seenVersion) return;
+  seenVersion = n;
+  try {
+    sessionStorage.setItem(VERSION_KEY, String(n));
+  } catch {
+    /* this page only */
+  }
 }
 export function versionHeaders(): Record<string, string> {
   return seenVersion ? { 'x-kks-v': String(seenVersion) } : {};

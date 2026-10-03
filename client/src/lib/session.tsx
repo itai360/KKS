@@ -17,6 +17,8 @@ interface MeResponse {
   mustChangePassword?: boolean;
   /** a previous course open for reading (the commander) */
   course?: { id: number; name: string } | null;
+  /** backup codes left, with two-step sign-in on */
+  recoveryLeft?: number | null;
 }
 
 export interface Session {
@@ -28,6 +30,8 @@ export interface Session {
   isCommander: boolean;
   /** a previous course open for reading: every screen shows it, and nothing can be changed */
   viewing: { id: number; name: string } | null;
+  /** backup codes left for two-step sign-in (null: it is off) */
+  recoveryLeft: number | null;
   unread: number;
   setUnread: (n: number) => void;
   refresh: () => Promise<void>;
@@ -132,6 +136,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
       weeks: weeks.data ?? [],
       isCommander: me.user.role === 'commander',
       viewing: me.course ?? null,
+      recoveryLeft: me.recoveryLeft ?? null,
       unread,
       setUnread,
       refresh,

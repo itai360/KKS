@@ -6,6 +6,8 @@ import { api } from '../lib/api';
 import { IS_DEMO } from '../lib/demo';
 import { setTitleSuffix, usePageTitle } from '../lib/title';
 import { ErrorBox, Field } from '../components/ui';
+import { CodeStep, ticketOf } from '../components/TwoFactor';
+import type { LoginResult } from '@shared/types';
 import { Icon } from '../components/Icon';
 
 interface Info {
@@ -25,7 +27,7 @@ interface GoogleIdApi {
 }
 
 /** Section 3: optional "sign in with Google", rendered by Google's own button. */
-export function GoogleButton({ clientId, onLogin, onError }: { clientId: string; onLogin: () => void; onError: (m: string) => void }) {
+export function GoogleButton({ clientId, onLogin, onError }: { clientId: string; onLogin: (r: LoginResult) => void; onError: (m: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const render = () => {
@@ -35,7 +37,7 @@ export function GoogleButton({ clientId, onLogin, onError }: { clientId: string;
         client_id: clientId,
         callback: (r) =>
           void api
-            .post('/api/auth/google', { credential: r.credential })
+            .post<LoginResult>('/api/auth/google', { credential: r.credential })
             .then(onLogin)
             .catch((e: Error) => onError(e.message)),
       });
@@ -97,6 +99,15 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // two-step sign-in: the password was right, the code comes next
+  const [ticket, setTicket] = useState<string | null>(null);
+  const afterPassword = (r: LoginResult) => {
+    const t = ticketOf(r);
+    if (t) {
+      setTicket(t);
+      setPassword('');
+    } else onLogin();
+  };
 
   useEffect(() => {
     api
@@ -112,10 +123,10 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
     try {
       if (info?.needsSetup) {
         await api.post('/api/setup', { courseName, courseSymbol, username, password, displayName: displayName || 'מפקד הקורס' });
+        onLogin();
       } else {
-        await api.post('/api/auth/login', { username, password });
+        afterPassword(await api.post<LoginResult>('/api/auth/login', { username, password }));
       }
-      onLogin();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -155,6 +166,22 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </div>
       <div className="login-form">
+        {ticket ? (
+          <div className="login-card col gap-16">
+            <div>
+              <h1>קוד אימות</h1>
+              <p className="muted">שלב שני בכניסה: הקוד מהטלפון שלך.</p>
+            </div>
+            <CodeStep
+              ticket={ticket}
+              onSignedIn={() => onLogin()}
+              onRestart={() => {
+                setTicket(null);
+                setError('צריך להתחבר שוב עם הסיסמה');
+              }}
+            />
+          </div>
+        ) : (
         <form className="login-card col gap-16" onSubmit={submit}>
           <div>
             <h1>{setup ? 'הקמת הקורס' : 'כניסה'}</h1>
@@ -191,10 +218,11 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
               <div className="row small muted" style={{ justifyContent: 'center' }}>
                 או
               </div>
-              <GoogleButton clientId={info.googleClientId} onLogin={onLogin} onError={setError} />
+              <GoogleButton clientId={info.googleClientId} onLogin={afterPassword} onError={setError} />
             </>
           )}
         </form>
+        )}
       </div>
     </div>
   );

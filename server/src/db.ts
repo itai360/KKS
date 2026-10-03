@@ -774,8 +774,28 @@ const SCHEMA_V24 = `
 ALTER TABLE users ADD COLUMN alignment_seen_id INTEGER NOT NULL DEFAULT 0;
 `;
 
+// two-step sign-in (twofactor.ts): the app's secret, the backup codes, and the tickets between password and code
+const SCHEMA_V25 = `
+ALTER TABLE users ADD COLUMN totp_secret TEXT;
+ALTER TABLE users ADD COLUMN totp_pending TEXT;
+ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE recovery_codes (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  used_at TEXT
+);
+CREATE INDEX recovery_codes_user ON recovery_codes(user_id);
+CREATE TABLE login_challenges (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0
+);
+`;
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

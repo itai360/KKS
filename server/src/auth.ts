@@ -17,6 +17,7 @@ export interface UserRow {
   active: number;
   created_at: string;
   must_change_password: number;
+  totp_secret: string | null;
 }
 
 declare global {
@@ -164,6 +165,8 @@ interface Limit {
   message: string;
 }
 const ADDRESS_LIMIT: Limit = { max: 5, ms: 60_000, message: 'יותר מדי ניסיונות כניסה. נסה שוב בעוד דקה.' };
+/** codes from one address (each ticket also allows only 5) */
+export const CODE_LIMIT: Limit = { max: 20, ms: 60_000, message: 'יותר מדי ניסיונות. נסו שוב בעוד דקה.' };
 /** a name tried from many addresses (a spread-out guessing attack): 10 misses lock it for 10 minutes */
 export const NAME_LIMIT: Limit = { max: 10, ms: 10 * 60_000, message: 'יותר מדי ניסיונות כניסה לשם המשתמש הזה. נסו שוב בעוד 10 דקות.' };
 const failures = new Map<string, { count: number; until: number }>();

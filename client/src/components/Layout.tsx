@@ -180,9 +180,11 @@ export function Layout({ children }: { children: ReactNode }) {
     else void checkForUpdate();
   }, [location.pathname]);
   // a block body on purpose: newer browsers return a promise from scrollTo, and an effect that returns
-  // anything but a cleanup function makes React crash on the next screen change
+  // anything but a cleanup function makes React crash on the next screen change.
+  // An address with "#section" is left to the screen, which scrolls to that section.
   useEffect(() => {
-    window.scrollTo(0, 0);
+    if (!location.hash) window.scrollTo(0, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on a screen change
   }, [location.pathname]);
 
   // a screen still loading (or empty) a few seconds after moving to it is reported, with what the browser is waiting for
