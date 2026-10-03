@@ -719,7 +719,7 @@ function ItemToTask({ item, onClose, onDone }: { item: DebriefItem; onClose: () 
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="לדוגמה: סגירת מדריכים עד יום שלישי" data-autofocus />
         </Field>
         <Field label="אחראי" required>
-          <UserPicker value={owners} onChange={setOwners} allowAll={isCommander} all={all} onAll={setAll} />
+          <UserPicker value={owners} onChange={setOwners} allowAll={isCommander} all={all} onAll={setAll} date={date} />
         </Field>
         <Field label="דד-ליין" required>
           <DateTimeInputs date={date} time={time} onDate={setDate} onTime={setTime} />

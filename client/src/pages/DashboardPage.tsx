@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { ABSENCE_REASON_LABELS } from '@shared/constants';
 import type { AttentionItem, AttentionKind, DashboardData } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
 import { DisciplineCard } from '../components/DisciplineCard';
@@ -28,6 +29,7 @@ const KIND_LABEL: Record<AttentionKind, string> = {
   overload: 'עומס',
   debrief: 'תחקיר שבועי',
   lessons: 'לקחי המחזור הקודם',
+  away: 'היעדרות',
 };
 
 export function DashboardPage() {
@@ -116,7 +118,7 @@ const LANES: { key: string; title: string; tone: string; kinds: AttentionKind[] 
   { key: 'approve', title: 'ממתין לאישורך', tone: 'blue', kinds: ['approval', 'request'] },
   { key: 'soon', title: 'דד-ליין ב-24 השעות הקרובות', tone: 'orange', kinds: ['due_soon'] },
   { key: 'risk', title: 'שבועות בסיכון', tone: 'orange', kinds: ['readiness'] },
-  { key: 'quiet', title: 'חסמים, עומס ומשימות שלא עודכנו', tone: 'yellow', kinds: ['blocked', 'stale', 'overload'] },
+  { key: 'quiet', title: 'חסמים, עומס, היעדרויות ומשימות שלא עודכנו', tone: 'yellow', kinds: ['blocked', 'stale', 'overload', 'away'] },
   { key: 'learn', title: 'למידה ושיפור', tone: 'purple', kinds: ['debrief', 'lessons'] },
 ];
 const LANE_LIMIT = 4;
@@ -284,6 +286,11 @@ function StaffHealth({ data }: { data: DashboardData }) {
         <div key={s.userId} className="health" {...openable(() => navigate(`/team/${s.userId}`))}>
           <span className={`dot t-${s.overdue > 1 ? 'red' : s.overdue === 1 ? 'orange' : 'green'}`} />
           <span className="strong grow">{s.name}</span>
+          {s.away && (
+            <span className="badge t-purple">
+              {ABSENCE_REASON_LABELS[s.away.reason]} עד {shortDate(s.away.endDate)}
+            </span>
+          )}
           <span className={`small ${s.overdue ? 'text-red strong' : 'muted'}`}>{staffHealthLabel(s.overdue)}</span>
           <span className="tiny mono muted">{s.open} פתוחות</span>
         </div>

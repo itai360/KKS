@@ -127,7 +127,7 @@ export function CommandPage() {
               </div>
             </div>
             <Field label={ownerIds.length || allStaff ? 'אחראי' : 'למי?'} required>
-              <UserPicker value={ownerIds} onChange={(v) => setOwners(v)} allowAll={isCommander} all={allStaff} onAll={(v) => setAll(v)} />
+              <UserPicker value={ownerIds} onChange={(v) => setOwners(v)} allowAll={isCommander} all={allStaff} onAll={(v) => setAll(v)} date={dDate || undefined} />
             </Field>
             <Field label="דד-ליין" required>
               <DateTimeInputs date={dDate} time={dTime} onDate={setDate} onTime={setTime} />

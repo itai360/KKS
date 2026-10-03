@@ -63,6 +63,7 @@ import { getFile, sendStoredFile, uploadName } from './files';
 import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
 import { deleteGuide, disciplineLog, disciplineOverview, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
 import { bulkSchema, runBulk } from './bulk';
+import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
@@ -220,6 +221,17 @@ export function v3Router(): Router {
     deleteExperience(me(req), id(req.params.id));
     res.json({ ok: true });
   });
+
+  // ---------------- availability ----------------
+
+  r.get('/absences', (req, res) => res.json(listAbsences({ userId: num(req.query.user), from: isDateKey(req.query.from) ? req.query.from : undefined, to: isDateKey(req.query.to) ? req.query.to : undefined })));
+  r.post('/absences', (req, res) => res.json(addAbsence(me(req), req.body)));
+  r.delete('/absences/:id', (req, res) => {
+    deleteAbsence(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  // who to give a task to: everyone's load, and who is away on its day
+  r.get('/load', (req, res) => res.json(staffLoad(isDateKey(req.query.date) ? req.query.date : undefined)));
 
   // ---------------- debriefs ----------------
 

@@ -2,13 +2,15 @@
 // name, owner, deadline, send. Section 27: or just write a sentence.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { PRIORITIES, PRIORITY_LABELS, VISIBILITIES, VISIBILITY_LABELS, type Priority, type Visibility } from '@shared/constants';
-import { addDays, startOfWeek, weekdayOf } from '@shared/dates';
+import { ABSENCE_REASON_LABELS, PRIORITIES, PRIORITY_LABELS, VISIBILITIES, VISIBILITY_LABELS, type Priority, type Visibility } from '@shared/constants';
+import { addDays, shortDate, startOfWeek, weekdayOf } from '@shared/dates';
+import type { UserLoad } from '@shared/types';
 import { parseTaskText, type ParsedTask } from '@shared/parser';
 import { api } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, getTz, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
+import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { ErrorBox, Field, Modal, Seg } from './ui';
@@ -100,6 +102,7 @@ export function UserPicker({
   all,
   onAll,
   multiple = true,
+  date,
 }: {
   value: number[];
   onChange: (ids: number[]) => void;
@@ -107,33 +110,71 @@ export function UserPicker({
   all?: boolean;
   onAll?: (v: boolean) => void;
   multiple?: boolean;
+  /** the day the task is due: who is away then, and what else they have that day */
+  date?: string;
 }) {
-  const { users, user } = useSession();
+  const { users, user, settings } = useSession();
+  // how loaded each person is, and who is away - so a task goes to someone who can take it
+  const load = useApi<UserLoad[]>(`/api/load${date ? `?date=${date}` : ''}`, ['tasks', 'users']).data;
+  const loadOf = (id: number) => load?.find((l) => l.userId === id);
   const people = [...users].sort((a, b) => (a.id === user.id ? -1 : b.id === user.id ? 1 : a.role === b.role ? a.displayName.localeCompare(b.displayName, 'he') : a.role === 'staff' ? -1 : 1));
+  const heavy = (n: number) => (n >= settings.overloadThreshold ? 't-red' : n >= Math.ceil(settings.overloadThreshold * 0.6) ? 't-orange' : '');
+  const awayChosen = all ? [] : value.map((id) => ({ u: users.find((x) => x.id === id), l: loadOf(id) })).filter((x) => x.u && x.l?.away);
   return (
-    <div className="chips">
-      {allowAll && (
-        <button type="button" className={`chip${all ? ' on' : ''}`} onClick={() => onAll?.(!all)}>
-          <Icon name="users" size={15} /> כל הסגל
-        </button>
-      )}
-      {people.map((u) => {
-        const on = !all && value.includes(u.id);
-        return (
-          <button
-            key={u.id}
-            type="button"
-            className={`chip${on ? ' on' : ''}`}
-            onClick={() => {
-              onAll?.(false);
-              if (!multiple) onChange([u.id]);
-              else onChange(on ? value.filter((v) => v !== u.id) : [...value, u.id]);
-            }}
-          >
-            {u.id === user.id ? `אני (${u.displayName})` : u.displayName}
+    <div className="col gap-6">
+      <div className="chips">
+        {allowAll && (
+          <button type="button" className={`chip${all ? ' on' : ''}`} onClick={() => onAll?.(!all)}>
+            <Icon name="users" size={15} /> כל הסגל
           </button>
-        );
-      })}
+        )}
+        {people.map((u) => {
+          const on = !all && value.includes(u.id);
+          const l = loadOf(u.id);
+          const name = u.id === user.id ? `אני (${u.displayName})` : u.displayName;
+          const about = l
+            ? [
+                l.away && `${ABSENCE_REASON_LABELS[l.away.reason]} עד ${shortDate(l.away.endDate)}`,
+                `${l.week} משימות פתוחות בשבוע הקרוב`,
+                l.overdue ? `${l.overdue} באיחור` : '',
+                date && l.onDay ? `${l.onDay} באותו יום` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : '';
+          return (
+            <button
+              key={u.id}
+              type="button"
+              className={`chip${on ? ' on' : ''}${l?.away ? ' chip-away' : ''}`}
+              title={about || undefined}
+              aria-label={about ? `${name} - ${about}` : name}
+              aria-pressed={on}
+              onClick={() => {
+                onAll?.(false);
+                if (!multiple) onChange([u.id]);
+                else onChange(on ? value.filter((v) => v !== u.id) : [...value, u.id]);
+              }}
+            >
+              {name}
+              {l?.away ? (
+                <span className="chip-note">{ABSENCE_REASON_LABELS[l.away.reason]}</span>
+              ) : (
+                l && l.week > 0 && (
+                  <span className={`chip-load ${heavy(l.week)}`} aria-hidden="true">
+                    {l.week}
+                  </span>
+                )
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {awayChosen.map(({ u, l }) => (
+        <span key={u!.id} className="small text-orange away-warn" role="status">
+          <Icon name="alert" size={13} /> {u!.displayName} ב{ABSENCE_REASON_LABELS[l!.away!.reason]} {date ? `ב-${shortDate(date)}` : 'היום'} (עד {shortDate(l!.away!.endDate)}) - אולי מישהו אחר?
+        </span>
+      ))}
     </div>
   );
 }
@@ -292,7 +333,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
         </Field>
 
         <Field label="אחראי" required hint={!isCommander ? 'ניתן לפתוח משימות לאחרים רק בשבוע שבאחריותך' : undefined}>
-          <UserPicker value={ownerIds} onChange={setOwnerIds} allowAll={isCommander} all={allStaff} onAll={setAllStaff} />
+          <UserPicker value={ownerIds} onChange={setOwnerIds} allowAll={isCommander} all={allStaff} onAll={setAllStaff} date={date || undefined} />
         </Field>
         {hasMany && (
           <Seg

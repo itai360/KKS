@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { shortDate } from '@shared/dates';
 import type { StaffPageData, StaffStatus } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
+import { AbsencesCard } from '../components/Absences';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
@@ -74,7 +75,7 @@ type Tab = 'open' | 'overdue' | 'done' | 'self' | 'commander';
 
 export function StaffPage() {
   const { id } = useParams();
-  const { isCommander } = useSession();
+  const { isCommander, user } = useSession();
   const newTask = useNewTask();
   const { data, error, loading, status } = useApi<StaffPageData>(`/api/team/${id}`, ['tasks', 'weeks']);
   const [tab, setTab] = useState<Tab>('open');
@@ -152,6 +153,7 @@ export function StaffPage() {
           <TaskList tasks={lists[tab].tasks} showOwner={false} empty={<Empty title="אין משימות" />} />
         </div>
         <div className="col gap-16 sticky-side">
+          <AbsencesCard userId={Number(id)} mine={Number(id) === user.id} canEdit={isCommander || Number(id) === user.id} />
           <div className="card">
             <div className="card-head">
               <h3>הקרובות ביותר</h3>

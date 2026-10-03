@@ -7,6 +7,7 @@ import { ROLE_LABELS, type Role } from '@shared/constants';
 import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Template, User } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GuideImportCard } from '../components/Discipline';
+import { AbsencesCard } from '../components/Absences';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { ErrorBox, Field, Modal, openable, PageHead, Seg } from '../components/ui';
@@ -22,7 +23,7 @@ import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupp
 import { ask } from '../components/Confirm';
 
 export function SettingsPage() {
-  const { isCommander } = useSession();
+  const { isCommander, user } = useSession();
   return (
     <div className="page narrow">
       <PageHead title={isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'} />
@@ -38,6 +39,7 @@ export function SettingsPage() {
             <BackupCard />
           </>
         )}
+        <AbsencesCard userId={user.id} mine canEdit />
         <AppearanceCard />
         <BrowserNotificationsCard />
         <PasswordCard />

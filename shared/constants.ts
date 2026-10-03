@@ -189,3 +189,14 @@ export const DEBRIEF_ITEM_LABELS: Record<DebriefItemKind, string> = {
 };
 
 export const DOCUMENT_CATEGORIES = ['נהלים', 'פקודות', 'מצגות', 'חומרי הדרכה', 'קישורים', 'אחר'] as const;
+
+/** why someone on the staff is away (section: availability) */
+export const ABSENCE_REASONS = ['leave', 'sick', 'course', 'duty', 'other'] as const;
+export type AbsenceReason = (typeof ABSENCE_REASONS)[number];
+export const ABSENCE_REASON_LABELS: Record<AbsenceReason, string> = {
+  leave: 'חופשה',
+  sick: 'מחלה',
+  course: 'השתלמות',
+  duty: 'מילואים / תורנות',
+  other: 'היעדרות',
+};

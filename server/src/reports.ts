@@ -1,7 +1,7 @@
 // Read-side views: dashboard (4, 5, 32), my tasks (10, 48), team (11, 12),
 // briefing (50), weekly snapshot (24), look-ahead (25), end of day (52), search (19).
 
-import { isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_RANK } from '../../shared/constants';
+import { ABSENCE_REASON_LABELS, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_RANK } from '../../shared/constants';
 import { addDays, DAY, dayRange, daysSince, diffDays, localDateKey, shortDate, startOfWeek, zonedToUtc } from '../../shared/dates';
 import { readinessPct } from '../../shared/taskLogic';
 import type {
@@ -27,6 +27,7 @@ import { pendingRequestsFor } from './taskService';
 import { listWeeks, weekContaining } from './weeks';
 import { listCadets, listExemptions } from './cadets';
 import { listDebriefs, pendingPriorLessons, weeksWithoutDebrief } from './debriefs';
+import { absencesAtRisk, awayOn } from './absences';
 import { matchesSearch, searchKey } from '../../shared/search';
 import { listDocuments } from './documents';
 
@@ -193,7 +194,20 @@ export function dashboard(actor: UserRow): DashboardData {
     });
   }
 
-  const staff = staffRows().map((u) => staffStatus(u, all, c));
+  // someone away in the next two weeks with open tasks due while they are away
+  for (const a of absencesAtRisk()) {
+    const range = a.startDate === a.endDate ? shortDate(a.startDate) : `${shortDate(a.startDate)}-${shortDate(a.endDate)}`;
+    attention.push({
+      kind: 'away',
+      tone: 'orange',
+      title: `${a.userName} - ${ABSENCE_REASON_LABELS[a.reason]} ${range}`,
+      subtitle: `${a.tasksDue === 1 ? 'משימה פתוחה אחת נופלת' : `${a.tasksDue} משימות פתוחות נופלות`} על ימי ההיעדרות - להעביר או להקדים`,
+      userId: a.userId,
+    });
+  }
+
+  const away = awayOn(c.today);
+  const staff = staffRows().map((u) => ({ ...staffStatus(u, all, c), away: away.get(u.id) ?? null }));
   for (const st of staff) {
     const load = open.filter((t) => t.ownerId === st.userId && !t.recurringRuleId && ms(t.deadline) < in7).length;
     if (load > s.overloadThreshold) {

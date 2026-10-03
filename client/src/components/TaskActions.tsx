@@ -433,7 +433,7 @@ function TransferRequestDialog({ detail, m, onClose }: { detail: TaskDetail; m: 
     >
       <div className="col gap-16">
         <Field label="להעביר אל" required>
-          <UserPicker value={owner} onChange={setOwner} multiple={false} />
+          <UserPicker value={owner} onChange={setOwner} multiple={false} date={dateKeyOf(t.deadline)} />
         </Field>
         <Field label="סיבה" required>
           <textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -512,7 +512,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
         )}
         {p.canChangeOwner && (
           <Field label="אחראי ראשי" className="span-2" hint="השינוי יירשם: מי היה האחראי, מי החדש, מי שינה ומתי">
-            <UserPicker value={owner} onChange={setOwner} multiple={false} />
+            <UserPicker value={owner} onChange={setOwner} multiple={false} date={date} />
           </Field>
         )}
         {p.canEdit && (

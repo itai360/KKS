@@ -2,6 +2,7 @@
 
 import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
 import type {
+  AbsenceReason,
   CadetStatus,
   CarryAction,
   CommitteeDecision,
@@ -359,7 +360,8 @@ export type AttentionKind =
   | 'readiness'
   | 'overload'
   | 'debrief'
-  | 'lessons';
+  | 'lessons'
+  | 'away';
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -378,10 +380,36 @@ export interface AttentionItem {
   link?: string;
 }
 
+/** someone on the staff away for some days */
+export interface Absence {
+  id: number;
+  userId: number;
+  userName: string;
+  startDate: string;
+  endDate: string;
+  reason: AbsenceReason;
+  note: string;
+  createdByName: string | null;
+  /** their open tasks due while they are away */
+  tasksDue: number;
+}
+
+/** how loaded someone is, to choose who takes a task */
+export interface UserLoad {
+  userId: number;
+  /** open tasks due in the next 7 days (overdue included), routine recurring ones aside */
+  week: number;
+  overdue: number;
+  /** due on the day asked about */
+  onDay: number;
+  away: Pick<Absence, 'startDate' | 'endDate' | 'reason'> | null;
+}
+
 export interface StaffStatus {
   userId: number;
   name: string;
   title: string;
+  away?: Pick<Absence, 'startDate' | 'endDate' | 'reason'> | null;
   open: number;
   inProgress: number;
   waiting: number;
