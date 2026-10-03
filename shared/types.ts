@@ -1010,6 +1010,32 @@ export interface CourseArchive {
   archivedByName: string | null;
 }
 
+/** a task of the same week in the previous course, to repeat in this one */
+export interface PreviousCycleTask {
+  id: number;
+  title: string;
+  ownerName: string | null;
+  /** who gets it here: the same person if still on the staff, else the week's lead */
+  assigneeName: string | null;
+  /** "a copy for each": how many it went to */
+  people: number;
+  priority: Priority;
+  domain: string;
+  /** days from the week's first day (negative: before the week) */
+  dayOffset: number;
+  time: string;
+  status: TaskStatus;
+  /** a task by that name is already in this week */
+  exists: boolean;
+}
+
+export interface PreviousCycleWeek {
+  archiveId: number;
+  archiveName: string;
+  week: { name: string; number: number; startDate: string } | null;
+  tasks: PreviousCycleTask[];
+}
+
 export interface CoursesOverview {
   current: { name: string; startDate: string | null; endDate: string | null; stats: CourseStats };
   archives: CourseArchive[];

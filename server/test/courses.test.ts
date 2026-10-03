@@ -5,7 +5,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { CourseArchive, CoursesOverview, SnapshotInfo } from '../../shared/types';
+import type { CourseArchive, CoursesOverview, PreviousCycleWeek, SnapshotInfo } from '../../shared/types';
 import { config } from '../src/core';
 import { db } from '../src/db';
 import { setSnapshotProvider, toPrune } from '../src/snapshots';
@@ -160,6 +160,55 @@ describe('previous courses', () => {
     expect((await c.cmd.post('/api/courses/new', { archiveName: '', name: 'ב' })).body.error).toContain('חסר שם לקורס שמסתיים');
     expect((await startNew({ startDate: '2027-09-01', endDate: '2027-03-01' })).body.error).toContain('תאריך הסיום לפני');
     expect(count('course_archives')).toBe(0);
+  });
+});
+
+describe('the same week in the previous course', () => {
+  it('shows what was done in it and repeats it here, at the same point of the week', async () => {
+    const { weekId } = await fillCourse();
+    await newTask(c.cmd, { title: 'הכנת שטח האימונים', ownerIds: [c.ids.s1], weekId, deadline: '2026-09-29T09:00:00.000Z', priority: 'high' }); // Tuesday 12:00
+    // a copy for each - one item; a recurring task's and a cadet's are not repeated
+    await newTask(c.cmd, { title: 'קריאת נוהל בטיחות', ownerIds: [c.ids.s2, c.ids.s3], assignMode: 'copies', weekId, deadline: '2026-09-30T15:00:00.000Z' });
+    const rule = (await c.cmd.post('/api/recurring', { title: 'דוח בוקר', frequency: 'daily', time: '08:00', assignee: 'all' })).body[0].id;
+    const cadet = db().get<{ id: number }>('SELECT id FROM cadets LIMIT 1')!.id;
+    const t1 = await newTask(c.cmd, { title: 'משימה של חוק חוזר', ownerIds: [c.ids.s1], weekId, deadline: '2026-09-30T05:00:00.000Z' });
+    const t2 = await newTask(c.cmd, { title: 'שיחה עם הצוערת', ownerIds: [c.ids.s1], weekId, deadline: '2026-09-30T06:00:00.000Z' });
+    db().run('UPDATE tasks SET recurring_rule_id = ? WHERE id = ?', rule, t1);
+    db().run('UPDATE tasks SET cadet_id = ? WHERE id = ?', cadet, t2);
+    expect((await c.cmd.get(`/api/weeks/${weekId}/previous-cycle`)).body).toBeNull(); // no previous course yet
+    await startNew();
+    const next = (await c.cmd.post('/api/weeks', { name: 'שבוע שטח', startDate: '2027-03-07', endDate: '2027-03-11', leadId: c.ids.s2 })).body;
+    const nextId = next.week?.id ?? next.id;
+
+    const prev = (await c.s2.get(`/api/weeks/${nextId}/previous-cycle`)).body as PreviousCycleWeek;
+    expect(prev).toMatchObject({ archiveName: 'מחזור 52', week: { name: 'שבוע שטח', startDate: '2026-09-27' } });
+    const field = prev.tasks.find((t) => t.title === 'הכנת שטח האימונים')!;
+    expect(field).toMatchObject({ dayOffset: 2, time: '12:00', ownerName: 'מפק"צ 1', assigneeName: 'מפק"צ 1', priority: 'high', exists: false });
+    // someone who left the staff: the week's lead gets it
+    db().run('UPDATE users SET active = 0 WHERE id = ?', c.ids.s1);
+    expect(((await c.s2.get(`/api/weeks/${nextId}/previous-cycle`)).body as PreviousCycleWeek).tasks.find((t) => t.id === field.id)!.assigneeName).toBe('מפק"צ 2');
+
+    expect(prev.tasks.map((t) => t.title).sort()).toEqual(['הזמנת תחמושת', 'הכנת שטח האימונים', 'קריאת נוהל בטיחות'].sort());
+    expect(prev.tasks.find((t) => t.title === 'קריאת נוהל בטיחות')).toMatchObject({ people: 2, assigneeName: null });
+    const ids = prev.tasks.map((t) => t.id);
+    expect((await c.s3.post(`/api/weeks/${nextId}/previous-cycle/copy`, { archiveId: prev.archiveId, taskIds: ids })).status).toBe(403);
+    const copied = await c.s2.post(`/api/weeks/${nextId}/previous-cycle/copy`, { archiveId: prev.archiveId, taskIds: ids });
+    expect(copied.body).toEqual({ created: ids.length, skipped: 0 });
+    const made = db().get<{ deadline: string; owner_id: number; priority: string; week_id: number }>("SELECT deadline, owner_id, priority, week_id FROM tasks WHERE title = 'הכנת שטח האימונים'")!;
+    expect(made).toEqual({ deadline: '2027-03-09T10:00:00.000Z', owner_id: c.ids.s2, priority: 'high', week_id: nextId }); // Tuesday 12:00 (winter time)
+    // once is enough
+    expect(db().all<{ owner_id: number }>("SELECT owner_id FROM tasks WHERE title = 'קריאת נוהל בטיחות' ORDER BY owner_id").map((t) => t.owner_id)).toEqual([c.ids.s2, c.ids.s3]);
+    expect((await c.s2.post(`/api/weeks/${nextId}/previous-cycle/copy`, { archiveId: prev.archiveId, taskIds: ids })).body).toEqual({ created: 0, skipped: ids.length });
+    expect(((await c.s2.get(`/api/weeks/${nextId}/previous-cycle`)).body as PreviousCycleWeek).tasks.every((t) => t.exists)).toBe(true);
+  });
+
+  it('finds the week by its number when the name changed', async () => {
+    await fillCourse();
+    await startNew();
+    const next = (await c.cmd.post('/api/weeks', { name: 'שבוע 1 - שטח', startDate: '2027-03-07', endDate: '2027-03-11' })).body;
+    const nextId = next.week?.id ?? next.id;
+    const prev = (await c.cmd.get(`/api/weeks/${nextId}/previous-cycle`)).body as PreviousCycleWeek;
+    expect(prev.week?.name).toBe('שבוע שטח');
   });
 });
 

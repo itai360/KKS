@@ -5130,3 +5130,42 @@ body:has(.bulk-bar) .back-fab {
   display: grid;
   gap: 6px;
 }
+
+/* ---------- the same week in the previous course (pages/WeeksPage.tsx) ---------- */
+
+.prev-intro {
+  padding-bottom: 6px;
+}
+
+.prev-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 18px;
+  border-top: 1px solid var(--line);
+}
+
+label.prev-task {
+  cursor: pointer;
+}
+
+.prev-task input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  accent-color: var(--ink);
+}
+
+.prev-task > .grow {
+  display: grid;
+  min-width: 0;
+}
+
+.prev-task.done {
+  opacity: 0.6;
+}
+
+.prev-more {
+  margin: 4px 12px 0;
+}

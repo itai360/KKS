@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CARRY_ACTION_LABELS, LESSON_KIND_LABELS, LESSON_KINDS, WEEK_STATUS_LABELS, type CarryAction, type LessonKind } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
-import type { CarryDecision, CloseCheck, Task, Template, Week, WeekDetail } from '@shared/types';
+import type { CarryDecision, CloseCheck, PreviousCycleWeek, Task, Template, Week, WeekDetail } from '@shared/types';
 import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { CalendarWeeksModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
@@ -283,6 +283,83 @@ export function GenerateWeeks({ onClose }: { onClose: () => void }) {
 
 type Dialog = null | 'edit' | 'open' | 'close';
 
+/** what was done in this week in the previous course - and repeating it, at the same point of the week */
+function PreviousCycle({ week: w, canCopy }: { week: Week; canCopy: boolean }) {
+  const { viewing } = useSession();
+  const { data } = useApi<PreviousCycleWeek | null>(viewing ? null : `/api/weeks/${w.id}/previous-cycle`, ['tasks', 'weeks']);
+  const [picked, setPicked] = useState<Set<number> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [all, setAll] = useState(false);
+  const toast = useToast();
+  if (!data?.week || !data.tasks.length) return null;
+  const FOLD = 8;
+  const shown = all ? data.tasks : data.tasks.slice(0, FOLD);
+  const open = data.tasks.filter((t) => !t.exists);
+  const chosen = picked ?? new Set(open.map((t) => t.id));
+  const toggle = (id: number) => {
+    const next = new Set(chosen);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setPicked(next);
+  };
+  const when = (offset: number, time: string) => {
+    const day = addDays(w.startDate, offset);
+    return `${weekdayName(day)} ${shortDate(day)} ${time}`;
+  };
+  const copy = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post<{ created: number; skipped: number }>(`/api/weeks/${w.id}/previous-cycle/copy`, { archiveId: data.archiveId, taskIds: [...chosen] });
+      toast({ title: r.created === 1 ? 'נפתחה משימה אחת בשבוע הזה' : `נפתחו ${r.created} משימות בשבוע הזה`, tone: 'green' });
+      setPicked(null);
+      emitLocalChange('tasks');
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const Row = canCopy ? 'label' : 'div';
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="history" />
+        <h3 className="grow">במחזור הקודם</h3>
+        <span className="mono tiny muted">{data.tasks.length}</span>
+      </div>
+      <p className="card-body small muted prev-intro">
+        המשימות של {data.week.name} ב{data.archiveName}, באותו מועד בשבוע הזה.
+      </p>
+      {shown.map((t) => (
+        <Row key={t.id} className={`prev-task${t.exists ? ' done' : ''}`}>
+          {canCopy && <input type="checkbox" disabled={t.exists} checked={!t.exists && chosen.has(t.id)} onChange={() => toggle(t.id)} />}
+          <span className="grow">
+            <span className="small strong">{t.title}</span>
+            <span className="tiny muted prev-meta">
+              {when(t.dayOffset, t.time)}
+              {t.people > 1 ? ` · עותק לכל אחד (${t.people})` : t.assigneeName && ` · ${t.assigneeName}`}
+              {t.ownerName && t.assigneeName && t.ownerName !== t.assigneeName && ` (במקום ${t.ownerName})`}
+              {t.exists && ' · כבר בשבוע הזה'}
+            </span>
+          </span>
+        </Row>
+      ))}
+      {data.tasks.length > FOLD && (
+        <button type="button" className="btn btn-ghost btn-sm prev-more" onClick={() => setAll(!all)} aria-expanded={all}>
+          {all ? 'פחות' : `הצגת כל ${data.tasks.length}`}
+        </button>
+      )}
+      {canCopy && open.length > 0 && (
+        <div className="card-body">
+          <button className="btn btn-sm" onClick={() => void copy()} disabled={busy || !chosen.size}>
+            <Icon name="plus" /> {busy ? 'פותח...' : `פתיחה בשבוע הזה (${chosen.size})`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WeekPage() {
   const { id } = useParams();
   const { data, error, loading, status } = useApi<WeekDetail>(`/api/weeks/${id}`, ['weeks', 'tasks', 'events']);
@@ -432,6 +509,7 @@ export function WeekPage() {
         <div className="col gap-16 sticky-side">
           <LeadWorkflow week={w} />
           <PriorLessons title="לקחים מהמחזור הקודם לשבוע הזה" context={{ weekId: w.id, canDecide: isCommander || w.leadId === user.id, owner: w.leadId, due: addDays(w.startDate, -2) }} />
+          <PreviousCycle week={w} canCopy={canManage} />
           {(w.topic || w.goals) && (
             <div className="card card-pad">
               <div className="label-caps">נושא ומטרות</div>

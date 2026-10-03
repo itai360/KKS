@@ -67,7 +67,7 @@ import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
 import { attendanceHistory, markAttendance, rollCall } from './attendance';
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
-import { coursesOverview, startNewCourse, viewCourse, viewingCourse } from './courses';
+import { copyPreviousCycleTasks, coursesOverview, previousCycleWeek, startNewCourse, viewCourse, viewingCourse } from './courses';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
@@ -413,6 +413,9 @@ export function v3Router(): Router {
   // ---------------- previous courses ----------------
 
   r.get('/courses', requireCommander, (req, res) => res.json(coursesOverview(viewingCourse(req))));
+  // the same week in the previous course: what was done, and repeating it here
+  r.get('/weeks/:id/previous-cycle', async (req, res) => res.json(await previousCycleWeek(id(req.params.id), me(req))));
+  r.post('/weeks/:id/previous-cycle/copy', async (req, res) => res.json(await copyPreviousCycleTasks(me(req), id(req.params.id), req.body)));
   r.post('/courses/new', requireCommander, async (req, res) => {
     const archive = await startNewCourse(me(req), req.body);
     viewCourse(res, null);

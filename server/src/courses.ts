@@ -13,14 +13,17 @@ import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
-import { isDateKey, localDateKey } from '../../shared/dates';
-import type { CourseArchive, CoursesOverview, CourseStats } from '../../shared/types';
+import { addDays, diffDays, isDateKey, localDateKey, localTime, zonedIso } from '../../shared/dates';
+import { searchKey } from '../../shared/search';
+import type { Priority, TaskStatus } from '../../shared/constants';
+import type { CourseArchive, CoursesOverview, CourseStats, PreviousCycleWeek } from '../../shared/types';
 import { parseCookies, type UserRow } from './auth';
 import { clock, config, forbidden, getSettings, HttpError, notFound, nowIso, resetSettingsCache, tz, updateSettings } from './core';
 import { db, Db, migrate, withDb } from './db';
 import { changed } from './journal';
 import type { Topic } from './realtime';
 import { fetchSnapshot, takeSnapshot } from './snapshots';
+import { createTasks } from './taskService';
 
 export const COURSE_COOKIE = 'kks_course';
 
@@ -277,4 +280,154 @@ export function viewingName(req: Request): { id: number; name: string } | null {
   if (id === null || req.user?.role !== 'commander') return null;
   const a = archiveRow(id);
   return a ? { id: a.id, name: a.name } : null;
+}
+
+// ---------------- the same week in the previous course ----------------
+
+interface PrevTaskRow {
+  id: number;
+  group_id: string | null;
+  title: string;
+  description: string;
+  owner_id: number | null;
+  owner_name: string | null;
+  priority: Priority;
+  domain: string;
+  domain_note: string;
+  deadline: string;
+  status: TaskStatus;
+}
+
+interface WeekRow {
+  id: number;
+  number: number;
+  name: string;
+  start_date: string;
+  lead_id: number | null;
+}
+
+function liveWeek(id: number): WeekRow {
+  const w = db().get<WeekRow>('SELECT id, number, name, start_date, lead_id FROM weeks WHERE id = ?', id);
+  if (!w) throw notFound('השבוע לא נמצא');
+  return w;
+}
+
+/** the week of the previous course that this one repeats: by name, else by number */
+function matchingWeek(d: Db, w: WeekRow): Omit<WeekRow, 'lead_id'> | undefined {
+  const weeks = d.all<Omit<WeekRow, 'lead_id'>>('SELECT id, number, name, start_date FROM weeks ORDER BY start_date');
+  const key = searchKey(w.name);
+  return weeks.find((x) => !!key && searchKey(x.name) === key) ?? weeks.find((x) => x.number === w.number);
+}
+
+/** a task of that week - "a copy for each" as one, with everyone it went to */
+interface PrevItem {
+  row: PrevTaskRow;
+  owners: number[];
+}
+
+/**
+ * The week's tasks worth repeating: not those of a recurring task (the rule carried over and
+ * makes them again) nor those about a particular cadet of that course.
+ */
+function previousItems(d: Db, weekId: number, ids?: number[]): PrevItem[] {
+  const rows = d.all<PrevTaskRow>(
+    `SELECT t.id, t.group_id, t.title, t.description, t.owner_id, u.display_name AS owner_name, t.priority, t.domain, t.domain_note, t.deadline, t.status
+     FROM tasks t LEFT JOIN users u ON u.id = t.owner_id
+     WHERE t.week_id = ? AND t.parent_id IS NULL AND t.status <> 'cancelled'
+       AND t.recurring_rule_id IS NULL AND t.cadet_id IS NULL AND t.experience_id IS NULL
+     ORDER BY t.deadline, t.id`,
+    weekId,
+  );
+  const items: PrevItem[] = [];
+  const groups = new Map<string, PrevItem>();
+  for (const r of rows) {
+    const group = r.group_id ? groups.get(r.group_id) : undefined;
+    if (group) {
+      if (r.owner_id) group.owners.push(r.owner_id);
+      continue;
+    }
+    const item = { row: r, owners: r.owner_id ? [r.owner_id] : [] };
+    if (r.group_id) groups.set(r.group_id, item);
+    items.push(item);
+  }
+  return ids ? items.filter((i) => ids.includes(i.row.id)) : items;
+}
+
+/** who gets a repeated task here: the same people if still on the staff, else the week's lead */
+function assigneesFor(owners: number[], w: WeekRow, fallback: number): number[] {
+  const active = (id: number | null) => !!id && !!db().get('SELECT 1 FROM users WHERE id = ? AND active = 1', id);
+  const instead = active(w.lead_id) ? w.lead_id! : fallback;
+  return [...new Set((owners.length ? owners : [0]).map((o) => (active(o) ? o : instead)))];
+}
+
+const timing = (r: PrevTaskRow, startDate: string) => ({ dayOffset: diffDays(localDateKey(r.deadline, tz()), startDate), time: localTime(r.deadline, tz()) });
+
+/** what was done in this week in the most recent previous course - null when there is none */
+export async function previousCycleWeek(weekId: number, actor: UserRow): Promise<PreviousCycleWeek | null> {
+  const w = liveWeek(weekId);
+  const a = db().get<ArchiveRow>(`${ARCHIVE_SELECT} ORDER BY a.archived_at DESC, a.id DESC LIMIT 1`);
+  if (!a) return null;
+  const prev = await archiveDb(a);
+  const match = matchingWeek(prev, w);
+  const out: PreviousCycleWeek = { archiveId: a.id, archiveName: a.name, week: match ? { name: match.name, number: match.number, startDate: match.start_date } : null, tasks: [] };
+  if (!match) return out;
+  const here = new Set(db().all<{ title: string }>('SELECT title FROM tasks WHERE week_id = ? AND parent_id IS NULL', w.id).map((t) => searchKey(t.title)));
+  const names = new Map(db().all<{ id: number; display_name: string }>('SELECT id, display_name FROM users').map((u) => [u.id, u.display_name]));
+  out.tasks = previousItems(prev, match.id).map(({ row: r, owners }) => {
+    const to = assigneesFor(owners, w, actor.id);
+    return {
+      id: r.id,
+      title: r.title,
+      ownerName: owners.length > 1 ? null : r.owner_name,
+      assigneeName: to.length > 1 ? null : (names.get(to[0]) ?? null),
+      people: owners.length,
+      priority: r.priority,
+      domain: r.domain,
+      ...timing(r, match.start_date),
+      status: r.status,
+      exists: here.has(searchKey(r.title)),
+    };
+  });
+  return out;
+}
+
+export const copyPreviousSchema = z.object({
+  archiveId: z.number().int().positive(),
+  taskIds: z.array(z.number().int().positive()).min(1, 'לא נבחרו משימות').max(300),
+});
+
+/** repeats tasks of the previous course's week in this one, at the same point of the week */
+export async function copyPreviousCycleTasks(actor: UserRow, weekId: number, raw: unknown): Promise<{ created: number; skipped: number }> {
+  const p = copyPreviousSchema.parse(raw);
+  const w = liveWeek(weekId);
+  if (actor.role !== 'commander' && w.lead_id !== actor.id) throw forbidden('מעתיקים משימות מהמחזור הקודם - מפקד הקורס או מפק"צ השבוע');
+  const a = archiveRow(p.archiveId);
+  if (!a) throw notFound('הקורס הקודם לא נמצא');
+  const prev = await archiveDb(a);
+  const match = matchingWeek(prev, w);
+  if (!match) throw notFound('השבוע הזה לא נמצא בקורס הקודם');
+  const items = previousItems(prev, match.id, p.taskIds);
+  const here = new Set(db().all<{ title: string }>('SELECT title FROM tasks WHERE week_id = ? AND parent_id IS NULL', w.id).map((t) => searchKey(t.title)));
+  let created = 0;
+  db().tx(() => {
+    for (const { row: r, owners } of items) {
+      if (here.has(searchKey(r.title))) continue;
+      const { dayOffset, time } = timing(r, match.start_date);
+      const to = assigneesFor(owners, w, actor.id);
+      createTasks(actor, {
+        title: r.title,
+        description: [r.description, `(חוזרת מ${a.name})`].filter(Boolean).join('\n\n').slice(0, 5000),
+        ownerIds: to,
+        assignMode: to.length > 1 ? 'copies' : 'shared',
+        deadline: zonedIso(addDays(w.start_date, dayOffset), time, tz()),
+        weekId: w.id,
+        priority: r.priority,
+        domain: r.domain,
+        domainNote: r.domain_note,
+      });
+      here.add(searchKey(r.title));
+      created++;
+    }
+  });
+  return { created, skipped: p.taskIds.length - created };
 }
