@@ -546,7 +546,7 @@ const SNAPSHOT_LABELS: Record<SnapshotLabel, string> = {
   before_restore: 'לפני שחזור',
   archive: 'קורס קודם',
 };
-const ALL_TOPICS = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment'];
+const ALL_TOPICS = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'meetings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment', 'plans'];
 
 /** Snapshots of the whole database: taken automatically, and restored from here (server/src/snapshots.ts). */
 function Backups() {

@@ -39,6 +39,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
           { to: '/my', label: 'המשימות שלי', icon: 'my' },
           { to: '/tasks', label: 'כל המשימות', icon: 'tasks' },
           { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
+          { to: '/plans', label: 'אישור תוכניות', icon: 'stamp' },
           { to: '/schedule', label: 'לו"ז', icon: 'calendar' },
           { to: '/team', label: 'צוות', icon: 'users' },
         ],

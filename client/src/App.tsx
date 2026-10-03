@@ -50,6 +50,8 @@ const AnnouncementsPage = lazyPage(() => import('./pages/AnnouncementsPage'), 'A
 const DirectoryPage = lazyPage(() => import('./pages/DirectoryPage'), 'DirectoryPage');
 const CoursesPage = lazyPage(() => import('./pages/CoursesPage'), 'CoursesPage');
 const AlignmentPage = lazyPage(() => import('./pages/AlignmentPage'), 'AlignmentPage');
+const PlansPage = lazyPage(() => import('./pages/PlansPage'), 'PlansPage');
+const PlanPage = lazyPage(() => import('./pages/PlansPage'), 'PlanPage');
 
 /** An address that isn't a screen - say so, rather than silently landing on the home page. */
 function NotFound() {
@@ -94,6 +96,8 @@ function AuthedRoutes() {
               <Route path="/weeks" element={<WeeksPage />} />
               <Route path="/weeks/:id" element={<WeekPage />} />
               <Route path="/weeks/:id/order" element={<WeekOrderPage />} />
+              <Route path="/plans" element={isCommander ? <PlansPage /> : <Navigate to="/" />} />
+              <Route path="/plans/:id" element={isCommander ? <PlanPage /> : <Navigate to="/" />} />
               <Route path="/schedule" element={<SchedulePage />} />
               <Route path="/team" element={isCommander ? <TeamPage /> : <Navigate to="/" />} />
               <Route path="/team/:id" element={<StaffPage />} />

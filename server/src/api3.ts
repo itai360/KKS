@@ -73,6 +73,7 @@ import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
+import { approvePlan, planDocument, plansOverview, savePlan } from './plans';
 
 const id = (v: unknown): number => {
   const n = Number(v);
@@ -434,6 +435,19 @@ export function v3Router(): Router {
     const { id } = z.object({ id: z.number().int().positive().nullable() }).parse(req.body);
     viewCourse(res, id);
     res.json({ ok: true });
+  });
+
+  // ---------------- plan approval: the commander's documents for the commander above ----------------
+
+  r.get('/plans', requireCommander, async (_req, res) => res.json(await plansOverview()));
+  r.get('/plans/:weekId', requireCommander, async (req, res) => res.json(await planDocument(id(req.params.weekId))));
+  r.patch('/plans/:weekId', requireCommander, async (req, res) => {
+    savePlan(me(req), id(req.params.weekId), req.body);
+    res.json(await planDocument(id(req.params.weekId)));
+  });
+  r.post('/plans/:weekId/approve', requireCommander, async (req, res) => {
+    await approvePlan(me(req), id(req.params.weekId), req.body);
+    res.json(await planDocument(id(req.params.weekId)));
   });
 
   // ---------------- backup ----------------

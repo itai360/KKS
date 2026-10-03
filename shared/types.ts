@@ -1099,3 +1099,95 @@ export interface DisciplineGuide {
   importedAt: string | null;
   importedByName: string | null;
 }
+
+// ---------------- plan approval (server/src/plans.ts) ----------------
+
+/** what kind of activity an event is, read from its title */
+export type PlanEventKind = 'exam' | 'ceremony' | 'field' | 'range' | 'navigation' | 'visit' | 'evaluation' | 'learning' | 'values' | 'physical' | 'staff' | 'leave' | 'other';
+
+/** an activity in a plan: one event, or the same one over consecutive days */
+export interface PlanEvent {
+  /** the same event at the same time keeps its key: what changed since an approval is found by it */
+  key: string;
+  title: string;
+  date: string;
+  /** the last day; the same as date for one day */
+  endDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  location: string;
+  ownerName: string | null;
+  kind: PlanEventKind;
+  /** how central to the week, 1-6 */
+  weight: number;
+  night: boolean;
+  /** the preparation tasks of a course event; null for an event from a connected calendar */
+  prep: { done: number; total: number } | null;
+  source: 'course' | 'calendar';
+}
+
+export interface PlanHorizonWeek {
+  weekId: number | null;
+  number: number | null;
+  name: string;
+  topic: string;
+  startDate: string;
+  endDate: string;
+  /** the key activities, by date */
+  events: PlanEvent[];
+  /** activities of lesser weight, counted */
+  more: number;
+}
+
+export type PlanSectionKey = 'goals' | 'achievements' | 'emphases' | 'requests';
+
+export interface PlanSection {
+  /** what the document shows: the commander's wording, or the automatic draft */
+  items: string[];
+  /** the automatic draft, from the course's data */
+  auto: string[];
+  edited: boolean;
+}
+
+export type PlanStatus = 'draft' | 'ready' | 'approved';
+
+export interface PlanRisk {
+  level: 'high' | 'medium';
+  text: string;
+  answer: string;
+}
+
+export interface PlanDocument {
+  week: Week;
+  position: { index: number; total: number; daysLeft: number | null; phase: 'opening' | 'middle' | 'closing' };
+  /** the bottom line, for someone with two minutes */
+  bluf: { text: string; auto: string; edited: boolean };
+  /** this week and the three after it */
+  horizon: PlanHorizonWeek[];
+  sections: Record<PlanSectionKey, PlanSection>;
+  risks: PlanRisk[];
+  /** the moment that shows the course best, for the superior to come and see */
+  visit: PlanEvent | null;
+  cadets: { active: number; dropped: number; watch: number; risk: number; committees: number; twoNotes: number };
+  absences: Absence[];
+  lessons: BankLesson[];
+  status: PlanStatus;
+  approval: { by: string; on: string; notes: string } | null;
+  /** what changed in the week's key activities since it was approved */
+  changes: string[];
+  updatedAt: string | null;
+  updatedByName: string | null;
+}
+
+export interface PlanListItem {
+  week: Week;
+  status: PlanStatus;
+  approval: { by: string; on: string } | null;
+  changed: boolean;
+  edited: boolean;
+}
+
+export interface PlansOverview {
+  weeks: PlanListItem[];
+  currentWeekId: number | null;
+}
