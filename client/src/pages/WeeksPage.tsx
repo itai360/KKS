@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { CARRY_ACTION_LABELS, LESSON_KIND_LABELS, LESSON_KINDS, WEEK_STATUS_LABELS, type CarryAction, type LessonKind } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { CarryDecision, CloseCheck, Task, Template, Week, WeekDetail } from '@shared/types';
+import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { CalendarWeeksModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
@@ -427,6 +428,7 @@ export function WeekPage() {
         </div>
         <div className="col gap-16 sticky-side">
           <LeadWorkflow week={w} />
+          <PriorLessons query={`week=${w.id}`} title="לקחים מהמחזור הקודם לשבוע הזה" />
           {(w.topic || w.goals) && (
             <div className="card card-pad">
               <div className="label-caps">נושא ומטרות</div>
@@ -467,11 +469,22 @@ export function WeekPage() {
                 <Icon name="plus" /> תחקיר
               </Link>
             </div>
+            {/* the weekly debrief: one per week, about this week and the same week next cycle */}
+            {!data.debriefs.some((d) => d.kind === 'weekly') && (
+              <div className="card-body">
+                <Link to={`/debriefs?new=weekly&week=${w.id}`} className="btn btn-sm">
+                  <Icon name="calendar" /> פתיחת תחקיר שבועי
+                </Link>
+                <div className="tiny muted mt-8">מה הושג, מה לשמר ומה לשפר - ולקחים עם אחראי, להמשך המחזור ולשבוע הזה במחזור הבא.</div>
+              </div>
+            )}
             {data.debriefs.length === 0 && <div className="card-body small muted">לא נפתחו תחקירים בשבוע זה.</div>}
-            {data.debriefs.map((d) => (
+            {[...data.debriefs].sort((a, b) => Number(b.kind === 'weekly') - Number(a.kind === 'weekly')).map((d) => (
               <Link key={d.id} to={`/debriefs/${d.id}`} className="health">
                 <span className="grow small strong">{d.title}</span>
+                <KindBadge kind={d.kind} />
                 <span className="tiny muted">{d.itemCounts.lesson === 1 ? 'לקח אחד' : `${d.itemCounts.lesson} לקחים`}</span>
+                {d.kind !== 'general' && <span className={`badge ${d.status === 'final' ? 't-green' : 't-yellow'}`}>{d.status === 'final' ? 'סוכם' : 'טיוטה'}</span>}
                 {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks}</span>}
               </Link>
             ))}

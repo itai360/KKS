@@ -597,7 +597,21 @@ const SCHEMA_V12 = `
 ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12];
+// debrief forms: a weekly debrief and an intensive-event debrief, filled in as a form; lessons
+// carry an owner and a date (a task when the debrief is summed up) or wait for the next cycle
+const SCHEMA_V13 = `
+ALTER TABLE debriefs ADD COLUMN kind TEXT NOT NULL DEFAULT 'general';
+ALTER TABLE debriefs ADD COLUMN answers TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE debrief_items ADD COLUMN horizon TEXT;
+ALTER TABLE debrief_items ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE debrief_items ADD COLUMN due_date TEXT;
+ALTER TABLE debrief_items ADD COLUMN target TEXT NOT NULL DEFAULT '';
+ALTER TABLE debrief_items ADD COLUMN target_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE debrief_items ADD COLUMN target_week INTEGER;
+CREATE INDEX debrief_items_horizon ON debrief_items(horizon);
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

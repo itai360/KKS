@@ -4,10 +4,12 @@
 
 import { z } from 'zod';
 import { DEBRIEF_ITEM_KINDS, PRIORITIES, isOpenStatus, type DebriefItemKind, type TaskStatus } from '../../shared/constants';
-import { isDateKey } from '../../shared/dates';
-import type { Debrief, DebriefDetail, DebriefItem } from '../../shared/types';
+import { isDateKey, zonedIso } from '../../shared/dates';
+import { answered, DEBRIEF_KINDS, DEBRIEF_KIND_LABELS, formFor, goalsFromText, LESSON_HORIZONS, type DebriefAnswers, type DebriefKind, type LessonHorizon } from '../../shared/debriefForms';
+import { searchKey } from '../../shared/search';
+import type { BankLesson, Debrief, DebriefDetail, DebriefItem } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
-import { badRequest, forbidden, notFound, nowIso, patchSchema } from './core';
+import { badRequest, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
 import { recurringSchema, saveRule } from './recurring';
@@ -17,6 +19,8 @@ import { getTemplate, saveTemplate } from './templates';
 
 interface DebriefRow {
   id: number;
+  kind: DebriefKind;
+  answers: string;
   title: string;
   occurred_on: string;
   event_id: number | null;
@@ -57,9 +61,20 @@ function counts(debriefId: number): Record<DebriefItemKind, number> {
   return out;
 }
 
+function parseAnswers(raw: string): DebriefAnswers {
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as DebriefAnswers) : {};
+  } catch {
+    return {};
+  }
+}
+
 function toDebrief(actor: UserRow, d: DebriefRow): Debrief {
   return {
     id: d.id,
+    kind: DEBRIEF_KINDS.includes(d.kind) ? d.kind : 'general',
+    answers: parseAnswers(d.answers),
     title: d.title,
     occurredOn: d.occurred_on,
     eventId: d.event_id,
@@ -97,7 +112,15 @@ export function listDebriefs(actor: UserRow, f: { weekId?: number; eventId?: num
     .map((d) => toDebrief(actor, d));
 }
 
+const answersSchema = z
+  .record(z.string().max(40), z.unknown())
+  .refine((a) => JSON.stringify(a).length <= 40000, 'התחקיר ארוך מדי');
+
 export const debriefSchema = z.object({
+  kind: z.enum(DEBRIEF_KINDS).optional().default('general'),
+  /** a weekly debrief names its week (it often takes place on the next week's first day) */
+  weekId: z.number().int().positive().nullable().optional().default(null),
+  answers: answersSchema.optional().default({}),
   title: z.string().trim().min(1, 'חובה לתת שם לתחקיר').max(200),
   occurredOn: z.string().refine(isDateKey, 'תאריך לא תקין'),
   eventId: z.number().int().positive().nullable().optional().default(null),
@@ -108,19 +131,31 @@ export const debriefSchema = z.object({
   summary: z.string().max(10000).optional().default(''),
 });
 
+function weekRow(id: number): { id: number; number: number; name: string; goals: string } {
+  const w = db().get<{ id: number; number: number; name: string; goals: string }>('SELECT id, number, name, goals FROM weeks WHERE id = ?', id);
+  if (!w) throw badRequest('השבוע לא נמצא');
+  return w;
+}
+
 export function createDebrief(actor: UserRow, raw: z.input<typeof debriefSchema>): number {
   const d = debriefSchema.parse(raw);
   if (d.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', d.eventId)) throw badRequest('הפעילות לא נמצאה');
   if (d.facilitatorId && !getUserRow(d.facilitatorId)?.active) throw badRequest('מנחה התחקיר אינו פעיל');
+  const week = d.kind === 'weekly' && d.weekId ? weekRow(d.weekId) : null;
+  if (d.kind === 'weekly' && !week) throw badRequest('בחרו את השבוע שהתחקיר עוסק בו');
+  // a weekly debrief starts from the goals its week set
+  const answers = week && !d.answers.goals ? { ...d.answers, goals: goalsFromText(week.goals) } : d.answers;
   const at = nowIso();
   const id = db().run(
-    `INSERT INTO debriefs(title, occurred_on, event_id, activity, week_id, facilitator_id, participants, summary, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO debriefs(kind, answers, title, occurred_on, event_id, activity, week_id, facilitator_id, participants, summary, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    d.kind,
+    JSON.stringify(answers),
     d.title,
     d.occurredOn,
     d.eventId,
     d.eventId ? '' : d.activity,
-    weekForDate(d.occurredOn),
+    week ? week.id : weekForDate(d.occurredOn),
     d.facilitatorId ?? actor.id,
     d.participants,
     d.summary,
@@ -140,14 +175,21 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
   const occurredOn = p.occurredOn ?? cur.occurred_on;
   const eventId = p.eventId !== undefined ? p.eventId : cur.event_id;
   if (p.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', p.eventId)) throw badRequest('הפעילות לא נמצאה');
+  // answers come per question: two people filling different parts of the form both keep theirs
+  const answers = p.answers ? { ...parseAnswers(cur.answers), ...p.answers } : parseAnswers(cur.answers);
+  if (JSON.stringify(answers).length > 40000) throw badRequest('התחקיר ארוך מדי');
+  const weekId = cur.kind === 'weekly' ? (p.weekId ? weekRow(p.weekId).id : cur.week_id) : weekForDate(occurredOn);
+  const summingUp = p.status === 'final' && cur.status !== 'final';
+  if (summingUp && cur.kind !== 'general') checkReady(cur, answers);
   db().tx(() => {
     db().run(
-      'UPDATE debriefs SET title = ?, occurred_on = ?, event_id = ?, activity = ?, week_id = ?, facilitator_id = ?, participants = ?, summary = ?, status = ?, updated_at = ? WHERE id = ?',
+      'UPDATE debriefs SET answers = ?, title = ?, occurred_on = ?, event_id = ?, activity = ?, week_id = ?, facilitator_id = ?, participants = ?, summary = ?, status = ?, updated_at = ? WHERE id = ?',
+      JSON.stringify(answers),
       p.title ?? cur.title,
       occurredOn,
       eventId,
       eventId ? '' : (p.activity ?? cur.activity),
-      weekForDate(occurredOn),
+      weekId,
       p.facilitatorId !== undefined ? p.facilitatorId : cur.facilitator_id,
       p.participants ?? cur.participants,
       p.summary ?? cur.summary,
@@ -155,15 +197,63 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
       nowIso(),
       id,
     );
-    if (p.status === 'final' && cur.status !== 'final') {
+    // the week or event it is about changed: the lessons kept for the next cycle follow it
+    if (p.weekId !== undefined || p.eventId !== undefined || p.activity !== undefined || p.title !== undefined) {
+      const t = lessonTarget(debriefRow(id));
+      db().run("UPDATE debrief_items SET target = ?, target_key = ?, target_week = ? WHERE debrief_id = ? AND horizon = 'next'", t.target, t.key, t.week, id);
+    }
+    if (summingUp) {
+      const opened = cur.kind === 'general' ? 0 : lessonsToTasks(actor, cur);
       logActivity({ userId: actor.id, action: 'debrief_final', text: `${actor.display_name} סיכם את התחקיר "${cur.title}"` });
+      if (answers.safetyEvent === true) {
+        notify(commanderIds(), { type: 'debrief', category: 'exception', title: `אירוע בטיחות במופע: ${cur.title}`, body: String(answers.safety ?? '').slice(0, 200), link: `/debriefs/${id}` }, actor.id);
+      }
       if (!isCommander(actor)) {
         const lessons = counts(id).lesson;
-        notify(commanderIds(), { type: 'debrief', category: 'info', title: `תחקיר "${cur.title}" סוכם`, body: `${lessons} לקחים · ${cur.open_tasks} משימות המשך פתוחות`, link: `/debriefs/${id}` }, actor.id);
+        notify(commanderIds(), { type: 'debrief', category: 'info', title: `תחקיר "${cur.title}" סוכם`, body: `${lessons} לקחים · ${cur.open_tasks + opened} משימות המשך פתוחות`, link: `/debriefs/${id}` }, actor.id);
       }
     }
   });
-  changed('debriefs');
+  changed('debriefs', 'tasks');
+}
+
+/** before a form is summed up: the questions that must be answered, and lessons that can be acted on */
+function checkReady(d: DebriefRow, answers: DebriefAnswers): void {
+  const missing = formFor(d.kind)
+    .filter((s) => s.questions.some((q) => q.required && !answered(q, answers)))
+    .map((s) => s.title);
+  if (missing.length) throw badRequest(`כדי לסכם חסר: ${missing.join(', ')}`);
+  const lessons = db().all<{ horizon: LessonHorizon | null; owner_id: number | null; due_date: string | null; task_id: number | null }>(
+    "SELECT horizon, owner_id, due_date, task_id FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson'",
+    d.id,
+  );
+  if (!lessons.length) throw badRequest('תחקיר בלי לקחים לא משנה דבר - הוסיפו לפחות לקח אחד');
+  if (lessons.some((l) => l.horizon === 'now' && !l.task_id && (!l.owner_id || !l.due_date))) throw badRequest('לכל לקח להמשך המחזור צריך אחראי ותאריך - כך הוא הופך למשימה');
+}
+
+/** on summing up: every lesson for this cycle becomes a task for its owner, by its date */
+function lessonsToTasks(actor: UserRow, d: DebriefRow): number {
+  const rows = db().all<{ id: number; body: string; owner_id: number; due_date: string }>(
+    "SELECT id, body, owner_id, due_date FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson' AND horizon = 'now' AND task_id IS NULL AND owner_id IS NOT NULL AND due_date IS NOT NULL",
+    d.id,
+  );
+  const time = getSettings().defaultDeadlineTime;
+  for (const l of rows) {
+    const [taskId] = createTasks(
+      actor,
+      {
+        title: l.body.split('\n')[0].slice(0, 200),
+        description: `לקח מ${DEBRIEF_KIND_LABELS[d.kind]} "${d.title}":\n${l.body}`,
+        ownerIds: [l.owner_id],
+        deadline: zonedIso(l.due_date, time, tz()),
+        domain: 'הערכה',
+        debriefId: d.id,
+      },
+      { system: true },
+    );
+    db().run('UPDATE debrief_items SET task_id = ? WHERE id = ?', taskId, l.id);
+  }
+  return rows.length;
 }
 
 export function deleteDebrief(actor: UserRow, id: number): void {
@@ -187,11 +277,17 @@ interface ItemRow {
   recurring_rule_id: number | null;
   recurring_title: string | null;
   created_at: string;
+  horizon: LessonHorizon | null;
+  owner_id: number | null;
+  owner_name: string | null;
+  due_date: string | null;
+  target: string;
 }
 
 const ITEM_BASE = `
-SELECT i.*, t.title AS task_title, t.status AS task_status, r.title AS recurring_title
+SELECT i.*, t.title AS task_title, t.status AS task_status, r.title AS recurring_title, o.display_name AS owner_name
 FROM debrief_items i LEFT JOIN tasks t ON t.id = i.task_id LEFT JOIN recurring_rules r ON r.id = i.recurring_rule_id
+LEFT JOIN users o ON o.id = i.owner_id
 `;
 
 function toItem(i: ItemRow): DebriefItem {
@@ -207,6 +303,11 @@ function toItem(i: ItemRow): DebriefItem {
     recurringRuleId: i.recurring_rule_id,
     recurringTitle: i.recurring_title,
     createdAt: i.created_at,
+    horizon: i.horizon,
+    ownerId: i.owner_id,
+    ownerName: i.owner_name,
+    dueDate: i.due_date,
+    target: i.target,
   };
 }
 
@@ -216,33 +317,71 @@ function itemRow(id: number): ItemRow {
   return i;
 }
 
-export const itemSchema = z.object({ kind: z.enum(DEBRIEF_ITEM_KINDS), body: z.string().trim().min(1, 'הפריט ריק').max(3000) });
+export const itemSchema = z.object({
+  kind: z.enum(DEBRIEF_ITEM_KINDS),
+  body: z.string().trim().min(1, 'הפריט ריק').max(3000),
+  horizon: z.enum(LESSON_HORIZONS).nullable().optional().default(null),
+  ownerId: z.number().int().positive().nullable().optional().default(null),
+  dueDate: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional().default(null),
+});
+
+/** what a lesson for the next cycle is for: the week (by number and name) or the event (by name) */
+function lessonTarget(d: DebriefRow): { target: string; key: string; week: number | null } {
+  if (d.kind === 'weekly' && d.week_id) {
+    const w = weekRow(d.week_id);
+    return { target: `שבוע ${w.number} · ${w.name}`, key: searchKey(w.name), week: w.number };
+  }
+  const name = d.event_title || d.title;
+  return { target: name, key: searchKey(name), week: null };
+}
 
 export function addItem(actor: UserRow, debriefId: number, raw: z.input<typeof itemSchema>): number {
   const d = debriefRow(debriefId);
   if (!canEditDebrief(actor, d)) throw forbidden();
   const it = itemSchema.parse(raw);
+  if (it.ownerId && !getUserRow(it.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
+  const t = it.horizon === 'next' ? lessonTarget(d) : { target: '', key: '', week: null };
   const sort = (db().get<{ n: number | null }>('SELECT max(sort) AS n FROM debrief_items WHERE debrief_id = ?', debriefId)?.n ?? 0) + 1;
   const id = db().run(
-    'INSERT INTO debrief_items(debrief_id, kind, body, sort, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO debrief_items(debrief_id, kind, body, sort, created_by, created_at, horizon, owner_id, due_date, target, target_key, target_week) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     debriefId,
     it.kind,
     it.body,
     sort,
     actor.id,
     nowIso(),
+    it.horizon,
+    it.ownerId,
+    it.dueDate,
+    t.target,
+    t.key,
+    t.week,
   ).id;
   db().run('UPDATE debriefs SET updated_at = ? WHERE id = ?', nowIso(), debriefId);
   changed('debriefs');
   return id;
 }
 
-export function updateItem(actor: UserRow, id: number, body: string): void {
+export const itemPatchSchema = z.object({
+  body: z.string().max(3000).optional(),
+  ownerId: z.number().int().positive().nullable().optional(),
+  dueDate: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional(),
+});
+
+export function updateItem(actor: UserRow, id: number, raw: z.input<typeof itemPatchSchema>): void {
   const i = itemRow(id);
   if (!canEditDebrief(actor, debriefRow(i.debrief_id))) throw forbidden();
-  const text = body.trim();
+  const p = itemPatchSchema.parse(raw);
+  const text = p.body !== undefined ? p.body.trim() : i.body;
   if (!text) throw badRequest('הפריט ריק');
-  db().run('UPDATE debrief_items SET body = ? WHERE id = ?', text, id);
+  if (p.ownerId && !getUserRow(p.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
+  db().run(
+    'UPDATE debrief_items SET body = ?, owner_id = ?, due_date = ? WHERE id = ?',
+    text,
+    p.ownerId !== undefined ? p.ownerId : i.owner_id,
+    p.dueDate !== undefined ? p.dueDate : i.due_date,
+    id,
+  );
   changed('debriefs');
 }
 
@@ -336,9 +475,63 @@ export function itemToTemplate(actor: UserRow, itemId: number, raw: z.input<type
   changed('debriefs', 'templates');
 }
 
+/**
+ * The lessons bank: lessons kept for the next cycle. For a week - those written for a week of the
+ * same number or name in an earlier cycle; for an event - those for an event of that name.
+ */
+export function lessonBank(f: { weekId?: number; eventId?: number } = {}): BankLesson[] {
+  const rows = db().all<{
+    id: number;
+    body: string;
+    target: string;
+    target_key: string;
+    target_week: number | null;
+    owner_name: string | null;
+    debrief_id: number;
+    debrief_title: string;
+    kind: DebriefKind;
+    occurred_on: string;
+    week_id: number | null;
+    event_id: number | null;
+    created_by_name: string | null;
+  }>(
+    `SELECT i.id, i.body, i.target, i.target_key, i.target_week, o.display_name AS owner_name, d.id AS debrief_id, d.title AS debrief_title,
+       d.kind, d.occurred_on, d.week_id, d.event_id, c.display_name AS created_by_name
+     FROM debrief_items i JOIN debriefs d ON d.id = i.debrief_id
+     LEFT JOIN users o ON o.id = i.owner_id LEFT JOIN users c ON c.id = i.created_by
+     WHERE i.kind = 'lesson' AND i.horizon = 'next'
+     ORDER BY d.occurred_on DESC, i.id`,
+  );
+  let list = rows;
+  if (f.weekId) {
+    const w = weekRow(f.weekId);
+    const key = searchKey(w.name);
+    // not the lessons this very week wrote for the next cycle
+    list = rows.filter((r) => r.week_id !== w.id && (r.target_week === w.number || (!!r.target_key && r.target_key === key)));
+  } else if (f.eventId) {
+    const e = db().get<{ title: string }>('SELECT title FROM events WHERE id = ?', f.eventId);
+    if (!e) throw notFound('הפעילות לא נמצאה');
+    const key = searchKey(e.title);
+    list = rows.filter((r) => r.event_id !== f.eventId && r.target_week === null && !!r.target_key && key && (key.includes(r.target_key) || r.target_key.includes(key)));
+  }
+  return list.map((r) => ({
+    id: r.id,
+    body: r.body,
+    target: r.target,
+    targetWeek: r.target_week,
+    ownerName: r.owner_name,
+    debriefId: r.debrief_id,
+    debriefTitle: r.debrief_title,
+    debriefKind: DEBRIEF_KINDS.includes(r.kind) ? r.kind : 'general',
+    occurredOn: r.occurred_on,
+    createdByName: r.created_by_name,
+  }));
+}
+
 export function debriefDetail(actor: UserRow, id: number): DebriefDetail {
   const d = debriefRow(id);
   return {
+    week: d.kind === 'weekly' && d.week_id ? weekRow(d.week_id) : null,
     debrief: toDebrief(actor, d),
     items: db()
       .all<ItemRow>(`${ITEM_BASE} WHERE i.debrief_id = ? ORDER BY i.sort, i.id`, id)

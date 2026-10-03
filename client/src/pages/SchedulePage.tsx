@@ -8,6 +8,7 @@ import { addDays, shortDate, weekdayName } from '@shared/dates';
 import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { CalendarView } from '../components/CalendarView';
+import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
@@ -687,11 +688,12 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
             </button>
           </div>
           {data.debriefs.length === 0 ? (
-            <p className="small muted">לאחר הפעילות - פתחו תחקיר: עובדות, ממצאים, מסקנות ולקחים שהופכים למשימות.</p>
+            <p className="small muted">לאחר הפעילות - פתחו תחקיר. אחרי מופע עצים (מארס, תרגיל מסכם) - טופס תחקיר מופע: מטרות, בטיחות, לוגיסטיקה ולקחים עם אחראי.</p>
           ) : (
             data.debriefs.map((d) => (
               <Link key={d.id} to={`/debriefs/${d.id}`} className="row small" onClick={onClose}>
                 <Icon name="lightbulb" size={16} /> <b>{d.title}</b>
+                <KindBadge kind={d.kind} />
                 <span className="tiny muted">
                   {d.itemCounts.lesson === 1 ? 'לקח אחד' : `${d.itemCounts.lesson} לקחים`} · {d.status === 'final' ? 'סוכם' : 'טיוטה'}
                 </span>
@@ -699,6 +701,8 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
             ))
           )}
         </div>
+
+        <PriorLessons query={`event=${e.id}`} title="לקחים ממופעים קודמים" card={false} onOpen={onClose} />
 
         <div>
           <h3 className="mb-12">קבצים וקישורים</h3>

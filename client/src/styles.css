@@ -3848,3 +3848,489 @@ button.stat:disabled {
   background: var(--red-bg);
   color: var(--red-ink);
 }
+
+/* ---------- debrief forms (components/DebriefFormView.tsx) ---------- */
+
+.prewrap {
+  white-space: pre-wrap;
+}
+
+.dform {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.dform-main {
+  min-width: 0;
+  max-width: 880px;
+}
+
+.dform-toc {
+  display: none;
+}
+
+@media (min-width: 1100px) {
+  .dform {
+    grid-template-columns: minmax(0, 880px) 230px;
+  }
+  .dform-toc {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: sticky;
+    top: calc(var(--top-h) + 16px);
+  }
+}
+
+.dform-toc .label-caps {
+  padding: 0 8px 6px;
+}
+
+.dform-toc a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.dform-toc a:hover {
+  background: var(--gray-bg);
+}
+
+.dform-toc a.ok .dsec-num {
+  background: var(--green-bg);
+  border-color: transparent;
+  color: var(--green-ink);
+}
+
+.dform-toc a.need .dsec-num {
+  border-color: var(--red);
+  color: var(--red-ink);
+}
+
+.dform-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 3px solid var(--tone);
+}
+
+.dsec-num {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-2);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.dsec {
+  scroll-margin-top: calc(var(--top-h) + 16px);
+}
+
+.dsec .card-head h2 {
+  font-size: 16px;
+}
+
+.dsec .card-head > svg:last-child {
+  color: var(--green);
+}
+
+.dsec.alert {
+  border-color: var(--red);
+  box-shadow: 0 0 0 1px var(--red);
+}
+
+.dsec.alert .card-head {
+  background: var(--red-bg);
+}
+
+.dsec-lessons {
+  border-top: 3px solid var(--tone);
+}
+
+.dq {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dq-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.dq-label .req {
+  color: var(--red-ink);
+}
+
+.dq-text {
+  min-height: 88px;
+  max-height: 420px;
+  field-sizing: content;
+}
+
+.dq-read {
+  font-size: 14.5px;
+}
+
+.dq > .badge {
+  align-self: flex-start;
+}
+
+.dq-choice,
+.dq-rating {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dq-choice button,
+.dq-rating button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--card);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.dq-rating button {
+  width: 44px;
+  padding: 0;
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 15px;
+}
+
+.dq-choice button:hover,
+.dq-rating button:hover {
+  border-color: var(--tone);
+}
+
+.dq-choice button[aria-pressed='true'],
+.dq-rating button[aria-pressed='true'] {
+  background: var(--tone-bg);
+  border-color: var(--tone);
+  box-shadow: inset 0 0 0 1px var(--tone);
+  color: var(--tone-ink, var(--tone));
+}
+
+.dq-goals,
+.dq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.goal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.goal-row .goal-del {
+  width: 32px;
+  height: 32px;
+}
+
+@media (max-width: 760px) {
+  .goal-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .goal-row .goal-del {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .goal-row .dq-choice,
+  .goal-row .goal-note {
+    grid-column: 1 / -1;
+  }
+}
+
+.dq-list-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 32px;
+  gap: 6px;
+  align-items: center;
+}
+
+.dq-list-row .icon-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.dq-bullet {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.dq-list-read {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 20px;
+}
+
+.dq-numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.dq-numbers .input {
+  height: 46px;
+  font-size: 18px;
+  text-align: center;
+}
+
+.dq-big {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dq-rate {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 6px;
+}
+
+.lessons-body {
+  gap: 10px;
+}
+
+.lesson-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+
+.lesson-row.incomplete {
+  border-color: color-mix(in srgb, var(--red) 50%, var(--line));
+}
+
+.lesson-row.lesson-new {
+  border-style: dashed;
+  background: transparent;
+}
+
+.lesson-body {
+  font-size: 14.5px;
+}
+
+.textarea.lesson-body {
+  min-height: 46px;
+  field-sizing: content;
+}
+
+.lesson-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lesson-meta .select {
+  flex: 1 1 160px;
+  width: auto;
+  max-width: 240px;
+}
+
+.lesson-meta .input[type='date'] {
+  flex: 0 1 160px;
+  width: auto;
+}
+
+.lesson-meta .lesson-del {
+  width: 32px;
+  height: 32px;
+  margin-inline-start: auto;
+}
+
+.select.missing,
+.input.missing {
+  border-color: var(--red);
+}
+
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.save-state.error {
+  color: var(--red-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fab-count {
+  display: none;
+}
+
+button.fab-missing {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.page-fab {
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+}
+
+@media (max-width: 860px) {
+  /* above the floating navigation bar - and down to the edge while it steps aside */
+  .page-fab {
+    bottom: calc(80px + env(safe-area-inset-bottom));
+    padding-bottom: 0;
+    transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  body:has(.bottom-nav.away) .page-fab {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  .page-fab {
+    flex-wrap: nowrap;
+  }
+  .page-fab .btn.fab-send {
+    height: 50px;
+    padding: 0 20px;
+  }
+  .page-fab .fab-missing,
+  .page-fab .save-state.quiet {
+    display: none;
+  }
+  .page-fab .fab-count {
+    display: inline;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--card);
+    color: var(--red-ink);
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+  .page-fab .btn.fab-send.incomplete {
+    opacity: 1;
+  }
+}
+
+/* the kind of debrief to open */
+.kind-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kind-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.kind-card:hover,
+.kind-card:focus-visible {
+  border-color: var(--tone);
+  box-shadow: 0 0 0 1px var(--tone);
+}
+
+.kind-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--tone-bg);
+  color: var(--tone-ink, var(--tone));
+}
+
+/* lessons an earlier cycle kept (components/DebriefBits.tsx) */
+.prior-lessons {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prior-lessons li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.prior-lessons li:last-child {
+  border-bottom: none;
+}
+
+.prior-lessons a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prior-card {
+  border-top: 3px solid var(--blue);
+}
+
+@media print {
+  .dform {
+    display: block;
+  }
+  .dform-main {
+    max-width: none;
+  }
+  .dsec.alert .card-head {
+    background: none;
+  }
+}

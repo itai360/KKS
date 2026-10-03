@@ -1,17 +1,23 @@
-// Section 31 (debriefs) and 57: facts -> findings -> conclusions -> lessons -> tasks.
+// Section 31 (debriefs) and 57: facts -> findings -> conclusions -> lessons -> tasks,
+// and two debriefs filled in as forms: the weekly debrief and an intensive event's.
 
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
-import type { Debrief, DebriefDetail, DebriefItem, EventDetail, ExternalEvent, ScheduleEvent, Template } from '@shared/types';
+import { DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, type DebriefKind } from '@shared/debriefForms';
+import { matchesSearch } from '@shared/search';
+import type { BankLesson, Debrief, DebriefDetail, DebriefItem, EventDetail, ExternalEvent, ScheduleEvent, Template, Week } from '@shared/types';
 import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
+import { KindBadge } from '../components/DebriefBits';
+import { DebriefFormView } from '../components/DebriefFormView';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
 import { api, changedFields } from '../lib/api';
+import { saveCsv } from '../lib/csv';
 import { isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -32,72 +38,212 @@ const KIND_HINT: Record<DebriefItemKind, string> = {
   lesson: 'מה עושים אחרת מעכשיו',
 };
 
+const KIND_ICONS: Record<DebriefKind, string> = { weekly: 'calendar', event: 'zap', general: 'lightbulb' };
+const isKind = (v: string | null): v is DebriefKind => v === 'weekly' || v === 'event' || v === 'general';
+
 export function DebriefsPage() {
   const [params, setParams] = useSearchParams();
   const { data, error, loading } = useApi<Debrief[]>('/api/debriefs', ['debriefs', 'tasks']);
   const navigate = useNavigate();
-  const creatingFromEvent = params.get('event');
-  const [creating, setCreating] = useState(!!creatingFromEvent || params.get('new') === '1');
+  const fromEvent = params.get('event') ? Number(params.get('event')) : undefined;
+  const fromWeek = params.get('week') ? Number(params.get('week')) : undefined;
+  const asked = params.get('new');
+  // ?new=weekly|event|general opens that form; ?new=1 or ?event= asks which kind first
+  const [creating, setCreating] = useState<null | 'pick' | DebriefKind>(isKind(asked) ? asked : fromEvent || asked === '1' ? 'pick' : null);
+  const tab = params.get('tab') === 'bank' ? 'bank' : 'list';
+  const [kind, setKind] = useState<'all' | DebriefKind>('all');
+  const shown = (data ?? []).filter((d) => kind === 'all' || d.kind === kind);
+  const close = () => {
+    setCreating(null);
+    if (params.has('new') || params.has('event') || params.has('week')) setParams(tab === 'bank' ? { tab } : {}, { replace: true });
+  };
 
   return (
-    <BulkScope entity="debriefs" noun="תחקירים" topics={['debriefs', 'tasks']} ids={(data ?? []).map((d) => d.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} תחקירים? משימות שנפתחו מהם יישארו.' }]}>
+    <BulkScope entity="debriefs" noun="תחקירים" topics={['debriefs', 'tasks']} ids={shown.map((d) => d.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} תחקירים? משימות שנפתחו מהם יישארו.' }]}>
     <div className="page">
       <PageHead
         title="תחקירים"
-        sub="אירוע, עובדות, ממצאים, מסקנות, לקחים - וכל לקח הופך למשימה, למשימה חוזרת או לשלב בתבנית."
+        sub="תחקיר שבועי, תחקיר מופע עצים ותחקיר פעילות - וכל לקח מקבל אחראי ותאריך והופך למשימה, או נשמר למחזור הבא."
         actions={
           <>
-            <BulkToggle />
-            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            {tab === 'list' && <BulkToggle />}
+            <button className="btn btn-primary" onClick={() => setCreating('pick')}>
               <Icon name="plus" /> תחקיר
             </button>
           </>
         }
       />
-      <ErrorBox error={error} />
-      {loading && !data ? (
-        <Loading rows={3} />
-      ) : !data?.length ? (
-        <Empty icon="lightbulb" title="אין תחקירים" text="פתחו תחקיר אחרי פעילות - מתוך הלו״ז או מכאן." />
+      <div className="tabs" role="tablist">
+        <button className={`tab${tab === 'list' ? ' on' : ''}`} role="tab" aria-selected={tab === 'list'} onClick={() => setParams({}, { replace: true })}>
+          תחקירים<span className="n">{data?.length ?? ''}</span>
+        </button>
+        <button className={`tab${tab === 'bank' ? ' on' : ''}`} role="tab" aria-selected={tab === 'bank'} onClick={() => setParams({ tab: 'bank' }, { replace: true })}>
+          בנק לקחים
+        </button>
+      </div>
+      {tab === 'bank' ? (
+        <LessonsBank />
       ) : (
-        <div className="list">
-          {data.map((d) => (
-            <BulkRow key={d.id} itemId={d.id} className="task-row t-gray" style={{ gridTemplateColumns: 'auto 1fr auto' }} onOpen={() => navigate(`/debriefs/${d.id}`)}>
-              <BulkCheck id={d.id} />
-              <div className="task-main">
-                <div className="task-title">{d.title}</div>
-                <div className="task-meta">
-                  <span className="mono">{shortDate(d.occurredOn)}</span>
-                  {d.eventTitle && <span className="sep">{d.eventTitle}</span>}
-                  {d.weekName && <span className="sep">{d.weekName}</span>}
-                  {d.facilitatorName && <span className="sep">מנחה: {d.facilitatorName}</span>}
-                </div>
-              </div>
-              <div className="task-side">
-                {DEBRIEF_ITEM_KINDS.map((k) => (
-                  <span key={k} className="badge" title={DEBRIEF_ITEM_LABELS[k]}>
-                    {DEBRIEF_ITEM_LABELS[k]} {d.itemCounts[k]}
-                  </span>
-                ))}
-                {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks} משימות פתוחות</span>}
-                <span className={`badge ${d.status === 'final' ? 't-green' : 't-yellow'}`}>{d.status === 'final' ? 'סוכם' : 'טיוטה'}</span>
-              </div>
-            </BulkRow>
-          ))}
-        </div>
+        <>
+          <ErrorBox error={error} />
+          {(data ?? []).some((d) => d.kind !== 'general') && (
+            <div className="mb-12">
+              <Seg
+                value={kind}
+                onChange={setKind}
+                options={[
+                  { value: 'all', label: 'הכל' },
+                  { value: 'weekly', label: 'שבועיים' },
+                  { value: 'event', label: 'מופעים עצימים' },
+                  { value: 'general', label: 'פעילויות' },
+                ]}
+              />
+            </div>
+          )}
+          {loading && !data ? (
+            <Loading rows={3} />
+          ) : !shown.length ? (
+            <Empty icon="lightbulb" title="אין תחקירים" text="בסוף כל שבוע - תחקיר שבועי. אחרי מארס או תרגיל מסכם - תחקיר מופע עצים." />
+          ) : (
+            <div className="list">
+              {shown.map((d) => (
+                <BulkRow key={d.id} itemId={d.id} className="task-row t-gray" style={{ gridTemplateColumns: 'auto 1fr auto' }} onOpen={() => navigate(`/debriefs/${d.id}`)}>
+                  <BulkCheck id={d.id} />
+                  <div className="task-main">
+                    <div className="task-title">{d.title}</div>
+                    <div className="task-meta">
+                      <span className="mono">{shortDate(d.occurredOn)}</span>
+                      {d.kind !== 'weekly' && d.eventTitle && <span className="sep">{d.eventTitle}</span>}
+                      {d.weekName && <span className="sep">{d.weekName}</span>}
+                      {d.facilitatorName && <span className="sep">מנחה: {d.facilitatorName}</span>}
+                    </div>
+                  </div>
+                  <div className="task-side">
+                    <KindBadge kind={d.kind} />
+                    {d.kind === 'general' ? (
+                      DEBRIEF_ITEM_KINDS.map((k) => (
+                        <span key={k} className="badge" title={DEBRIEF_ITEM_LABELS[k]}>
+                          {DEBRIEF_ITEM_LABELS[k]} {d.itemCounts[k]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="badge">{d.itemCounts.lesson === 1 ? 'לקח אחד' : `${d.itemCounts.lesson} לקחים`}</span>
+                    )}
+                    {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks} משימות פתוחות</span>}
+                    <span className={`badge ${d.status === 'final' ? 't-green' : 't-yellow'}`}>{d.status === 'final' ? 'סוכם' : 'טיוטה'}</span>
+                  </div>
+                </BulkRow>
+              ))}
+            </div>
+          )}
+        </>
       )}
-      {creating && (
-        <DebriefForm
-          eventId={creatingFromEvent ? Number(creatingFromEvent) : undefined}
-          onClose={() => {
-            setCreating(false);
-            if (params.size) setParams({}, { replace: true });
-          }}
-        />
-      )}
+      {creating === 'pick' && <KindPicker onPick={setCreating} onClose={close} />}
+      {creating && creating !== 'pick' && <DebriefForm kind={creating} eventId={fromEvent} weekId={fromWeek} onClose={close} />}
     </div>
     </BulkScope>
   );
+}
+
+function KindPicker({ onPick, onClose }: { onPick: (k: DebriefKind) => void; onClose: () => void }) {
+  return (
+    <Modal title="איזה תחקיר?" onClose={onClose}>
+      <div className="kind-cards">
+        {(['weekly', 'event', 'general'] as const).map((k, i) => (
+          <button key={k} type="button" className={`kind-card ${k === 'weekly' ? 't-blue' : k === 'event' ? 't-purple' : 't-gray'}`} onClick={() => onPick(k)} data-autofocus={i === 0 || undefined}>
+            <span className="kind-icon">
+              <Icon name={KIND_ICONS[k]} />
+            </span>
+            <span className="col gap-4">
+              <span className="strong">{DEBRIEF_KIND_LABELS[k]}</span>
+              <span className="small muted">{DEBRIEF_KIND_HINTS[k]}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+/** the lessons earlier debriefs kept for the next cycle, by the week or event they are for */
+function LessonsBank() {
+  const { data, error, loading } = useApi<BankLesson[]>('/api/lessons', ['debriefs']);
+  const [q, setQ] = useState('');
+  const [kind, setKind] = useState<'all' | 'weekly' | 'event'>('all');
+  const list = (data ?? []).filter((l) => (kind === 'all' || l.debriefKind === kind) && matchesSearch(q, l.body, l.target, l.debriefTitle, l.ownerName));
+  const groups = new Map<string, BankLesson[]>();
+  for (const l of [...list].sort((a, b) => (a.targetWeek ?? 999) - (b.targetWeek ?? 999) || a.target.localeCompare(b.target, 'he'))) groups.set(l.target, [...(groups.get(l.target) ?? []), l]);
+  if (loading && !data) return <Loading rows={3} />;
+  return (
+    <>
+      <ErrorBox error={error} />
+      <p className="small muted mb-12">לקחים שתחקירים שמרו למחזור הבא. כל לקח מוצג גם במסך השבוע או בפעילות שהוא נכתב עליהם, כשהם מגיעים שוב.</p>
+      {!data?.length ? (
+        <Empty icon="history" title="בנק הלקחים ריק" text='בתחקיר שבועי או בתחקיר מופע - הוסיפו לקחים בסעיף "למחזור הבא".' />
+      ) : (
+        <>
+          <div className="row wrap gap-6 mb-12">
+            <input className="input grow" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לקח, שבוע או מופע..." aria-label="חיפוש בבנק הלקחים" style={{ maxWidth: 360 }} />
+            <Seg
+              value={kind}
+              onChange={setKind}
+              options={[
+                { value: 'all', label: 'הכל' },
+                { value: 'weekly', label: 'שבועות' },
+                { value: 'event', label: 'מופעים' },
+              ]}
+            />
+            <button
+              className="btn"
+              onClick={() =>
+                void saveCsv(
+                  'בנק-לקחים',
+                  ['עבור', 'לקח', 'אחראי', 'תחקיר', 'תאריך', 'נכתב על ידי'],
+                  list.map((l) => [l.target, l.body, l.ownerName, l.debriefTitle, l.occurredOn, l.createdByName]),
+                )
+              }
+            >
+              <Icon name="download" /> ייצוא
+            </button>
+          </div>
+          {!list.length && <Empty icon="search" title="לא נמצאו לקחים" />}
+          <div className="col gap-16">
+            {[...groups].map(([target, items]) => (
+              <div key={target} className="card">
+                <div className="card-head">
+                  <Icon name={items[0].debriefKind === 'weekly' ? 'calendar' : 'zap'} />
+                  <h3 className="grow">{target}</h3>
+                  <span className="mono tiny muted">{items.length}</span>
+                </div>
+                <div className="card-body">
+                <ul className="prior-lessons">
+                  {items.map((l) => (
+                    <li key={l.id}>
+                      <div className="small prewrap">{l.body}</div>
+                      <div className="tiny muted">
+                        <Link to={`/debriefs/${l.debriefId}`}>{l.debriefTitle}</Link> · <span className="mono">{shortDate(l.occurredOn)}</span>
+                        {l.ownerName && ` · ${l.ownerName}`}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+/** the week a weekly debrief is about: the current one - or, in a week's first two days, the one that just ended */
+function defaultWeek(weeks: Week[], today: string): Week | undefined {
+  const sorted = [...weeks].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const started = sorted.filter((w) => w.startDate <= today);
+  const cur = started[started.length - 1];
+  if (cur && started.length > 1 && cur.endDate >= today && today <= addDays(cur.startDate, 1)) return started[started.length - 2];
+  return cur ?? sorted[0];
 }
 
 /** An activity to debrief: a schedule event (e:<id>), one from the synced Google calendar (x:<id>), or the name a debrief already keeps (a:<name>). */
@@ -107,10 +253,17 @@ interface Activity {
   title: string;
 }
 
-function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId?: number; onClose: () => void }) {
+function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onClose }: { debrief?: Debrief; kind?: DebriefKind; eventId?: number; weekId?: number; onClose: () => void }) {
   const toast = useToast();
   const navigate = useNavigate();
   const { users, user } = useSession();
+  const kind = debrief?.kind ?? newKind;
+  const weekly = kind === 'weekly';
+  // a weekly debrief is about a week - often held on the next week's first day
+  const weeks = useApi<Week[]>(weekly ? '/api/weeks' : null, ['weeks']).data;
+  const [weekSet, setWeekSet] = useState<number | null>(debrief?.weekId ?? weekId ?? null);
+  const week = weeks?.find((w) => w.id === weekSet) ?? (weekSet ? undefined : weeks && defaultWeek(weeks, todayKey()));
+  const sameWeek = useApi<Debrief[]>(weekly && !debrief && week ? `/api/debriefs?week=${week.id}` : null, ['debriefs']).data?.find((x) => x.kind === 'weekly');
   // opened from a schedule event: its day, until the date is changed here
   const preset = useApi<EventDetail>(!debrief && eventId ? `/api/events/${eventId}` : null, ['events']).data?.event;
   const [title, setTitle] = useState(debrief?.title ?? '');
@@ -123,8 +276,8 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
   const [error, setError] = useState<string | null>(null);
 
   // the activities of the chosen day: the course schedule and the synced Google calendar
-  const dayEvents = useApi<ScheduleEvent[]>(`/api/events?from=${date}&to=${date}`, ['events']);
-  const dayExternal = useApi<ExternalEvent[]>(`/api/calendar/external?from=${date}&to=${date}`, ['events']);
+  const dayEvents = useApi<ScheduleEvent[]>(weekly ? null : `/api/events?from=${date}&to=${date}`, ['events']);
+  const dayExternal = useApi<ExternalEvent[]>(weekly ? null : `/api/calendar/external?from=${date}&to=${date}`, ['events']);
   const byTime = (a: Activity, b: Activity) => (a.time ?? '').localeCompare(b.time ?? '') || a.title.localeCompare(b.title, 'he');
   const schedule: Activity[] = (dayEvents.data ?? []).filter((e) => !e.cancelled).map((e) => ({ key: `e:${e.id}`, time: e.startTime, title: e.title })).sort(byTime);
   const calendar: Activity[] = (dayExternal.data ?? []).map((e) => ({ key: `x:${e.id}`, time: e.startTime, title: e.title })).sort(byTime);
@@ -144,7 +297,7 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
       : null;
   const chosen = known.find((a) => a.key === current) ?? kept;
   const loadingDay = (dayEvents.loading && !dayEvents.data) || (dayExternal.loading && !dayExternal.data);
-  const effectiveTitle = title || (chosen ? `תחקיר ${chosen.title}` : '');
+  const effectiveTitle = title || (weekly ? (week ? `תחקיר שבועי - ${week.name}` : '') : chosen ? `תחקיר ${chosen.title}` : '');
   const label = (a: Activity) => (a.time ? `${a.time} · ${a.title}` : a.key.startsWith('x:') ? `כל היום · ${a.title}` : a.title);
 
   const save = async () => {
@@ -152,19 +305,20 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
     const body = {
       title: effectiveTitle,
       occurredOn: date,
-      eventId: chosen?.key.startsWith('e:') ? Number(chosen.key.slice(2)) : null,
-      activity: chosen && !chosen.key.startsWith('e:') ? chosen.title : '',
+      eventId: !weekly && chosen?.key.startsWith('e:') ? Number(chosen.key.slice(2)) : null,
+      activity: !weekly && chosen && !chosen.key.startsWith('e:') ? chosen.title : '',
       facilitatorId: facilitator ? Number(facilitator) : null,
       participants,
       summary,
     };
     try {
-      const created = debrief ? null : await api.post<DebriefDetail>('/api/debriefs', body);
+      const created = debrief ? null : await api.post<DebriefDetail>('/api/debriefs', { ...body, kind, weekId: weekly ? (week?.id ?? null) : null });
       if (debrief) {
         const { eventId, activity, ...rest } = body;
-        const patch: Partial<typeof body> = changedFields<typeof rest>(debrief, rest);
+        const patch: Partial<typeof body> & { weekId?: number } = changedFields<typeof rest>(debrief, rest);
         // the activity is one choice - a schedule event or a calendar entry by name
-        if (eventId !== debrief.eventId || activity !== (debrief.eventId ? '' : (debrief.eventTitle ?? ''))) Object.assign(patch, { eventId, activity });
+        if (!weekly && (eventId !== debrief.eventId || activity !== (debrief.eventId ? '' : (debrief.eventTitle ?? '')))) Object.assign(patch, { eventId, activity });
+        if (weekly && week && week.id !== debrief.weekId) patch.weekId = week.id;
         if (Object.keys(patch).length) await api.patch(`/api/debriefs/${debrief.id}`, patch);
       }
       toast({ title: 'התחקיר נשמר', tone: 'green' });
@@ -180,11 +334,11 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
 
   return (
     <Modal
-      title={debrief ? 'עריכת תחקיר' : 'תחקיר חדש'}
+      title={debrief ? 'פרטי התחקיר' : kind === 'general' ? 'תחקיר פעילות' : `${DEBRIEF_KIND_LABELS[kind]} חדש`}
       onClose={onClose}
       footer={
         <>
-          <button className="btn btn-primary" onClick={() => void save()} disabled={!effectiveTitle.trim()}>
+          <button className="btn btn-primary" onClick={() => void save()} disabled={!effectiveTitle.trim() || (weekly && !week)}>
             {debrief ? 'שמור' : 'פתח תחקיר'}
           </button>
           <button className="btn btn-ghost" onClick={onClose}>
@@ -193,11 +347,42 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
         </>
       }
     >
+      {!debrief && kind !== 'general' && <div className="info-box mb-12">{DEBRIEF_KIND_HINTS[kind]}</div>}
       <div className="form-grid">
+        {weekly && (
+          <Field
+            label="השבוע שהתחקיר עוסק בו"
+            required
+            className="span-2"
+            hint={
+              sameWeek ? (
+                <>
+                  כבר נפתח תחקיר שבועי לשבוע הזה -{' '}
+                  <Link to={`/debriefs/${sameWeek.id}`} onClick={onClose}>
+                    {sameWeek.title}
+                  </Link>
+                </>
+              ) : weeks && !weeks.length ? (
+                'אין שבועות בקורס. הוסיפו שבוע במסך שבועות.'
+              ) : undefined
+            }
+          >
+            <select className="select" value={week?.id ?? ''} onChange={(e) => (setWeekSet(Number(e.target.value)), setTitle(''))} data-autofocus>
+              {!weeks && <option value="">טוען שבועות...</option>}
+              {[...(weeks ?? [])]
+                .sort((a, b) => a.startDate.localeCompare(b.startDate))
+                .map((w) => (
+                  <option key={w.id} value={w.id}>
+                    שבוע {w.number} · {w.name} ({shortDate(w.startDate)}-{shortDate(w.endDate)})
+                  </option>
+                ))}
+            </select>
+          </Field>
+        )}
         <Field label="נושא התחקיר" required className="span-2">
-          <input className="input" value={effectiveTitle} onChange={(e) => setTitle(e.target.value)} placeholder="לדוגמה: תחקיר מטווח הפעלת כוח" data-autofocus />
+          <input className="input" value={effectiveTitle} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'event' ? 'לדוגמה: תחקיר מארס טורקי' : 'לדוגמה: תחקיר מטווח הפעלת כוח'} data-autofocus={!weekly || undefined} />
         </Field>
-        <Field label="תאריך האירוע">
+        <Field label={weekly ? 'תאריך התחקיר' : 'תאריך האירוע'}>
           <input
             className="input"
             type="date"
@@ -208,7 +393,8 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
             }}
           />
         </Field>
-        <Field label='פעילות בלו"ז' hint={loadingDay ? 'טוען את הפעילויות של היום...' : !known.length ? `אין פעילויות ב-${shortDate(date)} בלו"ז וביומן` : undefined}>
+        {!weekly && (
+        <Field label={kind === 'event' ? 'המופע בלו"ז' : 'פעילות בלו"ז'} hint={loadingDay ? 'טוען את הפעילויות של היום...' : !known.length ? `אין פעילויות ב-${shortDate(date)} בלו"ז וביומן` : undefined}>
           <select className="select" value={chosen?.key ?? ''} onChange={(e) => setPick(e.target.value)}>
             <option value="">ללא</option>
             {kept && <option value={kept.key}>{label(kept)}</option>}
@@ -232,6 +418,7 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
             )}
           </select>
         </Field>
+        )}
         <Field label="מנחה">
           <select className="select" value={facilitator} onChange={(e) => setFacilitator(e.target.value)}>
             {users.map((u) => (
@@ -244,7 +431,7 @@ function DebriefForm({ debrief, eventId, onClose }: { debrief?: Debrief; eventId
         <Field label="משתתפים">
           <input className="input" value={participants} onChange={(e) => setParticipants(e.target.value)} placeholder="לדוגמה: סגל הצוות, מדריכי ירי" />
         </Field>
-        <Field label="תיאור האירוע" className="span-2">
+        <Field label={kind === 'general' ? 'תיאור האירוע' : 'רקע קצר (לא חובה)'} className="span-2">
           <textarea className="textarea" value={summary} onChange={(e) => setSummary(e.target.value)} />
         </Field>
       </div>
@@ -279,6 +466,13 @@ export function DebriefPage() {
       </div>
     );
   const d = data.debrief;
+  if (d.kind !== 'general')
+    return (
+      <>
+        <DebriefFormView key={d.id} data={data} setData={setData} onEdit={() => setEditing(true)} />
+        {editing && <DebriefForm debrief={d} onClose={() => setEditing(false)} />}
+      </>
+    );
 
   const run = async (fn: () => Promise<DebriefDetail | void>, ok?: string) => {
     try {

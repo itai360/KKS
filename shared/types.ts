@@ -1,5 +1,6 @@
 // API data shapes shared by the server (producer) and the client (consumer).
 
+import type { DebriefAnswers, DebriefKind, LessonHorizon } from './debriefForms';
 import type {
   CadetStatus,
   CarryAction,
@@ -771,10 +772,34 @@ export interface DebriefItem {
   recurringRuleId: number | null;
   recurringTitle: string | null;
   createdAt: string;
+  /** a lesson in a debrief form: this cycle (a task on summing up) or the next one (the lessons bank) */
+  horizon: LessonHorizon | null;
+  ownerId: number | null;
+  ownerName: string | null;
+  dueDate: string | null;
+  /** next cycle: the week or the event it is for */
+  target: string;
+}
+
+/** a lesson kept for the next cycle, shown when its week or event comes round again */
+export interface BankLesson {
+  id: number;
+  body: string;
+  target: string;
+  targetWeek: number | null;
+  ownerName: string | null;
+  debriefId: number;
+  debriefTitle: string;
+  debriefKind: DebriefKind;
+  occurredOn: string;
+  createdByName: string | null;
 }
 
 export interface Debrief {
   id: number;
+  kind: DebriefKind;
+  /** the form's answers, by question */
+  answers: DebriefAnswers;
   title: string;
   occurredOn: string;
   eventId: number | null;
@@ -799,6 +824,8 @@ export interface DebriefDetail {
   debrief: Debrief;
   items: DebriefItem[];
   tasks: Task[];
+  /** a weekly debrief: the week it is about */
+  week: { id: number; number: number; name: string; goals: string } | null;
 }
 
 export interface CourseDocument {

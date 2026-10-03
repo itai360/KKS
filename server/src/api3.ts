@@ -33,6 +33,7 @@ import {
   addItem,
   createDebrief,
   debriefDetail,
+  lessonBank,
   deleteDebrief,
   deleteItem,
   itemToRecurring,
@@ -243,11 +244,12 @@ export function v3Router(): Router {
     return row.debrief_id;
   };
   r.patch('/debrief-items/:id', (req, res) => {
-    const { body } = z.object({ body: z.string().max(3000) }).parse(req.body);
     const did = itemDebrief(id(req.params.id));
-    updateItem(me(req), id(req.params.id), body);
+    updateItem(me(req), id(req.params.id), req.body);
     res.json(debriefDetail(me(req), did));
   });
+  // lessons kept for the next cycle: all, or those for a week or an event
+  r.get('/lessons', (req, res) => res.json(lessonBank({ weekId: num(req.query.week), eventId: num(req.query.event) })));
   r.delete('/debrief-items/:id', (req, res) => {
     const did = itemDebrief(id(req.params.id));
     deleteItem(me(req), id(req.params.id));
