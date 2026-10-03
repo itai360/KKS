@@ -2,7 +2,7 @@
 // recurring tasks, permissions) and personal settings.
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
 import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Template, User } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
@@ -39,6 +39,7 @@ export function SettingsPage() {
             <BackupCard />
           </>
         )}
+        <ContactCard />
         <AbsencesCard userId={user.id} mine canEdit />
         <AppearanceCard />
         <BrowserNotificationsCard />
@@ -605,6 +606,61 @@ function Backups() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** my phone and email - for the directory and the call buttons */
+function ContactCard() {
+  const { user } = useSession();
+  const toast = useToast();
+  const [phone, setPhone] = useState(user.phone);
+  const [email, setEmail] = useState(user.email);
+  const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === '#contact') document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash]);
+  const dirty = phone !== user.phone || email !== user.email;
+  const save = async () => {
+    setError(null);
+    try {
+      await api.patch('/api/me/contact', { phone, email });
+      emitLocalChange('users');
+      toast({ title: 'פרטי הקשר נשמרו', tone: 'green' });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <div className="card" id="contact">
+      <div className="card-head">
+        <Icon name="phone" />
+        <h3 className="grow">פרטי הקשר שלי</h3>
+      </div>
+      <form
+        className="card-body col gap-12"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <span className="small muted">מופיעים באנשי הקשר של הקורס, עם חיוג ווואטסאפ בלחיצה.</span>
+        <div className="form-grid">
+          <Field label="טלפון">
+            <input className="input" type="tel" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} placeholder="050-0000000" autoComplete="tel" />
+          </Field>
+          <Field label="מייל">
+            <input className="input" type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={120} autoComplete="email" />
+          </Field>
+        </div>
+        <ErrorBox error={error} />
+        <div>
+          <button className="btn btn-primary btn-sm" disabled={!dirty}>
+            שמירה
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

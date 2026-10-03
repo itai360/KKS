@@ -6,6 +6,7 @@ import { shortDate } from '@shared/dates';
 import type { StaffPageData, StaffStatus } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
 import { AbsencesCard } from '../components/Absences';
+import { ContactButtons } from '../components/ContactButtons';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
@@ -108,11 +109,14 @@ export function StaffPage() {
         title={data.user.displayName}
         sub={staffHealthLabel(s.overdue)}
         actions={
-          isCommander && (
-            <button className="btn btn-primary" onClick={() => newTask({ ownerIds: [data.user.id] })} title={`משימה ל${data.user.displayName}`}>
-              <Icon name="plus" /> <span className="clip-text">משימה ל{data.user.displayName}</span>
-            </button>
-          )
+          <>
+            <ContactButtons phone={data.user.phone} name={data.user.displayName} />
+            {isCommander && (
+              <button className="btn btn-primary" onClick={() => newTask({ ownerIds: [data.user.id] })} title={`משימה ל${data.user.displayName}`}>
+                <Icon name="plus" /> <span className="clip-text">משימה ל{data.user.displayName}</span>
+              </button>
+            )}
+          </>
         }
       />
       <div className="stats fade-in">

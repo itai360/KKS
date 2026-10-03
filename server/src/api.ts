@@ -266,6 +266,19 @@ export function apiRouter(): Router {
     res.json(toUser(getUserRow(newId)!));
   });
 
+  // my own phone and email, for the directory (the rest of a user is the commander's)
+  r.patch('/me/contact', (req, res) => {
+    const p = z
+      .object({
+        phone: z.string().trim().max(30).optional(),
+        email: z.string().trim().email('כתובת מייל לא תקינה').max(120).optional().or(z.literal('')),
+      })
+      .parse(req.body);
+    db().run('UPDATE users SET phone = coalesce(?, phone), email = coalesce(?, email) WHERE id = ?', p.phone ?? null, p.email ?? null, me(req).id);
+    changed('users');
+    res.json(toUser(getUserRow(me(req).id)!));
+  });
+
   r.patch('/users/:id', requireCommander, (req, res) => {
     const uid = id(req.params.id);
     const cur = getUserRow(uid);

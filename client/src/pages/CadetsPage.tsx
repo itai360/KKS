@@ -26,6 +26,7 @@ import { shortDate } from '@shared/dates';
 import type { AttendanceHistory, Cadet, CadetDetail, CadetRecord, Exemption, Team } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
+import { ContactButtons } from '../components/ContactButtons';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
@@ -550,6 +551,7 @@ export function CadetPage() {
         sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, c.phone].filter(Boolean).join(' · ')}
         actions={
           <>
+            <ContactButtons phone={c.phone} name={c.fullName} />
             {c.canManage && (
               <button className="btn" onClick={() => setDialog('edit')}>
                 <Icon name="edit" /> עריכה

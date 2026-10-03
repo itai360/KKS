@@ -36,6 +36,8 @@ const paths: Record<string, string> = {
   eye: 'M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   zap: 'M13 2 4 14h7l-1 8 9-12h-7z',
   message: 'M4 5h16v11H8l-4 4z',
+  phone: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z',
+  mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
   moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
   inbox: 'M3 13l3-8h12l3 8M3 13v6h18v-6M3 13h5l1.5 3h5L16 13h5',
   board: 'M4 4h5v16H4zM10.5 4h5v10h-5zM17 4h3v7h-3z',

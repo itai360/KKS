@@ -52,3 +52,14 @@ describe('staff availability', () => {
     expect((await c.cmd.get('/api/dashboard')).body.attention.some((a: { kind: string }) => a.kind === 'away')).toBe(false);
   });
 });
+
+describe('my contact details', () => {
+  it('anyone sets their own phone and email; the directory shows them to all', async () => {
+    const res = await c.s1.patch('/api/me/contact', { phone: '050-1234567', email: 's1@kks.org' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ phone: '050-1234567', email: 's1@kks.org' });
+    expect((await c.s2.patch('/api/me/contact', { email: 'not an email' })).status).toBe(400);
+    const users = (await c.s3.get('/api/users')).body as { id: number; phone: string }[];
+    expect(users.find((u) => u.id === c.ids.s1)?.phone).toBe('050-1234567');
+  });
+});
