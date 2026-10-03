@@ -1,5 +1,6 @@
-// A floating "back" on every screen: to the screen before, or - opened from a link, with no
-// screen before it in the app - to the screen above it (a task -> the tasks).
+// A floating "back" on every screen but the home screen: step by step to the screens before,
+// until home - where it is gone until another screen is opened. A screen opened from a link,
+// with no screen before it in the app, goes up instead (a task -> the tasks -> home).
 
 import { useLocation, useNavigate } from 'react-router';
 import { Icon } from './Icon';
@@ -17,11 +18,14 @@ export function parentPath(path: string): string {
 export function BackButton() {
   const location = useLocation();
   const navigate = useNavigate();
+  // going back ends at the home screen
+  if (location.pathname === '/') return null;
   // where this screen is in the app's own history (react-router keeps it)
   const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
-  if (location.pathname === '/' && idx === 0) return null;
+  // going up takes this screen's place, so the next "back" goes on up rather than down to it again
+  const back = () => (idx > 0 ? navigate(-1) : navigate(parentPath(location.pathname), { replace: true }));
   return (
-    <button type="button" className="back-fab no-print" aria-label="חזרה למסך הקודם" title="חזרה" onClick={() => (idx > 0 ? navigate(-1) : navigate(parentPath(location.pathname)))}>
+    <button type="button" className="back-fab no-print" aria-label="חזרה למסך הקודם" title="חזרה" onClick={back}>
       <Icon name="arrowRight" size={20} />
     </button>
   );
