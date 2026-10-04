@@ -6,14 +6,13 @@
 
 import { z } from 'zod';
 import { CADET_STATUSES, PRIORITIES } from '../../shared/constants';
-import { addDays, isDateKey, localDateKey } from '../../shared/dates';
+import { addDays } from '../../shared/dates';
 import type { UserRow } from './auth';
 import { deleteCadet, deleteExperience, deleteTeam, updateCadet } from './cadets';
-import { badRequest, clock, forbidden, HttpError, nowIso, tz } from './core';
+import { badRequest, forbidden, HttpError, nowIso } from './core';
 import { db } from './db';
 import { deleteDebrief } from './debriefs';
 import { deleteDocument, updateDocument } from './documents';
-import { deleteEvaluationEntry, setEntryShown } from './evaluations';
 import { changed } from './journal';
 import { deleteRule } from './recurring';
 import { cancelEvent, deleteEvent, restoreEvent, updateEvent } from './schedule';
@@ -128,10 +127,6 @@ const OPS: Record<string, Record<string, Op>> = {
         changed('users');
       },
     },
-  },
-  evaluationEntries: {
-    delete: { run: (a, id) => void deleteEvaluationEntry(a, id) },
-    shown: { run: (a, id, v) => void setEntryShown(a, id, v ? (isDateKey(v) ? String(v) : localDateKey(clock.now(), tz())) : null) },
   },
 };
 

@@ -563,9 +563,11 @@ export function CadetPage() {
                 <Icon name="edit" /> עריכה
               </button>
             )}
-            <Link className="btn" to={`/evaluations/${c.id}`}>
-              <Icon name="folder" /> תיק הערכה
-            </Link>
+            {c.canManage && (
+              <Link className="btn" to={`/evaluations/${c.id}`}>
+                <Icon name="folder" /> תיק הערכה
+              </Link>
+            )}
             {c.canManage && (
               <button className="btn" onClick={() => setDialog('experience')}>
                 <Icon name="target" /> שיבוץ להתנסות

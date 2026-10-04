@@ -37,6 +37,7 @@ export function Modal({
   wide,
   narrow,
   closable = true,
+  readOnly,
 }: {
   title: ReactNode;
   onClose: () => void;
@@ -47,6 +48,8 @@ export function Modal({
   narrow?: boolean;
   /** false: no close button, Escape or outside click - the dialog's own buttons answer it */
   closable?: boolean;
+  /** only text to read: the body itself takes focus, so it scrolls from the keyboard */
+  readOnly?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(closable ? onClose : () => undefined);
@@ -102,7 +105,9 @@ export function Modal({
             </button>
           )}
         </div>
-        <div className="modal-body">{children}</div>
+        <div className="modal-body" tabIndex={readOnly ? 0 : undefined}>
+          {children}
+        </div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
       {/* a screen opened over a screen has the floating back arrow too: it closes this one */}

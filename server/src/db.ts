@@ -818,8 +818,106 @@ const SCHEMA_V27 = `
 ALTER TABLE cadet_records ADD COLUMN form TEXT;
 `;
 
+// the evaluation file as a living file in nine parts (evaluations.ts): the course and the cadet,
+// the military path, exams and fitness, group dynamics, the reason for a committee, the team
+// commander's dated remarks, the critical points and the company commander's summary - with the
+// history of every change. What was written before stays: the remarks keep their dates and
+// writers, the team commander's opinion opens their remarks, the commander's opinion is the summary.
+function V28_EVALUATION_FILE(db: Db): void {
+  db.exec(`
+ALTER TABLE evaluation_files ADD COLUMN company_commander TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN team_commander TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN unit TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN city TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN enlisted_on TEXT;
+ALTER TABLE evaluation_files ADD COLUMN release_on TEXT;
+ALTER TABLE evaluation_files ADD COLUMN military_path TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN mid_a REAL;
+ALTER TABLE evaluation_files ADD COLUMN mid_b REAL;
+ALTER TABLE evaluation_files ADD COLUMN final_a REAL;
+ALTER TABLE evaluation_files ADD COLUMN final_b REAL;
+ALTER TABLE evaluation_files ADD COLUMN run_result TEXT;
+ALTER TABLE evaluation_files ADD COLUMN run_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN pushups INTEGER;
+ALTER TABLE evaluation_files ADD COLUMN pushups_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN committee_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE TABLE evaluation_entries_v28 (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  category TEXT NOT NULL DEFAULT '',
+  tone TEXT,
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  occurred_on TEXT NOT NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  shown_on TEXT,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO evaluation_entries_v28(id, cadet_id, category, tone, title, body, occurred_on, week_id, shown_on, author_id, created_at, updated_at)
+  SELECT id, cadet_id, category, tone, title, body, occurred_on, week_id, shown_on, author_id, created_at, updated_at FROM evaluation_entries;
+DROP TABLE evaluation_entries;
+ALTER TABLE evaluation_entries_v28 RENAME TO evaluation_entries;
+CREATE INDEX evaluation_entries_cadet ON evaluation_entries(cadet_id);
+
+CREATE TABLE evaluation_dynamics (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  occurred_on TEXT NOT NULL,
+  score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+  rank INTEGER NOT NULL CHECK (rank BETWEEN 1 AND 12),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX evaluation_dynamics_cadet ON evaluation_dynamics(cadet_id);
+
+CREATE TABLE evaluation_points (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  period TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL,
+  significance TEXT NOT NULL DEFAULT '',
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX evaluation_points_cadet ON evaluation_points(cadet_id);
+
+CREATE TABLE evaluation_history (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  section TEXT NOT NULL,
+  item_id INTEGER,
+  action TEXT NOT NULL CHECK (action IN ('set', 'add', 'edit', 'delete')),
+  field TEXT NOT NULL DEFAULT '',
+  old_value TEXT,
+  new_value TEXT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  at TEXT NOT NULL
+);
+CREATE INDEX evaluation_history_cadet ON evaluation_history(cadet_id, at);
+`);
+  // the team commander's opinion becomes the first of their dated remarks (the original column stays as it was)
+  db.run(`
+INSERT INTO evaluation_entries(cadet_id, body, occurred_on, author_id, created_at, updated_at)
+SELECT f.cadet_id, 'חוות דעת מפקד הצוות (מהתיק הקודם):' || char(10) || f.team_opinion,
+  substr(coalesce(f.team_opinion_at, f.updated_at), 1, 10),
+  coalesce(f.team_opinion_by, (SELECT t.commander_id FROM cadets c JOIN teams t ON t.id = c.team_id WHERE c.id = f.cadet_id), (SELECT id FROM users WHERE role = 'commander' ORDER BY id LIMIT 1)),
+  coalesce(f.team_opinion_at, f.updated_at), coalesce(f.team_opinion_at, f.updated_at)
+FROM evaluation_files f
+WHERE trim(f.team_opinion) <> ''
+  AND coalesce(f.team_opinion_by, (SELECT t.commander_id FROM cadets c JOIN teams t ON t.id = c.team_id WHERE c.id = f.cadet_id), (SELECT id FROM users WHERE role = 'commander' ORDER BY id LIMIT 1)) IS NOT NULL`);
+}
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

@@ -744,22 +744,98 @@ export interface Experience {
 
 // ---------------- evaluation files (תיקי הערכה) ----------------
 
-export interface EvaluationEntry {
+/** a dated remark in the evaluation file (התייחסות המפק"צ); earlier versions are kept in the history */
+export interface EvaluationNote {
   id: number;
-  cadetId: number;
-  category: string;
-  tone: EvalTone;
-  title: string;
-  body: string;
   occurredOn: string;
-  weekId: number | null;
-  weekName: string | null;
-  /** when the entry was shown to the cadet (what gives it weight at a committee) */
-  shownOn: string | null;
+  /** the remark in full */
+  body: string;
   authorId: number;
   authorName: string;
   createdAt: string;
+  updatedAt: string;
+  updatedByName: string | null;
+  /** sent back with a change: a change made meanwhile by someone else is not overwritten */
+  version: number;
+  edited: boolean;
   canEdit: boolean;
+  /** a remark written before the file had its present form: its tone, subject and when it was shown */
+  legacy: { tone: EvalTone | null; category: string; shownOn: string | null } | null;
+}
+
+/** a critical point or event (נקודה / אירוע קריטי) */
+export interface EvaluationPoint {
+  id: number;
+  period: string;
+  description: string;
+  significance: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedByName: string | null;
+  version: number;
+  edited: boolean;
+  canEdit: boolean;
+}
+
+/** one group dynamics assessment: a score of 1-5 and a place in the team of 1-12 */
+export interface EvaluationDynamics {
+  id: number;
+  occurredOn: string;
+  score: number;
+  rank: number;
+  authorName: string;
+  canDelete: boolean;
+}
+
+/** exams and fitness: null is "not entered yet", which is not a zero */
+export interface EvaluationExams {
+  midA: number | null;
+  midB: number | null;
+  finalA: number | null;
+  finalB: number | null;
+  runResult: string | null;
+  runScore: number | null;
+  pushups: number | null;
+  pushupsScore: number | null;
+}
+
+/** the fields of the file that are set one by one (shared/evaluation.ts names them) */
+export type EvaluationField =
+  | 'companyCommander'
+  | 'teamCommander'
+  | 'firstName'
+  | 'lastName'
+  | 'personalNumber'
+  | 'unit'
+  | 'city'
+  | 'enlistedOn'
+  | 'releaseOn'
+  | 'militaryPath'
+  | 'midA'
+  | 'midB'
+  | 'finalA'
+  | 'finalB'
+  | 'runResult'
+  | 'runScore'
+  | 'pushups'
+  | 'pushupsScore'
+  | 'committeeReason'
+  | 'summary'
+  | 'standing';
+
+/** one change in the file's history */
+export interface EvaluationChange {
+  id: number;
+  at: string;
+  userName: string | null;
+  section: string;
+  action: 'set' | 'add' | 'edit' | 'delete';
+  /** what changed, in words */
+  label: string;
+  oldValue: string | null;
+  newValue: string | null;
+  itemId: number | null;
 }
 
 export interface EvaluationOpinion {
@@ -784,23 +860,44 @@ export interface Committee {
   decidedByName: string | null;
 }
 
+/**
+ * The evaluation file (תיק הערכה): a living file that goes with the cadet through the course, in
+ * nine parts, alongside what the cadet file holds. Seen only by the company commander (the course
+ * commander) and the cadet's team commander.
+ */
 export interface EvaluationFile {
+  /** the file's present form (committees keep older versions as they were) */
+  layout: 2;
   cadet: Cadet;
   teamCommanderName: string | null;
+  /** 1. general: who fills in the file; empty stands for the name from the system (…Auto) */
+  general: { companyCommander: string; teamCommander: string; companyCommanderAuto: string | null; teamCommanderAuto: string | null };
+  /** 2. the cadet: name and personal number from the cadet card, the rest kept in the file */
+  details: { firstName: string; lastName: string; personalNumber: string; unit: string; city: string; enlistedOn: string | null; releaseOn: string | null };
+  /** 3. */
+  militaryPath: string;
+  /** 4. */
+  exams: EvaluationExams;
+  /** 5. oldest first */
+  dynamics: EvaluationDynamics[];
+  /** 6. */
+  committeeReason: string;
+  /** 7. oldest first */
+  notes: EvaluationNote[];
+  /** 8. */
+  points: EvaluationPoint[];
+  /** 9. the company commander's summary - written by them, read by the team commander */
+  summary: EvaluationOpinion;
   standing: Standing;
-  teamOpinion: EvaluationOpinion;
-  commanderOpinion: EvaluationOpinion;
-  entries: EvaluationEntry[];
   /** from the cadet file: average score by criterion */
   scores: { criterion: string; average: number; count: number }[];
   experiences: { role: string; startDate: string; endDate: string; mentorName: string | null; score: number | null; strengths: string; improvements: string }[];
   discipline: CadetRecord[];
   talks: CadetRecord[];
   committees: Committee[];
-  /** the viewer sees the whole file (team commander, course commander); others see only their own entries */
-  full: boolean;
-  canEditStanding: boolean;
-  canEditCommanderOpinion: boolean;
+  updatedAt: string | null;
+  updatedByName: string | null;
+  canEditSummary: boolean;
   canRefer: boolean;
   generatedAt: string;
 }
@@ -813,16 +910,17 @@ export interface EvaluationListItem {
   teamName: string | null;
   status: CadetStatus;
   standing: Standing;
-  positive: number;
-  improve: number;
-  exception: number;
-  notShown: number;
-  lastEntryAt: string | null;
-  hasOpinions: boolean;
-  /** discipline notes (for those who see the whole file) */
+  notes: number;
+  points: number;
+  /** of the 8 exam and fitness fields, how many are entered */
+  exams: number;
+  lastDynamics: { score: number; rank: number; occurredOn: string } | null;
+  hasSummary: boolean;
+  hasCommitteeReason: boolean;
   disciplineNotes: number;
   committee: { id: number; kind: string; decision: CommitteeDecision | null } | null;
-  full: boolean;
+  updatedAt: string | null;
+  updatedByName: string | null;
 }
 
 /** A committee with the evaluation file as it was presented to it. */

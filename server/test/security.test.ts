@@ -43,9 +43,10 @@ async function plantSecrets() {
   await ok(c.s1.post(`/api/cadets/${cadet}/records`, { kind: 'discipline', title: 'משמעת', body: `${SECRET}9 משמעת` }));
   // an exemption's reason (the subject and details are for everyone)
   await ok(c.cmd.post(`/api/cadets/${cadet}/exemptions`, { subject: 'גילוח', details: 'עד הודעה חדשה', reason: `${SECRET}5 סיבה רפואית` }));
-  // the evaluation file: the commander's opinion and another's entry
-  await ok(c.cmd.patch(`/api/evaluations/${cadet}`, { commanderOpinion: `${SECRET}6 חוות דעת`, teamOpinion: `${SECRET}6b`, standing: 'watch' }));
-  await ok(c.s2.post(`/api/evaluations/${cadet}/entries`, { category: 'משמעת', tone: 'improve', title: `${SECRET}7 רישום`, body: `${SECRET}7b` }));
+  // the evaluation file: the company commander's summary and the team commander's remark and critical point
+  await ok(c.cmd.patch(`/api/evaluations/${cadet}`, { changes: { summary: `${SECRET}6 סיכום`, committeeReason: `${SECRET}6b`, standing: 'watch' } }));
+  await ok(c.s1.post(`/api/evaluations/${cadet}/notes`, { occurredOn: '2026-09-30', body: `${SECRET}7 התייחסות` }));
+  await ok(c.s1.post(`/api/evaluations/${cadet}/points`, { period: 'שבוע 2', description: `${SECRET}7b אירוע` }));
   // another person's absence note
   await ok(c.s1.post('/api/absences', { startDate: '2026-10-05', endDate: '2026-10-06', reason: 'sick', note: `${SECRET}10 בדיקה רפואית` }));
   return { cadet, task, weekId, team };
@@ -81,6 +82,7 @@ const READS = (p: { cadet: number; task: number; weekId: number }, ids: Ctx['ids
   '/api/discipline/log',
   '/api/evaluations',
   `/api/evaluations/${p.cadet}`,
+  `/api/evaluations/${p.cadet}/history`,
   '/api/experiences',
   '/api/announcements',
   '/api/attendance',
@@ -119,7 +121,8 @@ describe('nothing private leaks to another staff member', () => {
     const s1Cadet = JSON.stringify((await c.s1.get(`/api/cadets/${p.cadet}`)).body); // the team's commander
     expect(s1Cadet).toContain(`${SECRET}3`);
     expect(s1Cadet).toContain(`${SECRET}5`);
-    expect(JSON.stringify((await c.s2.get(`/api/evaluations/${p.cadet}`)).body)).toContain(`${SECRET}7`); // their own entry
+    expect(JSON.stringify((await c.s1.get(`/api/evaluations/${p.cadet}`)).body)).toContain(`${SECRET}6`); // the team commander reads the summary
+    expect((await c.s2.get(`/api/evaluations/${p.cadet}`)).status).toBe(403); // another team's commander: no file at all
     expect(JSON.stringify((await c.cmd.get('/api/absences')).body)).toContain(`${SECRET}10`);
     expect(JSON.stringify((await c.s1.get('/api/absences')).body)).toContain(`${SECRET}10`); // their own
     expect(JSON.stringify((await c.cmd.get('/api/documents')).body)).toContain(`${SECRET}2`);
@@ -142,7 +145,8 @@ describe('nobody changes what is not theirs', () => {
     const idOf = (sql: string) => db().get<{ id: number }>(sql)!.id;
     const shared = await newTask(c.cmd, { title: 'משימה רגילה של מפק"צ 1', ownerIds: [c.ids.s1] });
     const talk = idOf("SELECT id FROM cadet_records WHERE body LIKE '%ZQX3%'");
-    const entry = idOf("SELECT id FROM evaluation_entries WHERE title LIKE '%ZQX7%'");
+    const entry = idOf("SELECT id FROM evaluation_entries WHERE body LIKE '%ZQX7%'");
+    const point = idOf('SELECT id FROM evaluation_points LIMIT 1');
     const absence = idOf('SELECT id FROM absences LIMIT 1');
     const doc = idOf('SELECT id FROM documents LIMIT 1');
     const exemption = idOf('SELECT id FROM exemptions LIMIT 1');
@@ -157,9 +161,12 @@ describe('nobody changes what is not theirs', () => {
       ['edit another\'s task', () => c.s3.patch(`/api/tasks/${shared}`, { title: 'נפרץ' })],
       ['complete another\'s task', () => c.s3.post(`/api/tasks/${shared}/transition`, { action: 'complete' })],
       ['delete a talk', () => c.s3.del(`/api/records/${talk}`)],
-      ['edit another\'s evaluation entry', () => c.s3.patch(`/api/evaluations/entries/${entry}`, { title: 'נפרץ' })],
-      ['delete another\'s evaluation entry', () => c.s3.del(`/api/evaluations/entries/${entry}`)],
-      ['write the commander\'s opinion', () => c.s3.patch(`/api/evaluations/${p.cadet}`, { commanderOpinion: 'נפרץ' })],
+      ['edit a remark in another\'s evaluation file', () => c.s3.patch(`/api/evaluations/notes/${entry}`, { body: 'נפרץ', version: 1 })],
+      ['delete a remark in another\'s evaluation file', () => c.s3.del(`/api/evaluations/notes/${entry}`)],
+      ['edit a critical point', () => c.s3.patch(`/api/evaluations/points/${point}`, { description: 'נפרץ', version: 1 })],
+      ['add to another\'s evaluation file', () => c.s3.post(`/api/evaluations/${p.cadet}/notes`, { occurredOn: '2026-10-01', body: 'נפרץ' })],
+      ['write the company commander\'s summary', () => c.s3.patch(`/api/evaluations/${p.cadet}`, { changes: { summary: 'נפרץ' } })],
+      ['change the exams in another\'s file', () => c.s3.patch(`/api/evaluations/${p.cadet}`, { changes: { midA: 100 } })],
       ['delete another\'s absence', () => c.s3.del(`/api/absences/${absence}`)],
       ['mark an absence for another', () => c.s3.post('/api/absences', { userId: c.ids.s1, startDate: '2026-10-10', endDate: '2026-10-11' })],
       ['delete a restricted document', () => c.s3.del(`/api/documents/${doc}`)],

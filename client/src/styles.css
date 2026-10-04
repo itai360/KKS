@@ -5013,6 +5013,316 @@ button.fab-missing {
   }
 }
 
+/* ---------- the evaluation file (components/EvaluationFile.tsx) ---------- */
+
+.eval-split {
+  grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr);
+}
+
+.eval-status {
+  position: sticky;
+  top: calc(var(--top-h) + 8px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.eval-status.saved,
+.eval-status.idle {
+  color: var(--green-ink);
+}
+
+.eval-status.pending,
+.eval-status.saving {
+  color: var(--ink-2);
+}
+
+.eval-status.failed,
+.eval-status.conflict {
+  color: var(--red-ink);
+  border-color: var(--red);
+  background: var(--red-bg);
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.eval-num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.eval-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.eval-table caption {
+  caption-side: top;
+  text-align: start;
+  padding: 0 0 8px;
+  font-family: var(--display);
+  font-size: 20px;
+}
+
+.eval-table th,
+.eval-table td {
+  padding: 8px 10px;
+  text-align: start;
+  vertical-align: middle;
+  border: 1px solid var(--line);
+}
+
+.eval-table th[scope='row'] {
+  width: 30%;
+  background: var(--gray-bg);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.eval-table thead th {
+  background: var(--gray-bg);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.eval-table .input,
+.eval-table .select {
+  width: 100%;
+}
+
+.eval-pair > * {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.eval-cell-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.eval-exams td {
+  width: 35%;
+}
+
+.eval-list td,
+.eval-list th {
+  white-space: nowrap;
+}
+
+.eval-text {
+  resize: vertical;
+  overflow: hidden;
+  min-height: 0;
+  line-height: 1.6;
+}
+
+.eval-readonly {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+
+.eval-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--red);
+  border-radius: var(--radius-sm);
+  background: var(--red-bg);
+  color: var(--red-ink);
+}
+
+.eval-conflict-text {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.eval-timeline,
+.eval-points,
+.eval-history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.eval-item {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--ink-2);
+  border-radius: var(--radius-sm);
+}
+
+.eval-critical {
+  border: 1.5px solid var(--red);
+}
+
+.eval-critical .eval-num {
+  background: var(--red);
+  color: #fff;
+}
+
+.eval-points .eval-item {
+  border-inline-start-color: var(--red);
+  background: var(--red-bg);
+}
+
+.eval-point-part {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eval-add {
+  padding-top: 12px;
+  border-top: 1px dashed var(--line-2);
+}
+
+.eval-add.row {
+  align-items: flex-end;
+}
+
+/* the long texts of a new entry take the whole width */
+.eval-add.col > .field,
+.eval-add.col .eval-text {
+  width: 100%;
+}
+
+.eval-history li {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eval-history-old div,
+.eval-history-new div {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.eval-history-old div {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-2);
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.eval-context > .label-caps {
+  margin-bottom: -8px;
+}
+
+@media (max-width: 1100px) {
+  .eval-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .eval-context {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .eval-table th[scope='row'] {
+    width: 36%;
+  }
+  .eval-exams thead {
+    display: none;
+  }
+  .eval-exams tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .eval-exams th[scope='row'] {
+    grid-column: 1 / -1;
+    width: auto;
+  }
+  .eval-exams td {
+    width: auto;
+  }
+  .eval-status {
+    top: calc(var(--top-h) + 4px);
+  }
+}
+
+@media print {
+  .eval-status,
+  .eval-context {
+    display: none;
+  }
+  .eval-split {
+    grid-template-columns: 1fr;
+  }
+  .eval-section {
+    break-inside: avoid-page;
+    box-shadow: none;
+  }
+  .eval-points .eval-item {
+    background: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
 /* ---------- quick command, Ctrl+K (components/CommandPalette.tsx) ---------- */
 
 .search input {
