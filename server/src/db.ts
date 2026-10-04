@@ -916,8 +916,34 @@ WHERE trim(f.team_opinion) <> ''
   AND coalesce(f.team_opinion_by, (SELECT t.commander_id FROM cadets c JOIN teams t ON t.id = c.team_id WHERE c.id = f.cadet_id), (SELECT id FROM users WHERE role = 'commander' ORDER BY id LIMIT 1)) IS NOT NULL`);
 }
 
+// the exams in the evaluation file as the course reaches them: the fitness threshold (the fitness
+// fields so far) and the readings exam always, the mid and final fitness tests and exams once added
+// for the whole course. A new course starts without them (the table is not carried over).
+const SCHEMA_V29 = `
+ALTER TABLE evaluation_files ADD COLUMN readings_a REAL;
+ALTER TABLE evaluation_files ADD COLUMN readings_b REAL;
+ALTER TABLE evaluation_files ADD COLUMN mid_run_result TEXT;
+ALTER TABLE evaluation_files ADD COLUMN mid_run_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN mid_pushups INTEGER;
+ALTER TABLE evaluation_files ADD COLUMN mid_pushups_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN end_run_result TEXT;
+ALTER TABLE evaluation_files ADD COLUMN end_run_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN end_pushups INTEGER;
+ALTER TABLE evaluation_files ADD COLUMN end_pushups_score REAL;
+
+CREATE TABLE evaluation_tests (
+  test TEXT PRIMARY KEY,
+  added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  added_at TEXT NOT NULL
+);
+INSERT INTO evaluation_tests(test, added_at)
+  SELECT 'midExam', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE EXISTS (SELECT 1 FROM evaluation_files WHERE mid_a IS NOT NULL OR mid_b IS NOT NULL);
+INSERT INTO evaluation_tests(test, added_at)
+  SELECT 'finalExam', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE EXISTS (SELECT 1 FROM evaluation_files WHERE final_a IS NOT NULL OR final_b IS NOT NULL);
+`;
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

@@ -6,8 +6,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { STANDING_LABELS, STANDING_TONES, STANDINGS, EVAL_TONE_LABELS, type Standing } from '@shared/constants';
 import { shortDate } from '@shared/dates';
-import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EVALUATION_TITLE, NOT_ENTERED } from '@shared/evaluation';
-import type { EvaluationChange, EvaluationField, EvaluationFile, EvaluationNote, EvaluationPoint } from '@shared/types';
+import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EVALUATION_TITLE, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, NOT_ENTERED, shownTests, TEST_ORDER } from '@shared/evaluation';
+import type { EvaluationChange, EvaluationExams, EvaluationField, EvaluationFile, EvaluationNote, EvaluationPoint, ExamTest } from '@shared/types';
 import { api, ApiError } from '../lib/api';
 import { useDraft } from '../lib/draft';
 import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
@@ -19,7 +19,7 @@ import { useToast } from './Toasts';
 import { ErrorBox, Field, Modal, Seg } from './ui';
 
 type Value = string | number | null;
-const NUMBER_FIELDS: EvaluationField[] = ['midA', 'midB', 'finalA', 'finalB', 'runScore', 'pushups', 'pushupsScore'];
+const NUMBER_FIELDS: EvaluationField[] = EXAM_FIELDS.filter((k) => !EXAM_TEXT_FIELDS.includes(k));
 
 /** a field's value in the file as the server keeps it */
 export function fieldValue(f: EvaluationFile, field: EvaluationField): Value {
@@ -44,7 +44,7 @@ export function fieldValue(f: EvaluationFile, field: EvaluationField): Value {
     case 'standing':
       return f.standing;
     default:
-      return f.exams[field];
+      return f.exams[field] ?? null;
   }
 }
 
@@ -101,12 +101,14 @@ export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) 
       const next = await api.patch<EvaluationFile>(`/api/evaluations/${cadetId}`, { changes, base });
       setFile(next);
       // what was sent is saved; what was typed again meanwhile waits for the next save
+      const sent = (f: EvaluationField, e: Edit) => sending.some(([sf, se]) => sf === f && se.value === e.value);
+      const waiting = (Object.entries(editsRef.current) as [EvaluationField, Edit][]).some(([f, e]) => !sent(f, e) && !conflictsRef.current.includes(f));
       setEdits((cur) => {
         const out = { ...cur };
         for (const [f, e] of sending) if (out[f]?.value === e.value) delete out[f];
         return out;
       });
-      setStatus({ state: 'saved', at: new Date().toISOString() });
+      setStatus(waiting ? { state: 'pending' } : { state: 'saved', at: new Date().toISOString() });
       emitLocalChange('cadets');
     } catch (err) {
       const e = err as ApiError;
@@ -304,24 +306,6 @@ function Section({ n, title, children, className, hint, id }: { n?: number; titl
 export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; setFile: (f: EvaluationFile) => void; onHistory: (itemId?: number) => void }) {
   const saver = useFileSaver(file, setFile);
   const { user } = useSession();
-  const exam = (label: string, a: EvaluationField, b: EvaluationField, aLabel: string, bLabel: string, aType: 'score' | 'time' | 'reps' = 'score') => (
-    <tr>
-      <th scope="row">{label}</th>
-      <td>
-        <span className="eval-cell-label">{aLabel}</span>
-        {aType === 'time' ? (
-          <Input field={a} saver={saver} file={file} placeholder={NOT_ENTERED} />
-        ) : (
-          <Input field={a} saver={saver} file={file} type="number" min={0} max={aType === 'reps' ? 1000 : 100} step={aType === 'reps' ? 1 : 0.5} placeholder={NOT_ENTERED} />
-        )}
-      </td>
-      <td>
-        <span className="eval-cell-label">{bLabel}</span>
-        <Input field={b} saver={saver} file={file} type="number" min={0} max={100} step={0.5} placeholder={NOT_ENTERED} />
-      </td>
-    </tr>
-  );
-
   return (
     <div className="col gap-16 eval-file">
       <SaveBar saver={saver} file={file} />
@@ -406,24 +390,7 @@ export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; s
       </Section>
 
       <Section n={4} id="eval-4" title={EVALUATION_SECTIONS.exams} hint={`כל נתון נשמר בנפרד. שדה ריק הוא "${NOT_ENTERED}" - שונה מציון 0.`}>
-        <div className="table-wrap">
-          <table className="eval-table eval-exams">
-            <thead>
-              <tr>
-                <th scope="col">מבחן</th>
-                <th scope="col" colSpan={2}>
-                  שדות למילוי
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {exam('מבחן אמצע', 'midA', 'midB', 'ציון מועד א׳', 'ציון מועד ב׳')}
-              {exam('מבחן סוף', 'finalA', 'finalB', 'ציון מועד א׳', 'ציון מועד ב׳')}
-              {exam('כושר גופני - ריצה', 'runResult', 'runScore', 'תוצאה', 'ציון', 'time')}
-              {exam('כושר גופני - שכיבות סמיכה', 'pushups', 'pushupsScore', 'מספר חזרות', 'ציון', 'reps')}
-            </tbody>
-          </table>
-        </div>
+        <ExamsSection file={file} setFile={setFile} saver={saver} />
       </Section>
 
       <Section n={5} id="eval-5" title={EVALUATION_SECTIONS.dynamics} hint="ציון 1-5 ומיקום ביחס לצוות 1-12. הערכה חדשה מתווספת לקודמות.">
@@ -463,6 +430,139 @@ export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; s
         )}
       </Section>
     </div>
+  );
+}
+
+/** a number field of a test: a score 0-100, or repetitions */
+function ExamInput({ field, saver, file }: { field: keyof EvaluationExams; saver: Saver; file: EvaluationFile }) {
+  if (EXAM_TEXT_FIELDS.includes(field)) return <Input field={field} saver={saver} file={file} placeholder={NOT_ENTERED} />;
+  const reps = field.toLowerCase().endsWith('pushups');
+  return <Input field={field} saver={saver} file={file} type="number" min={0} max={reps ? 1000 : 100} step={reps ? 1 : 0.5} placeholder={NOT_ENTERED} />;
+}
+
+function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile: (f: EvaluationFile) => void; saver: Saver }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const addable = TEST_ORDER.filter((t) => !EXAM_TESTS[t].always && !file.tests.includes(t));
+  const act = async (run: () => Promise<EvaluationFile>, done: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setFile(await run());
+      emitLocalChange('cadets');
+      toast({ title: done, tone: 'green' });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = (t: ExamTest) => void act(() => api.post<EvaluationFile>(`/api/evaluations/${file.cadet.id}/tests`, { test: t }), `"${EXAM_TESTS[t].label}" נוסף לתיקים של כל הצוערים`);
+  const remove = async (t: ExamTest) => {
+    const label = EXAM_TESTS[t].label;
+    if (!(await ask({ title: `להסיר את "${label}"?`, body: 'הוא יוסר מתיקי ההערכה של כל הצוערים. עדיין לא הוזנו בו נתונים, ואפשר להוסיף אותו שוב בכל שלב.', confirm: 'הסרה', danger: true }))) return;
+    void act(() => api.del<EvaluationFile>(`/api/evaluations/${file.cadet.id}/tests/${t}`), `"${label}" הוסר מהתיקים`);
+  };
+  const removeButton = (t: ExamTest) =>
+    file.removableTests.includes(t) && (
+      <button type="button" className="icon-btn eval-test-remove" disabled={busy} aria-label={`הסרת "${EXAM_TESTS[t].label}" מהתיקים`} title="הסרה מהתיקים" onClick={() => void remove(t)}>
+        <Icon name="x" size={14} />
+      </button>
+    );
+  return (
+    <>
+      <div className="table-wrap">
+        <table className="eval-table eval-exams">
+          <thead>
+            <tr>
+              <th scope="col">מבחן</th>
+              <th scope="col" colSpan={2}>
+                שדות למילוי
+              </th>
+            </tr>
+          </thead>
+          {file.tests.map((t) => {
+            const test = EXAM_TESTS[t];
+            if (test.kind === 'exam') {
+              const [a, b] = test.fields;
+              return (
+                <tbody key={t}>
+                  <tr>
+                    <th scope="row">
+                      <span className="eval-test-name">
+                        {test.label}
+                        {removeButton(t)}
+                      </span>
+                    </th>
+                    <td>
+                      <span className="eval-cell-label">ציון מועד א׳</span>
+                      <ExamInput field={a} saver={saver} file={file} />
+                    </td>
+                    <td>
+                      <span className="eval-cell-label">ציון מועד ב׳</span>
+                      <ExamInput field={b} saver={saver} file={file} />
+                    </td>
+                  </tr>
+                </tbody>
+              );
+            }
+            const [run, runScore, pushups, pushupsScore] = test.fields;
+            return (
+              <tbody key={t} className="eval-test">
+                <tr className="eval-test-head">
+                  <th colSpan={3} scope="rowgroup">
+                    <span className="eval-test-name">
+                      {test.label}
+                      {removeButton(t)}
+                    </span>
+                  </th>
+                </tr>
+                <tr>
+                  <th scope="row" className="eval-sub">
+                    ריצה
+                  </th>
+                  <td>
+                    <span className="eval-cell-label">תוצאה</span>
+                    <ExamInput field={run} saver={saver} file={file} />
+                  </td>
+                  <td>
+                    <span className="eval-cell-label">ציון</span>
+                    <ExamInput field={runScore} saver={saver} file={file} />
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className="eval-sub">
+                    שכיבות סמיכה
+                  </th>
+                  <td>
+                    <span className="eval-cell-label">מספר חזרות</span>
+                    <ExamInput field={pushups} saver={saver} file={file} />
+                  </td>
+                  <td>
+                    <span className="eval-cell-label">ציון</span>
+                    <ExamInput field={pushupsScore} saver={saver} file={file} />
+                  </td>
+                </tr>
+              </tbody>
+            );
+          })}
+        </table>
+      </div>
+      {addable.length > 0 && (
+        <div className="eval-add col gap-6">
+          <div className="row wrap gap-6">
+            {addable.map((t) => (
+              <button key={t} type="button" className="btn btn-sm" disabled={busy} onClick={() => add(t)}>
+                <Icon name="plus" size={14} /> {EXAM_TESTS[t].label}
+              </button>
+            ))}
+          </div>
+          <span className="tiny muted">מבחן שנוסף מופיע בתיקים של כל הצוערים בקורס.</span>
+        </div>
+      )}
+      <ErrorBox error={error} />
+    </>
   );
 }
 
@@ -1047,26 +1147,30 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
       <Section n={4} title={EVALUATION_SECTIONS.exams}>
         <table className="eval-table">
           <tbody>
-            <tr>
-              <th scope="row">מבחן אמצע</th>
-              <td>מועד א׳: {valueOr(e.midA)}</td>
-              <td>מועד ב׳: {valueOr(e.midB)}</td>
-            </tr>
-            <tr>
-              <th scope="row">מבחן סוף</th>
-              <td>מועד א׳: {valueOr(e.finalA)}</td>
-              <td>מועד ב׳: {valueOr(e.finalB)}</td>
-            </tr>
-            <tr>
-              <th scope="row">כושר גופני - ריצה</th>
-              <td>תוצאה: {valueOr(e.runResult)}</td>
-              <td>ציון: {valueOr(e.runScore)}</td>
-            </tr>
-            <tr>
-              <th scope="row">כושר גופני - שכיבות סמיכה</th>
-              <td>חזרות: {valueOr(e.pushups)}</td>
-              <td>ציון: {valueOr(e.pushupsScore)}</td>
-            </tr>
+            {(file.tests ?? shownTests([], e)).flatMap((t) => {
+              const test = EXAM_TESTS[t];
+              const v = (k: keyof EvaluationExams) => valueOr(e[k] ?? null);
+              if (test.kind === 'exam')
+                return [
+                  <tr key={t}>
+                    <th scope="row">{test.label}</th>
+                    <td>מועד א׳: {v(test.fields[0])}</td>
+                    <td>מועד ב׳: {v(test.fields[1])}</td>
+                  </tr>,
+                ];
+              return [
+                <tr key={`${t}-run`}>
+                  <th scope="row">{test.label} - ריצה</th>
+                  <td>תוצאה: {v(test.fields[0])}</td>
+                  <td>ציון: {v(test.fields[1])}</td>
+                </tr>,
+                <tr key={`${t}-pushups`}>
+                  <th scope="row">{test.label} - שכיבות סמיכה</th>
+                  <td>חזרות: {v(test.fields[2])}</td>
+                  <td>ציון: {v(test.fields[3])}</td>
+                </tr>,
+              ];
+            })}
           </tbody>
         </table>
       </Section>

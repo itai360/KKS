@@ -56,7 +56,9 @@ describe('a living file', () => {
     expect(f.layout).toBe(2);
     expect(f.general).toEqual({ companyCommander: '', teamCommander: '', companyCommanderAuto: 'מפקד הקורס', teamCommanderAuto: 'מפק"צ 1' });
     expect(f.details).toEqual({ firstName: 'איתן משה', lastName: 'שפיגלר', personalNumber: '9335581', unit: '', city: '', enlistedOn: null, releaseOn: null });
-    expect(f.exams).toEqual({ midA: null, midB: null, finalA: null, finalB: null, runResult: null, runScore: null, pushups: null, pushupsScore: null });
+    expect(Object.values(f.exams).every((v) => v === null)).toBe(true);
+    expect(f.tests).toEqual(['fitBase', 'readings']);
+    expect(f.removableTests).toEqual([]);
     expect([f.dynamics, f.notes, f.points, f.committeeReason, f.militaryPath]).toEqual([[], [], [], '', '']);
   });
 
@@ -72,10 +74,41 @@ describe('a living file', () => {
     expect(f.militaryPath).toContain('מפעיל במרכז');
     // zero is a score; what was never entered stays "not entered"
     expect(f.exams).toMatchObject({ midA: 0, midB: null, runResult: '11:45', runScore: null, pushups: 42 });
+    // a test with a value is shown even before the course added it
+    expect(f.tests).toEqual(['fitBase', 'readings', 'midExam']);
     expect(f.updatedByName).toBe('מפק"צ 1');
     // and back to "not entered"
     await set(c.s1, { midA: null });
     expect((await file()).exams.midA).toBeNull();
+    expect((await file()).tests).toEqual(['fitBase', 'readings']);
+  });
+
+  it('the threshold fitness test and the readings exam are always there; the rest are added for the whole course', async () => {
+    const other = (await c.cmd.post('/api/cadets', { firstName: 'דנה', lastName: 'לוי' })).body.cadet.id as number;
+    const tests = `/api/evaluations/${cadet}/tests`;
+    expect((await c.s2.post(tests, { test: 'fitMid' })).status).toBe(403);
+    expect((await c.s1.post(tests, { test: 'fitBase' })).status).toBe(400);
+    const added = (await c.s1.post(tests, { test: 'fitMid' })).body as EvaluationFile;
+    expect(added.tests).toEqual(['fitBase', 'readings', 'fitMid']);
+    expect(added.removableTests).toEqual(['fitMid']);
+    expect((await c.s1.post(tests, { test: 'fitMid' })).status).toBe(200); // twice is once
+    // in the other cadets' files too
+    expect(((await c.cmd.get(`/api/evaluations/${other}`)).body as EvaluationFile).tests).toEqual(['fitBase', 'readings', 'fitMid']);
+    expect(((await c.s1.get('/api/evaluations')).body as EvaluationListItem[])[0]).toMatchObject({ exams: 0, examsTotal: 10 });
+    // once a value is entered it stays
+    await set(c.s1, { midRunResult: '10:58', midRunScore: 85, readingsA: 92 });
+    const f = await file(c.s1);
+    expect(f.exams).toMatchObject({ midRunResult: '10:58', midRunScore: 85, readingsA: 92, runResult: null });
+    expect(f.removableTests).toEqual([]);
+    expect((await c.cmd.del(`${tests}/fitMid`)).body.error).toContain('כבר הוזנו נתונים');
+    expect(((await c.s1.get('/api/evaluations')).body as EvaluationListItem[])[0]).toMatchObject({ exams: 3, examsTotal: 10 });
+    const history = (await c.s1.get(`/api/evaluations/${cadet}/history`)).body as EvaluationChange[];
+    expect(history.map((h) => h.label)).toEqual(expect.arrayContaining(['כושר גופני אמצע - ציון ריצה', 'מבחן מקראות - מועד א׳']));
+    // emptied again, it can be taken away - by the commander or the cadet's team commander only
+    await set(c.s1, { midRunResult: null, midRunScore: null });
+    expect((await c.s2.del(`${tests}/fitMid`)).status).toBe(403);
+    expect(((await c.s1.del(`${tests}/fitMid`)).body as EvaluationFile).tests).toEqual(['fitBase', 'readings']);
+    expect((await c.s1.del(`${tests}/readings`)).status).toBe(400);
   });
 
   it('keeps every value within its range', async () => {
@@ -213,6 +246,17 @@ describe('what was written before stays', () => {
       { title: '', body: 'חוות דעת מפקד הצוות (מהתיק הקודם):\nצוער רציני', tone: null, occurred_on: '2026-09-20', author_id: 2, shown_on: null },
     ]);
     expect(before.get<{ commander_opinion: string; standing: string; team_opinion: string }>('SELECT commander_opinion, standing, team_opinion FROM evaluation_files')).toEqual({ commander_opinion: 'במעקב', standing: 'watch', team_opinion: 'צוער רציני' });
+    before.close();
+  });
+
+  it('the fitness entered so far is the threshold test; a mid or final exam already entered is added for the course', () => {
+    const before = new Db(':memory:');
+    migrate(before, 28);
+    before.run("INSERT INTO cadets(id, first_name, created_at, updated_at) VALUES (1, 'נועם', '2026-09-01', '2026-09-01')");
+    before.run("INSERT INTO evaluation_files(cadet_id, mid_a, run_result, pushups, updated_at) VALUES (1, 74, '11:30', 40, '2026-09-21T08:00:00.000Z')");
+    migrate(before);
+    expect(before.all<{ test: string }>('SELECT test FROM evaluation_tests').map((r) => r.test)).toEqual(['midExam']);
+    expect(before.get('SELECT mid_a, run_result, pushups, readings_a, mid_run_score FROM evaluation_files')).toEqual({ mid_a: 74, run_result: '11:30', pushups: 40, readings_a: null, mid_run_score: null });
     before.close();
   });
 });

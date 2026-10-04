@@ -788,17 +788,34 @@ export interface EvaluationDynamics {
   canDelete: boolean;
 }
 
-/** exams and fitness: null is "not entered yet", which is not a zero */
+/**
+ * exams and fitness: null is "not entered yet", which is not a zero. The fitness threshold
+ * (run…, pushups…) and the readings exam are always in the file; the mid and final fitness tests
+ * and exams once the course adds them (shared/evaluation.ts, EXAM_TESTS).
+ */
 export interface EvaluationExams {
-  midA: number | null;
-  midB: number | null;
-  finalA: number | null;
-  finalB: number | null;
   runResult: string | null;
   runScore: number | null;
   pushups: number | null;
   pushupsScore: number | null;
+  readingsA: number | null;
+  readingsB: number | null;
+  midRunResult: string | null;
+  midRunScore: number | null;
+  midPushups: number | null;
+  midPushupsScore: number | null;
+  midA: number | null;
+  midB: number | null;
+  endRunResult: string | null;
+  endRunScore: number | null;
+  endPushups: number | null;
+  endPushupsScore: number | null;
+  finalA: number | null;
+  finalB: number | null;
 }
+
+/** an exam or fitness test of the file (shared/evaluation.ts names them) */
+export type ExamTest = 'fitBase' | 'readings' | 'fitMid' | 'midExam' | 'fitEnd' | 'finalExam';
 
 /** the fields of the file that are set one by one (shared/evaluation.ts names them) */
 export type EvaluationField =
@@ -812,14 +829,7 @@ export type EvaluationField =
   | 'enlistedOn'
   | 'releaseOn'
   | 'militaryPath'
-  | 'midA'
-  | 'midB'
-  | 'finalA'
-  | 'finalB'
-  | 'runResult'
-  | 'runScore'
-  | 'pushups'
-  | 'pushupsScore'
+  | keyof EvaluationExams
   | 'committeeReason'
   | 'summary'
   | 'standing';
@@ -876,8 +886,11 @@ export interface EvaluationFile {
   details: { firstName: string; lastName: string; personalNumber: string; unit: string; city: string; enlistedOn: string | null; releaseOn: string | null };
   /** 3. */
   militaryPath: string;
-  /** 4. */
+  /** 4. the tests shown, in order: the ones always there, the ones the course added, any with a value */
+  tests: ExamTest[];
   exams: EvaluationExams;
+  /** tests added for the course that no file has a value in yet - they can still be taken away */
+  removableTests: ExamTest[];
   /** 5. oldest first */
   dynamics: EvaluationDynamics[];
   /** 6. */
@@ -912,8 +925,9 @@ export interface EvaluationListItem {
   standing: Standing;
   notes: number;
   points: number;
-  /** of the 8 exam and fitness fields, how many are entered */
+  /** of the exam and fitness fields of the tests in the file (examsTotal), how many are entered */
   exams: number;
+  examsTotal: number;
   lastDynamics: { score: number; rank: number; occurredOn: string } | null;
   hasSummary: boolean;
   hasCommitteeReason: boolean;

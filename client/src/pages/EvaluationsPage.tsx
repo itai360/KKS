@@ -81,7 +81,7 @@ export function EvaluationsPage() {
             onClick={() =>
               void saveCsv(
                 'תיקי-הערכה',
-                ['שם מלא', 'מספר אישי', 'צוות', 'מצב', 'התייחסויות', 'נקודות קריטיות', 'ציונים שהוזנו (מתוך 8)', 'דינמיקה אחרונה - ציון', 'דינמיקה אחרונה - מיקום', 'סיכום מ"פ', 'הערות משמעת', 'עודכן לאחרונה', 'ועדה'],
+                ['שם מלא', 'מספר אישי', 'צוות', 'מצב', 'התייחסויות', 'נקודות קריטיות', 'ציונים שהוזנו', 'דינמיקה אחרונה - ציון', 'דינמיקה אחרונה - מיקום', 'סיכום מ"פ', 'הערות משמעת', 'עודכן לאחרונה', 'ועדה'],
                 shown.map((c) => [
                   c.fullName,
                   c.personalNumber,
@@ -89,7 +89,7 @@ export function EvaluationsPage() {
                   STANDING_LABELS[c.standing],
                   c.notes,
                   c.points,
-                  c.exams,
+                  `${c.exams}/${c.examsTotal}`,
                   c.lastDynamics?.score ?? '',
                   c.lastDynamics?.rank ?? '',
                   c.hasSummary ? 'נכתב' : '',
@@ -149,7 +149,7 @@ export function EvaluationsPage() {
                     <div className="strong">{c.fullName}</div>
                     <div className="tiny muted">
                       {c.personalNumber && <span className="mono">{c.personalNumber} · </span>}
-                      {c.notes} התייחסויות · {c.exams}/8 ציונים
+                      {c.notes} התייחסויות · {c.exams}/{c.examsTotal} ציונים
                       {c.lastDynamics && ` · דינמיקה ${c.lastDynamics.score}/5, מקום ${c.lastDynamics.rank}`}
                       {c.updatedAt && <span className="hide-mobile"> · עודכן {fmtAgo(c.updatedAt)}</span>}
                     </div>

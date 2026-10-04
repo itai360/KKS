@@ -5137,6 +5137,30 @@ button.fab-missing {
   width: 35%;
 }
 
+/* a fitness test: its name over its two rows (run, push-ups) */
+.eval-test-head th {
+  background: var(--gray-bg);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.eval-table th.eval-sub {
+  background: transparent;
+  font-weight: 500;
+  padding-inline-start: 22px;
+}
+
+.eval-test-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.eval-test-remove {
+  width: 26px;
+  height: 26px;
+}
+
 .eval-list td,
 .eval-list th {
   white-space: nowrap;
@@ -5288,7 +5312,8 @@ button.fab-missing {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
-  .eval-exams th[scope='row'] {
+  .eval-exams th[scope='row'],
+  .eval-exams th[scope='rowgroup'] {
     grid-column: 1 / -1;
     width: auto;
   }

@@ -13,8 +13,8 @@
 import { z } from 'zod';
 import { COMMITTEE_DECISIONS, COMMITTEE_DECISION_LABELS, COMMITTEE_KINDS, committeeTo, DISCIPLINE_COMMITTEE_KIND, STANDING_LABELS, STANDINGS } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
-import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EXAM_FIELDS, type EvaluationSection } from '../../shared/evaluation';
-import type { Committee, CommitteeDetail, EvaluationChange, EvaluationField, EvaluationFile, EvaluationListItem, EvaluationNote, EvaluationPoint } from '../../shared/types';
+import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, examsEntered, shownTests, type EvaluationSection } from '../../shared/evaluation';
+import type { Committee, CommitteeDetail, EvaluationChange, EvaluationExams, EvaluationField, EvaluationFile, EvaluationListItem, EvaluationNote, EvaluationPoint, ExamTest } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { cadetRow, canManageCadet, disciplineOrder, listExperiences, RECORD_BASE, toCadet, toRecord, type CadetRow, type RecordRow } from './cadets';
 import { badRequest, clock, forbidden, HttpError, notFound, nowIso, tz } from './core';
@@ -35,14 +35,24 @@ interface FileRow {
   enlisted_on: string | null;
   release_on: string | null;
   military_path: string;
-  mid_a: number | null;
-  mid_b: number | null;
-  final_a: number | null;
-  final_b: number | null;
   run_result: string | null;
   run_score: number | null;
   pushups: number | null;
   pushups_score: number | null;
+  readings_a: number | null;
+  readings_b: number | null;
+  mid_run_result: string | null;
+  mid_run_score: number | null;
+  mid_pushups: number | null;
+  mid_pushups_score: number | null;
+  mid_a: number | null;
+  mid_b: number | null;
+  end_run_result: string | null;
+  end_run_score: number | null;
+  end_pushups: number | null;
+  end_pushups_score: number | null;
+  final_a: number | null;
+  final_b: number | null;
   committee_reason: string;
   updated_at: string;
   updated_by_name: string | null;
@@ -220,6 +230,41 @@ function toCommittee(r: CommitteeRow): Committee {
   };
 }
 
+/** where each exam and fitness field is kept */
+const EXAM_COLUMNS: Record<keyof EvaluationExams, keyof FileRow> = {
+  runResult: 'run_result',
+  runScore: 'run_score',
+  pushups: 'pushups',
+  pushupsScore: 'pushups_score',
+  readingsA: 'readings_a',
+  readingsB: 'readings_b',
+  midRunResult: 'mid_run_result',
+  midRunScore: 'mid_run_score',
+  midPushups: 'mid_pushups',
+  midPushupsScore: 'mid_pushups_score',
+  midA: 'mid_a',
+  midB: 'mid_b',
+  endRunResult: 'end_run_result',
+  endRunScore: 'end_run_score',
+  endPushups: 'end_pushups',
+  endPushupsScore: 'end_pushups_score',
+  finalA: 'final_a',
+  finalB: 'final_b',
+};
+
+function examsOf(f: FileRow | undefined): EvaluationExams {
+  return Object.fromEntries(EXAM_FIELDS.map((k) => [k, (f?.[EXAM_COLUMNS[k]] as string | number | null | undefined) ?? null])) as unknown as EvaluationExams;
+}
+
+/** the tests added for the whole course (the threshold fitness test and the readings exam are always there) */
+const addedTests = (): ExamTest[] => db().all<{ test: ExamTest }>('SELECT test FROM evaluation_tests').map((r) => r.test);
+
+/** an added test that no file has a value in yet */
+function testIsEmpty(test: ExamTest): boolean {
+  const where = EXAM_TESTS[test].fields.map((k) => `${EXAM_COLUMNS[k]} IS NOT NULL`).join(' OR ');
+  return !db().get(`SELECT 1 FROM evaluation_files WHERE ${where} LIMIT 1`);
+}
+
 /** the first active company commander: the name the file shows until another is written */
 const companyCommanderName = () => {
   const id = commanderIds()[0];
@@ -240,6 +285,8 @@ function buildFile(viewer: UserRow, cadetId: number): EvaluationFile {
   const order = disciplineOrder(records);
   const teamCommanderName = c.team_commander_id ? (getUserRow(c.team_commander_id)?.display_name ?? null) : null;
   const commander = isCommander(viewer);
+  const exams = examsOf(f);
+  const added = addedTests();
 
   return {
     layout: 2,
@@ -256,16 +303,9 @@ function buildFile(viewer: UserRow, cadetId: number): EvaluationFile {
       releaseOn: f?.release_on ?? null,
     },
     militaryPath: f?.military_path ?? '',
-    exams: {
-      midA: f?.mid_a ?? null,
-      midB: f?.mid_b ?? null,
-      finalA: f?.final_a ?? null,
-      finalB: f?.final_b ?? null,
-      runResult: f?.run_result ?? null,
-      runScore: f?.run_score ?? null,
-      pushups: f?.pushups ?? null,
-      pushupsScore: f?.pushups_score ?? null,
-    },
+    tests: shownTests(added, exams),
+    exams,
+    removableTests: added.filter((t) => !EXAM_TESTS[t].always && testIsEmpty(t)),
     dynamics: db()
       .all<{ id: number; occurred_on: string; score: number; rank: number; author_id: number; author_name: string }>(
         'SELECT d.*, u.display_name AS author_name FROM evaluation_dynamics d JOIN users u ON u.id = d.author_id WHERE d.cadet_id = ? ORDER BY d.occurred_on, d.id',
@@ -329,11 +369,13 @@ export function listEvaluations(actor: UserRow): EvaluationListItem[] {
       .all<{ cadet_id: number; n: number }>("SELECT cadet_id, count(*) AS n FROM cadet_records WHERE kind = 'discipline' AND formal = 1 GROUP BY cadet_id")
       .map((r) => [r.cadet_id, r.n]),
   );
-  const examColumns = ['mid_a', 'mid_b', 'final_a', 'final_b', 'run_result', 'run_score', 'pushups', 'pushups_score'] as const;
+  const added = addedTests();
 
   return cadets.map((c) => {
     const f = files.get(c.id);
     const committee = committees.get(c.id);
+    const exams = examsOf(f);
+    const tally = examsEntered(shownTests(added, exams), exams);
     return {
       cadetId: c.id,
       fullName: fullName(c),
@@ -344,7 +386,8 @@ export function listEvaluations(actor: UserRow): EvaluationListItem[] {
       standing: f?.standing ?? 'ok',
       notes: notes.get(c.id) ?? 0,
       points: points.get(c.id) ?? 0,
-      exams: f ? examColumns.filter((k) => f[k] !== null && f[k] !== '').length : 0,
+      exams: tally.entered,
+      examsTotal: tally.total,
       lastDynamics: dynamics.get(c.id) ?? null,
       hasSummary: !!f?.commander_opinion.trim(),
       hasCommitteeReason: !!f?.committee_reason.trim(),
@@ -360,7 +403,18 @@ export function listEvaluations(actor: UserRow): EvaluationListItem[] {
 
 const score = z.number().min(0, 'ציון בין 0 ל-100').max(100, 'ציון בין 0 ל-100').nullable();
 const text = (max: number) => z.string().max(max, 'הטקסט ארוך מדי');
-const FIELD_RULES: Record<EvaluationField, { schema: z.ZodType<string | number | null>; column?: keyof FileRow; cadet?: 'first_name' | 'last_name' | 'personal_number' }> = {
+type FieldRule = { schema: z.ZodType<string | number | null>; column?: keyof FileRow; cadet?: 'first_name' | 'last_name' | 'personal_number' };
+const REPS: (keyof EvaluationExams)[] = ['pushups', 'midPushups', 'endPushups'];
+const EXAM_RULES = Object.fromEntries(
+  EXAM_FIELDS.map((k): [keyof EvaluationExams, FieldRule] => [
+    k,
+    {
+      schema: EXAM_TEXT_FIELDS.includes(k) ? z.string().trim().max(40).nullable() : REPS.includes(k) ? z.number().int('מספר שלם של חזרות').min(0).max(1000).nullable() : score,
+      column: EXAM_COLUMNS[k],
+    },
+  ]),
+) as Record<keyof EvaluationExams, FieldRule>;
+const FIELD_RULES: Record<EvaluationField, FieldRule> = {
   companyCommander: { schema: text(120), column: 'company_commander' },
   teamCommander: { schema: text(120), column: 'team_commander' },
   firstName: { schema: z.string().trim().min(1, 'חובה למלא שם פרטי').max(60), cadet: 'first_name' },
@@ -371,14 +425,7 @@ const FIELD_RULES: Record<EvaluationField, { schema: z.ZodType<string | number |
   enlistedOn: { schema: dateKey.nullable(), column: 'enlisted_on' },
   releaseOn: { schema: dateKey.nullable(), column: 'release_on' },
   militaryPath: { schema: text(20_000), column: 'military_path' },
-  midA: { schema: score, column: 'mid_a' },
-  midB: { schema: score, column: 'mid_b' },
-  finalA: { schema: score, column: 'final_a' },
-  finalB: { schema: score, column: 'final_b' },
-  runResult: { schema: z.string().trim().max(40).nullable(), column: 'run_result' },
-  runScore: { schema: score, column: 'run_score' },
-  pushups: { schema: z.number().int('מספר שלם של חזרות').min(0).max(1000).nullable(), column: 'pushups' },
-  pushupsScore: { schema: score, column: 'pushups_score' },
+  ...EXAM_RULES,
   committeeReason: { schema: text(20_000), column: 'committee_reason' },
   summary: { schema: text(20_000), column: 'commander_opinion' },
   standing: { schema: z.enum(STANDINGS), column: 'standing' },
@@ -392,17 +439,19 @@ const fieldsSchema = z.object({
   base: z.record(z.string(), value).optional(),
 });
 
+/** fields that can be "not entered" (null), as distinct from empty text or a zero */
+const NULLABLE: EvaluationField[] = ['enlistedOn', 'releaseOn', ...EXAM_FIELDS];
+
 /** a value as kept: text trimmed, an empty one "not entered" where that exists */
 function normalize(field: EvaluationField, v: unknown): string | number | null {
   if (typeof v === 'string') {
     const t = v.trim();
-    if (t === '' && (field === 'enlistedOn' || field === 'releaseOn' || field === 'runResult')) return null;
+    if (t === '' && NULLABLE.includes(field)) return null;
     return field === 'militaryPath' || field === 'committeeReason' || field === 'summary' ? v.replace(/\s+$/, '') : t;
   }
   return (v as number | null) ?? null;
 }
 
-const NULLABLE: EvaluationField[] = ['enlistedOn', 'releaseOn', 'runResult', 'midA', 'midB', 'finalA', 'finalB', 'runScore', 'pushups', 'pushupsScore'];
 
 function currentValue(c: CadetRow, f: FileRow | undefined, field: EvaluationField): string | number | null {
   const rule = FIELD_RULES[field];
@@ -452,6 +501,30 @@ export function updateEvaluationFields(actor: UserRow, cadetId: number, raw: unk
     }
     touched(actor, cadetId);
   });
+  changed('cadets');
+}
+
+// ---------------- the exams the course has reached ----------------
+
+const testSchema = z.object({ test: z.enum(['fitMid', 'midExam', 'fitEnd', 'finalExam']) });
+
+/** adds a test to the files of every cadet in the course - from any file its user may open */
+export function addExamTest(actor: UserRow, cadetId: number, raw: unknown): void {
+  openFile(actor, cadetId);
+  const { test } = testSchema.parse(raw);
+  const added = db().run('INSERT INTO evaluation_tests(test, added_by, added_at) VALUES (?, ?, ?) ON CONFLICT(test) DO NOTHING', test, actor.id, nowIso()).changes > 0;
+  if (!added) return;
+  logActivity({ userId: actor.id, action: 'evaluation_test', text: `${actor.display_name} הוסיף "${EXAM_TESTS[test].label}" לתיקי ההערכה של כל הצוערים` });
+  changed('cadets');
+}
+
+/** takes an added test away again - only while no file has a value in it */
+export function removeExamTest(actor: UserRow, cadetId: number, test: string): void {
+  openFile(actor, cadetId);
+  const t = testSchema.parse({ test }).test;
+  if (!testIsEmpty(t)) throw badRequest(`כבר הוזנו נתונים ב"${EXAM_TESTS[t].label}" - הוא נשאר בתיקים`);
+  if (db().run('DELETE FROM evaluation_tests WHERE test = ?', t).changes === 0) return;
+  logActivity({ userId: actor.id, action: 'evaluation_test', text: `${actor.display_name} הסיר את "${EXAM_TESTS[t].label}" מתיקי ההערכה` });
   changed('cadets');
 }
 
@@ -808,7 +881,14 @@ export function committeeDetail(actor: UserRow, id: number): CommitteeDetail {
   // a referral carried over from the first release has no saved version yet: the file as it is now
   if (!r.snapshot) return { committee: toCommittee(r), file: buildFile(actor, r.cadet_id) };
   const saved = JSON.parse(r.snapshot) as EvaluationFile | LegacyFile;
-  return { committee: toCommittee(r), file: 'layout' in saved && saved.layout === 2 ? saved : fromLegacy(saved as LegacyFile) };
+  return { committee: toCommittee(r), file: 'layout' in saved && saved.layout === 2 ? withTests(saved) : fromLegacy(saved as LegacyFile) };
+}
+
+/** a version kept before tests could be added: the tests it has values in, the rest not entered */
+function withTests(file: EvaluationFile): EvaluationFile {
+  if (file.tests) return file;
+  const exams = { ...examsOf(undefined), ...file.exams };
+  return { ...file, exams, tests: shownTests([], exams), removableTests: [] };
 }
 
 /** a version given to a committee before the file had its present form */
@@ -855,7 +935,9 @@ function fromLegacy(old: LegacyFile): EvaluationFile {
     general: { companyCommander: '', teamCommander: '', companyCommanderAuto: null, teamCommanderAuto: old.teamCommanderName },
     details: { firstName: old.cadet.firstName, lastName: old.cadet.lastName, personalNumber: old.cadet.personalNumber, unit: '', city: '', enlistedOn: null, releaseOn: null },
     militaryPath: '',
-    exams: Object.fromEntries(EXAM_FIELDS.map((k) => [k, null])) as unknown as EvaluationFile['exams'],
+    tests: shownTests([], {}),
+    exams: examsOf(undefined),
+    removableTests: [],
     dynamics: [],
     committeeReason: '',
     notes,

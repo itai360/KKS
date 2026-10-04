@@ -48,6 +48,7 @@ import {
 } from './debriefs';
 import {
   addDynamics,
+  addExamTest,
   addNote,
   addPoint,
   cancelCommittee,
@@ -61,6 +62,7 @@ import {
   listEvaluations,
   referToCommittee,
   refreshCommitteeVersion,
+  removeExamTest,
   updateEvaluationFields,
   updateNote,
   updatePoint,
@@ -192,6 +194,15 @@ export function v3Router(): Router {
   r.get('/evaluations/:cadetId/history', (req, res) => res.json(evaluationHistory(me(req), id(req.params.cadetId))));
   r.patch('/evaluations/:cadetId', (req, res) => {
     updateEvaluationFields(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  // a test added (or taken away) from one file is in the files of the whole course
+  r.post('/evaluations/:cadetId/tests', (req, res) => {
+    addExamTest(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  r.delete('/evaluations/:cadetId/tests/:test', (req, res) => {
+    removeExamTest(me(req), id(req.params.cadetId), String(req.params.test));
     res.json(evaluationFile(me(req), id(req.params.cadetId)));
   });
   r.post('/evaluations/:cadetId/dynamics', (req, res) => {
