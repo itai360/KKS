@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { TALK_TYPES } from '@shared/constants';
+import { TALK_COURSE_ORDER, TALK_TYPES } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
 import { numberedSections, TALK_FORMS, TALK_HIGHLIGHTS, type TalkAnswers, type TalkType } from '@shared/talks';
 import type { Cadet, CadetDetail, CadetRecord } from '@shared/types';
@@ -281,7 +281,7 @@ export function TalkHighlights({ cadet, records, onNew }: { cadet: Cadet; record
           </p>
         )}
         <div className="talk-done" aria-label="השיחות שנערכו">
-          {TALK_TYPES.map((t) => {
+          {TALK_COURSE_ORDER.map((t) => {
             const held = all.filter((r) => r.category === t).sort(byDate)[0];
             return (
               <span key={t} className={`badge${held ? ' t-green' : ''}`}>

@@ -2,13 +2,13 @@
 
 import { useNavigate } from 'react-router';
 import { shortDate } from '@shared/dates';
-import type { MyTasksData, Task } from '@shared/types';
+import type { MyTasksData } from '@shared/types';
 import { DisciplineCard } from '../components/DisciplineCard';
 import { PendingAnnouncements } from '../components/Announcements';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkToggle } from '../components/Bulk';
-import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
+import { GroupTaskRow, GroupTitle, TaskBulkScope, TaskList, TaskRow } from '../components/TaskRow';
 import { Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
 import { useSession } from '../lib/session';
@@ -16,7 +16,7 @@ import { useApi, useTick } from '../lib/useApi';
 
 export function MyTasksPage() {
   const { user, isCommander } = useSession();
-  const { data, error, loading } = useApi<MyTasksData & { teamTasks: Task[] }>('/api/my', ['tasks', 'weeks']);
+  const { data, error, loading } = useApi<MyTasksData>('/api/my', ['tasks', 'weeks']);
   const navigate = useNavigate();
   const newTask = useNewTask();
   useTick();
@@ -130,7 +130,16 @@ export function MyTasksPage() {
                   <span className="tiny mono muted">{data.teamTasks.length}</span>
                 </div>
                 <div className="card-body">
-                  {data.teamTasks.length === 0 ? <p className="small muted">אין משימות כלליות פתוחות.</p> : <TaskList tasks={data.teamTasks.slice(0, 8)} />}
+                  {data.teamTasks.length === 0 ? (
+                    <p className="small muted">אין משימות כלליות פתוחות.</p>
+                  ) : (
+                    <div className="list">
+                      {data.teamTasks.slice(0, 8).map((t) => {
+                        const g = t.groupId ? data.groupProgress[t.groupId] : undefined;
+                        return g && g.total > 1 ? <GroupTaskRow key={t.id} task={t} done={g.done} total={g.total} /> : <TaskRow key={t.id} task={t} />;
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

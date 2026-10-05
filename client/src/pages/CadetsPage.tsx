@@ -23,6 +23,7 @@ import {
   type RecordKind,
 } from '@shared/constants';
 import { shortDate } from '@shared/dates';
+import { sortHe } from '@shared/sort';
 import type { AttendanceHistory, Cadet, CadetDetail, CadetRecord, Exemption, Team } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
@@ -592,7 +593,7 @@ export function CadetPage() {
                 <button className={`chip chip-sm${kind === 'all' ? ' on' : ''}`} onClick={() => setKind('all')}>
                   הכל
                 </button>
-                {RECORD_KINDS.filter((k) => data.records.some((r) => r.kind === k)).map((k) => (
+                {sortHe(RECORD_KINDS, (k) => RECORD_KIND_LABELS[k]).filter((k) => data.records.some((r) => r.kind === k)).map((k) => (
                   <button key={k} className={`chip chip-sm${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>
                     {RECORD_KIND_LABELS[k]}
                   </button>
@@ -1040,11 +1041,12 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
         <Field label="המקרה לפי מדרג האכיפה">
           <select className="select" value={offense} onChange={(e) => pickOffense(e.target.value)}>
             <option value="">אחר / לא מהמדרג</option>
-            {[...new Set(offenses.map((o) => o.category))].map((cat) => (
+            {sortHe([...new Set(offenses.map((o) => o.category))]).map((cat) => (
               <optgroup key={cat || '-'} label={cat || 'מקרים'}>
-                {offenses
-                  .filter((o) => o.category === cat)
-                  .map((o) => (
+                {sortHe(
+                  offenses.filter((o) => o.category === cat),
+                  (o) => o.name,
+                ).map((o) => (
                     <option key={o.key} value={o.key}>
                       {o.name}
                     </option>
@@ -1101,7 +1103,10 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
         <div className="row wrap gap-6">
           <select className="select grow" value={letter ?? ''} onChange={(e) => setLetterSet(e.target.value === '' ? null : Number(e.target.value))} aria-label="נוסח הערת המשמעת" style={{ minWidth: 200 }}>
             <option value="">נוסח הערת המשמעת מהמסמך...</option>
-            {letters.map((l, i) => (
+            {sortHe(
+              letters.map((l, i) => ({ l, i })),
+              (x) => x.l.title,
+            ).map(({ l, i }) => (
               <option key={i} value={i}>
                 {l.title}
               </option>

@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
+import { sortHe } from '@shared/sort';
 import { addDays, shortDate } from '@shared/dates';
 import { DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, type DebriefKind } from '@shared/debriefForms';
 import { matchesSearch } from '@shared/search';
@@ -813,7 +814,7 @@ function ItemToTemplate({ item, onClose, onDone }: { item: DebriefItem; onClose:
   const [title, setTitle] = useState(item.body.length <= 80 ? item.body : '');
   const [offset, setOffset] = useState(-2);
   const [error, setError] = useState<string | null>(null);
-  const list = data ?? [];
+  const list = sortHe(data ?? [], (t) => t.name);
   const chosen = templateId || (list.find((t) => t.kind === 'activity') ?? list[0])?.id?.toString() || '';
   const save = async () => {
     setError(null);

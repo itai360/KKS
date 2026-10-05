@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { ATTENDANCE_IN, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, type AttendanceStatus } from '../../shared/constants';
 import { addDays, isDateKey, localDateKey, localTime } from '../../shared/dates';
+import { byTeamAndName } from '../../shared/sort';
 import type { AttendanceHistory, RollCall, RollEntry } from '../../shared/types';
 import type { UserRow } from './auth';
 import { badRequest, clock, nowIso, tz } from './core';
@@ -19,20 +20,22 @@ export function rollCall(date: string, teamId?: number): RollCall {
     full_name: string;
     team_id: number | null;
     team_name: string | null;
+    first_name: string;
+    last_name: string;
     status: AttendanceStatus | null;
     note: string | null;
     marked_by_name: string | null;
     marked_at: string | null;
   }>(
-    `SELECT c.id, trim(c.first_name || ' ' || c.last_name) AS full_name, c.team_id, t.name AS team_name,
+    `SELECT c.id, trim(c.first_name || ' ' || c.last_name) AS full_name, c.first_name, c.last_name, c.team_id, t.name AS team_name,
        a.status, a.note, u.display_name AS marked_by_name, a.marked_at
      FROM cadets c LEFT JOIN teams t ON t.id = c.team_id
      LEFT JOIN attendance a ON a.cadet_id = c.id AND a.date = ?
      LEFT JOIN users u ON u.id = a.marked_by
-     WHERE c.status = 'active' ${teamId ? 'AND c.team_id = ?' : ''}
-     ORDER BY t.sort, t.name, c.last_name, c.first_name`,
+     WHERE c.status = 'active' ${teamId ? 'AND c.team_id = ?' : ''}`,
     ...(teamId ? [date, teamId] : [date]),
   );
+  rows.sort((a, b) => byTeamAndName({ team: a.team_name, last: a.last_name, first: a.first_name }, { team: b.team_name, last: b.last_name, first: b.first_name }));
   // excused today: shown on the roll, so the one marking knows
   const exempt = new Map<number, string[]>();
   for (const x of db().all<{ cadet_id: number; subject: string }>('SELECT cadet_id, subject FROM exemptions WHERE until IS NULL OR until >= ?', date)) {

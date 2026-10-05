@@ -230,7 +230,7 @@ export function dashboard(actor: UserRow): DashboardData {
   };
 }
 
-export function myTasks(actor: UserRow): MyTasksData & { teamTasks: Task[] } {
+export function myTasks(actor: UserRow): MyTasksData {
   const c = ctx();
   const visible = visibleTasks(actor);
   const mine = visible.filter((t) => involves(t, actor.id));
@@ -260,7 +260,7 @@ export function myTasks(actor: UserRow): MyTasksData & { teamTasks: Task[] } {
     waiting,
     recentDone,
     myWeeks: listWeeks('w.lead_id = ? AND w.end_date >= ?', actor.id, c.today),
-    teamTasks: teamTasks(visible, mine, actor.id),
+    ...teamTasks(visible, mine, actor.id),
     stats: {
       today: today.length,
       overdue: overdue.length,
@@ -270,11 +270,15 @@ export function myTasks(actor: UserRow): MyTasksData & { teamTasks: Task[] } {
   };
 }
 
-/** Company-wide tasks, without the other copies of an all-staff task I already have (section 64). */
-function teamTasks(visible: Task[], mine: Task[], uid: number): Task[] {
+/**
+ * Company-wide tasks, without the other copies of an all-staff task I already have (section 64).
+ * An all-staff task appears once, with how many of its copies are done: ticking one copy here
+ * would only bring up the next.
+ */
+function teamTasks(visible: Task[], mine: Task[], uid: number): Pick<MyTasksData, 'teamTasks' | 'groupProgress'> {
   const myGroups = new Set(mine.map((t) => t.groupId).filter(Boolean));
   const seenGroups = new Set<string>();
-  return visible
+  const list = visible
     .filter((t) => t.visibility === 'team' && !involves(t, uid) && isOpenStatus(t.status))
     .filter((t) => {
       if (!t.groupId) return true;
@@ -283,6 +287,14 @@ function teamTasks(visible: Task[], mine: Task[], uid: number): Task[] {
       return true;
     })
     .sort(byDeadline);
+  const groupProgress: MyTasksData['groupProgress'] = {};
+  for (const t of visible) {
+    if (!t.groupId || !seenGroups.has(t.groupId) || t.status === 'cancelled') continue;
+    const g = (groupProgress[t.groupId] ??= { done: 0, total: 0 });
+    g.total++;
+    if (t.status === 'done') g.done++;
+  }
+  return { teamTasks: list, groupProgress };
 }
 
 export function team(actor: UserRow): StaffStatus[] {

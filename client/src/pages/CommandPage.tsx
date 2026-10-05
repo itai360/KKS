@@ -6,7 +6,7 @@ import { parseTaskText } from '@shared/parser';
 import type { Task } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, quickDeadlines } from '../components/NewTask';
-import { TaskRow } from '../components/TaskRow';
+import { GroupTaskRow, TaskRow } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { ErrorBox, Field, PageHead } from '../components/ui';
 import { api } from '../lib/api';
@@ -190,14 +190,7 @@ function RecentOrders({ tasks }: { tasks: Task[] }) {
   if (!rows.length) return <p className="small muted">משימות שתפתח יופיעו כאן עם הסטטוס שלהן.</p>;
   return (
     <div className="list">
-      {rows.slice(0, 15).map(({ task, done, total }) => (
-        <TaskRow
-          key={task.id}
-          task={total ? { ...task, ownerName: 'כל הסגל', status: done === total ? 'done' : 'todo', tone: done === total ? 'green' : task.tone, overdue: done !== total && task.overdue } : task}
-          readOnly={!!total}
-          extra={total ? <span className={`badge t-${done === total ? 'green' : 'blue'}`}>{done}/{total} השלימו</span> : undefined}
-        />
-      ))}
+      {rows.slice(0, 15).map(({ task, done, total }) => (total ? <GroupTaskRow key={task.id} task={task} done={done!} total={total} /> : <TaskRow key={task.id} task={task} />))}
     </div>
   );
 }

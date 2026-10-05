@@ -139,7 +139,7 @@ function DocForm({ doc, onClose }: { doc?: CourseDocument; onClose: () => void }
   const toast = useToast();
   const [kind, setKind] = useState<'file' | 'link'>(doc?.kind ?? 'file');
   const [title, setTitle] = useState(doc?.title ?? '');
-  const [category, setCategory] = useState(doc?.category ?? DOCUMENT_CATEGORIES[0]);
+  const [category, setCategory] = useState<string>(doc?.category ?? 'נהלים');
   const [description, setDescription] = useState(doc?.description ?? '');
   const [url, setUrl] = useState(doc?.kind === 'link' ? doc.url : '');
   const [weekId, setWeekId] = useState<string>(doc?.weekId ? String(doc.weekId) : '');

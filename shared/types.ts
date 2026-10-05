@@ -1,6 +1,7 @@
 // API data shapes shared by the server (producer) and the client (consumer).
 
 import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
+import type { ExperienceKind, ExperienceSpan } from './experiences';
 import type {
   AbsenceReason,
   AttendanceStatus,
@@ -500,6 +501,9 @@ export interface MyTasksData {
   waiting: Task[];
   recentDone: Task[];
   myWeeks: Week[];
+  /** company-wide tasks of others; the copies of an all-staff task once, with how many finished it */
+  teamTasks: Task[];
+  groupProgress: Record<string, { done: number; total: number }>;
   stats: { today: number; overdue: number; week: number; doneToday: number };
 }
 
@@ -718,6 +722,10 @@ export interface Experience {
   cadetId: number;
   cadetName: string;
   teamName: string | null;
+  /** a role in an event, or a broad experience (התנסות רוחב) held for part of the course (span) */
+  kind: ExperienceKind;
+  span: ExperienceSpan | null;
+  /** the role; for a broad experience, its type */
   role: string;
   weekId: number | null;
   weekName: string | null;

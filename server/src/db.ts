@@ -942,8 +942,15 @@ INSERT INTO evaluation_tests(test, added_at)
   SELECT 'finalExam', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE EXISTS (SELECT 1 FROM evaluation_files WHERE final_a IS NOT NULL OR final_b IS NOT NULL);
 `;
 
+// a broad experience (התנסות רוחב, shared/experiences.ts): a staff role held alongside the course for
+// half of it or all of it - its kind of experience in role, which part of the course in span
+const SCHEMA_V30 = `
+ALTER TABLE experiences ADD COLUMN kind TEXT NOT NULL DEFAULT 'role' CHECK (kind IN ('role', 'broad'));
+ALTER TABLE experiences ADD COLUMN span TEXT CHECK (span IN ('first_half', 'second_half', 'full'));
+`;
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

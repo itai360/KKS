@@ -1,13 +1,15 @@
 // Section 31 - experiences: role, goals, mentor, tasks, feedback and evaluation.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { shortDate } from '@shared/dates';
+import { BROAD_EXPERIENCES, EXPERIENCE_KIND_LABELS, EXPERIENCE_SPANS, SPAN_LABELS, SPAN_SHORT, spanDates, type ExperienceKind, type ExperienceSpan } from '@shared/experiences';
+import { byHe } from '@shared/sort';
 import type { Cadet, Experience } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui';
+import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -22,7 +24,8 @@ const PHASE: Record<Experience['phase'], { label: string; tone: string }> = {
 };
 const PHASE_ORDER: Record<Experience['phase'], number> = { awaiting_feedback: 0, active: 1, planned: 2, done: 3 };
 
-type Tab = 'all' | 'mine' | 'awaiting_feedback' | 'active' | 'planned' | 'done';
+type Tab = 'all' | 'mine' | 'broad' | 'awaiting_feedback' | 'active' | 'planned' | 'done';
+const inTab = (t: Tab, x: Experience, userId: number) => (t === 'all' ? true : t === 'mine' ? x.mentorId === userId : t === 'broad' ? x.kind === 'broad' : x.phase === t);
 
 export function ExperiencesPage() {
   const { user } = useSession();
@@ -33,9 +36,9 @@ export function ExperiencesPage() {
   const canCreate = (cadets.data ?? []).some((c) => c.canManage);
   // what needs action first: missing feedback, then running, then upcoming, then done
   const list = (data ?? [])
-    .filter((x) => (tab === 'all' ? true : tab === 'mine' ? x.mentorId === user.id : x.phase === tab))
+    .filter((x) => inTab(tab, x, user.id))
     .sort((a, b) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase] || (a.phase === 'planned' ? a.startDate.localeCompare(b.startDate) : 0));
-  const count = (t: Tab) => (data ?? []).filter((x) => (t === 'mine' ? x.mentorId === user.id : x.phase === t)).length;
+  const count = (t: Tab) => (data ?? []).filter((x) => inTab(t, x, user.id)).length;
 
   return (
     <BulkScope entity="experiences" noun="התנסויות" topics={['cadets', 'tasks']} ids={list.filter((x) => x.canEdit).map((x) => x.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} התנסויות?' }]}>
@@ -59,6 +62,7 @@ export function ExperiencesPage() {
           [
             ['all', 'הכל'],
             ['mine', 'אני החונך'],
+            ['broad', 'התנסויות רוחב'],
             ['awaiting_feedback', 'ממתינות למשוב'],
             ['active', 'מתבצעות'],
             ['planned', 'מתוכננות'],
@@ -98,6 +102,7 @@ export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolea
       <div className="row wrap gap-6">
         {x.canEdit && <BulkCheck id={x.id} />}
         <span className={`badge t-${p.tone}`}>{p.label}</span>
+        {x.kind === 'broad' && <span className="badge t-blue">רוחב{x.span ? ` · ${SPAN_SHORT[x.span]}` : ''}</span>}
         <span className="tiny muted mono">
           {shortDate(x.startDate)}
           {x.endDate !== x.startDate && `-${shortDate(x.endDate)}`}
@@ -154,23 +159,53 @@ export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolea
   );
 }
 
+/** a field whose input is a row of choices: named as a group (a <label> would name only the first choice) */
+function ChoiceField({ label, id, hint, required, children }: { label: string; id: string; hint?: string; required?: boolean; children: ReactNode }) {
+  return (
+    <div className="field span-2" role="group" aria-labelledby={`${id}-l`}>
+      <span id={`${id}-l`}>
+        {label}
+        {required && <span className="req"> *</span>}
+      </span>
+      {children}
+      {hint && <span className="hint">{hint}</span>}
+    </div>
+  );
+}
+
 export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: number; experience?: Experience; onClose: () => void }) {
   const toast = useToast();
-  const { users } = useSession();
+  const { users, settings, weeks } = useSession();
   const cadets = useApi<Cadet[]>(experience || cadetId ? null : '/api/cadets', ['cadets']);
   const [cadet, setCadet] = useState<string>(String(experience?.cadetId ?? cadetId ?? ''));
+  const [kind, setKind] = useState<ExperienceKind>(experience?.kind ?? 'role');
   const [role, setRole] = useState(experience?.role ?? '');
+  const [broad, setBroad] = useState(experience?.kind === 'broad' ? experience.role : '');
+  const [span, setSpan] = useState<ExperienceSpan | null>(experience?.span ?? null);
   const [start, setStart] = useState(experience?.startDate ?? todayKey());
   const [end, setEnd] = useState(experience?.endDate ?? todayKey());
+  // the course's first and last day: as set in the settings, or its first and last week
+  const courseStart = settings.startDate ?? weeks.reduce<string | null>((m, w) => (!m || w.startDate < m ? w.startDate : m), null);
+  const courseEnd = settings.endDate ?? weeks.reduce<string | null>((m, w) => (!m || w.endDate > m ? w.endDate : m), null);
+  const pickSpan = (s: ExperienceSpan) => {
+    setSpan(s);
+    if (courseStart && courseEnd && courseEnd >= courseStart) {
+      const d = spanDates(s, courseStart, courseEnd);
+      setStart(d.startDate);
+      setEnd(d.endDate);
+    }
+  };
+  const isBroad = kind === 'broad';
+  const name = isBroad ? broad : role;
   const [mentor, setMentor] = useState<string>(experience?.mentorId ? String(experience.mentorId) : '');
   const [goals, setGoals] = useState(experience?.goals ?? '');
   const [error, setError] = useState<string | null>(null);
   const save = async () => {
     setError(null);
     try {
-      const body = { role, startDate: start, endDate: end, goals, mentorId: mentor ? Number(mentor) : null };
+      const body = { role: name, startDate: start, endDate: end, goals, mentorId: mentor ? Number(mentor) : null, ...(isBroad ? { span } : {}) };
       if (experience) await api.patch(`/api/experiences/${experience.id}`, body);
-      else await api.post('/api/experiences', { ...body, cadetId: Number(cadet) });
+      else await api.post('/api/experiences', { ...body, kind, cadetId: Number(cadet) });
       toast({ title: experience ? 'ההתנסות עודכנה' : 'ההתנסות שובצה - נפתחה משימת משוב לחונך', tone: 'green' });
       emitLocalChange('cadets', 'tasks');
       onClose();
@@ -180,11 +215,11 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
   };
   return (
     <Modal
-      title={experience ? 'עריכת התנסות' : 'שיבוץ להתנסות'}
+      title={experience ? (experience.kind === 'broad' ? 'עריכת התנסות רוחב' : 'עריכת התנסות') : 'שיבוץ להתנסות'}
       onClose={onClose}
       footer={
         <>
-          <button className="btn btn-primary" onClick={() => void save()} disabled={!role.trim() || !cadet}>
+          <button className="btn btn-primary" onClick={() => void save()} disabled={!name.trim() || !cadet || (isBroad && !span)}>
             שמור
           </button>
           <button className="btn btn-ghost" onClick={onClose}>
@@ -194,12 +229,18 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
       }
     >
       <div className="form-grid">
+        {!experience && (
+          <ChoiceField label="סוג ההתנסות" id="exp-kind" hint={isBroad ? 'תפקיד לצד הקורס, לחצי קורס או לקורס שלם' : 'תפקיד באירוע או בשבוע מסוים'}>
+            <Seg<ExperienceKind> value={kind} onChange={setKind} options={(['role', 'broad'] as const).map((k) => ({ value: k, label: EXPERIENCE_KIND_LABELS[k] }))} />
+          </ChoiceField>
+        )}
         {!experience && !cadetId && (
           <Field label="צוער" required className="span-2">
             <select className="select" value={cadet} onChange={(e) => setCadet(e.target.value)}>
               <option value="">בחירת צוער...</option>
               {(cadets.data ?? [])
                 .filter((c) => c.canManage)
+                .sort((a, b) => byHe(a.fullName, b.fullName))
                 .map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.fullName} {c.teamName ? `(${c.teamName})` : ''}
@@ -208,9 +249,27 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
             </select>
           </Field>
         )}
-        <Field label="תפקיד" required className="span-2">
-          <input className="input" value={role} onChange={(e) => setRole(e.target.value)} placeholder='לדוגמה: מ"מ בתרגיל התקפה' data-autofocus />
-        </Field>
+        {isBroad ? (
+          <>
+            <Field label="סוג התנסות רוחב" required className="span-2">
+              <select className="select" value={broad} onChange={(e) => setBroad(e.target.value)} data-autofocus>
+                <option value="">בחירה...</option>
+                {BROAD_EXPERIENCES.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <ChoiceField label="תקופה" id="exp-span" required hint={courseStart && courseEnd ? 'התאריכים מתמלאים לפי תאריכי הקורס, ואפשר לשנות אותם' : 'תאריכי הקורס לא הוגדרו - מלאו את התאריכים ידנית'}>
+              <Seg<ExperienceSpan> wrap value={span ?? ('' as ExperienceSpan)} onChange={pickSpan} options={EXPERIENCE_SPANS.map((s) => ({ value: s, label: SPAN_LABELS[s] }))} />
+            </ChoiceField>
+          </>
+        ) : (
+          <Field label="תפקיד" required className="span-2">
+            <input className="input" value={role} onChange={(e) => setRole(e.target.value)} placeholder='לדוגמה: מ"מ בתרגיל התקפה' data-autofocus />
+          </Field>
+        )}
         <Field label="מתאריך">
           <input className="input" type="date" value={start} onChange={(e) => (setStart(e.target.value), end < e.target.value && setEnd(e.target.value))} />
         </Field>

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { sortHe } from '@shared/sort';
 import type { CourseSettings, User, Week } from '@shared/types';
 import { api, setReauthHandler, setUnauthorizedHandler } from './api';
 import { setTimezone } from './format';
@@ -126,11 +127,12 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
   }, [unread]);
 
   const value = useMemo<Session>(() => {
-    const list = users.data ?? [me.user];
+    // people and areas are offered in alphabetical order on every screen
+    const list = sortHe(users.data ?? [me.user], (u) => u.displayName);
     const byId = new Map(list.map((u) => [u.id, u]));
     return {
       user: me.user,
-      settings: currentSettings,
+      settings: { ...currentSettings, domains: sortHe(currentSettings.domains) },
       users: list,
       staff: list.filter((u) => u.role === 'staff'),
       weeks: weeks.data ?? [],

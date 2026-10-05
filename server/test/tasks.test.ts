@@ -33,6 +33,13 @@ describe('creating tasks', () => {
     await c.s1.post(`/api/tasks/${s1Task.id}/transition`, { action: 'complete' });
     const after = await c.cmd.get(`/api/tasks/${res.body.ids[0]}`);
     expect(after.body.group).toMatchObject({ total: 3, done: 1 });
+    // a company-wide one shows once in the card, with its progress - not the next person's copy
+    const team = await c.cmd.post('/api/tasks', { title: 'קריאת נוהל בטיחות', assignMode: 'all', visibility: 'team', deadline: at('2026-10-01', '18:00') });
+    await c.s1.post(`/api/tasks/${team.body.ids[0]}/transition`, { action: 'complete' });
+    const groupId = (await c.cmd.get(`/api/tasks/${team.body.ids[0]}`)).body.task.groupId as string;
+    const my = (await c.cmd.get('/api/my')).body;
+    expect(my.teamTasks.filter((t: { groupId: string }) => t.groupId === groupId)).toHaveLength(1);
+    expect(my.groupProgress[groupId]).toEqual({ done: 1, total: 3 });
     // staff cannot open an all-staff task
     expect((await c.s1.post('/api/tasks', { title: 'x', assignMode: 'all', deadline: at('2026-10-05') })).status).toBe(403);
   });

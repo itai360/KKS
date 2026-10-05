@@ -46,8 +46,8 @@ describe('cadets and teams (section 31)', () => {
     // the same list again: everyone with a personal number is already there
     expect((await c.cmd.post('/api/cadets/import', { text: text.split('\n').slice(0, 3).join('\n') })).body).toEqual({ imported: 0, updated: 0, skipped: 2 });
     expect((await c.cmd.get('/api/teams')).body.map((t: { name: string; cadetCount: number }) => [t.name, t.cadetCount])).toEqual([
-      ['צוות 2 - גיורא', 2],
       ['צוות 1 - אלון', 1],
+      ['צוות 2 - גיורא', 2],
     ]);
   });
 
@@ -127,6 +127,21 @@ describe('experiences (section 31)', () => {
     await c.s1.patch(`/api/experiences/${x.id}`, { mentorId: c.ids.s3, endDate: '2026-10-07' });
     const t = db().get<{ owner_id: number; deadline: string }>('SELECT owner_id, deadline FROM tasks WHERE experience_id = ?', x.id)!;
     expect(t).toEqual({ owner_id: c.ids.s3, deadline: at('2026-10-07', '18:00') });
+  });
+
+  it('a broad experience is one of the listed types, for half the course or all of it', async () => {
+    const { a } = await teamWithCadets();
+    const post = (body: object) => c.s1.post('/api/experiences', { cadetId: a, kind: 'broad', startDate: '2026-09-01', endDate: '2026-11-30', ...body });
+    expect((await post({ role: 'טבח', span: 'full' })).body.error).toContain('סוג התנסות רוחב לא מוכר');
+    expect((await post({ role: 'קב"ט' })).body.error).toContain('לאיזו תקופה');
+    const x = (await post({ role: 'קב"ט', span: 'first_half', mentorId: c.ids.s2 })).body;
+    expect(x).toMatchObject({ kind: 'broad', span: 'first_half', role: 'קב"ט', startDate: '2026-09-01', endDate: '2026-11-30', mentorId: c.ids.s2 });
+    expect(db().get<{ title: string }>('SELECT title FROM tasks WHERE experience_id = ?', x.id)!.title).toBe('משוב התנסות: דניאל כהן - רוחב - קב"ט (חצי קורס ראשון)');
+    // it becomes a whole-course one, but stays one of the list
+    expect((await c.s1.patch(`/api/experiences/${x.id}`, { span: 'full', endDate: '2027-02-28' })).body).toMatchObject({ span: 'full', endDate: '2027-02-28' });
+    expect((await c.s1.patch(`/api/experiences/${x.id}`, { role: 'טבח' })).status).toBe(400);
+    // an experience in a role has no part of the course
+    expect((await c.s1.post('/api/experiences', { cadetId: a, role: 'סמל תורן', span: 'full', startDate: '2026-10-04', endDate: '2026-10-05' })).body).toMatchObject({ kind: 'role', span: null });
   });
 });
 

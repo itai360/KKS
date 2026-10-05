@@ -15,6 +15,8 @@ import {
   type RecordKind,
 } from '../../shared/constants';
 import { isDateKey, localDateKey, zonedIso } from '../../shared/dates';
+import { byHe, byTeamAndName } from '../../shared/sort';
+import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, SPAN_SHORT, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
 import type { Cadet, CadetDetail, CadetRecord, Exemption, Experience, Team } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
@@ -44,9 +46,10 @@ export function listTeams(): Team[] {
     .all<TeamRow>(
       `SELECT t.*, u.display_name AS commander_name,
         (SELECT count(*) FROM cadets c WHERE c.team_id = t.id AND c.status = 'active') AS cadet_count
-       FROM teams t LEFT JOIN users u ON u.id = t.commander_id ORDER BY t.sort, t.name`,
+       FROM teams t LEFT JOIN users u ON u.id = t.commander_id`,
     )
-    .map((r) => ({ id: r.id, name: r.name, commanderId: r.commander_id, commanderName: r.commander_name, sort: r.sort, cadetCount: r.cadet_count }));
+    .map((r) => ({ id: r.id, name: r.name, commanderId: r.commander_id, commanderName: r.commander_name, sort: r.sort, cadetCount: r.cadet_count }))
+    .sort((a, b) => byHe(a.name, b.name)); // teams are listed and offered alphabetically
 }
 
 export const teamSchema = z.object({
@@ -246,8 +249,11 @@ function talkForm(category: string, raw: Record<string, string>): { body: string
   return { body, form: JSON.stringify({ answers }), next: answers.next ?? '' };
 }
 
+/** a cadet row as lists order it */
+const alphaKey = (r: { team_name: string | null; last_name: string; first_name: string }) => ({ team: r.team_name, last: r.last_name, first: r.first_name });
+
 export function listCadets(actor: UserRow, filter: { teamId?: number; status?: string; q?: string } = {}): Cadet[] {
-  const rows = db().all<CadetRow>(`${CADET_BASE} ORDER BY t.sort, t.name, c.last_name, c.first_name`);
+  const rows = db().all<CadetRow>(CADET_BASE).sort((x, y) => byTeamAndName(alphaKey(x), alphaKey(y)));
   const records = db().all<RecordRow>(`${RECORD_BASE}`);
   const byCadet = new Map<number, RecordRow[]>();
   for (const r of records) byCadet.set(r.cadet_id, [...(byCadet.get(r.cadet_id) ?? []), r]);
@@ -675,7 +681,10 @@ function toExemption(actor: UserRow, r: ExemptionRow): Exemption {
 export function listExemptions(actor: UserRow, filter: { cadetId?: number } = {}): Exemption[] {
   const rows = filter.cadetId
     ? db().all<ExemptionRow>(`${EXEMPTION_BASE} WHERE x.cadet_id = ? ORDER BY x.created_at DESC`, filter.cadetId)
-    : db().all<ExemptionRow>(`${EXEMPTION_BASE} WHERE c.status = 'active' ORDER BY t.sort, t.name, c.last_name, c.first_name, x.created_at`).filter((r) => exemptionActive(r.until));
+    : db()
+        .all<ExemptionRow>(`${EXEMPTION_BASE} WHERE c.status = 'active' ORDER BY x.created_at`)
+        .filter((r) => exemptionActive(r.until))
+        .sort((x, y) => byTeamAndName({ team: x.team_name, last: x.cadet_name, first: '' }, { team: y.team_name, last: y.cadet_name, first: '' }));
   return rows.map((r) => toExemption(actor, r)).sort((a, b) => Number(b.active) - Number(a.active));
 }
 
@@ -722,6 +731,8 @@ interface ExperienceRow {
   cadet_name: string;
   team_name: string | null;
   team_commander_id: number | null;
+  kind: ExperienceKind;
+  span: ExperienceSpan | null;
   role: string;
   week_id: number | null;
   week_name: string | null;
@@ -781,6 +792,8 @@ function toExperience(actor: UserRow, x: ExperienceRow): Experience {
     cadetId: x.cadet_id,
     cadetName: x.cadet_name,
     teamName: x.team_name,
+    kind: x.kind,
+    span: x.span,
     role: x.role,
     weekId: x.week_id,
     weekName: x.week_name,
@@ -824,6 +837,8 @@ function experienceRow(id: number): ExperienceRow {
 export const experienceSchema = z
   .object({
     cadetId: z.number().int().positive(),
+    kind: z.enum(EXPERIENCE_KINDS).optional().default('role'),
+    span: z.enum(EXPERIENCE_SPANS).nullable().optional().default(null),
     role: z.string().trim().min(1, 'חובה לציין תפקיד').max(80),
     startDate: z.string().refine(isDateKey, 'תאריך לא תקין'),
     endDate: z.string().refine(isDateKey, 'תאריך לא תקין'),
@@ -833,18 +848,32 @@ export const experienceSchema = z
   })
   .refine((x) => x.endDate >= x.startDate, { message: 'תאריך הסיום לפני תאריך ההתחלה', path: ['endDate'] });
 
+/** a broad experience is one of the listed types, for half the course or all of it */
+function checkBroad(kind: ExperienceKind, role: string, span: ExperienceSpan | null): void {
+  if (kind !== 'broad') return;
+  if (!BROAD_EXPERIENCES.includes(role)) throw badRequest(`סוג התנסות רוחב לא מוכר. האפשרויות: ${BROAD_EXPERIENCES.join(', ')}`);
+  if (!span) throw badRequest('בחרו לאיזו תקופה ההתנסות: חצי ראשון, חצי שני או כל הקורס');
+}
+
+/** the experience in words: "כ<role>", or "רוחב - <type> (<part of the course>)" */
+const experienceName = (kind: ExperienceKind, role: string, span: ExperienceSpan | null) => (kind === 'broad' ? `רוחב - ${role}${span ? ` (${SPAN_SHORT[span]})` : ''}` : role);
+
 export function createExperience(actor: UserRow, raw: z.input<typeof experienceSchema>): number {
   const x = experienceSchema.parse(raw);
   const c = cadetRow(x.cadetId);
   if (!canManageCadet(actor, c)) throw forbidden('רק מפקד הצוות או מפקד הקורס יכולים לשבץ התנסות');
+  checkBroad(x.kind, x.role, x.span);
+  const span = x.kind === 'broad' ? x.span : null;
   if (x.mentorId && !getUserRow(x.mentorId)?.active) throw badRequest('המפקד החונך אינו פעיל');
   const name = `${c.first_name} ${c.last_name}`.trim();
   let id = 0;
   db().tx(() => {
     id = db().run(
-      `INSERT INTO experiences(cadet_id, role, week_id, event_id, start_date, end_date, goals, mentor_id, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO experiences(cadet_id, kind, span, role, week_id, event_id, start_date, end_date, goals, mentor_id, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       x.cadetId,
+      x.kind,
+      span,
       x.role,
       weekForDate(x.startDate),
       x.eventId,
@@ -859,7 +888,7 @@ export function createExperience(actor: UserRow, raw: z.input<typeof experienceS
     createTasks(
       actor,
       {
-        title: `משוב התנסות: ${name} - ${x.role}`,
+        title: `משוב התנסות: ${name} - ${experienceName(x.kind, x.role, span)}`,
         description: x.goals ? `מטרות ההתנסות:\n${x.goals}` : '',
         ownerIds: [x.mentorId ?? actor.id],
         deadline: zonedIso(x.endDate, getSettings().defaultDeadlineTime, tz()),
@@ -870,7 +899,7 @@ export function createExperience(actor: UserRow, raw: z.input<typeof experienceS
       },
       { system: true },
     );
-    logActivity({ userId: actor.id, action: 'experience', text: `${actor.display_name} שיבץ את ${name} להתנסות כ${x.role}` });
+    logActivity({ userId: actor.id, action: 'experience', text: `${actor.display_name} שיבץ את ${name} ${x.kind === 'broad' ? `להתנסות ${experienceName(x.kind, x.role, span)}` : `להתנסות כ${x.role}`}` });
   });
   changed('cadets', 'tasks');
   return id;
@@ -882,6 +911,7 @@ export function updateExperience(actor: UserRow, id: number, raw: Partial<z.inpu
   const p = z
     .object({
       role: z.string().trim().min(1).max(80),
+      span: z.enum(EXPERIENCE_SPANS).nullable(),
       startDate: z.string().refine(isDateKey),
       endDate: z.string().refine(isDateKey),
       goals: z.string().max(4000),
@@ -892,6 +922,7 @@ export function updateExperience(actor: UserRow, id: number, raw: Partial<z.inpu
     .parse(raw);
   const next = {
     role: p.role ?? cur.role,
+    span: cur.kind === 'broad' ? (p.span !== undefined ? p.span : cur.span) : null,
     start: p.startDate ?? cur.start_date,
     end: p.endDate ?? cur.end_date,
     goals: p.goals ?? cur.goals,
@@ -899,10 +930,12 @@ export function updateExperience(actor: UserRow, id: number, raw: Partial<z.inpu
     event: p.eventId !== undefined ? p.eventId : cur.event_id,
   };
   if (next.end < next.start) throw badRequest('תאריך הסיום לפני תאריך ההתחלה');
+  checkBroad(cur.kind, next.role, next.span);
   db().tx(() => {
     db().run(
-      'UPDATE experiences SET role = ?, start_date = ?, end_date = ?, goals = ?, mentor_id = ?, event_id = ?, week_id = ? WHERE id = ?',
+      'UPDATE experiences SET role = ?, span = ?, start_date = ?, end_date = ?, goals = ?, mentor_id = ?, event_id = ?, week_id = ? WHERE id = ?',
       next.role,
+      next.span,
       next.start,
       next.end,
       next.goals,

@@ -1,4 +1,7 @@
-// Shared domain vocabulary for client and server.
+// Shared domain vocabulary for client and server. Lists of choices are kept in alphabetical order
+// (shared/test/sort.test.ts), the catch-all "אחר" last; scales and sequences keep their own order.
+
+import { sortHe } from './sort';
 
 export const ROLES = ['commander', 'staff'] as const;
 export type Role = (typeof ROLES)[number];
@@ -44,19 +47,7 @@ export function domainLabel(domain: string, note?: string | null): string {
   return domain === OTHER_DOMAIN && note ? `${domain}: ${note}` : domain;
 }
 
-export const DEFAULT_DOMAINS = [
-  'הדרכה',
-  'בטיחות',
-  'לוגיסטיקה',
-  'משמעת',
-  'פרט',
-  'לו"ז',
-  'תיאומים',
-  'צוערים',
-  'הערכה',
-  ...ADDED_DOMAINS,
-  'אחר',
-];
+export const DEFAULT_DOMAINS = [...sortHe(['בטיחות', 'הדרכה', 'הערכה', 'לו"ז', 'לוגיסטיקה', 'משמעת', 'פרט', 'צוערים', 'תיאומים', ...ADDED_DOMAINS]), 'אחר'];
 
 export const VISIBILITIES = ['normal', 'team', 'private'] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
@@ -68,11 +59,11 @@ export const VISIBILITY_LABELS: Record<Visibility, string> = {
 
 // Section 43 - a blocked task must carry a reason.
 export const BLOCK_REASONS = [
+  'חסר כוח אדם',
+  'חסר ציוד',
+  'חסרה החלטת מפקד',
   'ממתין לאישור',
   'ממתין לתשובת גורם חיצוני',
-  'חסר ציוד',
-  'חסר כוח אדם',
-  'חסרה החלטת מפקד',
   'תלוי במשימה אחרת',
   'אחר',
 ] as const;
@@ -157,14 +148,16 @@ export const RECORD_KIND_LABELS: Record<RecordKind, string> = {
 /** Personal talks and discipline are always restricted to the author, the team commander and the course commander. */
 export const RESTRICTED_RECORD_KINDS: readonly RecordKind[] = ['talk', 'discipline'];
 
-export const EVALUATION_CRITERIA = ['פיקוד והובלה', 'מקצועיות', 'ערכים ודוגמה אישית', 'עבודת צוות', 'יוזמה', 'כושר גופני'] as const;
+export const EVALUATION_CRITERIA = ['יוזמה', 'כושר גופני', 'מקצועיות', 'עבודת צוות', 'ערכים ודוגמה אישית', 'פיקוד והובלה'] as const;
 export const DISCIPLINE_SEVERITIES = ['קלה', 'בינונית', 'חמורה'] as const;
 /** A cadet who gets this many discipline notes (הערות משמעת) goes to an evaluation committee. */
 export const DISCIPLINE_NOTE_LIMIT = 3;
 export const DISCIPLINE_COMMITTEE_KIND = 'ועדת הערכה';
 /** "ועדת הערכה" -> "לוועדת הערכה": after the prefix the vav doubles */
 export const committeeTo = (name: string) => `ל${name.startsWith('ו') && !name.startsWith('וו') ? `ו${name}` : name}`;
-export const TALK_TYPES = ['שיחת היכרות', 'שיחת אמצע', 'שיחת משוב', 'שיחה יזומה', 'שיחת סיום'] as const;
+export const TALK_TYPES = ['שיחה יזומה', 'שיחת אמצע', 'שיחת היכרות', 'שיחת משוב', 'שיחת סיום'] as const;
+/** the talks in the order the course holds them (TALK_TYPES is alphabetical, for choosing) */
+export const TALK_COURSE_ORDER: readonly (typeof TALK_TYPES)[number][] = ['שיחת היכרות', 'שיחת אמצע', 'שיחת משוב', 'שיחה יזומה', 'שיחת סיום'];
 
 // ---------------- evaluation files (תיקי הערכה) ----------------
 
@@ -181,8 +174,8 @@ export const EVAL_TONE_TONES: Record<EvalTone, string> = { positive: 'green', im
 /** What an evaluation entry is about: the evaluation criteria, conduct, and anything else. */
 export const EVAL_CATEGORIES = [...EVALUATION_CRITERIA, 'משמעת והתנהגות', 'אחר'] as const;
 
-export const COMMITTEE_KINDS = ['ועדת הדחה', 'ועדת הערכה', 'ועדת מעבר שלב', 'ועדת חריגים', 'ועדת סיום', 'אחר'] as const;
-export const COMMITTEE_DECISIONS = ['continue', 'conditional', 'dismissed', 'other'] as const;
+export const COMMITTEE_KINDS = ['ועדת הדחה', 'ועדת הערכה', 'ועדת חריגים', 'ועדת מעבר שלב', 'ועדת סיום', 'אחר'] as const;
+export const COMMITTEE_DECISIONS = ['dismissed', 'continue', 'conditional', 'other'] as const;
 export type CommitteeDecision = (typeof COMMITTEE_DECISIONS)[number];
 export const COMMITTEE_DECISION_LABELS: Record<CommitteeDecision, string> = {
   continue: 'ממשיך בקורס',
@@ -200,10 +193,10 @@ export const DEBRIEF_ITEM_LABELS: Record<DebriefItemKind, string> = {
   lesson: 'לקחים',
 };
 
-export const DOCUMENT_CATEGORIES = ['נהלים', 'פקודות', 'מצגות', 'חומרי הדרכה', 'קישורים', 'אחר'] as const;
+export const DOCUMENT_CATEGORIES = ['חומרי הדרכה', 'מצגות', 'נהלים', 'פקודות', 'קישורים', 'אחר'] as const;
 
 /** why someone on the staff is away (section: availability) */
-export const ABSENCE_REASONS = ['leave', 'sick', 'course', 'duty', 'other'] as const;
+export const ABSENCE_REASONS = ['course', 'leave', 'sick', 'duty', 'other'] as const;
 export type AbsenceReason = (typeof ABSENCE_REASONS)[number];
 export const ABSENCE_REASON_LABELS: Record<AbsenceReason, string> = {
   leave: 'חופשה',

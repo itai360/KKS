@@ -120,7 +120,7 @@ export function UserPicker({
   // how loaded each person is, and who is away - so a task goes to someone who can take it
   const load = useApi<UserLoad[]>(`/api/load${date ? `?date=${date}` : ''}`, ['tasks', 'users']).data;
   const loadOf = (id: number) => load?.find((l) => l.userId === id);
-  const people = [...users].sort((a, b) => (a.id === user.id ? -1 : b.id === user.id ? 1 : a.role === b.role ? a.displayName.localeCompare(b.displayName, 'he') : a.role === 'staff' ? -1 : 1));
+  const people = users; // alphabetical, as the session keeps them
   const heavy = (n: number) => (n >= settings.overloadThreshold ? 't-red' : n >= Math.ceil(settings.overloadThreshold * 0.6) ? 't-orange' : '');
   const awayChosen = all ? [] : value.map((id) => ({ u: users.find((x) => x.id === id), l: loadOf(id) })).filter((x) => x.u && x.l?.away);
   return (

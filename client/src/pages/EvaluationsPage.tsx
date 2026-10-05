@@ -120,10 +120,10 @@ export function EvaluationsPage() {
         <input className="input" placeholder="חיפוש לפי שם או מספר אישי" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="select" value={view} onChange={(e) => set('view', e.target.value)} aria-label="תצוגה">
           <option value="">כל הצוערים</option>
-          <option value="watch">במעקב ובסיכון ({all.filter((c) => c.standing !== 'ok').length})</option>
           <option value="committee">בדרך לוועדה ({all.filter((c) => c.committee && !c.committee.decision).length})</option>
-          <option value="reason">עם סיבת העלאה לוועדה ({all.filter((c) => c.hasCommitteeReason).length})</option>
           <option value="nosummary">בלי סיכום מ"פ ({all.filter((c) => !c.hasSummary).length})</option>
+          <option value="watch">במעקב ובסיכון ({all.filter((c) => c.standing !== 'ok').length})</option>
+          <option value="reason">עם סיבת העלאה לוועדה ({all.filter((c) => c.hasCommitteeReason).length})</option>
         </select>
       </div>
       <ErrorBox error={list.error} />

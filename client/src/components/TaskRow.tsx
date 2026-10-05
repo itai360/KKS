@@ -22,13 +22,17 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
   const toast = useToast();
   const bulk = useBulk();
   const [busy, setBusy] = useState(false);
+  // ticked: shown done at once, until the list comes back without it (or with it as done)
+  const [ticked, setTicked] = useState(false);
   const open = isOpenStatus(task.status);
   const canCheck = !readOnly && canQuickUpdate(task, user.id, isCommander) && open && task.status !== 'pending_approval';
+  const done = task.status === 'done' || ticked;
 
   const complete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!canCheck || busy) return;
     setBusy(true);
+    if (!task.requiresApproval || isCommander) setTicked(true);
     try {
       const d = await api.post<{ task: Task }>(`/api/tasks/${task.id}/transition`, { action: 'complete' });
       toast({
@@ -38,6 +42,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
       });
       emitLocalChange('tasks');
     } catch (err) {
+      setTicked(false);
       toast({ title: (err as Error).message, tone: 'red' });
     } finally {
       setBusy(false);
@@ -46,7 +51,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
 
   return (
     <div
-      className={`task-row t-${task.tone}${task.status === 'done' ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}`}
+      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}`}
       {...openable(bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`)))}
     >
       {bulk?.active ? (
@@ -54,10 +59,10 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
       ) : (
       <button
         type="button"
-        className={`task-check${task.status === 'done' ? ' checked' : ''}`}
+        className={`task-check${done ? ' checked' : ''}`}
         onClick={complete}
         disabled={!canCheck || busy}
-        aria-label={task.status === 'done' ? 'הושלמה' : 'סימון כהושלמה'}
+        aria-label={done ? 'הושלמה' : 'סימון כהושלמה'}
         title={canCheck ? (task.requiresApproval ? 'סימון כהושלמה (יישלח לאישור)' : 'סימון כהושלמה') : undefined}
       >
         <Icon name="check" />
@@ -93,6 +98,18 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
         <StatusBadge status={task.status} overdue={task.overdue} />
       </div>
     </div>
+  );
+}
+
+/** The copies of an all-staff task as one row: its progress, not anyone's copy to tick. */
+export function GroupTaskRow({ task, done, total }: { task: Task; done: number; total: number }) {
+  const all = done === total;
+  return (
+    <TaskRow
+      task={{ ...task, ownerName: 'כל הסגל', participantIds: [], status: all ? 'done' : 'todo', tone: all ? 'green' : task.tone, overdue: !all && task.overdue }}
+      readOnly
+      extra={<span className={`badge t-${all ? 'green' : 'blue'}`}>{done}/{total} השלימו</span>}
+    />
   );
 }
 

@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import { COMMITTEE_DECISIONS, COMMITTEE_DECISION_LABELS, COMMITTEE_KINDS, committeeTo, DISCIPLINE_COMMITTEE_KIND, STANDING_LABELS, STANDINGS } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
+import { byTeamAndName } from '../../shared/sort';
 import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, examsEntered, shownTests, type EvaluationSection } from '../../shared/evaluation';
 import type { Committee, CommitteeDetail, EvaluationChange, EvaluationExams, EvaluationField, EvaluationFile, EvaluationListItem, EvaluationNote, EvaluationPoint, ExamTest } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
@@ -347,9 +348,11 @@ export function listEvaluations(actor: UserRow): EvaluationListItem[] {
   const cadets = db()
     .all<CadetRow>(
       `SELECT c.*, t.name AS team_name, t.commander_id AS team_commander_id FROM cadets c LEFT JOIN teams t ON t.id = c.team_id
-       ORDER BY CASE c.status WHEN 'active' THEN 0 ELSE 1 END, t.sort, t.name, c.last_name, c.first_name`,
+       ORDER BY CASE c.status WHEN 'active' THEN 0 ELSE 1 END`,
     )
-    .filter((c) => canManageCadet(actor, c));
+    .filter((c) => canManageCadet(actor, c))
+    // active cadets first (the order SQL gave, kept by a stable sort), each part by team and name
+    .sort((a, b) => Number(a.status !== 'active') - Number(b.status !== 'active') || byTeamAndName({ team: a.team_name, last: a.last_name, first: a.first_name }, { team: b.team_name, last: b.last_name, first: b.first_name }));
   const files = new Map(
     db()
       .all<FileRow & { cadet_id: number }>('SELECT f.*, ub.display_name AS updated_by_name FROM evaluation_files f LEFT JOIN users ub ON ub.id = f.updated_by')
