@@ -4,6 +4,7 @@
 // for the version a committee received.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { STANDING_LABELS, STANDING_TONES, STANDINGS, EVAL_TONE_LABELS, type Standing } from '@shared/constants';
 import { shortDate } from '@shared/dates';
 import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EVALUATION_TITLE, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, NOT_ENTERED, shownTests, TEST_ORDER } from '@shared/evaluation';
@@ -21,8 +22,18 @@ import { ErrorBox, Field, Modal, Seg } from './ui';
 type Value = string | number | null;
 const NUMBER_FIELDS: EvaluationField[] = EXAM_FIELDS.filter((k) => !EXAM_TEXT_FIELDS.includes(k));
 
+/** a field of the file, or one of the course's other grades ("grade:<id>", from the grade sheet) */
+export type FileKey = EvaluationField | `grade:${number}`;
+const isGrade = (k: FileKey): k is `grade:${number}` => k.startsWith('grade:');
+
+/** what a field is called, in the file's words */
+export function keyLabel(f: EvaluationFile, k: FileKey): string {
+  return isGrade(k) ? `ציון: ${f.grades.find((g) => `grade:${g.id}` === k)?.name ?? ''}` : EVALUATION_FIELDS[k].label;
+}
+
 /** a field's value in the file as the server keeps it */
-export function fieldValue(f: EvaluationFile, field: EvaluationField): Value {
+export function fieldValue(f: EvaluationFile, field: FileKey): Value {
+  if (isGrade(field)) return f.grades?.find((g) => `grade:${g.id}` === field)?.value ?? null;
   switch (field) {
     case 'companyCommander':
     case 'teamCommander':
@@ -49,8 +60,8 @@ export function fieldValue(f: EvaluationFile, field: EvaluationField): Value {
 }
 
 /** what the user typed, as the server takes it: an emptied number is "not entered" */
-function toServer(field: EvaluationField, v: Value): Value {
-  if (!NUMBER_FIELDS.includes(field)) return v;
+function toServer(field: FileKey, v: Value): Value {
+  if (!isGrade(field) && !NUMBER_FIELDS.includes(field)) return v;
   if (v === null || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : (v as string);
@@ -68,8 +79,8 @@ interface Edit {
 type SaveState = { state: 'idle' } | { state: 'pending' } | { state: 'saving' } | { state: 'saved'; at: string } | { state: 'failed'; error: string } | { state: 'conflict'; error: string };
 
 export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) => void) {
-  const [edits, setEdits] = useState<Partial<Record<EvaluationField, Edit>>>({});
-  const [conflicts, setConflicts] = useState<EvaluationField[]>([]);
+  const [edits, setEdits] = useState<Partial<Record<FileKey, Edit>>>({});
+  const [conflicts, setConflicts] = useState<FileKey[]>([]);
   const [status, setStatus] = useState<SaveState>({ state: 'idle' });
   const editsRef = useRef(edits);
   editsRef.current = edits;
@@ -87,7 +98,7 @@ export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) 
       timer.current = setTimeout(() => void flush(), 400);
       return;
     }
-    const sending = (Object.entries(editsRef.current) as [EvaluationField, Edit][]).filter(([f]) => !conflictsRef.current.includes(f));
+    const sending = (Object.entries(editsRef.current) as [FileKey, Edit][]).filter(([f]) => !conflictsRef.current.includes(f));
     if (!sending.length) return;
     busy.current = true;
     setStatus({ state: 'saving' });
@@ -101,8 +112,8 @@ export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) 
       const next = await api.patch<EvaluationFile>(`/api/evaluations/${cadetId}`, { changes, base });
       setFile(next);
       // what was sent is saved; what was typed again meanwhile waits for the next save
-      const sent = (f: EvaluationField, e: Edit) => sending.some(([sf, se]) => sf === f && se.value === e.value);
-      const waiting = (Object.entries(editsRef.current) as [EvaluationField, Edit][]).some(([f, e]) => !sent(f, e) && !conflictsRef.current.includes(f));
+      const sent = (f: FileKey, e: Edit) => sending.some(([sf, se]) => sf === f && se.value === e.value);
+      const waiting = (Object.entries(editsRef.current) as [FileKey, Edit][]).some(([f, e]) => !sent(f, e) && !conflictsRef.current.includes(f));
       setEdits((cur) => {
         const out = { ...cur };
         for (const [f, e] of sending) if (out[f]?.value === e.value) delete out[f];
@@ -136,7 +147,7 @@ export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) 
   }, [cadetId, setFile]);
 
   const change = useCallback(
-    (field: EvaluationField, v: Value, now = false) => {
+    (field: FileKey, v: Value, now = false) => {
       setEdits((cur) => ({ ...cur, [field]: { value: v, base: cur[field] ? cur[field]!.base : fieldValue(fileRef.current, field) } }));
       setStatus({ state: 'pending' });
       if (timer.current) clearTimeout(timer.current);
@@ -146,13 +157,13 @@ export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) 
   );
 
   /** a conflict: write mine over the version now saved, knowingly */
-  const keepMine = (field: EvaluationField) => {
+  const keepMine = (field: FileKey) => {
     setEdits((cur) => (cur[field] ? { ...cur, [field]: { ...cur[field]!, base: fieldValue(fileRef.current, field) } } : cur));
     setConflicts((c) => c.filter((x) => x !== field));
     setTimeout(() => void flush(), 0);
   };
   /** a conflict: take the version now saved, drop what was typed here */
-  const takeTheirs = (field: EvaluationField) => {
+  const takeTheirs = (field: FileKey) => {
     setEdits((cur) => {
       const out = { ...cur };
       delete out[field];
@@ -180,7 +191,7 @@ export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) 
     };
   }, [flush]);
 
-  const value = (field: EvaluationField): Value => (edits[field] ? edits[field]!.value : fieldValue(file, field));
+  const value = (field: FileKey): Value => (edits[field] ? edits[field]!.value : fieldValue(file, field));
   return { value, change, flush, status, conflicts, keepMine, takeTheirs, unsaved };
 }
 
@@ -235,12 +246,12 @@ function AutoText(props: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { m
 }
 
 /** the version saved meanwhile by someone else, next to what was typed here */
-function ConflictBox({ field, saver, file }: { field: EvaluationField; saver: Saver; file: EvaluationFile }) {
+function ConflictBox({ field, saver, file }: { field: FileKey; saver: Saver; file: EvaluationFile }) {
   if (!saver.conflicts.includes(field)) return null;
   const saved = show(fieldValue(file, field));
   return (
     <div className="eval-conflict" role="alert">
-      <div className="strong small">{EVALUATION_FIELDS[field].label} עודכן בינתיים. הנוסח השמור עכשיו:</div>
+      <div className="strong small">{keyLabel(file, field)} עודכן בינתיים. הנוסח השמור עכשיו:</div>
       <div className="eval-conflict-text">{saved ?? NOT_ENTERED}</div>
       <div className="row wrap gap-6">
         <button type="button" className="btn btn-sm btn-primary" onClick={() => saver.keepMine(field)}>
@@ -255,10 +266,10 @@ function ConflictBox({ field, saver, file }: { field: EvaluationField; saver: Sa
 }
 
 /** one field of the file, saved as it is typed */
-function Input({ field, saver, file, type = 'text', placeholder, min, max, step, long, minRows, label }: { field: EvaluationField; saver: Saver; file: EvaluationFile; type?: string; placeholder?: string; min?: number; max?: number; step?: number; long?: boolean; minRows?: number; label?: string }) {
+function Input({ field, saver, file, type = 'text', placeholder, min, max, step, long, minRows, label }: { field: FileKey; saver: Saver; file: EvaluationFile; type?: string; placeholder?: string; min?: number; max?: number; step?: number; long?: boolean; minRows?: number; label?: string }) {
   const v = saver.value(field);
   const text = v === null || v === undefined ? '' : String(v);
-  const aria = label ?? EVALUATION_FIELDS[field].label;
+  const aria = label ?? keyLabel(file, field);
   return (
     <>
       {long ? (
@@ -442,6 +453,7 @@ function ExamInput({ field, saver, file }: { field: keyof EvaluationExams; saver
 
 function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile: (f: EvaluationFile) => void; saver: Saver }) {
   const toast = useToast();
+  const { isCommander } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const addable = TEST_ORDER.filter((t) => !EXAM_TESTS[t].always && !file.tests.includes(t));
@@ -463,6 +475,13 @@ function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile:
     const label = EXAM_TESTS[t].label;
     if (!(await ask({ title: `להסיר את "${label}"?`, body: 'הוא יוסר מתיקי ההערכה של כל הצוערים. עדיין לא הוזנו בו נתונים, ואפשר להוסיף אותו שוב בכל שלב.', confirm: 'הסרה', danger: true }))) return;
     void act(() => api.del<EvaluationFile>(`/api/evaluations/${file.cadet.id}/tests/${t}`), `"${label}" הוסר מהתיקים`);
+  };
+  const removeGrade = async (g: EvaluationFile['grades'][number]) => {
+    if (!(await ask({ title: `להסיר את "${g.name}"?`, body: 'הציון יוסר מתיקי ההערכה של כל הצוערים. עדיין לא הוזן בו אף ציון.', confirm: 'הסרה', danger: true }))) return;
+    void act(async () => {
+      await api.del(`/api/evaluations/grade-items/${g.id}`);
+      return api.get<EvaluationFile>(`/api/evaluations/${file.cadet.id}`);
+    }, `"${g.name}" הוסר מהתיקים`);
   };
   const removeButton = (t: ExamTest) =>
     file.removableTests.includes(t) && (
@@ -507,7 +526,7 @@ function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile:
                 </tbody>
               );
             }
-            const [run, runScore, pushups, pushupsScore] = test.fields;
+            const [run, runScore, pushups, pushupsScore, total] = test.fields;
             return (
               <tbody key={t} className="eval-test">
                 <tr className="eval-test-head">
@@ -544,11 +563,55 @@ function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile:
                     <ExamInput field={pushupsScore} saver={saver} file={file} />
                   </td>
                 </tr>
+                <tr>
+                  <th scope="row" className="eval-sub">
+                    ציון כש"ג
+                  </th>
+                  <td>
+                    <span className="eval-cell-label">ציון כולל</span>
+                    <ExamInput field={total} saver={saver} file={file} />
+                  </td>
+                  <td aria-hidden="true" />
+                </tr>
               </tbody>
             );
           })}
         </table>
       </div>
+      {file.grades.length > 0 && (
+        <div className="col gap-6">
+          <h4 className="eval-subhead">ציונים נוספים מגליון הציונים</h4>
+          <div className="table-wrap">
+            <table className="eval-table eval-grades">
+              <tbody>
+                {file.grades.map((g) => (
+                  <tr key={g.id}>
+                    <th scope="row">
+                      <span className="eval-test-name">
+                        {g.name}
+                        {isCommander && g.removable && (
+                          <button type="button" className="icon-btn eval-test-remove" disabled={busy} aria-label={`הסרת "${g.name}" מהתיקים`} title="הסרה מהתיקים" onClick={() => void removeGrade(g)}>
+                            <Icon name="x" size={14} />
+                          </button>
+                        )}
+                      </span>
+                    </th>
+                    <td>
+                      <Input field={`grade:${g.id}`} saver={saver} file={file} type="number" min={0} max={100} step={0.5} placeholder={NOT_ENTERED} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {isCommander && (
+        <p className="tiny muted" style={{ margin: 0 }}>
+          <Icon name="upload" size={12} /> אחרי כל מבחן או כש"ג אפשר להכניס את הציונים של כל הצוערים בבת אחת:{' '}
+          <Link to="/evaluations?import=1">ייבוא מגליון הציונים</Link>.
+        </p>
+      )}
       {addable.length > 0 && (
         <div className="eval-add col gap-6">
           <div className="row wrap gap-6">
@@ -1169,8 +1232,18 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
                   <td>חזרות: {v(test.fields[2])}</td>
                   <td>ציון: {v(test.fields[3])}</td>
                 </tr>,
+                <tr key={`${t}-total`}>
+                  <th scope="row">{test.label} - ציון כש"ג</th>
+                  <td colSpan={2}>{v(test.fields[4])}</td>
+                </tr>,
               ];
             })}
+            {(file.grades ?? []).map((g) => (
+              <tr key={`grade-${g.id}`}>
+                <th scope="row">{g.name}</th>
+                <td colSpan={2}>{valueOr(g.value)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </Section>

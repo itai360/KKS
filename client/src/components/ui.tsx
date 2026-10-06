@@ -1,7 +1,8 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
+import { parseTime, shapeTime } from '@shared/dates';
 import { Icon } from './Icon';
 import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
@@ -219,6 +220,68 @@ export function Bar({ value, tone, label }: { value: number; tone?: Tone; label:
     <div className={`bar t-${tone ?? readinessTone(value)}`} role="progressbar" aria-label={label} aria-valuenow={Math.round(value)} aria-valuemin={0} aria-valuemax={100}>
       <div className="bar-fill" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
+  );
+}
+
+/**
+ * A time of day as Israel writes it - 14:00, never 2:00 PM - whatever language the device is set to
+ * (a browser's own time field follows the device). `value` and `onChange` use "HH:MM", or "" for none.
+ */
+export function TimeInput({
+  value,
+  onChange,
+  className = 'input',
+  style,
+  required,
+  id,
+  'aria-label': ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  style?: CSSProperties;
+  required?: boolean;
+  id?: string;
+  'aria-label'?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const sent = useRef(value);
+  // a new value from outside (a parsed sentence, a reset) replaces what is shown
+  useEffect(() => {
+    if (value !== sent.current) {
+      sent.current = value;
+      setDraft(value);
+    }
+  }, [value]);
+  const time = parseTime(draft);
+  const invalid = draft.trim() !== '' && !time;
+  return (
+    <input
+      id={id}
+      className={`${className}${invalid ? ' missing' : ''} time-input`}
+      style={style}
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      dir="ltr"
+      maxLength={5}
+      placeholder="14:00"
+      required={required}
+      aria-label={ariaLabel}
+      aria-invalid={invalid || undefined}
+      title={invalid ? 'שעה בפורמט 24 שעות, למשל 14:00' : undefined}
+      value={draft}
+      onChange={(e) => {
+        const next = shapeTime(e.target.value);
+        setDraft(next);
+        const t = next === '' ? '' : parseTime(next);
+        if (t !== null && t !== sent.current) {
+          sent.current = t;
+          onChange(t);
+        }
+      }}
+      onBlur={() => time && time !== draft && setDraft(time)}
+    />
   );
 }
 

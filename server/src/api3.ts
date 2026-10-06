@@ -67,6 +67,7 @@ import {
   updateNote,
   updatePoint,
 } from './evaluations';
+import { importGrades, previewGrades, readGradeSheets, removeGradeItem } from './grades';
 import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
 import { getFile, sendStoredFile, uploadName } from './files';
 import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
@@ -186,6 +187,21 @@ export function v3Router(): Router {
   // every change answers with the cadet's file as the user may see it
 
   r.get('/evaluations', (req, res) => res.json(listEvaluations(me(req))));
+  // the grade sheet, after an exam or a fitness test: read it, see what it changes, import it
+  r.post('/evaluations/grades/file', requireCommander, express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(readGradeSheets(me(req), req.body));
+  });
+  r.post('/evaluations/grades/link', requireCommander, async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    res.json(readGradeSheets(me(req), await downloadGoogleSheet(url, config.maxUploadMb * 1024 * 1024)));
+  });
+  r.post('/evaluations/grades/preview', requireCommander, (req, res) => res.json(previewGrades(me(req), req.body)));
+  r.post('/evaluations/grades/import', requireCommander, (req, res) => res.json(importGrades(me(req), req.body)));
+  r.delete('/evaluations/grade-items/:id', requireCommander, (req, res) => {
+    removeGradeItem(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
   r.get('/evaluations/committees/:id', (req, res) => res.json(committeeDetail(me(req), id(req.params.id))));
   r.post('/evaluations/committees/:id/refresh', requireCommander, (req, res) => res.json(evaluationFile(me(req), refreshCommitteeVersion(me(req), id(req.params.id)))));
   r.post('/evaluations/committees/:id/decision', requireCommander, (req, res) => res.json(evaluationFile(me(req), decideCommittee(me(req), id(req.params.id), req.body))));

@@ -10,7 +10,7 @@ import { GuideImportCard } from '../components/Discipline';
 import { AbsencesCard } from '../components/Absences';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { ErrorBox, Field, Modal, openable, PageHead, Seg } from '../components/ui';
+import { ErrorBox, Field, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { demoHooks, IS_DEMO } from '../lib/demo';
 import { emitLocalChange } from '../lib/realtime';
@@ -154,7 +154,7 @@ function CourseSettingsCard() {
             <input className="input" type="date" value={s.endDate ?? ''} onChange={(e) => setS({ ...s, endDate: e.target.value || null })} />
           </Field>
           <Field label="שעת דד-ליין ברירת מחדל">
-            <input className="input" type="time" value={s.defaultDeadlineTime} onChange={(e) => setS({ ...s, defaultDeadlineTime: e.target.value })} />
+            <TimeInput value={s.defaultDeadlineTime} onChange={(v) => setS({ ...s, defaultDeadlineTime: v })} />
           </Field>
           <Field label="אזור זמן">
             <input className="input" dir="ltr" value={s.timezone} onChange={(e) => setS({ ...s, timezone: e.target.value })} />
@@ -406,8 +406,8 @@ function DomainsCard() {
 function PermissionsCard() {
   const rows: [string, boolean, boolean][] = [
     ['יצירת משימות לכל אחד ולכל הסגל', true, false],
-    ['יצירת משימות לעצמו', true, true],
-    ['פתיחת משימות לאחרים בשבוע שבאחריותו', true, true],
+    ['יצירת משימות לעצמו ולשאר הסגל', true, true],
+    ['פתיחת משימה למפקד הקורס בשבוע שבאחריותו', true, true],
     ['צפייה בכל המשימות', true, false],
     ['צפייה במשימות שלו, הכלליות ומשימות השבוע שלו', true, true],
     ['עדכון סטטוס, עדכונים, קבצים וסימון הושלם', true, true],

@@ -47,3 +47,12 @@ describe('dates', () => {
     expect(formatDeadline(zonedIso('2026-10-20', '09:00', TZ), now, TZ)).toBe('20.10 09:00');
   });
 });
+
+describe('a time of day as typed', () => {
+  it('takes shape as 24-hour time, whatever the device language', async () => {
+    const { parseTime, shapeTime } = await import('../dates');
+    expect(['1400', '14:00', '9:30', '930', '0000', '23:59'].map(parseTime)).toEqual(['14:00', '14:00', '09:30', '09:30', '00:00', '23:59']);
+    expect(['24:00', '1260', '2:00 PM', '', '14:'].map(parseTime)).toEqual([null, null, null, null, null]);
+    expect(['1', '14', '140', '1400', '9:', '14:0', '14000'].map(shapeTime)).toEqual(['1', '14', '1:40', '14:00', '9:', '14:0', '14:00']);
+  });
+});

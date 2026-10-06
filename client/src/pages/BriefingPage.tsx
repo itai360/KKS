@@ -107,7 +107,7 @@ export function BriefingPage() {
             {data.exemptions.length > 0 && (
               <div className="card">
                 <div className="card-head">
-                  <h3 className="grow">החרגות פעילות</h3>
+                  <h3 className="grow">פטורים פעילים</h3>
                   <span className="tiny mono muted">{data.exemptions.length}</span>
                 </div>
                 {data.exemptions.map((x) => (

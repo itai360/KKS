@@ -689,7 +689,7 @@ export function listExemptions(actor: UserRow, filter: { cadetId?: number } = {}
 }
 
 export const exemptionSchema = z.object({
-  subject: z.string().trim().min(1, 'ממה הצוער מוחרג?').max(80),
+  subject: z.string().trim().min(1, 'ממה הצוער פטור?').max(80),
   details: z.string().trim().max(300).optional().default(''),
   reason: z.string().trim().max(1000).optional().default(''),
   until: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional().default(null),
@@ -698,16 +698,16 @@ export const exemptionSchema = z.object({
 /** Records an exemption; every staff member hears of it, so nobody remarks on what was allowed. */
 export function addExemption(actor: UserRow, cadetId: number, raw: z.input<typeof exemptionSchema>): number {
   const c = cadetRow(cadetId);
-  if (!canManageCadet(actor, c)) throw forbidden('החרגות נרשמות על ידי מפקד הצוות או מפקד הקורס');
+  if (!canManageCadet(actor, c)) throw forbidden('פטורים נרשמים על ידי מפקד הצוות או מפקד הקורס');
   const x = exemptionSchema.parse(raw);
   if (x.until && x.until < today()) throw badRequest('תאריך הסיום כבר עבר');
   const name = `${c.first_name} ${c.last_name}`.trim();
   const id = db().tx(() => {
     const id = db().run('INSERT INTO exemptions(cadet_id, subject, details, reason, until, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', cadetId, x.subject, x.details, x.reason, x.until, actor.id, nowIso()).id;
     const when = x.until ? ` עד ${x.until.split('-').reverse().slice(0, 2).join('.')}` : '';
-    logActivity({ userId: actor.id, action: 'exemption', text: `${actor.display_name} רשם החרגה ל${name}: ${x.subject}${when}` });
+    logActivity({ userId: actor.id, action: 'exemption', text: `${actor.display_name} רשם פטור ל${name}: ${x.subject}${when}` });
     const staff = db().all<{ id: number }>('SELECT id FROM users WHERE active = 1').map((u) => u.id);
-    notify(staff, { type: 'exemption', category: 'info', title: `החרגה: ${name} - ${x.subject}${when}`, body: x.details, link: `/cadets/${cadetId}` }, actor.id);
+    notify(staff, { type: 'exemption', category: 'info', title: `פטור: ${name} - ${x.subject}${when}`, body: x.details, link: `/cadets/${cadetId}` }, actor.id);
     return id;
   });
   changed('cadets');
@@ -716,7 +716,7 @@ export function addExemption(actor: UserRow, cadetId: number, raw: z.input<typeo
 
 export function deleteExemption(actor: UserRow, id: number): number {
   const r = db().get<ExemptionRow>(`${EXEMPTION_BASE} WHERE x.id = ?`, id);
-  if (!r) throw notFound('ההחרגה לא נמצאה');
+  if (!r) throw notFound('הפטור לא נמצא');
   if (!canManageCadet(actor, r)) throw forbidden();
   db().run('DELETE FROM exemptions WHERE id = ?', id);
   changed('cadets');

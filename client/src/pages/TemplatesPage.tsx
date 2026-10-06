@@ -7,7 +7,7 @@ import type { Template, TemplateItem } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
+import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -188,7 +188,7 @@ function TemplateEditor({ template, onClose }: { template: Template | null; onCl
                     title={anchorLabel}
                     aria-label={anchorLabel}
                   />
-                  <input className="input" type="time" style={{ width: 110 }} value={it.time ?? ''} onChange={(e) => upd(i, { time: e.target.value })} aria-label="שעה" />
+                  <TimeInput style={{ width: 110 }} value={it.time ?? ''} onChange={(v) => upd(i, { time: v })} aria-label="שעה" />
                   <button className="icon-btn" aria-label="הסר סעיף" onClick={() => setItems(items.filter((_, j) => j !== i))}>
                     <Icon name="x" size={16} />
                   </button>

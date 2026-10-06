@@ -40,6 +40,9 @@ interface FileRow {
   run_score: number | null;
   pushups: number | null;
   pushups_score: number | null;
+  fit_base_score: number | null;
+  mid_fit_score: number | null;
+  end_fit_score: number | null;
   readings_a: number | null;
   readings_b: number | null;
   mid_run_result: string | null;
@@ -146,7 +149,7 @@ function openFile(actor: UserRow, cadetId: number): CadetRow {
 }
 
 /** something in the file changed: who and when, for the file's header */
-function touched(actor: UserRow, cadetId: number): void {
+export function touched(actor: UserRow, cadetId: number): void {
   ensureFile(cadetId);
   db().run('UPDATE evaluation_files SET updated_at = ?, updated_by = ? WHERE cadet_id = ?', nowIso(), actor.id, cadetId);
 }
@@ -237,6 +240,9 @@ const EXAM_COLUMNS: Record<keyof EvaluationExams, keyof FileRow> = {
   runScore: 'run_score',
   pushups: 'pushups',
   pushupsScore: 'pushups_score',
+  fitBaseScore: 'fit_base_score',
+  midFitScore: 'mid_fit_score',
+  endFitScore: 'end_fit_score',
   readingsA: 'readings_a',
   readingsB: 'readings_b',
   midRunResult: 'mid_run_result',
@@ -265,6 +271,20 @@ function testIsEmpty(test: ExamTest): boolean {
   const where = EXAM_TESTS[test].fields.map((k) => `${EXAM_COLUMNS[k]} IS NOT NULL`).join(' OR ');
   return !db().get(`SELECT 1 FROM evaluation_files WHERE ${where} LIMIT 1`);
 }
+
+/** the course's other grades, in the order they came (the grade sheet's), with one cadet's values */
+export function gradesOf(cadetId: number): EvaluationFile['grades'] {
+  return db()
+    .all<{ id: number; name: string; value: number | null; used: number }>(
+      `SELECT i.id, i.name, v.value, EXISTS (SELECT 1 FROM grade_values u WHERE u.item_id = i.id) AS used
+       FROM grade_items i LEFT JOIN grade_values v ON v.item_id = i.id AND v.cadet_id = ? ORDER BY i.id`,
+      cadetId,
+    )
+    .map((g) => ({ id: g.id, name: g.name, value: g.value, removable: !g.used }));
+}
+
+/** "grade:<id>" - one of the course's other grades, set like any field of the file */
+const GRADE_KEY = /^grade:(\d+)$/;
 
 /** the first active company commander: the name the file shows until another is written */
 const companyCommanderName = () => {
@@ -307,6 +327,7 @@ function buildFile(viewer: UserRow, cadetId: number): EvaluationFile {
     tests: shownTests(added, exams),
     exams,
     removableTests: added.filter((t) => !EXAM_TESTS[t].always && testIsEmpty(t)),
+    grades: gradesOf(cadetId),
     dynamics: db()
       .all<{ id: number; occurred_on: string; score: number; rank: number; author_id: number; author_name: string }>(
         'SELECT d.*, u.display_name AS author_name FROM evaluation_dynamics d JOIN users u ON u.id = d.author_id WHERE d.cadet_id = ? ORDER BY d.occurred_on, d.id',
@@ -463,6 +484,50 @@ function currentValue(c: CadetRow, f: FileRow | undefined, field: EvaluationFiel
   return f ? ((f[rule.column!] as string | number | null) ?? empty) : empty;
 }
 
+/** a score as typed: "" is not entered, a number written as text is the number */
+function normalizeScore(v: unknown): unknown {
+  if (typeof v !== 'string') return v ?? null;
+  const t = v.trim().replace(',', '.');
+  return t === '' ? null : Number.isFinite(Number(t)) ? Number(t) : t;
+}
+
+/** an exam or fitness field of a cadet's file, as kept */
+export function examValue(cadetId: number, field: keyof EvaluationExams): string | number | null {
+  return (fileRow(cadetId)?.[EXAM_COLUMNS[field]] as string | number | null | undefined) ?? null;
+}
+
+/** sets an exam or fitness field (a grade sheet's number) - kept in the file's history */
+export function setExamValue(actor: UserRow, cadetId: number, field: keyof EvaluationExams, value: number | null): boolean {
+  const before = examValue(cadetId, field);
+  if (same(before, value)) return false;
+  ensureFile(cadetId);
+  db().run(`UPDATE evaluation_files SET ${EXAM_COLUMNS[field]} = ? WHERE cadet_id = ?`, value, cadetId);
+  remember(actor, cadetId, 'exams', 'set', field, before, value);
+  return true;
+}
+
+/** one of the course's other grades for a cadet */
+export function gradeValue(cadetId: number, itemId: number): number | null {
+  return db().get<{ value: number }>('SELECT value FROM grade_values WHERE cadet_id = ? AND item_id = ?', cadetId, itemId)?.value ?? null;
+}
+
+/** one of the course's other grades for a cadet - kept in the file's history */
+export function setGrade(actor: UserRow, cadetId: number, itemId: number, before: number | null, value: number | null): boolean {
+  if (same(before, value)) return false;
+  if (value === null) db().run('DELETE FROM grade_values WHERE cadet_id = ? AND item_id = ?', cadetId, itemId);
+  else
+    db().run(
+      'INSERT INTO grade_values(cadet_id, item_id, value, updated_by, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(cadet_id, item_id) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = excluded.updated_at',
+      cadetId,
+      itemId,
+      value,
+      actor.id,
+      nowIso(),
+    );
+  remember(actor, cadetId, 'exams', 'set', `grade:${itemId}`, before, value);
+  return true;
+}
+
 const same = (a: unknown, b: unknown) => (a ?? null) === (b ?? null) || (typeof a === 'string' && typeof b === 'string' && a.trim() === b.trim());
 
 /** sets fields of the file - all of them, or none when one of them changed meanwhile */
@@ -470,7 +535,8 @@ export function updateEvaluationFields(actor: UserRow, cadetId: number, raw: unk
   const c = openFile(actor, cadetId);
   const { changes, base } = fieldsSchema.parse(raw);
   const fields = Object.keys(changes).filter((k): k is EvaluationField => Object.hasOwn(FIELD_RULES, k));
-  if (!fields.length) throw badRequest('אין מה לשמור');
+  const grades = Object.keys(changes).filter((k) => GRADE_KEY.test(k));
+  if (!fields.length && !grades.length) throw badRequest('אין מה לשמור');
   if (fields.includes('summary') && !isCommander(actor)) throw forbidden('את סיכום המ"פ כותב המ"פ');
   const f = fileRow(cadetId);
   const next = new Map<EvaluationField, string | number | null>();
@@ -480,6 +546,18 @@ export function updateEvaluationFields(actor: UserRow, cadetId: number, raw: unk
     if (!parsed.success) throw badRequest(`${EVALUATION_FIELDS[field].label}: ${parsed.error.issues[0]?.message ?? 'ערך לא תקין'}`);
     next.set(field, parsed.data);
     if (base && Object.hasOwn(base, field) && !same(currentValue(c, f, field), normalize(field, base[field]))) conflict(EVALUATION_FIELDS[field].label, cadetId, field);
+  }
+  // the course's other grades: a score, or "not entered"
+  const nextGrades = new Map<number, { name: string; before: number | null; value: number | null }>();
+  for (const key of grades) {
+    const itemId = Number(GRADE_KEY.exec(key)![1]);
+    const item = db().get<{ name: string }>('SELECT name FROM grade_items WHERE id = ?', itemId);
+    if (!item) throw badRequest('הציון לא נמצא - אולי הוסר מהקורס');
+    const parsed = score.safeParse(normalizeScore(changes[key]));
+    if (!parsed.success) throw badRequest(`${item.name}: ${parsed.error.issues[0]?.message ?? 'ערך לא תקין'}`);
+    const before = db().get<{ value: number }>('SELECT value FROM grade_values WHERE cadet_id = ? AND item_id = ?', cadetId, itemId)?.value ?? null;
+    if (base && Object.hasOwn(base, key) && !same(before, normalizeScore(base[key]))) conflict(item.name, cadetId, key);
+    nextGrades.set(itemId, { name: item.name, before, value: parsed.data as number | null });
   }
   const enlisted = next.has('enlistedOn') ? next.get('enlistedOn') : (f?.enlisted_on ?? null);
   const release = next.has('releaseOn') ? next.get('releaseOn') : (f?.release_on ?? null);
@@ -502,6 +580,7 @@ export function updateEvaluationFields(actor: UserRow, cadetId: number, raw: unk
         if (v === 'risk') notify(commanderIds(), { type: 'evaluation', category: 'exception', title: `${fullName(c)} סומן "בסיכון" בתיק ההערכה`, link: `/evaluations/${cadetId}` }, actor.id);
       }
     }
+    for (const [itemId, g] of nextGrades) setGrade(actor, cadetId, itemId, g.before, g.value);
     touched(actor, cadetId);
   });
   changed('cadets');
@@ -741,13 +820,15 @@ const ACTION_WORDS: Record<EvaluationChange['action'], string> = { set: '', add:
 /** every change in the file, newest first */
 export function evaluationHistory(actor: UserRow, cadetId: number): EvaluationChange[] {
   openFile(actor, cadetId);
+  const gradeNames = new Map(db().all<{ id: number; name: string }>('SELECT id, name FROM grade_items').map((g) => [g.id, g.name]));
   return db()
     .all<{ id: number; at: string; user_name: string | null; section: string; action: EvaluationChange['action']; field: string; old_value: string | null; new_value: string | null; item_id: number | null }>(
       'SELECT h.*, u.display_name AS user_name FROM evaluation_history h LEFT JOIN users u ON u.id = h.user_id WHERE h.cadet_id = ? ORDER BY h.id DESC LIMIT 1000',
       cadetId,
     )
     .map((h) => {
-      const field = EVALUATION_FIELDS[h.field as EvaluationField]?.label;
+      const grade = GRADE_KEY.exec(h.field);
+      const field = grade ? `ציון: ${gradeNames.get(Number(grade[1])) ?? 'ציון שהוסר'}` : EVALUATION_FIELDS[h.field as EvaluationField]?.label;
       const item = ITEM_LABELS[h.field];
       const label = field ?? `${item ?? EVALUATION_SECTIONS[h.section as EvaluationSection] ?? h.section}${ACTION_WORDS[h.action] ? ` ${ACTION_WORDS[h.action]}` : ''}`;
       return { id: h.id, at: h.at, userName: h.user_name, section: h.section, action: h.action, label, oldValue: h.old_value, newValue: h.new_value, itemId: h.item_id };
@@ -889,9 +970,8 @@ export function committeeDetail(actor: UserRow, id: number): CommitteeDetail {
 
 /** a version kept before tests could be added: the tests it has values in, the rest not entered */
 function withTests(file: EvaluationFile): EvaluationFile {
-  if (file.tests) return file;
   const exams = { ...examsOf(undefined), ...file.exams };
-  return { ...file, exams, tests: shownTests([], exams), removableTests: [] };
+  return { ...file, exams, tests: file.tests ?? shownTests([], exams), removableTests: [], grades: file.grades ?? [] };
 }
 
 /** a version given to a committee before the file had its present form */
@@ -941,6 +1021,7 @@ function fromLegacy(old: LegacyFile): EvaluationFile {
     tests: shownTests([], {}),
     exams: examsOf(undefined),
     removableTests: [],
+    grades: [],
     dynamics: [],
     committeeReason: '',
     notes,

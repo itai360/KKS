@@ -7,7 +7,7 @@ import type { RecurringRule } from '@shared/types';
 import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
+import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -204,7 +204,7 @@ function RuleEditor({ rule, onClose }: { rule: RecurringRule | null; onClose: ()
         )}
         <div className="form-grid">
           <Field label="שעת דד-ליין">
-            <input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            <TimeInput value={time} onChange={setTime} />
           </Field>
           <Field label="אחראי">
             <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>

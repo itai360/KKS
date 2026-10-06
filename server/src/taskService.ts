@@ -142,12 +142,13 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
     owners.forEach(requireActiveUser);
   }
 
-  // Section 2: staff create tasks for themselves; a week lead may assign within their week.
+  // Section 2: staff open tasks for themselves and for other staff members; for the course
+  // commander only within the week they lead.
   if (!commander && !opts.system) {
     const lead = weekLead(weekId);
-    const foreign = owners.filter((id) => id !== actor.id);
-    if (foreign.length && lead !== actor.id) {
-      throw forbidden('איש סגל יכול לפתוח משימות לעצמו, או לאחרים רק בשבוע שבאחריותו');
+    const above = owners.filter((id) => id !== actor.id && getUserRow(id)?.role !== 'staff');
+    if (above.length && lead !== actor.id) {
+      throw forbidden('איש סגל יכול לפתוח משימה לעצמו ולשאר הסגל; למפקד הקורס - רק בשבוע שבאחריותו');
     }
   }
 
@@ -285,7 +286,7 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
   if (!bypass && patch.deadline !== undefined && patch.deadline !== t.deadline && !canChangeDeadline(actor, t)) {
     throw forbidden('לא ניתן לשנות דד-ליין שקבע מפקד הקורס - יש להגיש בקשת שינוי דד-ליין');
   }
-  if (!bypass && patch.ownerId !== undefined && patch.ownerId !== t.owner_id && !canChangeOwner(actor, t)) {
+  if (!bypass && patch.ownerId !== undefined && patch.ownerId !== t.owner_id && !canChangeOwner(actor, t, patch.ownerId)) {
     throw forbidden('העברת אחריות לאיש סגל אחר דורשת אישור - יש להגיש בקשת העברה');
   }
 

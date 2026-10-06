@@ -13,7 +13,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal, Seg } from './ui';
+import { ErrorBox, Field, Modal, Seg, TimeInput } from './ui';
 
 export interface NewTaskInitial {
   title?: string;
@@ -93,7 +93,7 @@ export function DateTimeInputs({ date, time, onDate, onTime }: { date: string; t
   return (
     <div className="row gap-6">
       <input className="input" type="date" value={date} onChange={(e) => onDate(e.target.value)} required aria-label="תאריך" style={{ flex: 1.4 }} />
-      <input className="input" type="time" value={time} onChange={(e) => onTime(e.target.value)} required aria-label="שעה" style={{ flex: 1 }} />
+      <TimeInput value={time} onChange={onTime} required aria-label="שעה" style={{ flex: 1 }} />
     </div>
   );
 }
@@ -353,7 +353,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
           </select>
         </Field>
 
-        <Field label="אחראי" required hint={!isCommander ? 'ניתן לפתוח משימות לאחרים רק בשבוע שבאחריותך' : undefined}>
+        <Field label="אחראי" required hint={!isCommander ? 'אפשר לבחור את עצמך או כל איש סגל אחר; משימה למפקד הקורס - רק בשבוע שבאחריותך' : undefined}>
           <UserPicker value={ownerIds} onChange={setOwnerIds} allowAll={isCommander} all={allStaff} onAll={setAllStaff} date={date || undefined} />
         </Field>
         {hasMany && (

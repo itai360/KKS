@@ -176,9 +176,15 @@ export function canChangeDeadline(u: UserRow, t: TaskRow): boolean {
 }
 
 /** Re-assigning needs approval (section 2), except a week lead organising their own week. */
-export function canChangeOwner(u: UserRow, t: TaskRow): boolean {
+/**
+ * The commander moves any task; a staff member moves a task they opened - to another staff member,
+ * or to anyone within the week they lead. Without `to`: whether they may move it at all.
+ */
+export function canChangeOwner(u: UserRow, t: TaskRow, to?: number): boolean {
   if (isCommander(u)) return true;
-  return t.created_by === u.id && t.week_lead_id === u.id;
+  if (t.created_by !== u.id) return false;
+  if (t.week_lead_id === u.id || to === undefined) return true;
+  return db().get<{ role: Role }>('SELECT role FROM users WHERE id = ?', to)?.role === 'staff';
 }
 
 /** Staff cannot delete tasks the commander assigned them (section 2). */

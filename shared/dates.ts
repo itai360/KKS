@@ -192,3 +192,22 @@ export function formatTimeLeft(iso: string, now: Date = new Date()): string {
   const unit = d >= 1 ? (d === 1 ? 'יום' : d === 2 ? 'יומיים' : `${d} ימים`) : h >= 1 ? (h === 1 ? 'שעה' : h === 2 ? 'שעתיים' : `${h} שעות`) : `${Math.max(1, Math.floor(abs / 60000))} דק'`;
   return ms >= 0 ? `נותרו ${unit}` : `באיחור של ${unit}`;
 }
+
+// ---------------- a time of day as typed (24-hour, as in Israel) ----------------
+
+/** "1400", "9:5", "14:00" -> "14:00"; null when it is not a time of day (yet) */
+export function parseTime(raw: string): string | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(raw.trim()) ?? /^(\d{1,2})(\d{2})$/.exec(raw.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null;
+}
+
+/** what is typed, as a time takes shape: digits only get their colon ("1400" -> "14:00") */
+export function shapeTime(raw: string): string {
+  const typed = raw.replace(/[^\d:]/g, '');
+  if (/^\d{1,2}:\d{0,2}$/.test(typed)) return typed;
+  const d = typed.replace(/\D/g, '').slice(0, 4);
+  return d.length <= 2 ? d : `${d.slice(0, d.length - 2)}:${d.slice(-2)}`;
+}

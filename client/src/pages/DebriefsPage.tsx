@@ -16,7 +16,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
+import { Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Seg, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { isoAt, todayKey } from '../lib/format';
@@ -787,7 +787,7 @@ function ItemToRecurring({ item, onClose, onDone }: { item: DebriefItem; onClose
         )}
         <div className="form-grid">
           <Field label="שעה">
-            <input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            <TimeInput value={time} onChange={setTime} />
           </Field>
           <Field label="אחראי">
             <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>

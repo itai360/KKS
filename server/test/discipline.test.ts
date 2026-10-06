@@ -302,7 +302,7 @@ describe('exemptions', () => {
     const d = (await c.s1.post(`/api/cadets/${cadet}/exemptions`, shaving)).body as CadetDetail;
     expect(d.cadet.exemptions).toEqual(['דיגום']);
     expect(d.exemptions).toMatchObject([{ subject: 'דיגום', details: 'פטור גילוח', reason: 'אישור רפואי', until: '2026-10-15', active: true, canDelete: true, createdByName: 'מפק"צ 1' }]);
-    for (const id of [c.ids.s2, c.ids.s3, c.ids.cmd]) expect(notificationsOf(id).map((n) => n.title)).toContain('החרגה: נועם לוי - דיגום עד 15.10');
+    for (const id of [c.ids.s2, c.ids.s3, c.ids.cmd]) expect(notificationsOf(id).map((n) => n.title)).toContain('פטור: נועם לוי - דיגום עד 15.10');
     expect(notificationsOf(c.ids.s1)).toEqual([]);
 
     // other staff: what and until when, not why

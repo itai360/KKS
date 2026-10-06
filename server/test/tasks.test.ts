@@ -53,13 +53,20 @@ describe('creating tasks', () => {
     expect((await c.s1.get(`/api/tasks/${id}`)).body.task.status).toBe('done');
   });
 
-  it('staff create for themselves, and for others only within the week they lead', async () => {
+  it('staff open tasks for themselves and for other staff; for the course commander only within the week they lead', async () => {
     expect((await c.s1.post('/api/tasks', { title: 'שלי', ownerIds: [c.ids.s1], deadline: at('2026-10-05') })).status).toBe(200);
-    expect((await c.s1.post('/api/tasks', { title: 'לאחר', ownerIds: [c.ids.s2], deadline: at('2026-10-05') })).status).toBe(403);
+    const other = await c.s1.post('/api/tasks', { title: 'לאחר', ownerIds: [c.ids.s2], deadline: at('2026-10-05') });
+    expect(other.status).toBe(200);
+    expect(notificationsOf(c.ids.s2)[0].title).toContain('נוספה לך משימה חדשה');
+    expect((await c.s1.post('/api/tasks', { title: 'למפקד', ownerIds: [c.ids.cmd], deadline: at('2026-10-05') })).status).toBe(403);
+    // a task they opened moves to another staff member, not up to the commander
+    const mine = (await c.s1.post('/api/tasks', { title: 'שלי להעביר', ownerIds: [c.ids.s1], deadline: at('2026-10-05') })).body.ids[0];
+    expect((await c.s1.patch(`/api/tasks/${mine}`, { ownerId: c.ids.s3 })).status).toBe(200);
+    expect((await c.s1.patch(`/api/tasks/${mine}`, { ownerId: c.ids.cmd })).status).toBe(403);
     const week = await c.cmd.post('/api/weeks', { name: 'שבוע התקפה', startDate: '2026-10-04', endDate: '2026-10-10', leadId: c.ids.s1 });
-    const ok = await c.s1.post('/api/tasks', { title: 'תיאום מטווח', ownerIds: [c.ids.s2], deadline: at('2026-10-06') });
+    const ok = await c.s1.post('/api/tasks', { title: 'תיאום מטווח', ownerIds: [c.ids.cmd], deadline: at('2026-10-06') });
     expect(ok.status).toBe(200);
-    const t = await c.s2.get(`/api/tasks/${ok.body.ids[0]}`);
+    const t = await c.cmd.get(`/api/tasks/${ok.body.ids[0]}`);
     expect(t.body.task.weekId).toBe(week.body.id); // auto-attached to the week by its deadline
   });
 });

@@ -52,6 +52,7 @@ export function CadetsPage() {
   const team = params.get('team') ?? '';
   const status = params.get('status') ?? 'active';
   const notesOnly = params.get('notes') === '1';
+  const exemptOnly = params.get('exempt') === '1';
   const [q, setQ] = useState('');
   const teams = useApi<Team[]>('/api/teams', ['cadets']);
   const cadets = useApi<Cadet[]>(`/api/cadets${qs({ team, status })}`, ['cadets']);
@@ -60,7 +61,7 @@ export function CadetsPage() {
   const myTeams = (teams.data ?? []).filter((t) => t.commanderId === user.id);
   const canAdd = isCommander || myTeams.length > 0;
 
-  const shown = (cadets.data ?? []).filter((c) => matchesSearch(q, c.fullName, c.personalNumber) && (!notesOnly || c.disciplineNotes > 0));
+  const shown = (cadets.data ?? []).filter((c) => matchesSearch(q, c.fullName, c.personalNumber) && (!notesOnly || c.disciplineNotes > 0) && (!exemptOnly || c.exemptions.length > 0));
   const grouped = useMemo(() => {
     const map = new Map<string, Cadet[]>();
     for (const c of shown) map.set(c.teamName ?? 'ללא צוות', [...(map.get(c.teamName ?? 'ללא צוות') ?? []), c]);
@@ -171,6 +172,9 @@ export function CadetsPage() {
         <button type="button" className={`chip${notesOnly ? ' on' : ''}`} onClick={() => set('notes', notesOnly ? '' : '1')} aria-pressed={notesOnly}>
           עם הערות משמעת
         </button>
+        <button type="button" className={`chip${exemptOnly ? ' on' : ''}`} onClick={() => set('exempt', exemptOnly ? '' : '1')} aria-pressed={exemptOnly}>
+          עם פטורים
+        </button>
       </div>
       <ErrorBox error={cadets.error} />
       {cadets.loading && !cadets.data ? (
@@ -206,8 +210,10 @@ export function CadetsPage() {
 function CadetRows({ list }: { list: Cadet[] }) {
   const navigate = useNavigate();
   const bulk = useBulk();
+  const [exempting, setExempting] = useState<Cadet | null>(null);
   return (
     <div className="card">
+      {exempting && <ExemptionDialog cadet={exempting} onClose={() => setExempting(null)} />}
       {list.map((c) => (
         <div key={c.id} className={`health${bulk?.selected.has(c.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, c.id, () => navigate(`/cadets/${c.id}`)))}>
           <BulkCheck id={c.id} />
@@ -228,8 +234,8 @@ function CadetRows({ list }: { list: Cadet[] }) {
           {c.status !== 'active' && <span className={`badge t-${CADET_STATUS_TONES[c.status]}`}>{CADET_STATUS_LABELS[c.status]}</span>}
           <NotesBadge count={c.disciplineNotes} />
           {c.exemptions.length > 0 && (
-            <span className="badge t-blue clip" title={`מוחרג מ: ${c.exemptions.join(', ')}`}>
-              <span className="clip-text">החרגה{c.exemptions.length === 1 ? `: ${c.exemptions[0]}` : ` (${c.exemptions.length})`}</span>
+            <span className="badge t-purple clip" title={`פטור מ: ${c.exemptions.join(', ')}`}>
+              <span className="clip-text">פטור: {c.exemptions.join(', ')}</span>
             </span>
           )}
           {c.disciplineCount > 0 && <span className="badge t-orange hide-mobile">{c.disciplineCount} משמעת</span>}
@@ -238,6 +244,21 @@ function CadetRows({ list }: { list: Cadet[] }) {
             <span className="mono strong" title="ממוצע הערכות (1-5)">
               {c.avgScore.toFixed(1)}
             </span>
+          )}
+          {c.canManage && !bulk?.active && (
+            <button
+              type="button"
+              className="icon-btn exemption-add"
+              aria-label={`הוספת פטור ל${c.fullName}`}
+              title="הוספת פטור"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExempting(c);
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <Icon name="flag" size={15} />
+            </button>
           )}
           <Icon name="chevronLeft" size={16} className="faint" />
         </div>
@@ -699,13 +720,8 @@ function StatusPill({ cadet }: { cadet: Cadet }) {
 
 const KIND_TONE: Record<RecordKind, string> = { note: 'gray', talk: 'blue', discipline: 'orange', evaluation: 'green' };
 
-const EXEMPTION_SUBJECTS = ['דיגום', 'נשק', 'טלפונים', 'זמנים', 'כושר גופני', 'שמירות', 'תורנויות', 'אוכל'];
+const EXEMPTION_SUBJECTS = ['דיגום', 'נשק', 'טלפונים', 'זמנים', 'כושר גופני', 'שמירות', 'תורנויות', 'אוכל', 'גילוח', 'מאמץ גופני', 'נעליים', 'נשיאת משקל'];
 
-/**
- * What the cadet is excused from - shaving, carrying a weapon - so nobody
- * remarks on what was allowed. Every staff member sees what and until when;
- * the reason stays with the team commander and the course commander.
- */
 /** the last two months on the roll call: how many days away, and why */
 function AttendanceCard({ cadetId }: { cadetId: number }) {
   const { data } = useApi<AttendanceHistory>(`/api/cadets/${cadetId}/attendance`, ['cadets']);
@@ -744,41 +760,18 @@ function AttendanceCard({ cadetId }: { cadetId: number }) {
   );
 }
 
+/**
+ * What the cadet is exempt from (פטורים) - shaving, running, carrying weight - so nobody remarks on
+ * what was allowed. Every staff member sees what and until when; the reason stays with the team
+ * commander and the course commander.
+ */
 function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemption[] }) {
-  const toast = useToast();
-  const guide = useGuide(cadet.canManage);
   const [adding, setAdding] = useState(false);
-  const [subject, setSubject] = useState('');
-  const [details, setDetails] = useState('');
-  const [reason, setReason] = useState('');
-  const [until, setUntil] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
   const current = exemptions.filter((x) => x.active);
   const past = exemptions.filter((x) => !x.active);
-  const subjects = [...new Set([...(guide.data?.offenses.map((o) => o.category).filter(Boolean) ?? []), ...EXEMPTION_SUBJECTS])];
-
-  const add = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post(`/api/cadets/${cadet.id}/exemptions`, { subject, details, reason, until: until || null });
-      toast({ title: 'ההחרגה נרשמה', body: 'כל הסגל קיבל עדכון', tone: 'green' });
-      setAdding(false);
-      setSubject('');
-      setDetails('');
-      setReason('');
-      setUntil('');
-      emitLocalChange('cadets');
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
   const remove = async (x: Exemption) => {
-    if (!(await ask({ title: `להסיר את ההחרגה "${x.subject}"?`, body: `הסגל יפסיק לראות אותה אצל ${cadet.fullName}.`, confirm: 'הסרה', danger: true }))) return;
+    if (!(await ask({ title: `להסיר את הפטור "${x.subject}"?`, body: `הסגל יפסיק לראות אותו אצל ${cadet.fullName}.`, confirm: 'הסרה', danger: true }))) return;
     await api.del(`/api/exemptions/${x.id}`);
     emitLocalChange('cadets');
   };
@@ -796,7 +789,7 @@ function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemp
         </div>
       </div>
       {x.canDelete && (
-        <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label={`הסרת ההחרגה ${x.subject}`} onClick={() => void remove(x)}>
+        <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label={`הסרת הפטור ${x.subject}`} onClick={() => void remove(x)}>
           <Icon name="trash" size={14} />
         </button>
       )}
@@ -804,57 +797,92 @@ function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemp
   );
 
   return (
-    <div className={`card${current.length ? ' t-blue exemption-card' : ''}`}>
+    <div className={`card${current.length ? ' t-purple exemption-card' : ''}`}>
       <div className="card-head">
         <Icon name="flag" />
-        <h3 className="grow">החרגות</h3>
-        {cadet.canManage && !adding && (
+        <h3 className="grow">פטורים</h3>
+        {cadet.canManage && (
           <button className="btn btn-sm" onClick={() => setAdding(true)}>
-            <Icon name="plus" size={14} /> החרגה
+            <Icon name="plus" size={14} /> פטור
           </button>
         )}
       </div>
       <div className="card-body col gap-6">
-        {current.length === 0 && !adding && <p className="small muted" style={{ margin: 0 }}>אין החרגות פעילות.</p>}
+        {current.length === 0 && <p className="small muted" style={{ margin: 0 }}>אין פטורים פעילים.</p>}
         {current.map(row)}
-        {adding && (
-          <div className="col gap-6">
-            <Field label="ממה הצוער מוחרג" required>
-              <input className="input" list="exemption-subjects" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="לדוגמה: דיגום" data-autofocus />
-              <datalist id="exemption-subjects">
-                {subjects.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </Field>
-            <Field label="פירוט (גלוי לכל הסגל)">
-              <input className="input" value={details} onChange={(e) => setDetails(e.target.value)} placeholder="לדוגמה: פטור גילוח" />
-            </Field>
-            <Field label="סיבה (רק לך ולמפקד הקורס / מפקד הצוות)">
-              <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: אישור רפואי" />
-            </Field>
-            <Field label="עד תאריך" hint="ריק - עד להודעה חדשה">
-              <input className="input" type="date" value={until} min={todayKey()} onChange={(e) => setUntil(e.target.value)} />
-            </Field>
-            <ErrorBox error={error} />
-            <div className="row gap-6">
-              <button className="btn btn-primary btn-sm" disabled={busy || !subject.trim()} onClick={() => void add()}>
-                שמירה ועדכון הסגל
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>
-                ביטול
-              </button>
-            </div>
-          </div>
-        )}
         {past.length > 0 && (
           <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowPast(!showPast)} aria-expanded={showPast}>
-            {showPast ? 'הסתרת' : 'הצגת'} החרגות שהסתיימו ({past.length})
+            {showPast ? 'הסתרת' : 'הצגת'} פטורים שהסתיימו ({past.length})
           </button>
         )}
         {showPast && <div className="col gap-6 muted">{past.map(row)}</div>}
       </div>
+      {adding && <ExemptionDialog cadet={cadet} onClose={() => setAdding(false)} />}
     </div>
+  );
+}
+
+/** a new exemption, from the cadet's card or straight from the list */
+function ExemptionDialog({ cadet, onClose }: { cadet: Pick<Cadet, 'id' | 'fullName' | 'canManage'>; onClose: () => void }) {
+  const toast = useToast();
+  const guide = useGuide(cadet.canManage);
+  const [subject, setSubject] = useState('');
+  const [details, setDetails] = useState('');
+  const [reason, setReason] = useState('');
+  const [until, setUntil] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const subjects = sortHe([...new Set([...(guide.data?.offenses.map((o) => o.category).filter(Boolean) ?? []), ...EXEMPTION_SUBJECTS])]);
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/api/cadets/${cadet.id}/exemptions`, { subject, details, reason, until: until || null });
+      toast({ title: 'הפטור נרשם', body: 'כל הסגל קיבל עדכון', tone: 'green' });
+      emitLocalChange('cadets');
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`פטור ל${cadet.fullName}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" disabled={busy || !subject.trim()} onClick={() => void add()}>
+            שמירה ועדכון הסגל
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        <Field label="ממה הצוער פטור" required>
+          <input className="input" list="exemption-subjects" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="לדוגמה: גילוח" data-autofocus />
+          <datalist id="exemption-subjects">
+            {subjects.map((x) => (
+              <option key={x} value={x} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="פירוט (גלוי לכל הסגל)">
+          <input className="input" value={details} onChange={(e) => setDetails(e.target.value)} placeholder="לדוגמה: פטור מריצות עד הבדיקה הבאה" />
+        </Field>
+        <Field label="סיבה (רק למפקד הצוות ולמפקד הקורס)">
+          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: אישור רפואי" />
+        </Field>
+        <Field label="עד תאריך" hint="ריק - עד להודעה חדשה">
+          <input className="input" type="date" value={until} min={todayKey()} onChange={(e) => setUntil(e.target.value)} />
+        </Field>
+        <ErrorBox error={error} />
+      </div>
+    </Modal>
   );
 }
 
@@ -1082,7 +1110,7 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
           {prior.length > 0 && <div className="tiny muted">קודם: {prior.map((r) => shortDate(r.occurredOn)).join(', ')}</div>}
           {exempted && (
             <div className="strong" style={{ color: 'var(--blue)' }}>
-              שימו לב: ל{cadet.firstName} יש החרגה בנושא {exempted} - כדאי לבדוק בכרטיס ההחרגות לפני שרושמים.
+              שימו לב: ל{cadet.firstName} יש פטור בנושא {exempted} - כדאי לבדוק בכרטיס הפטורים לפני שרושמים.
             </div>
           )}
         </div>

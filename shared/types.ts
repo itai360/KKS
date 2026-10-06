@@ -806,18 +806,22 @@ export interface EvaluationExams {
   runScore: number | null;
   pushups: number | null;
   pushupsScore: number | null;
+  /** a fitness test's overall score (ציון כש"ג), as the grade sheet has it */
+  fitBaseScore: number | null;
   readingsA: number | null;
   readingsB: number | null;
   midRunResult: string | null;
   midRunScore: number | null;
   midPushups: number | null;
   midPushupsScore: number | null;
+  midFitScore: number | null;
   midA: number | null;
   midB: number | null;
   endRunResult: string | null;
   endRunScore: number | null;
   endPushups: number | null;
   endPushupsScore: number | null;
+  endFitScore: number | null;
   finalA: number | null;
   finalB: number | null;
 }
@@ -841,6 +845,43 @@ export type EvaluationField =
   | 'committeeReason'
   | 'summary'
   | 'standing';
+
+// ---------------- the grade sheet (server/src/grades.ts) ----------------
+
+/** where a column goes: a field of the file, one of the course's grades, a new grade, or nowhere */
+export type GradeTarget = keyof EvaluationExams | `item:${number}` | 'new' | 'skip';
+
+export interface GradeColumn {
+  index: number;
+  header: string;
+  target: GradeTarget;
+  /** numbers for cadets that were found */
+  values: number;
+  /** of them, how many replace a different grade already in the file */
+  changes: number;
+  /** cells that are not a number (a mark, a word) - not imported */
+  other: number;
+  /** numbers outside 0-100 - not imported */
+  outOfRange: number;
+}
+
+export interface GradeImportPreview {
+  /** the sheet's header row, counted from 1 as in the spreadsheet */
+  headerRow: number;
+  columns: GradeColumn[];
+  /** the cadets' rows: found, or not found in the course */
+  rows: { line: number; name: string; personalNumber: string; cadetId: number | null; cadetName: string | null }[];
+  /** what a column can go to */
+  targets: { value: GradeTarget; label: string }[];
+}
+
+export interface GradeImportResult {
+  cadets: number;
+  set: number;
+  replaced: number;
+  kept: number;
+  unmatched: number;
+}
 
 /** one change in the file's history */
 export interface EvaluationChange {
@@ -899,6 +940,8 @@ export interface EvaluationFile {
   exams: EvaluationExams;
   /** tests added for the course that no file has a value in yet - they can still be taken away */
   removableTests: ExamTest[];
+  /** the course's other grades (from the grade sheet), in the sheet's order; null is not entered */
+  grades: { id: number; name: string; value: number | null; /** no cadet has it yet - it can be taken away */ removable: boolean }[];
   /** 5. oldest first */
   dynamics: EvaluationDynamics[];
   /** 6. */

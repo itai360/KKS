@@ -94,14 +94,14 @@ describe('a living file', () => {
     expect((await c.s1.post(tests, { test: 'fitMid' })).status).toBe(200); // twice is once
     // in the other cadets' files too
     expect(((await c.cmd.get(`/api/evaluations/${other}`)).body as EvaluationFile).tests).toEqual(['fitBase', 'readings', 'fitMid']);
-    expect(((await c.s1.get('/api/evaluations')).body as EvaluationListItem[])[0]).toMatchObject({ exams: 0, examsTotal: 10 });
+    expect(((await c.s1.get('/api/evaluations')).body as EvaluationListItem[])[0]).toMatchObject({ exams: 0, examsTotal: 12 });
     // once a value is entered it stays
     await set(c.s1, { midRunResult: '10:58', midRunScore: 85, readingsA: 92 });
     const f = await file(c.s1);
     expect(f.exams).toMatchObject({ midRunResult: '10:58', midRunScore: 85, readingsA: 92, runResult: null });
     expect(f.removableTests).toEqual([]);
     expect((await c.cmd.del(`${tests}/fitMid`)).body.error).toContain('כבר הוזנו נתונים');
-    expect(((await c.s1.get('/api/evaluations')).body as EvaluationListItem[])[0]).toMatchObject({ exams: 3, examsTotal: 10 });
+    expect(((await c.s1.get('/api/evaluations')).body as EvaluationListItem[])[0]).toMatchObject({ exams: 3, examsTotal: 12 });
     const history = (await c.s1.get(`/api/evaluations/${cadet}/history`)).body as EvaluationChange[];
     expect(history.map((h) => h.label)).toEqual(expect.arrayContaining(['כושר גופני אמצע - ציון ריצה', 'מבחן מקראות - מועד א׳']));
     // emptied again, it can be taken away - by the commander or the cadet's team commander only

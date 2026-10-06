@@ -1207,6 +1207,415 @@ input::-webkit-date-and-time-value {
   color: #fff;
 }
 
+/* ---------- commander's daily overview ---------- */
+
+.main:has(.dashboard-page) {
+  background-image: none;
+}
+
+.dashboard-page .page-title,
+.more-page .page-title {
+  font-family: var(--font);
+  font-size: clamp(26px, 2.4vw, 34px);
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.dashboard-page .eyebrow {
+  margin-bottom: 8px;
+  letter-spacing: 0;
+}
+
+.dashboard-page .page-head {
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.dashboard-page .card {
+  border-radius: 14px;
+}
+
+.dashboard-stats .stat {
+  padding: 18px 20px;
+  gap: 8px;
+  text-align: start;
+}
+
+.stat-heading,
+.stat-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stat-heading > svg,
+.stat-footer > svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.dashboard-stats .stat-num {
+  font-family: var(--font);
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+.dashboard-stats .stat.alert {
+  background: var(--red-bg);
+  border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+  color: var(--red-ink);
+  box-shadow: inset 0 3px var(--red);
+}
+
+.dashboard-stats .stat.alert :is(.stat-hint, .stat-heading > svg, .stat-footer > svg) {
+  color: var(--red-ink);
+}
+
+.dashboard-command-details {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-2);
+}
+
+.dashboard-command-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 12px 18px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+  border-radius: 14px;
+}
+
+.dashboard-command-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-command-details > summary svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.dashboard-command-details[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.dashboard-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 0 18px 16px;
+}
+
+.dashboard-command > .tiny {
+  grid-column: 1 / -1;
+}
+
+.dashboard-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: 'attention schedule' 'attention weeks';
+  gap: 18px;
+  align-items: start;
+}
+
+.dashboard-attention { grid-area: attention; }
+.dashboard-schedule { grid-area: schedule; }
+.dashboard-weeks { grid-area: weeks; }
+
+.dashboard-attention .card-head {
+  padding: 18px;
+}
+
+.dashboard-attention h2 {
+  font-size: 20px;
+}
+
+.dashboard-attention .card-head p {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.dashboard-section-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--card-2);
+  flex-shrink: 0;
+}
+
+.attention-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.attention-filters .chip {
+  min-height: 36px;
+  height: auto;
+  gap: 6px;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.attention-filters .chip > span:last-child {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.attention-filters .chip.on .dot {
+  background: currentColor;
+}
+
+.dashboard-attention .attention-group-title {
+  margin: 0;
+  padding: 16px 18px 8px;
+  font-size: 13px;
+}
+
+.dashboard-attention .dashboard-attn-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0;
+  padding: 0;
+  cursor: default;
+}
+
+.attention-link {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  min-width: 0;
+  border-radius: 6px;
+}
+
+.attention-link .attn-sub {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.attention-actions {
+  padding-inline-end: 14px;
+  flex-wrap: wrap;
+}
+
+.attention-more,
+.agenda-more {
+  min-height: 44px;
+  margin: 4px 14px 10px;
+  justify-content: center;
+}
+
+.dashboard-support {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+}
+
+.week-summary {
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+.week-summary:hover,
+.dashboard-event:hover {
+  background: var(--card-2);
+}
+
+.week-readiness {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dashboard-event {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.dashboard-event-time {
+  display: flex;
+  flex-direction: column;
+  min-width: 44px;
+  font-size: 12px;
+  direction: ltr;
+}
+
+.dashboard-event-time > span,
+.dashboard-event-detail {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.dashboard-event-marker {
+  width: 3px;
+  height: 32px;
+  background: var(--line-2);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.dashboard-inline-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* All screens remain available on mobile, with a searchable, labelled menu. */
+.more-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  background: var(--field);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+}
+
+.more-search:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.more-search > svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.more-search .input {
+  border: 0;
+  background: none;
+  padding-inline: 0;
+  box-shadow: none;
+  outline: none;
+  min-width: 0;
+}
+
+.more-search-status {
+  margin: 8px 2px 18px;
+}
+
+.more-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 18px;
+  align-items: start;
+}
+
+.more-sections > .empty {
+  grid-column: 1 / -1;
+}
+
+.more-section-title {
+  margin: 14px 4px 8px;
+}
+
+.more-sections .health {
+  min-height: 50px;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas: 'schedule' 'attention' 'weeks';
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-page .page-actions .btn {
+    min-height: 44px;
+  }
+  .dashboard-stats .stat {
+    padding: 14px;
+    gap: 10px;
+  }
+  .dashboard-stats .stat-num {
+    font-size: 36px;
+  }
+  .dashboard-stats .stat-footer {
+    display: none;
+  }
+  .dashboard-command {
+    padding: 0 14px 14px;
+    gap: 10px;
+  }
+  .dashboard-command .input {
+    grid-column: 1 / -1;
+    font-size: 16px;
+  }
+  .dashboard-command > .btn {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+  .dashboard-support,
+  .more-sections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dashboard-attention .card-head {
+    padding: 14px;
+  }
+  .dashboard-section-icon {
+    display: none;
+  }
+  .attention-filters {
+    padding: 12px;
+  }
+  .attention-filters .chip {
+    min-height: 44px;
+  }
+  .attention-link {
+    gap: 10px;
+    padding: 14px 12px;
+  }
+  .dashboard-attention .dashboard-attn-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .attention-actions {
+    padding: 0 26px 12px 12px;
+  }
+  .attention-actions .btn {
+    min-height: 44px;
+    min-width: 68px;
+  }
+  .more-search .input {
+    font-size: 16px;
+  }
+}
+
+/* a time of day, always 24-hour (ui.tsx TimeInput) */
+.time-input {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  min-width: 84px;
+}
+.time-input::placeholder {
+  font-family: var(--mono);
+}
+
 /* ---------- task rows ---------- */
 
 .list {
@@ -3729,6 +4138,18 @@ select.status-pill:disabled {
   border-top: 0;
 }
 
+/* adding an exemption straight from the cadets list */
+.health .exemption-add {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  color: var(--muted);
+}
+.health .exemption-add:hover {
+  color: var(--ink);
+  background: var(--gray-bg);
+}
+
 /* picking a cadet in a dialog */
 .pick-list {
   display: flex;
@@ -5159,6 +5580,70 @@ button.fab-missing {
 .eval-test-remove {
   width: 26px;
   height: 26px;
+}
+
+.eval-subhead {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+/* the grade sheet's columns, and where each one goes */
+.grade-map th[scope='row'] {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.grade-map .select {
+  min-width: 200px;
+}
+.grade-map tbody tr:last-child th {
+  border-bottom: 0;
+}
+.grade-map tr.muted th,
+.grade-map tr.muted td {
+  color: var(--muted);
+}
+@media (max-width: 860px) {
+  /* on a phone every column of the sheet is a small card: name and count, where it goes, notes */
+  .grade-map thead {
+    display: none;
+  }
+  .grade-map,
+  .grade-map tbody {
+    display: block;
+  }
+  .grade-map tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .grade-map th,
+  .grade-map td {
+    padding: 0;
+    border: 0;
+  }
+  .grade-map td:nth-child(2),
+  .grade-map td:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+  .grade-map td:nth-child(3) {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  .grade-map td:empty {
+    display: none;
+  }
+  .grade-map .select {
+    min-width: 0;
+    width: 100%;
+  }
+}
+.grade-missing {
+  margin: 0;
+  padding-inline-start: 20px;
+  max-height: 160px;
+  overflow: auto;
 }
 
 .eval-list td,

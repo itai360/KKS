@@ -19,6 +19,7 @@ import { shortDate } from '@shared/dates';
 import type { Committee, CommitteeDetail, EvaluationFile, EvaluationListItem, Team } from '@shared/types';
 import { NoteDots, NotesBadge, noteTone, timeLabel } from '../components/Discipline';
 import { FileDocument, HistoryDialog, LiveFile } from '../components/EvaluationFile';
+import { GradesImport } from '../components/GradesImport';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, initials } from '../components/ui';
@@ -74,6 +75,12 @@ export function EvaluationsPage() {
         title="תיקי הערכה"
         sub={'תיק חי שמלווה כל צוער לאורך הקורס - פתוח למ"פ ולמפק"צ האחראי על הצוער בלבד. אפשר להשלים ולעדכן כל סעיף בכל שלב.'}
         actions={
+          <>
+          {isCommander && (
+            <button className="btn btn-primary" onClick={() => set('import', '1')}>
+              <Icon name="upload" /> ייבוא ציונים
+            </button>
+          )}
           <button
             className="btn"
             title="ייצוא הרשימה המסוננת לאקסל"
@@ -102,8 +109,10 @@ export function EvaluationsPage() {
           >
             <Icon name="download" /> ייצוא
           </button>
+          </>
         }
       />
+      {isCommander && params.get('import') === '1' && <GradesImport onClose={() => set('import', '')} />}
       {myTeams.length > 1 && (
         <div className="chips chips-scroll mb-12">
           <button className={`chip${!team ? ' on' : ''}`} onClick={() => set('team', '')}>
