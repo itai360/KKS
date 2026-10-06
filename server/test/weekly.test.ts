@@ -69,7 +69,7 @@ describe('the weekly', () => {
     expect((await c.s1.del(`/api/weekly/items/${topic}`)).status).toBe(200);
   });
 
-  it('held: the summary goes to the staff with the points, and what was left open moves to the next weekly', async () => {
+  it('held: the summary goes to the staff, the points stay the commander’s, and what was left open moves to the next weekly', async () => {
     const open = (await c.s1.post('/api/weekly/items', { kind: 'topic', title: 'לא נדון' })).body.id;
     const discussed = (await c.s1.post('/api/weekly/items', { kind: 'topic', title: 'נדון' })).body.id;
     await c.cmd.patch(`/api/weekly/items/${discussed}`, { done: true, outcome: 'סגור' });
@@ -79,10 +79,15 @@ describe('the weekly', () => {
     const held = (await c.cmd.post(`/api/weekly/${w1}/hold`, {})).body;
     expect(held).toMatchObject({ carried: 2, nextWeekId: w2 });
     expect(notificationsOf(c.ids.s1).find((n) => n.type === 'weekly_summary')).toMatchObject({ title: 'סיכום השבועי - שבוע שטח', link: `/weekly/${w1}` });
-    // now everyone sees the points; what was left open is in the next weekly, marked where it came from
+    // the points stay the commander's - not shown, not counted; what was left open is in the next weekly, marked where it came from
     const after = await view(c.s1, w1);
-    expect(after.pointsHidden).toBe(false);
-    expect(titles(after)).toEqual(['נדון', 'דגש המפקד']);
+    expect(after.pointsHidden).toBe(true);
+    expect(titles(after)).toEqual(['נדון']);
+    expect(titles(await view(c.cmd, w1))).toEqual(['נדון', 'דגש המפקד']);
+    expect(notificationsOf(c.ids.s1).find((n) => n.type === 'weekly_summary')!.title).not.toContain('דגש');
+    const point = (await view(c.cmd, w1)).items.find((i) => i.kind === 'point')!.id;
+    expect((await c.s1.patch(`/api/weekly/items/${point}`, { title: 'x' })).status).toBe(404);
+    expect((await c.s1.del(`/api/weekly/items/${point}`)).status).toBe(404);
     const next = await view(c.s1, w2);
     expect(next.items.map((i) => [i.title, i.carriedFrom?.name])).toEqual([
       ['לא נדון', 'שבוע שטח'],
@@ -94,9 +99,9 @@ describe('the weekly', () => {
     expect((await c.s1.post('/api/weekly/items', { weekId: w1, kind: 'topic', title: 'מאוחר' })).status).toBe(400);
     expect((await c.s1.patch(`/api/weekly/items/${discussed}`, { outcome: 'שונה' })).status).toBe(403);
     expect((await c.cmd.post(`/api/weekly/${w1}/hold`, {})).status).toBe(400);
-    // reopened: the points are the commander's again
+    // reopened: open to changes again, the points still the commander's
     await c.cmd.post(`/api/weekly/${w1}/reopen`, {});
-    expect((await view(c.s1, w1)).pointsHidden).toBe(true);
+    expect((await view(c.s1, w1)).heldAt).toBeNull();
     expect(titles(await view(c.s1, w1))).toEqual(['נדון']);
   });
 
@@ -112,7 +117,7 @@ describe('the weekly', () => {
 });
 
 describe('the summary as text', () => {
-  it('goes section by section, with what was decided', () => {
+  it('goes section by section, with what was decided - without the commander’s points', () => {
     const item = (kind: WeeklyItem['kind'], title: string, more: Partial<WeeklyItem> = {}): WeeklyItem => ({
       id: 0,
       weekId: 1,
@@ -139,6 +144,6 @@ describe('the summary as text', () => {
       week: { id: 1, number: 3, name: 'שבוע שטח', startDate: '', endDate: '', leadId: null, leadName: null, heldAt: null },
       items: [item('topic', 'שמירות', { outcome: 'מפצלים' }), item('closure', 'שטח אש', { done: true, ownerName: 'מפק"צ 3' }), item('point', 'שינה', { details: 'שש שעות' })],
     });
-    expect(text).toBe(['*שבועי - שבוע שטח*', '', '*סגירות מקצועיות*', '✔ שטח אש (מפק"צ 3)', '', '*נושאים לשיח*', '• שמירות - מפצלים', '', '*דגשי המפקד*', '• שינה - שש שעות'].join('\n'));
+    expect(text).toBe(['*שבועי - שבוע שטח*', '', '*סגירות מקצועיות*', '✔ שטח אש (מפק"צ 3)', '', '*נושאים לשיח*', '• שמירות - מפצלים'].join('\n'));
   });
 });

@@ -91,7 +91,7 @@ export function WeeklyPage() {
     }
   };
   const reopen = async () => {
-    if (!(await ask({ title: 'לפתוח את השבועי מחדש?', body: 'הדגשים שלך יחזרו להיות גלויים רק לך עד הסיכום הבא, ואפשר יהיה לשנות הכול.', confirm: 'פתיחה מחדש' }))) return;
+    if (!(await ask({ title: 'לפתוח את השבועי מחדש?', body: 'אפשר יהיה לשנות הכול ולסכם שוב. הסגל יקבל את הסיכום מחדש.', confirm: 'פתיחה מחדש' }))) return;
     try {
       await api.post(`/api/weekly/${w.id}/reopen`);
       emitLocalChange('weekly');
@@ -233,11 +233,11 @@ export function WeeklyPage() {
           {canAdd && <QuickAdd weekId={w.id} kind="topic" placeholder="נושא לשיח - למשל: עומס השמירות על הצוערים" />}
         </Section>
 
-        <Section n={4} {...SECTIONS[3]} hint={data.canHold && !held ? 'הדגשים שלך לסוף השבועי - גם מה שעלה לך במהלך השבוע. עד הסיכום רק אתה רואה אותם.' : undefined}>
+        <Section n={4} {...SECTIONS[3]} hint={data.canHold ? 'הדגשים שלך לסוף השבועי - גם מה שעלה לך במהלך השבוע. רק אתה רואה אותם, גם אחרי הסיכום.' : undefined}>
           {data.pointsHidden ? (
             <div className="weekly-locked small">
               <Icon name="lock" size={16} />
-              <span>מפקד הקורס יציג את הדגשים שלו בסוף השבועי. אחרי הסיכום הם יופיעו כאן.</span>
+              <span>מפקד הקורס יציג את הדגשים שלו בסוף השבועי.</span>
             </div>
           ) : (
             <>
@@ -692,7 +692,7 @@ function HoldDialog({ view, onClose }: { view: WeeklyView; onClose: () => void }
       }
     >
       <div className="col gap-12">
-        <p className="small">הסיכום יישלח לכל הסגל כהתראה, והדגשים שלך יהיו גלויים לכולם בעמוד השבועי.</p>
+        <p className="small">הסיכום יישלח לכל הסגל כהתראה. הדגשים שלך נשארים רק אצלך - הם לא נשלחים ולא מוצגים לאף אחד.</p>
         <ul className="small weekly-hold-list">
           {line('הערות ללו"ז', of('schedule'))}
           {line('סגירות מקצועיות', of('closure'), 'נסגרו')}

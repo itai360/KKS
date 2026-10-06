@@ -1,7 +1,7 @@
 // The weekly (שבועי): the staff's meeting of a course week. It goes over the week's schedule, the
 // professional closures and the topics the team commanders raise during the week, and ends with the
 // commander's points. Anyone on the staff adds to it during the week (from the bottom bar's "+" too);
-// the commander's points are the commander's until the weekly is held. Holding it sends the summary to
+// the commander's points are seen by the one who wrote them alone, also after. Holding it sends the summary to
 // the staff, and what was not yet discussed or closed moves on to the next week's weekly.
 
 import { z } from 'zod';
@@ -96,9 +96,10 @@ function targetWeekId(): number | null {
 }
 
 const canManage = (actor: UserRow, w: Pick<WeekRow, 'lead_id'>) => isCommander(actor) || w.lead_id === actor.id;
-const canEdit = (actor: UserRow, i: Pick<ItemRow, 'created_by'>) => isCommander(actor) || i.created_by === actor.id;
+// a point is its writer's alone
+const canEdit = (actor: UserRow, i: Pick<ItemRow, 'created_by' | 'kind'>) => (i.kind === 'point' ? i.created_by === actor.id : isCommander(actor) || i.created_by === actor.id);
 const canSettle = (actor: UserRow, w: Pick<WeekRow, 'lead_id'>, i: Pick<ItemRow, 'created_by' | 'kind' | 'owner_id'>) =>
-  canManage(actor, w) || i.created_by === actor.id || (i.kind === 'closure' && i.owner_id === actor.id);
+  i.kind === 'point' ? i.created_by === actor.id : canManage(actor, w) || i.created_by === actor.id || (i.kind === 'closure' && i.owner_id === actor.id);
 
 function toItem(actor: UserRow, w: WeekRow, r: ItemRow): WeeklyItem {
   return {
@@ -124,10 +125,9 @@ function toItem(actor: UserRow, w: WeekRow, r: ItemRow): WeeklyItem {
   };
 }
 
-/** the items the one asking may see: the commander's points only to a commander until the weekly is held */
+/** the items the one asking may see: the commander's points to the one who wrote them alone - before the weekly and after */
 function itemsOf(actor: UserRow, w: WeekRow): ItemRow[] {
-  const hide = !w.held_at && !isCommander(actor);
-  return db().all<ItemRow>(`${ITEMS} WHERE i.week_id = ?${hide ? " AND i.kind <> 'point'" : ''} ORDER BY i.created_at, i.id`, w.id);
+  return db().all<ItemRow>(`${ITEMS} WHERE i.week_id = ? AND (i.kind <> 'point' OR i.created_by = ?) ORDER BY i.created_at, i.id`, w.id, actor.id);
 }
 
 export function weeklyTarget(actor: UserRow): WeeklyTarget & { name: string | null; heldAt: string | null; counts: Record<WeeklyKind, number> & { open: number } } {
@@ -158,7 +158,7 @@ export function weeklyView(actor: UserRow, weekId: number): WeeklyView {
     heldAt: w.held_at,
     heldByName: w.held_by_name,
     items: itemsOf(actor, w).map((r) => toItem(actor, w, r)),
-    pointsHidden: !w.held_at && !isCommander(actor),
+    pointsHidden: !isCommander(actor),
     canManage: canManage(actor, w),
     canHold: isCommander(actor),
     events: listEvents(w.start_date, w.end_date),
@@ -232,15 +232,16 @@ export const weeklyPatchSchema = z
   })
   .partial();
 
-function itemRow(id: number): ItemRow {
+/** someone else's point is not there at all for the one asking */
+function itemRow(actor: UserRow, id: number): ItemRow {
   const r = db().get<ItemRow>(`${ITEMS} WHERE i.id = ?`, id);
-  if (!r) throw notFound('הפריט לא נמצא');
+  if (!r || (r.kind === 'point' && r.created_by !== actor.id)) throw notFound('הפריט לא נמצא');
   return r;
 }
 
 export function updateWeeklyItem(actor: UserRow, id: number, raw: z.input<typeof weeklyPatchSchema>): void {
   const p = weeklyPatchSchema.parse(raw);
-  const cur = itemRow(id);
+  const cur = itemRow(actor, id);
   const w = weekRow(cur.week_id);
   if (w.held_at && !isCommander(actor)) throw forbidden('השבועי כבר התקיים');
   const editing = p.title !== undefined || p.details !== undefined || p.ownerId !== undefined;
@@ -266,7 +267,7 @@ export function updateWeeklyItem(actor: UserRow, id: number, raw: z.input<typeof
 }
 
 export function deleteWeeklyItem(actor: UserRow, id: number): void {
-  const cur = itemRow(id);
+  const cur = itemRow(actor, id);
   const w = weekRow(cur.week_id);
   if (!canEdit(actor, cur) || (w.held_at && !isCommander(actor))) throw forbidden('רק מי שהעלה את הפריט או מפקד הקורס יכולים למחוק אותו');
   db().run('DELETE FROM weekly_items WHERE id = ?', id);
@@ -276,7 +277,7 @@ export function deleteWeeklyItem(actor: UserRow, id: number): void {
 export const holdSchema = z.object({ carry: z.boolean().optional().default(true) });
 
 /**
- * The weekly was held: the summary goes to the staff (the commander's points with it), and the topics
+ * The weekly was held: the summary goes to the staff (the commander's points stay the commander's), and the topics
  * not discussed and the closures not closed move on to the next week's weekly.
  */
 export function holdWeekly(actor: UserRow, weekId: number, raw: z.input<typeof holdSchema>): WeeklyHoldResult {
@@ -308,11 +309,12 @@ export function holdWeekly(actor: UserRow, weekId: number, raw: z.input<typeof h
         w.id,
       ).changes;
     }
-    const n = db().get<{ points: number; topics: number; closures: number }>(
-      `SELECT sum(kind = 'point') AS points, sum(kind = 'topic') AS topics, sum(kind = 'closure') AS closures FROM weekly_items WHERE week_id = ?`,
+    // the points are not counted: what the commander writes is not shown to anyone, not even as a number
+    const n = db().get<{ topics: number; closures: number }>(
+      `SELECT sum(kind = 'topic') AS topics, sum(kind = 'closure') AS closures FROM weekly_items WHERE week_id = ?`,
       w.id,
-    ) ?? { points: 0, topics: 0, closures: 0 };
-    const parts = [`${n.points ?? 0} דגשים`, `${n.topics ?? 0} נושאים`, `${n.closures ?? 0} סגירות`];
+    ) ?? { topics: 0, closures: 0 };
+    const parts = [`${n.topics ?? 0} נושאים`, `${n.closures ?? 0} סגירות`];
     logActivity({ weekId: w.id, userId: actor.id, action: 'weekly_held', text: `${actor.display_name} סיכם את השבועי של ${w.name}: ${parts.join(', ')}${carried ? ` - ${carried} עברו לשבועי הבא` : ''}` });
     notify(staff, { type: 'weekly_summary', category: 'info', title: `סיכום השבועי - ${w.name}`, body: parts.join(' · '), link: `/weekly/${w.id}` }, actor.id);
   });
@@ -320,7 +322,7 @@ export function holdWeekly(actor: UserRow, weekId: number, raw: z.input<typeof h
   return { carried, notified: staff.length, nextWeekId: next?.id ?? null };
 }
 
-/** back to preparation: the points are the commander's again, and everything can be changed */
+/** back to preparation: everything can be changed again */
 export function reopenWeekly(actor: UserRow, weekId: number): void {
   if (!isCommander(actor)) throw forbidden('את השבועי פותח מחדש מפקד הקורס');
   weekRow(weekId);

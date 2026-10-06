@@ -69,7 +69,7 @@ export interface WeeklyView {
   heldAt: string | null;
   heldByName: string | null;
   items: WeeklyItem[];
-  /** the commander's points are the commander's until the weekly is held; then everyone's */
+  /** the commander's points are seen by the one who wrote them alone - before the weekly and after */
   pointsHidden: boolean;
   /** the commander and the week's team commander run it */
   canManage: boolean;
@@ -93,7 +93,7 @@ export interface WeeklyHoldResult {
   nextWeekId: number | null;
 }
 
-/** the summary as text, to paste in the staff's WhatsApp group */
+/** the summary as text, to paste in the staff's WhatsApp group - without the commander's points, which stay the commander's */
 export function weeklySummaryText(v: Pick<WeeklyView, 'week' | 'items'>): string {
   const lines: string[] = [`*שבועי - ${v.week.name}*`];
   const section = (title: string, kind: WeeklyKind, row: (i: WeeklyItem) => string) => {
@@ -106,6 +106,5 @@ export function weeklySummaryText(v: Pick<WeeklyView, 'week' | 'items'>): string
   section('לו"ז', 'schedule', (i) => `• ${i.title}${outcome(i)}`);
   section('סגירות מקצועיות', 'closure', (i) => `${i.done ? '✔' : '•'} ${i.title}${i.ownerName ? ` (${i.ownerName})` : ''}${outcome(i)}`);
   section('נושאים לשיח', 'topic', (i) => `• ${i.title}${outcome(i)}`);
-  section('דגשי המפקד', 'point', (i) => `• ${i.title}${i.details.trim() ? ` - ${i.details.trim()}` : ''}`);
   return lines.join('\n');
 }

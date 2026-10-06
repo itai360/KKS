@@ -44,7 +44,7 @@ const KIND_HINTS: Record<WeeklyKind, string> = {
   topic: 'משהו שעלה במהלך השבוע ורוצים להעלות לשיח בשבועי.',
   closure: 'תיאום מקצועי שצריך לסגור (שטח, הסעות, מדריכים...) - ומי סוגר אותו.',
   schedule: 'הערה על הלו"ז של השבוע - שינוי, הקדמה, משהו שחסר.',
-  point: 'דגש שתאמר בסוף השבועי. עד הסיכום רק אתה רואה אותו.',
+  point: 'דגש שתאמר בסוף השבועי. רק אתה רואה אותו - גם אחרי הסיכום.',
 };
 
 function WeeklyAddModal({ initial, onClose }: { initial: WeeklyAddInitial; onClose: () => void }) {
