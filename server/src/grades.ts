@@ -153,7 +153,7 @@ function plan(raw: unknown) {
     const cells = parsed.rows.filter((r) => r.cadetId).map((r) => cellValue(r.cells[index]));
     const numbers = cells.filter((c) => c.kind === 'number').length;
     const target = (mapping[String(index)] as GradeTarget | undefined) ?? suggest(header, numbers);
-    return { index, header, target, values: 0, changes: 0, other: cells.filter((c) => c.kind === 'other').length, outOfRange: cells.filter((c) => c.kind === 'range').length };
+    return { index, header, target, values: 0, changes: 0, same: 0, other: cells.filter((c) => c.kind === 'other').length, outOfRange: cells.filter((c) => c.kind === 'range').length, changed: [] };
   });
   const used = columns.filter((c) => c.target !== 'skip' && c.target !== 'new').map((c) => c.target);
   const twice = used.find((t, i) => used.indexOf(t) !== i);
@@ -168,7 +168,10 @@ function plan(raw: unknown) {
       if (v.kind !== 'number') continue;
       col.values++;
       const before = col.target === 'new' ? null : current(r.cadetId, col.target);
-      if (before !== null && before !== v.value) col.changes++;
+      if (before === v.value) col.same++;
+      if (before === null || before === v.value) continue;
+      col.changes++;
+      if (col.changed.length < 200) col.changed.push({ cadetId: r.cadetId, name: r.cadetName ?? r.name, before, after: v.value });
     }
   }
   return { parsed, columns, overwrite };
@@ -203,7 +206,7 @@ export function removeGradeItem(actor: UserRow, id: number): void {
 export function importGrades(actor: UserRow, raw: unknown): GradeImportResult {
   requireCommanderActor(actor);
   const { parsed, columns, overwrite } = plan(raw);
-  const result: GradeImportResult = { cadets: 0, set: 0, replaced: 0, kept: 0, unmatched: parsed.rows.filter((r) => !r.cadetId).length };
+  const result: GradeImportResult = { cadets: 0, set: 0, replaced: 0, kept: 0, unchanged: 0, unmatched: parsed.rows.filter((r) => !r.cadetId).length };
   const touchedCadets = new Set<number>();
   db().tx(() => {
     for (const col of columns) {
@@ -227,6 +230,10 @@ export function importGrades(actor: UserRow, raw: unknown): GradeImportResult {
         const before = current(r.cadetId, target);
         if (before !== null && before !== v.value && !overwrite) {
           result.kept++;
+          continue;
+        }
+        if (before === v.value) {
+          result.unchanged++;
           continue;
         }
         const wrote = itemId ? setGrade(actor, r.cadetId, itemId, before, v.value) : setExamValue(actor, r.cadetId, target as ExamKey, v.value);

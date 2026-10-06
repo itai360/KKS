@@ -77,10 +77,10 @@ describe('the grade sheet', () => {
     // after the mid fitness test: the threshold column changed for one cadet, the readings column is empty
     const next = sheet(['86', '77', '', '100', '', ''], ['70', '81', '', '', '', '']);
     const p = (await c.cmd.post('/api/evaluations/grades/preview', { rows: next })).body;
-    expect(p.columns.find((x: { header: string }) => x.header === 'כש"ג פתיחה')).toMatchObject({ values: 2, changes: 1 });
-    expect((await c.cmd.post('/api/evaluations/grades/import', { rows: next, overwrite: false })).body).toMatchObject({ set: 2, kept: 1 });
+    expect(p.columns.find((x: { header: string }) => x.header === 'כש"ג פתיחה')).toMatchObject({ values: 2, changes: 1, same: 1, changed: [{ cadetId: a, name: 'נועה כהן', before: 85, after: 86 }] });
+    expect((await c.cmd.post('/api/evaluations/grades/import', { rows: next, overwrite: false })).body).toMatchObject({ set: 2, kept: 1, unchanged: 2 });
     expect((await file(a)).exams).toMatchObject({ fitBaseScore: 85, midFitScore: 77, readingsA: 92 });
-    expect((await c.cmd.post('/api/evaluations/grades/import', { rows: next })).body).toMatchObject({ set: 1, replaced: 1 });
+    expect((await c.cmd.post('/api/evaluations/grades/import', { rows: next })).body).toMatchObject({ set: 1, replaced: 1, unchanged: 4 });
     expect((await file(a)).exams.fitBaseScore).toBe(86);
   });
 

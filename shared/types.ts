@@ -859,10 +859,14 @@ export interface GradeColumn {
   values: number;
   /** of them, how many replace a different grade already in the file */
   changes: number;
+  /** and how many are already in the file just like that - nothing to do */
+  same: number;
   /** cells that are not a number (a mark, a word) - not imported */
   other: number;
   /** numbers outside 0-100 - not imported */
   outOfRange: number;
+  /** the cadets whose grade would change: what is in the file and what comes from the sheet (the first 200) */
+  changed: { cadetId: number; name: string; before: number; after: number }[];
 }
 
 export interface GradeImportPreview {
@@ -880,6 +884,8 @@ export interface GradeImportResult {
   set: number;
   replaced: number;
   kept: number;
+  /** grades already in the file just as in the sheet */
+  unchanged: number;
   unmatched: number;
 }
 

@@ -5602,6 +5602,75 @@ button.fab-missing {
 .grade-map tr.muted td {
   color: var(--muted);
 }
+/* several files of grades: where each one stands */
+.grade-queue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.grade-queue-item,
+.grade-queue-item > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.grade-queue-item {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card-2);
+  font-size: 13px;
+}
+.grade-queue-item > button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.grade-queue-item.is-current {
+  border-color: var(--ink);
+  background: var(--card);
+  font-weight: 600;
+}
+.grade-queue-item.is-done {
+  border-color: var(--green-bg);
+  background: var(--green-bg);
+  color: var(--green-ink);
+}
+.grade-queue-item.is-done .muted {
+  color: inherit;
+}
+.grade-queue-item.is-skipped {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+/* whose grade a column changes */
+.grade-changes td {
+  background: var(--card-2);
+}
+.grade-changes ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.grade-changes li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line);
+}
 @media (max-width: 860px) {
   /* on a phone every column of the sheet is a small card: name and count, where it goes, notes */
   .grade-map thead {
@@ -5633,6 +5702,14 @@ button.fab-missing {
   }
   .grade-map td:empty {
     display: none;
+  }
+  .grade-map tr.grade-changes {
+    padding-top: 0;
+  }
+  .grade-map tr.grade-changes td {
+    grid-column: 1 / -1;
+    padding: 8px;
+    border-radius: var(--radius-sm);
   }
   .grade-map .select {
     min-width: 0;
