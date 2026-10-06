@@ -70,7 +70,8 @@ import {
 import { importGrades, previewGrades, readGradeSheets, removeGradeItem } from './grades';
 import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
 import { getFile, sendStoredFile, uploadName } from './files';
-import { cadetsFromSpreadsheet, downloadGoogleSheet } from './sheets';
+import { cadetsFromSpreadsheet, downloadGoogleSheet, downloadGoogleSheetNamed } from './sheets';
+import { deleteSocioRound, importSocio, previewSocio, readSocioSheets, socioOfCadet, socioRound, updateSocioRound } from './sociometric';
 import { deleteGuide, disciplineLog, disciplineOverview, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
 import { bulkSchema, runBulk } from './bulk';
 import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
@@ -202,6 +203,30 @@ export function v3Router(): Router {
     removeGradeItem(me(req), id(req.params.id));
     res.json({ ok: true });
   });
+  // ---------------- the sociometric ----------------
+  // each team's sheet into a round; the results for the commander, a team's for its commander
+  r.get('/sociometric', (req, res) => res.json(socioRound(me(req), req.query.round ? id(String(req.query.round)) : undefined)));
+  r.post('/sociometric/file', requireCommander, express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(readSocioSheets(me(req), req.body));
+  });
+  r.post('/sociometric/link', requireCommander, async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    const { buf, name } = await downloadGoogleSheetNamed(url, config.maxUploadMb * 1024 * 1024);
+    res.json({ name, sheets: readSocioSheets(me(req), buf) });
+  });
+  r.post('/sociometric/preview', requireCommander, (req, res) => res.json(previewSocio(me(req), req.body)));
+  r.post('/sociometric/import', requireCommander, (req, res) => res.json(importSocio(me(req), req.body)));
+  r.patch('/sociometric/rounds/:id', requireCommander, (req, res) => {
+    updateSocioRound(me(req), id(req.params.id), req.body);
+    res.json({ ok: true });
+  });
+  r.delete('/sociometric/rounds/:id', requireCommander, (req, res) => {
+    deleteSocioRound(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.get('/cadets/:id/sociometric', (req, res) => res.json(socioOfCadet(me(req), id(req.params.id))));
+
   r.get('/evaluations/committees/:id', (req, res) => res.json(committeeDetail(me(req), id(req.params.id))));
   r.post('/evaluations/committees/:id/refresh', requireCommander, (req, res) => res.json(evaluationFile(me(req), refreshCommitteeVersion(me(req), id(req.params.id)))));
   r.post('/evaluations/committees/:id/decision', requireCommander, (req, res) => res.json(evaluationFile(me(req), decideCommittee(me(req), id(req.params.id), req.body))));

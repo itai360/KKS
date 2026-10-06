@@ -23,6 +23,7 @@ const DocumentsPage = lazyPage(() => import('./pages/DocumentsPage'), 'Documents
 const CommitteePage = lazyPage(() => import('./pages/EvaluationsPage'), 'CommitteePage');
 const EvaluationFilePage = lazyPage(() => import('./pages/EvaluationsPage'), 'EvaluationFilePage');
 const EvaluationsPage = lazyPage(() => import('./pages/EvaluationsPage'), 'EvaluationsPage');
+const SociometricPage = lazyPage(() => import('./pages/SociometricPage'), 'SociometricPage');
 const ExperiencesPage = lazyPage(() => import('./pages/ExperiencesPage'), 'ExperiencesPage');
 const CommandPage = lazyPage(() => import('./pages/CommandPage'), 'CommandPage');
 const MeetingPage = lazyPage(() => import('./pages/MeetingPage'), 'MeetingPage');
@@ -129,6 +130,7 @@ function AuthedRoutes() {
               <Route path="/cadets/:id/talks/:recordId" element={<TalkPage />} />
               <Route path="/experiences" element={<ExperiencesPage />} />
               <Route path="/evaluations" element={<EvaluationsPage />} />
+              <Route path="/sociometric" element={<SociometricPage />} />
               <Route path="/evaluations/committee/:id" element={<CommitteePage />} />
               <Route path="/evaluations/:cadetId" element={<EvaluationFilePage />} />
               <Route path="/debriefs" element={<DebriefsPage />} />

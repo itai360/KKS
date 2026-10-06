@@ -265,13 +265,30 @@ export function setSheetFetcher(fn: typeof fetcher): void {
 
 /** Downloads a shared sheet; a file that is not shared with "anyone with the link" comes back as a sign-in page. */
 export async function downloadGoogleSheet(raw: string, maxBytes: number): Promise<Buffer> {
+  return (await downloadGoogleSheetNamed(raw, maxBytes)).buf;
+}
+
+/** The same, with the file's title as Google names it ("סוציומטרי צוות 2...") - it can say whose sheet it is. */
+export async function downloadGoogleSheetNamed(raw: string, maxBytes: number): Promise<{ buf: Buffer; name: string }> {
   for (const url of googleDownloadUrls(raw)) {
     const res = await fetcher(url).catch(() => null);
     if (!res?.ok) continue;
     const type = res.headers.get('content-type') ?? '';
     const buf = await readLimited(res, maxBytes, () => badRequest('הקובץ גדול מדי'));
     if (/text\/html/.test(type) || buf.subarray(0, 200).toString('utf8').toLowerCase().includes('<html')) continue;
-    return buf;
+    return { buf, name: fileNameOf(res.headers.get('content-disposition') ?? '') };
   }
   throw badRequest('לא ניתן להוריד את הקובץ. ב-Google צריך לשתף אותו: "שיתוף" ← "כל מי שיש לו את הקישור" (צופה). אפשר גם להוריד אותו כקובץ אקסל ולהעלות כאן.');
+}
+
+/** the file name of a download ("attachment; filename*=UTF-8''..."), without its extension */
+function fileNameOf(disposition: string): string {
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  let name = '';
+  try {
+    name = star ? decodeURIComponent(star) : (/filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? '');
+  } catch {
+    name = '';
+  }
+  return name.replace(/\.(xlsx|csv)$/i, '').trim();
 }

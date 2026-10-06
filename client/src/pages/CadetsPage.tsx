@@ -44,6 +44,7 @@ import { useDraft } from '../lib/draft';
 import { matchesSearch } from '@shared/search';
 import { ask } from '../components/Confirm';
 import { TalkDialog, TalkHighlights, TalkView } from '../components/Talks';
+import { SocioCard } from '../components/SocioCard';
 
 export function CadetsPage() {
   const { isCommander, user } = useSession();
@@ -630,6 +631,7 @@ export function CadetPage() {
             <DisciplineSummary count={c.disciplineNotes} committee={c.notesCommittee} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
           )}
           {(c.canManage || data.exemptions.length > 0) && <ExemptionsCard cadet={c} exemptions={data.exemptions} />}
+          {c.canManage && <SocioCard cadetId={c.id} />}
           {c.status === 'active' && <AttendanceCard cadetId={c.id} />}
           <Development detail={data} />
           {c.notes && (
