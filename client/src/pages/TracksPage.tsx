@@ -11,7 +11,7 @@ import { Icon } from '../components/Icon';
 import { UserPicker, useNewTask } from '../components/NewTask';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Bar, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg } from '../components/ui';
+import { Bar, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { fmtDeadline, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -24,6 +24,8 @@ export function TracksPage() {
   const list = data ?? tracks;
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [leads, setLeads] = useState(false);
+  const noLead = list.filter((t) => !t.leadId).length;
   return (
     <div className="page">
       <PageHead
@@ -31,9 +33,16 @@ export function TracksPage() {
         sub="קווי העבודה של הקורס לצד השבועות: אחראי, משימות ואחוז מוכנות לכל ציר. משימה נכנסת לציר לפי השדה 'ציר בקורס' שלה."
         actions={
           isCommander && (
-            <button className="btn btn-primary" onClick={() => setCreating(true)}>
-              <Icon name="plus" /> ציר
-            </button>
+            <>
+              {list.length > 0 && (
+                <button className="btn" onClick={() => setLeads(true)}>
+                  <Icon name="users" /> קביעת אחראים{noLead > 0 && <span className="count-pill">{noLead}</span>}
+                </button>
+              )}
+              <button className="btn btn-primary" onClick={() => setCreating(true)}>
+                <Icon name="plus" /> ציר
+              </button>
+            </>
           )
         }
       />
@@ -67,7 +76,66 @@ export function TracksPage() {
         </div>
       )}
       {creating && <TrackForm onClose={() => setCreating(false)} />}
+      {leads && <LeadsDialog tracks={list} onClose={() => setLeads(false)} />}
     </div>
+  );
+}
+
+/** Every track's lead, set in one place. */
+function LeadsDialog({ tracks, onClose }: { tracks: Track[]; onClose: () => void }) {
+  const { staff, users } = useSession();
+  const toast = useToast();
+  const [chosen, setChosen] = useState<Record<number, string>>(() => Object.fromEntries(tracks.map((t) => [t.id, t.leadId ? String(t.leadId) : ''])));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const people = staff.length ? [...users.filter((u) => u.role === 'commander'), ...staff] : users;
+  const changes = tracks.filter((t) => (chosen[t.id] || '') !== (t.leadId ? String(t.leadId) : ''));
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      for (const t of changes) await api.patch(`/api/tracks/${t.id}`, { leadId: chosen[t.id] ? Number(chosen[t.id]) : null });
+      emitLocalChange('weeks');
+      toast({ title: changes.length === 1 ? 'האחראי נשמר' : `נשמרו ${changes.length} אחראים`, body: 'כל אחראי חדש קיבל הודעה', tone: 'green' });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="אחראים על הצירים"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" disabled={busy || !changes.length} onClick={() => void save()}>
+            {changes.length > 1 ? `שמירת ${changes.length} שינויים` : 'שמירה'}
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-6">
+        {tracks.map((t) => (
+          <div key={t.id} className="row gap-12 track-lead-row">
+            <span className="strong grow">{t.name}</span>
+            <Select value={chosen[t.id] ?? ''} onChange={(e) => setChosen({ ...chosen, [t.id]: e.target.value })} aria-label={`אחראי על ציר ${t.name}`} style={{ maxWidth: 220 }}>
+              <option value="">ללא אחראי</option>
+              {people.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.displayName}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ))}
+        <ErrorBox error={error} />
+      </div>
+    </Modal>
   );
 }
 

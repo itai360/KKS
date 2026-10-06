@@ -10,7 +10,7 @@ import { DisciplineCard } from '../components/DisciplineCard';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
+import { Bar, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDeadline, fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -122,6 +122,7 @@ export function DashboardPage() {
             {data.roll && <RollCard roll={data.roll} />}
             <DisciplineCard />
             <StaffHealth data={data} />
+            <TracksCard />
             <QuickActions />
           </div>
           <TwoStepNudge />
@@ -345,6 +346,52 @@ function WeekCard({ data }: { data: DashboardData }) {
           </div>
         </Link>
       ))}
+    </section>
+  );
+}
+
+/** the course's tracks in a glance: those with tasks, what needs attention first */
+function TracksCard() {
+  const { tracks } = useSession();
+  const live = tracks
+    .filter((t) => t.totalTasks > 0)
+    .sort((a, b) => b.overdueTasks - a.overdueTasks || a.readiness - b.readiness)
+    .slice(0, 6);
+  const noLead = tracks.filter((t) => !t.leadId).length;
+  if (!tracks.length) return null;
+  return (
+    <section className="card" aria-label="צירים בקורס">
+      <div className="card-head">
+        <Icon name="route" />
+        <h3 className="grow">צירים בקורס</h3>
+        <Link className="btn btn-ghost btn-sm" to="/tracks">
+          לכל הצירים
+          <Icon name="chevronLeft" size={15} />
+        </Link>
+      </div>
+      {live.length === 0 ? (
+        <div className="card-body small muted">עדיין אין משימות בצירים. משימה נכנסת לציר לפי השדה "ציר בקורס" שלה.</div>
+      ) : (
+        live.map((t) => (
+          <Link key={t.id} to={`/tracks/${t.id}`} className="health track-line">
+            <span className="strong" style={{ width: 96 }}>
+              {t.name}
+            </span>
+            <div className="grow">
+              <Bar value={t.readiness} label={`מוכנות ${t.name}`} />
+            </div>
+            <span className="mono tiny" style={{ width: 52, textAlign: 'left' }}>
+              {t.doneTasks}/{t.totalTasks}
+            </span>
+            <span className="track-line-flag">{t.overdueTasks > 0 && <span className="badge t-red">{t.overdueTasks} באיחור</span>}</span>
+          </Link>
+        ))
+      )}
+      {noLead > 0 && (
+        <div className="card-body tiny muted" style={{ paddingTop: 8 }}>
+          {noLead === tracks.length ? 'לאף ציר עוד לא נקבע אחראי' : `${noLead} צירים בלי אחראי`} - <Link to="/tracks">קביעת אחראים</Link>
+        </div>
+      )}
     </section>
   );
 }

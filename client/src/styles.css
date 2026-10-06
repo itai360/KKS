@@ -1640,6 +1640,26 @@ input::-webkit-date-and-time-value {
 .time-input::placeholder {
   font-family: var(--mono);
 }
+/* the home card's tracks: the bars line up whether or not a row has something overdue */
+.track-line-flag {
+  width: 74px;
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .track-line-flag:empty {
+    display: none;
+  }
+}
+.track-lead-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.track-lead-row:last-of-type {
+  border-bottom: 0;
+}
+
 /* ---------- picking from a list, a time, a date (pickers.tsx) ---------- */
 .combo-input {
   appearance: none;
@@ -2242,7 +2262,8 @@ input::-webkit-date-and-time-value {
 .bar {
   height: 8px;
   border-radius: 4px;
-  background: var(--paper-2);
+  /* the empty part of the bar shows in dark mode too */
+  background: var(--line);
   overflow: hidden;
 }
 
