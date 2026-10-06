@@ -76,6 +76,9 @@ export interface Task {
   domainNote: string;
   weekId: number | null;
   weekName: string | null;
+  /** the course track (ציר) it belongs to */
+  trackId: number | null;
+  trackName: string | null;
   eventId: number | null;
   eventTitle: string | null;
   parentId: number | null;
@@ -231,6 +234,31 @@ export interface Lesson {
   taskId: number | null;
   taskTitle: string | null;
   createdAt: string;
+}
+
+/** a course track (ציר בקורס) - its tasks counted as a week's are */
+export interface Track {
+  id: number;
+  name: string;
+  leadId: number | null;
+  leadName: string | null;
+  goals: string;
+  totalTasks: number;
+  doneTasks: number;
+  overdueTasks: number;
+  blockedTasks: number;
+  /** the nearest deadline of a task still open */
+  nextDeadline: string | null;
+  readiness: number;
+}
+
+export interface TrackDetail {
+  track: Track;
+  /** the commander, or the track's lead */
+  canManage: boolean;
+  byDomain: DomainReadiness[];
+  byWeek: { weekId: number | null; name: string; number: number | null; startDate: string | null; total: number; done: number; readiness: number }[];
+  tasks: Task[];
 }
 
 export interface DomainReadiness {

@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { ADDED_DOMAINS } from '../../shared/constants';
+import { ADDED_DOMAINS, COURSE_TRACKS } from '../../shared/constants';
 
 type Param = SQLInputValue | boolean | undefined;
 
@@ -971,8 +971,26 @@ CREATE TABLE grade_values (
 );
 `;
 
+/** the course's tracks (צירים): a lead and goals each, and a track on every task - a task already in an area of the same name goes in its track */
+function V32_TRACKS(db: Db): void {
+  db.exec(`
+CREATE TABLE tracks (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  lead_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  goals TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+ALTER TABLE tasks ADD COLUMN track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL;
+CREATE INDEX idx_tasks_track ON tasks(track_id);
+`);
+  const now = new Date().toISOString();
+  for (const name of COURSE_TRACKS) db.run('INSERT INTO tracks(name, created_at) VALUES (?, ?)', name, now);
+  db.run('UPDATE tasks SET track_id = (SELECT id FROM tracks WHERE tracks.name = tasks.domain) WHERE track_id IS NULL');
+}
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

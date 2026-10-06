@@ -48,7 +48,7 @@ const SCOPES: [string, string][] = [
 
 export function TasksPage() {
   const [params, setParams] = useSearchParams();
-  const { staff, users, weeks, settings, isCommander } = useSession();
+  const { staff, users, weeks, tracks, settings, isCommander } = useSession();
   const newTask = useNewTask();
   const toast = useToast();
   const [view, setView] = useState<View>(() => (window.innerWidth < 860 ? 'list' : ((readPref('kks.tasksView') as View | null) ?? 'table')));
@@ -58,6 +58,7 @@ export function TasksPage() {
     scope: params.get('scope') ?? 'open',
     owner: params.get('owner') ?? '',
     week: params.get('week') ?? '',
+    track: params.get('track') ?? '',
     domain: params.get('domain') ?? '',
     status: params.get('status') ?? '',
     priority: params.get('priority') ?? '',
@@ -75,6 +76,7 @@ export function TasksPage() {
     scope: f.scope === 'all' ? undefined : f.scope,
     owner: f.owner,
     week: f.week,
+    track: f.track,
     domain: f.domain,
     status: f.status,
     priority: f.priority,
@@ -87,7 +89,7 @@ export function TasksPage() {
     writePref('kks.tasksView', v);
   };
   const people = isCommander ? users : staff;
-  const active = [f.owner, f.week, f.domain, f.status, f.priority, f.q].filter(Boolean).length;
+  const active = [f.owner, f.week, f.track, f.domain, f.status, f.priority, f.q].filter(Boolean).length;
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
@@ -148,6 +150,15 @@ export function TasksPage() {
           {weeks.map((w) => (
             <option key={w.id} value={w.id}>
               {w.name}
+            </option>
+          ))}
+        </select>
+        <select className="select" value={f.track} onChange={(e) => set('track', e.target.value)} aria-label="ציר">
+          <option value="">כל הצירים</option>
+          <option value="none">ללא ציר</option>
+          {tracks.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
             </option>
           ))}
         </select>

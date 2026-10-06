@@ -19,6 +19,7 @@ export interface TaskRow {
   domain: string;
   domain_note: string;
   week_id: number | null;
+  track_id: number | null;
   event_id: number | null;
   parent_id: number | null;
   group_id: string | null;
@@ -51,6 +52,7 @@ export interface TaskRow {
   creator_role: Role;
   week_name: string | null;
   week_lead_id: number | null;
+  track_name: string | null;
   event_title: string | null;
   cadet_name: string | null;
   debrief_title: string | null;
@@ -62,7 +64,7 @@ export interface TaskRow {
 
 const BASE = `
 SELECT t.*, o.display_name AS owner_name, c.display_name AS created_by_name, c.role AS creator_role,
-  w.name AS week_name, w.lead_id AS week_lead_id, e.title AS event_title,
+  w.name AS week_name, w.lead_id AS week_lead_id, tr.name AS track_name, e.title AS event_title,
   trim(cd.first_name || ' ' || cd.last_name) AS cadet_name, db.title AS debrief_title,
   (SELECT count(*) FROM tasks s WHERE s.parent_id = t.id AND s.status <> 'cancelled') AS subtask_total,
   (SELECT count(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'done') AS subtask_done,
@@ -73,6 +75,7 @@ FROM tasks t
 JOIN users o ON o.id = t.owner_id
 JOIN users c ON c.id = t.created_by
 LEFT JOIN weeks w ON w.id = t.week_id
+LEFT JOIN tracks tr ON tr.id = t.track_id
 LEFT JOIN events e ON e.id = t.event_id
 LEFT JOIN cadets cd ON cd.id = t.cadet_id
 LEFT JOIN debriefs db ON db.id = t.debrief_id
@@ -119,6 +122,8 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     domainNote: r.domain_note ?? '',
     weekId: r.week_id,
     weekName: r.week_name,
+    trackId: r.track_id,
+    trackName: r.track_name,
     eventId: r.event_id,
     eventTitle: r.event_title,
     parentId: r.parent_id,

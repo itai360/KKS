@@ -434,7 +434,7 @@ function TransferRequestDialog({ detail, m, onClose }: { detail: TaskDetail; m: 
 
 function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; onClose: () => void }) {
   const { task: t, permissions: p } = detail;
-  const { settings, weeks } = useSession();
+  const { settings, weeks, tracks } = useSession();
   const [title, setTitle] = useState(t.title);
   const [description, setDescription] = useState(t.description);
   const [owner, setOwner] = useState<number[]>([t.ownerId]);
@@ -445,6 +445,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
   const [domain, setDomain] = useState(t.domain);
   const [domainNote, setDomainNote] = useState(t.domainNote);
   const [weekId, setWeekId] = useState(t.weekId ? String(t.weekId) : '');
+  const [trackId, setTrackId] = useState(t.trackId ? String(t.trackId) : '');
   const [visibility, setVisibility] = useState<Visibility>(t.visibility);
   const [requiresApproval, setRequiresApproval] = useState(t.requiresApproval);
 
@@ -459,6 +460,8 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
       if (note !== t.domainNote) patch.domainNote = note;
       const w = weekId ? Number(weekId) : null;
       if (w !== t.weekId) patch.weekId = w;
+      const tr = trackId ? Number(trackId) : null;
+      if (tr !== t.trackId) patch.trackId = tr;
       if (visibility !== t.visibility) patch.visibility = visibility;
       if (requiresApproval !== t.requiresApproval) patch.requiresApproval = requiresApproval;
       const parts = participants.filter((x) => x !== owner[0]);
@@ -546,6 +549,16 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
                 {weeks.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="ציר בקורס">
+              <select className="select" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
+                <option value="">ללא ציר</option>
+                {tracks.map((tr) => (
+                  <option key={tr.id} value={tr.id}>
+                    {tr.name}
                   </option>
                 ))}
               </select>

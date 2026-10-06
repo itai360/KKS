@@ -9,7 +9,7 @@ export type ExperienceKind = (typeof EXPERIENCE_KINDS)[number];
 export const EXPERIENCE_KIND_LABELS: Record<ExperienceKind, string> = { role: 'התנסות בתפקיד', broad: 'התנסות רוחב' };
 
 /** the broad experiences, in alphabetical order */
-export const BROAD_EXPERIENCES: readonly string[] = sortHe(['ס\' מ"פ', 'קה"ד', 'קב"ט', 'קל"ג', 'קחו"ם', 'א"ג', 'שטח', 'ניווטים']);
+export const BROAD_EXPERIENCES: readonly string[] = sortHe(['ס\' מ"פ', 'קה"ד', 'קב"ט', 'קל"ג', 'קחו"ם', 'א"ג', 'שטח', 'ניווטים', 'אקדמיה', 'פרט']);
 
 export const EXPERIENCE_SPANS = ['first_half', 'second_half', 'full'] as const;
 export type ExperienceSpan = (typeof EXPERIENCE_SPANS)[number];

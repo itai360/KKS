@@ -98,6 +98,7 @@ import {
   updateWeek,
   weekDetail,
 } from './weeks';
+import { createTrack, deleteTrack, getTrack, listTracks, trackDetail, updateTrack } from './tracks';
 
 /** The address the app is reached at, for links that leave it (calendar feeds). */
 const origin = (req: Request) => `${req.protocol}://${req.host}`;
@@ -460,6 +461,8 @@ export function apiRouter(): Router {
     }
     const weekF = str(q.week);
     if (weekF) list = list.filter((t) => (weekF === 'none' ? t.weekId === null : t.weekId === Number(weekF)));
+    const trackF = str(q.track);
+    if (trackF) list = list.filter((t) => (trackF === 'none' ? t.trackId === null : t.trackId === Number(trackF)));
     const domainF = str(q.domain);
     if (domainF) list = list.filter((t) => t.domain === domainF);
     const statusF = str(q.status);
@@ -757,6 +760,19 @@ export function apiRouter(): Router {
     if (body.showInSchedule) await addCalendarSource(me(req), 'יומן הקורס', body.url).catch(() => undefined);
     res.json(weeks);
   });
+  // ---------------- course tracks ----------------
+  r.get('/tracks', (_req, res) => res.json(listTracks()));
+  r.post('/tracks', requireCommander, (req, res) => res.json(getTrack(createTrack(me(req), req.body))));
+  r.get('/tracks/:id', (req, res) => res.json(trackDetail(me(req), id(req.params.id))));
+  r.patch('/tracks/:id', (req, res) => {
+    updateTrack(me(req), id(req.params.id), req.body);
+    res.json(getTrack(id(req.params.id)));
+  });
+  r.delete('/tracks/:id', requireCommander, (req, res) => {
+    deleteTrack(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+
   r.get('/weeks/:id', (req, res) => res.json(weekDetail(me(req), id(req.params.id))));
   r.patch('/weeks/:id', (req, res) => {
     updateWeek(me(req), id(req.params.id), req.body);

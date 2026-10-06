@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { sortHe } from '@shared/sort';
-import type { CourseSettings, User, Week } from '@shared/types';
+import type { CourseSettings, Track, User, Week } from '@shared/types';
 import { api, setReauthHandler, setUnauthorizedHandler } from './api';
 import { setTimezone } from './format';
 import { setTitleCount, setTitleSuffix } from './title';
@@ -28,6 +28,8 @@ export interface Session {
   users: User[];
   staff: User[];
   weeks: Week[];
+  /** the course's tracks (צירים), in alphabetical order */
+  tracks: Track[];
   isCommander: boolean;
   /** a previous course open for reading: every screen shows it, and nothing can be changed */
   viewing: { id: number; name: string } | null;
@@ -103,6 +105,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
   };
   const users = useApi<User[]>('/api/users', ['users']);
   const weeks = useApi<Week[]>('/api/weeks', ['weeks', 'tasks']);
+  const tracks = useApi<Track[]>('/api/tracks', ['weeks', 'tasks']);
   const settings = useApi<CourseSettings>('/api/settings', ['settings']);
 
   useEffect(() => {
@@ -136,6 +139,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
       users: list,
       staff: list.filter((u) => u.role === 'staff'),
       weeks: weeks.data ?? [],
+      tracks: tracks.data ?? [],
       isCommander: me.user.role === 'commander',
       viewing: me.course ?? null,
       recoveryLeft: me.recoveryLeft ?? null,
@@ -148,7 +152,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
       },
       userName: (id) => (id ? (byId.get(id)?.displayName ?? '') : ''),
     };
-  }, [me, users.data, weeks.data, currentSettings, unread, refresh, onLogout]);
+  }, [me, users.data, weeks.data, tracks.data, currentSettings, unread, refresh, onLogout]);
 
   return (
     <Ctx.Provider value={value}>

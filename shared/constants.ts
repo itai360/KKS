@@ -49,6 +49,9 @@ export function domainLabel(domain: string, note?: string | null): string {
 
 export const DEFAULT_DOMAINS = [...sortHe(['בטיחות', 'הדרכה', 'הערכה', 'לו"ז', 'לוגיסטיקה', 'משמעת', 'פרט', 'צוערים', 'תיאומים', ...ADDED_DOMAINS]), 'אחר'];
 
+/** the course's tracks (צירים בקורס) - each with a lead and its tasks, alongside the weeks; a course can add its own */
+export const COURSE_TRACKS = sortHe(['חינוך', 'אקדמיה', 'אימון גופני', 'שטח', 'ניווטים', 'דת', 'רכב', 'מסע פתיחה', 'מארס טורקי', 'תרגיל מסכם']);
+
 export const VISIBILITIES = ['normal', 'team', 'private'] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
 export const VISIBILITY_LABELS: Record<Visibility, string> = {

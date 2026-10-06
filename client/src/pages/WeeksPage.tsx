@@ -44,7 +44,11 @@ export function WeeksPage() {
         title="שבועות הקורס"
         sub="ציר הזמן של הקורס: מפק״צ מוביל, משימות ואחוז מוכנות לכל שבוע."
         actions={
-          isCommander && (
+          <>
+            <Link to="/tracks" className="btn btn-ghost">
+              <Icon name="route" /> צירים בקורס
+            </Link>
+            {isCommander && (
             <>
               <BulkToggle />
               <button className="btn" onClick={() => setFromCalendar(true)}>
@@ -57,7 +61,8 @@ export function WeeksPage() {
                 <Icon name="plus" /> שבוע
               </button>
             </>
-          )
+            )}
+          </>
         }
       />
       {loading && !list.length ? (

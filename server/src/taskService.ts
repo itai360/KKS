@@ -62,6 +62,8 @@ export const createTaskSchema = z.object({
   /** the area "אחר": what it is */
   domainNote: z.string().trim().max(120).optional().default(''),
   weekId: z.number().int().positive().nullable().optional(),
+  /** the course track; not given - the track named like the task's area, if there is one */
+  trackId: z.number().int().positive().nullable().optional(),
   eventId: z.number().int().positive().nullable().optional(),
   parentId: z.number().int().positive().nullable().optional(),
   meetingId: z.number().int().positive().nullable().optional(),
@@ -91,6 +93,11 @@ export function weekForDate(dateKey: string): number | null {
     db().get<{ id: number }>('SELECT id FROM weeks WHERE start_date <= ? AND end_date >= ? ORDER BY start_date LIMIT 1', dateKey, dateKey)
       ?.id ?? null
   );
+}
+
+/** the track named like an area (שטח, ניווטים...) - where a task in that area goes unless told otherwise */
+export function trackForDomain(domain: string): number | null {
+  return domain ? (db().get<{ id: number }>('SELECT id FROM tracks WHERE name = ?', domain)?.id ?? null) : null;
 }
 
 function weekLead(weekId: number | null | undefined): number | null {
@@ -124,6 +131,9 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
     if (!parent || (!opts.system && !canView(actor, parent))) throw badRequest('משימת האב לא נמצאה');
     if (weekId === undefined) weekId = parent.week_id;
   }
+  let trackId = input.trackId;
+  if (trackId === undefined) trackId = parent?.track_id ?? trackForDomain(input.domain);
+  if (trackId && !db().get('SELECT 1 FROM tracks WHERE id = ?', trackId)) throw badRequest('הציר לא נמצא');
   if (weekId === undefined) weekId = weekForDate(localDateKey(input.deadline, tz()));
   if (weekId && !db().get('SELECT 1 FROM weeks WHERE id = ?', weekId)) throw badRequest('השבוע לא נמצא');
   if (input.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', input.eventId)) throw badRequest('הפעילות לא נמצאה');
@@ -169,10 +179,10 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
       const at = nowIso();
       const flags = reminderFlags(input.deadline);
       const id = db().run(
-        `INSERT INTO tasks(title, description, owner_id, created_by, deadline, priority, status, domain, domain_note, week_id, event_id,
+        `INSERT INTO tasks(title, description, owner_id, created_by, deadline, priority, status, domain, domain_note, week_id, track_id, event_id,
            parent_id, group_id, meeting_id, recurring_rule_id, cadet_id, experience_id, debrief_id, requires_approval, visibility,
            reminded_24h, reminded_2h, overdue_notified, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         input.title,
         input.description,
         unit.owner,
@@ -182,6 +192,7 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
         input.domain,
         input.domain === OTHER_DOMAIN ? input.domainNote : '',
         weekId ?? null,
+        trackId ?? null,
         input.eventId ?? null,
         input.parentId ?? null,
         groupId,
@@ -249,6 +260,7 @@ export const updateTaskSchema = z
     domain: z.string().trim().max(60),
     domainNote: z.string().trim().max(120),
     weekId: z.number().int().positive().nullable(),
+    trackId: z.number().int().positive().nullable(),
     eventId: z.number().int().positive().nullable(),
     parentId: z.number().int().positive().nullable(),
     requiresApproval: z.boolean(),
@@ -279,7 +291,7 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
   const t = mustTaskRow(id);
   if (!bypass && !canView(actor, t)) throw notFound('המשימה לא נמצאה');
 
-  const coreKeys = ['title', 'description', 'priority', 'domain', 'domainNote', 'weekId', 'eventId', 'parentId', 'requiresApproval', 'visibility', 'participantIds'] as const;
+  const coreKeys = ['title', 'description', 'priority', 'domain', 'domainNote', 'weekId', 'trackId', 'eventId', 'parentId', 'requiresApproval', 'visibility', 'participantIds'] as const;
   if (!bypass && coreKeys.some((k) => patch[k] !== undefined) && !canEdit(actor, t)) {
     throw forbidden('רק מי שיצר את המשימה או מפקד הקורס יכולים לערוך אותה');
   }
@@ -326,6 +338,12 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
       if (patch.weekId && !w) throw badRequest('השבוע לא נמצא');
       set('week_id', patch.weekId);
       logs.push({ action: 'week', text: w ? `${who} שייך את המשימה ל"${w.name}"` : `${who} הסיר את השיוך לשבוע` });
+    }
+    if (patch.trackId !== undefined && patch.trackId !== t.track_id) {
+      const tr = patch.trackId ? db().get<{ name: string }>('SELECT name FROM tracks WHERE id = ?', patch.trackId) : null;
+      if (patch.trackId && !tr) throw badRequest('הציר לא נמצא');
+      set('track_id', patch.trackId);
+      logs.push({ action: 'track', text: tr ? `${who} שייך את המשימה לציר "${tr.name}"` : `${who} הסיר את השיוך לציר` });
     }
     if (patch.eventId !== undefined && patch.eventId !== t.event_id) {
       const e = patch.eventId ? db().get<{ title: string }>('SELECT title FROM events WHERE id = ?', patch.eventId) : null;

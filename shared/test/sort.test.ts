@@ -21,7 +21,7 @@ describe('alphabetical order', () => {
 
   it('every fixed list of choices is in it', () => {
     alphabetical(BROAD_EXPERIENCES);
-    expect(BROAD_EXPERIENCES).toEqual(['א"ג', 'ניווטים', 'ס\' מ"פ', 'קב"ט', 'קה"ד', 'קחו"ם', 'קל"ג', 'שטח']);
+    expect(BROAD_EXPERIENCES).toEqual(['א"ג', 'אקדמיה', 'ניווטים', 'ס\' מ"פ', 'פרט', 'קב"ט', 'קה"ד', 'קחו"ם', 'קל"ג', 'שטח']);
     alphabetical(BLOCK_REASONS, 'אחר');
     alphabetical(COMMITTEE_KINDS, 'אחר');
     alphabetical(DOCUMENT_CATEGORIES, 'אחר');

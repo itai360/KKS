@@ -240,6 +240,8 @@ function Details({ task: t }: { task: Task }) {
           <dd>{domainLabel(t.domain, t.domainNote) || '-'}</dd>
           <dt>שבוע</dt>
           <dd>{t.weekId ? <Link to={`/weeks/${t.weekId}`}>{t.weekName}</Link> : '-'}</dd>
+          <dt>ציר</dt>
+          <dd>{t.trackId ? <Link to={`/tracks/${t.trackId}`}>{t.trackName}</Link> : '-'}</dd>
           {t.cadetId && (
             <>
               <dt>צוער</dt>
@@ -311,7 +313,7 @@ function Subtasks({ detail }: { detail: TaskDetail }) {
         {canAdd && (
           <button
             className="btn btn-sm"
-            onClick={() => newTask({ parentId: t.id, weekId: t.weekId, ownerIds: [t.ownerId], domain: t.domain, deadline: t.deadline, heading: `משימת משנה: ${t.title}` })}
+            onClick={() => newTask({ parentId: t.id, weekId: t.weekId, trackId: t.trackId, ownerIds: [t.ownerId], domain: t.domain, deadline: t.deadline, heading: `משימת משנה: ${t.title}` })}
           >
             <Icon name="plus" /> הוספה
           </button>

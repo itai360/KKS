@@ -44,6 +44,8 @@ const TeamPage = lazyPage(() => import('./pages/TeamPage'), 'TeamPage');
 const TemplatesPage = lazyPage(() => import('./pages/TemplatesPage'), 'TemplatesPage');
 const WeekPage = lazyPage(() => import('./pages/WeeksPage'), 'WeekPage');
 const WeeksPage = lazyPage(() => import('./pages/WeeksPage'), 'WeeksPage');
+const TracksPage = lazyPage(() => import('./pages/TracksPage'), 'TracksPage');
+const TrackPage = lazyPage(() => import('./pages/TracksPage'), 'TrackPage');
 const WeekOrderPage = lazyPage(() => import('./pages/WeekOrderPage'), 'WeekOrderPage');
 const AttendancePage = lazyPage(() => import('./pages/AttendancePage'), 'AttendancePage');
 const AnnouncementsPage = lazyPage(() => import('./pages/AnnouncementsPage'), 'AnnouncementsPage');
@@ -97,6 +99,8 @@ function AuthedRoutes() {
               <Route path="/weeks" element={<WeeksPage />} />
               <Route path="/weeks/:id" element={<WeekPage />} />
               <Route path="/weeks/:id/order" element={<WeekOrderPage />} />
+              <Route path="/tracks" element={<TracksPage />} />
+              <Route path="/tracks/:id" element={<TrackPage />} />
               <Route path="/plans" element={isCommander ? <PlansPage /> : <Navigate to="/" />} />
               <Route path="/plans/:id" element={isCommander ? <PlanPage /> : <Navigate to="/" />} />
               <Route path="/schedule" element={<SchedulePage />} />

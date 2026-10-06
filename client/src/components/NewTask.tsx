@@ -21,6 +21,7 @@ export interface NewTaskInitial {
   allStaff?: boolean;
   deadline?: string;
   weekId?: number | null;
+  trackId?: number | null;
   eventId?: number | null;
   parentId?: number | null;
   meetingId?: number | null;
@@ -183,7 +184,7 @@ export function UserPicker({
 }
 
 function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial; onClose: () => void; onCreated: (ids: number[]) => void }) {
-  const { user, isCommander, settings, users, weeks } = useSession();
+  const { user, isCommander, settings, users, weeks, tracks } = useSession();
   const toast = useToast();
   const defaultTime = settings.defaultDeadlineTime;
   const initDate = initial.deadline ? dateKeyOf(initial.deadline) : '';
@@ -202,6 +203,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   const [domain, setDomain] = useState(initial.domain ?? '');
   const [domainNote, setDomainNote] = useState('');
   const [weekId, setWeekId] = useState<string>(initial.weekId ? String(initial.weekId) : 'auto');
+  const [trackId, setTrackId] = useState<string>(initial.trackId ? String(initial.trackId) : 'auto');
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [visibility, setVisibility] = useState<Visibility>('normal');
   const [link, setLink] = useState('');
@@ -249,6 +251,8 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   const deadlineIso = date && time ? isoAt(date, time) : null;
   // the week a task falls in by its deadline, when none is chosen
   const autoWeek = date ? weeks.find((w) => w.startDate <= date && w.endDate >= date) : undefined;
+  // a task in an area named like a track (שטח, ניווטים...) goes in that track unless another is chosen
+  const autoTrack = domain ? tracks.find((t) => t.name === domain) : undefined;
   const hasMany = !allStaff && ownerIds.length > 1;
   // what the form holds now - picked by hand or read from the sentence
   const ownerNames = allStaff ? ['כל הסגל'] : ownerIds.map((id) => users.find((u) => u.id === id)?.displayName ?? '');
@@ -272,6 +276,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
         domain,
         domainNote: domain === OTHER_DOMAIN ? domainNote.trim() : '',
         weekId: weekId === 'auto' ? undefined : weekId === 'none' ? null : Number(weekId),
+        trackId: trackId === 'auto' ? undefined : trackId === 'none' ? null : Number(trackId),
         eventId: initial.eventId ?? null,
         parentId: initial.parentId ?? null,
         meetingId: initial.meetingId ?? null,
@@ -350,6 +355,18 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
                   {weekLabel(w)}
                 </option>
               ))}
+          </select>
+        </Field>
+
+        <Field label="ציר בקורס" hint={trackId === 'auto' ? (autoTrack ? `לפי התחום: ${autoTrack.name}` : 'ללא ציר - או בחירת ציר מהרשימה') : undefined}>
+          <select className="select" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
+            <option value="auto">{autoTrack ? `אוטומטי - ${autoTrack.name}` : 'אוטומטי לפי התחום'}</option>
+            <option value="none">ללא ציר</option>
+            {tracks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
           </select>
         </Field>
 

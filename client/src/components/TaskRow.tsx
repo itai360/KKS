@@ -82,6 +82,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
           </span>
           {task.domain && <span className="sep">{domainLabel(task.domain, task.domainNote)}</span>}
           {task.weekName && <span className="sep">{task.weekName}</span>}
+          {task.trackName && task.trackName !== task.domain && <span className="sep">ציר {task.trackName}</span>}
           {task.subtaskTotal > 0 && (
             <span className="sep mono">
               {task.subtaskDone}/{task.subtaskTotal} משנה

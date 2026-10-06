@@ -42,6 +42,7 @@ const CARRIED = new Set([
   'recurring_rules',
   'recurring_instances',
   'teams',
+  'tracks',
   'discipline_guide',
   'documents',
   'calendar_sources',
