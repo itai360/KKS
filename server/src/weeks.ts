@@ -15,6 +15,7 @@ import { listDebriefs } from './debriefs';
 import { isCommander, mustTaskRow, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime } from './taskService';
 import { applyTemplate, listTemplates } from './templates';
+import { followWeekLead } from './weeklyDebriefTask';
 
 interface WeekRow {
   id: number;
@@ -191,7 +192,10 @@ export function updateWeek(actor: UserRow, id: number, raw: Partial<z.input<type
     );
     logActivity({ weekId: id, userId: actor.id, action: 'week_updated', text: `${actor.display_name} עדכן את פרטי ${next.name}` });
   });
-  if (patch.leadId && patch.leadId !== cur.leadId) notifyLead(actor, id, patch.leadId, next.name);
+  if (patch.leadId && patch.leadId !== cur.leadId) {
+    notifyLead(actor, id, patch.leadId, next.name);
+    followWeekLead(actor, id, patch.leadId);
+  }
   changed('weeks', 'tasks');
 }
 

@@ -202,6 +202,8 @@ export interface TaskDetail {
   group: GroupProgress | null;
   requests: TaskRequest[];
   permissions: TaskPermissions;
+  /** the weekly debrief task of a week (opened by the automation on its Tuesday): the week, and its debrief once opened */
+  weeklyDebrief: { weekId: number; weekName: string; debriefId: number | null } | null;
 }
 
 export interface Week {

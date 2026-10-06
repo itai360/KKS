@@ -16,6 +16,7 @@ import { recurringSchema, saveRule } from './recurring';
 import { isCommander, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime, weekForDate } from './taskService';
 import { getTemplate, saveTemplate } from './templates';
+import { closeWeeklyDebriefTask } from './weeklyDebriefTask';
 
 interface DebriefRow {
   id: number;
@@ -204,6 +205,8 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
     }
     if (summingUp) {
       const opened = cur.kind === 'general' ? 0 : lessonsToTasks(actor, cur);
+      // the week's lead had it as a task: done
+      if (cur.kind === 'weekly' && weekId) closeWeeklyDebriefTask(actor, weekId);
       logActivity({ userId: actor.id, action: 'debrief_final', text: `${actor.display_name} סיכם את התחקיר "${cur.title}"` });
       if (answers.safetyEvent === true) {
         notify(commanderIds(), { type: 'debrief', category: 'exception', title: `אירוע בטיחות במופע: ${cur.title}`, body: String(answers.safety ?? '').slice(0, 200), link: `/debriefs/${id}` }, actor.id);

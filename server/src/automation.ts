@@ -1,7 +1,7 @@
 // Section 72 - automation rules that run without manual intervention:
 // deadline passed -> overdue + alerts, 24h / 2h reminders, critical delay -> commander,
-// recurring tasks, automatic week templates, and the learning loop (weekly debrief, lessons
-// an earlier cycle kept for a week or an event).
+// recurring tasks, automatic week templates, and the learning loop (the weekly debrief - a task for
+// the week's lead on its Tuesday - and the lessons an earlier cycle kept for a week or an event).
 
 import { addDays, diffDays, HOUR, localDateKey } from '../../shared/dates';
 import { commanderIds, getUserRow, type UserRow } from './auth';
@@ -14,6 +14,7 @@ import { changed, logActivity, notify, wakeSnoozed } from './journal';
 import { generateRecurring } from './recurring';
 import { involvedIds, queryTasks } from './taskRepo';
 import { applyTemplate } from './templates';
+import { weeklyDebriefTasks } from './weeklyDebriefTask';
 
 export interface AutomationResult {
   overdue: number;
@@ -22,6 +23,7 @@ export interface AutomationResult {
   recurring: number;
   templates: number;
   learning: number;
+  debriefTasks: number;
   briefs: number;
   roll: number;
 }
@@ -29,7 +31,7 @@ export interface AutomationResult {
 export function runAutomation(): AutomationResult {
   const now = clock.now();
   const nowS = now.toISOString();
-  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, briefs: 0, roll: 0 };
+  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, debriefTasks: 0, briefs: 0, roll: 0 };
 
   // 1. Deadline passed -> overdue (derived status) + alerts, once per deadline.
   for (const t of queryTasks("t.status NOT IN ('done', 'cancelled') AND t.overdue_notified = 0 AND t.deadline < ?", nowS)) {
@@ -116,6 +118,13 @@ export function runAutomation(): AutomationResult {
     res.learning = learningReminders(now);
   } catch (e) {
     console.error('[automation] learning', e);
+  }
+
+  // 6b. The week's lead gets the weekly debrief as a task on the week's Tuesday, due the next Tuesday at 12:00.
+  try {
+    res.debriefTasks = weeklyDebriefTasks(now);
+  } catch (e) {
+    console.error('[automation] debrief tasks', e);
   }
 
   // 7. The morning brief, once a day from 07:00.

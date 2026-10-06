@@ -940,6 +940,16 @@ export function groupProgress(groupId: string): GroupProgress {
   };
 }
 
+/** for the task's page: the week it is the weekly debrief task of (weeklyDebriefTask.ts), and the debrief once opened */
+function weeklyDebriefOfTask(taskId: number): { weekId: number; weekName: string; debriefId: number | null } | null {
+  const r = db().get<{ week_id: number; name: string; debrief_id: number | null }>(
+    `SELECT x.week_id, w.name, (SELECT d.id FROM debriefs d WHERE d.week_id = x.week_id AND d.kind = 'weekly' ORDER BY d.id LIMIT 1) AS debrief_id
+     FROM week_debrief_tasks x JOIN weeks w ON w.id = x.week_id WHERE x.task_id = ?`,
+    taskId,
+  );
+  return r ? { weekId: r.week_id, weekName: r.name, debriefId: r.debrief_id } : null;
+}
+
 export function taskDetail(actor: UserRow, id: number): TaskDetail {
   const t = mustTaskRow(id);
   if (!canView(actor, t)) throw notFound('המשימה לא נמצאה');
@@ -971,6 +981,7 @@ export function taskDetail(actor: UserRow, id: number): TaskDetail {
     blocks,
     group: t.group_id && (isCommander(actor) || t.created_by === actor.id) ? groupProgress(t.group_id) : null,
     requests,
+    weeklyDebrief: weeklyDebriefOfTask(id),
     permissions: permissionsFor(actor, t),
   };
 }

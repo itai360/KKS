@@ -123,6 +123,21 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
             </div>
           </div>
         ))}
+        {/* the weekly debrief task: the debrief itself is one press away, and summing it up closes the task */}
+        {detail.weeklyDebrief && (
+          <div className="info-box mt-16 row wrap debrief-task-box">
+            <Icon name="lightbulb" size={16} />
+            <span className="grow small">
+              {t.status === 'done' ? 'התחקיר השבועי סוכם והמשימה נסגרה.' : `התחקיר השבועי של ${detail.weeklyDebrief.weekName}. כשמסכמים את התחקיר המשימה נסגרת מעצמה.`}
+            </span>
+            <Link
+              className="btn btn-sm btn-primary"
+              to={detail.weeklyDebrief.debriefId ? `/debriefs/${detail.weeklyDebrief.debriefId}` : `/debriefs?new=weekly&week=${detail.weeklyDebrief.weekId}`}
+            >
+              <Icon name="lightbulb" /> {detail.weeklyDebrief.debriefId ? 'לתחקיר השבועי' : 'פתיחת התחקיר השבועי'}
+            </Link>
+          </div>
+        )}
         <div className="mt-16">
           <TaskActions detail={detail} onChange={onChange} onDeleted={onDeleted} />
         </div>
