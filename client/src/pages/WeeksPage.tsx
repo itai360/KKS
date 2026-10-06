@@ -17,7 +17,7 @@ import { api, changedFields } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
-import { useApi } from '../lib/useApi';
+import { prefetch, useApi } from '../lib/useApi';
 
 export function WeeksPage() {
   const { weeks, isCommander, staff } = useSession();
@@ -89,7 +89,13 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
             const current = w.startDate <= today && w.endDate >= today;
             const until = diffDays(w.startDate, today);
             return (
-              <div key={w.id} className={`card week-card${current ? ' current' : ''}${bulk?.selected.has(w.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, w.id, () => navigate(`/weeks/${w.id}`)))}>
+              <div
+                key={w.id}
+                className={`card week-card${current ? ' current' : ''}${bulk?.selected.has(w.id) ? ' selected' : ''}`}
+                {...openable(bulkClick(bulk, w.id, () => navigate(`/weeks/${w.id}`)))}
+                onPointerEnter={() => prefetch(`/api/weeks/${w.id}`)}
+                onFocus={() => prefetch(`/api/weeks/${w.id}`)}
+              >
                 <span className="week-num">{w.number}</span>
                 <BulkCheck id={w.id} />
                 <div style={{ position: 'relative' }}>

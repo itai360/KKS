@@ -5,7 +5,7 @@ import { api, setReauthHandler, setUnauthorizedHandler } from './api';
 import { setTimezone } from './format';
 import { setTitleCount, setTitleSuffix } from './title';
 import { connectRealtime, disconnectRealtime, onNotification } from './realtime';
-import { useApi } from './useApi';
+import { clearApiCache, setApiCacheOwner, useApi } from './useApi';
 import { ReauthDialog } from '../components/Reauth';
 import { FirstPasswordDialog } from '../components/FirstPassword';
 import { clearDrafts } from './draft';
@@ -58,6 +58,8 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
   const refresh = useCallback(async () => {
     try {
       const me = await api.get<MeResponse>('/api/auth/me');
+      // what screens kept from another person (or another course) is not shown to this one
+      setApiCacheOwner(`${me.user.id}:${me.course?.id ?? ''}`);
       setTimezone(me.settings.timezone);
       setState({ status: 'authed', me });
     } catch {
@@ -69,6 +71,7 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
     void refresh();
     setUnauthorizedHandler(() => {
       disconnectRealtime();
+      clearApiCache();
       setState({ status: 'anon' });
     });
   }, [refresh]);
@@ -82,6 +85,7 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
       onLogout={() => {
         disconnectRealtime();
         clearDrafts();
+        clearApiCache();
         setState({ status: 'anon' });
       }}
     >

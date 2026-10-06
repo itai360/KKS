@@ -2533,6 +2533,38 @@ input::-webkit-date-and-time-value {
   box-shadow: var(--shadow);
 }
 
+/* the chosen option's highlight, sliding from one option to the next */
+.seg {
+  position: relative;
+}
+.seg-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pill-w);
+  height: var(--pill-h);
+  transform: translate(var(--pill-x), var(--pill-y));
+  border-radius: 7px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1), width 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1), height 0.2s ease;
+  pointer-events: none;
+}
+.seg.has-pill button {
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s;
+}
+.seg.has-pill button.on {
+  background: transparent;
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .seg-pill {
+    transition: none;
+  }
+}
+
 /* ---------- modal ---------- */
 
 .modal-backdrop {
@@ -2656,6 +2688,78 @@ input::-webkit-date-and-time-value {
   animation: slide 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1);
   cursor: pointer;
   border-right: 4px solid var(--tone, var(--paper));
+  position: relative;
+  overflow: hidden;
+  /* swiped sideways on a phone; the page still scrolls up and down under it */
+  touch-action: pan-y;
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.22s ease;
+}
+/* leaving: it slides away instead of vanishing */
+.toast.is-leaving:not(.is-swiped) {
+  animation: toast-out 0.22s ease forwards;
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateX(-24px) scale(0.98);
+  }
+}
+.toast-action {
+  align-self: center;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--paper);
+  background: color-mix(in srgb, var(--paper) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--paper) 35%, transparent);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.toast-action:hover {
+  background: color-mix(in srgb, var(--paper) 26%, transparent);
+}
+.toast-close {
+  flex-shrink: 0;
+  align-self: flex-start;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -3px -6px -3px 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.toast-close:hover,
+.toast-close:focus-visible {
+  opacity: 1;
+}
+.toast-action:focus-visible,
+.toast-close:focus-visible {
+  outline: 2px solid var(--paper);
+  outline-offset: 2px;
+}
+/* the time left on a message with a button */
+.toast-time {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--tone, var(--paper));
+  opacity: 0.8;
+  transform-origin: right;
+  animation: toast-time linear forwards;
+}
+@keyframes toast-time {
+  to {
+    transform: scaleX(0);
+  }
 }
 
 .toast .t-title {
@@ -7513,4 +7617,180 @@ button.weekly-item-title:hover {
 /* the weekly debrief task: its text keeps a readable width, the button goes under it on a phone */
 .debrief-task-box > .grow {
   flex: 1 1 220px;
+}
+
+/* ---------------- motion: screens, waiting, feedback ---------------- */
+/* a screen comes in softly - by opacity only: a moving ancestor would carry the fixed buttons with it */
+#main > .page {
+  animation: screen-in 0.2s ease-out backwards;
+}
+@keyframes screen-in {
+  from {
+    opacity: 0.2;
+  }
+}
+
+/* the thin bar along the top while a screen waits for what it shows */
+.top-progress {
+  position: fixed;
+  top: 0;
+  inset-inline: 0;
+  height: 3px;
+  z-index: 450;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease 0.12s;
+}
+.top-progress::before {
+  content: '';
+  display: block;
+  height: 100%;
+  background: var(--focus);
+  box-shadow: 0 0 10px var(--focus);
+  border-radius: 0 0 0 3px;
+  transform-origin: right;
+  transform: scaleX(0);
+}
+.top-progress.is-on {
+  opacity: 1;
+  transition: none;
+}
+.top-progress.is-on::before {
+  animation: progress-grow 7s cubic-bezier(0.08, 0.7, 0.2, 1) forwards;
+}
+.top-progress.is-done::before {
+  transform: scaleX(1);
+}
+@keyframes progress-grow {
+  from {
+    transform: scaleX(0.06);
+  }
+  to {
+    transform: scaleX(0.92);
+  }
+}
+
+/* a count that appears or changes pops, so the eye goes to it */
+.rail-link .count,
+.rail-group-head .count,
+.bell .count {
+  animation: count-bump 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.5);
+}
+@keyframes count-bump {
+  0% {
+    transform: scale(0.45);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ticked just now: the circle pops and the check draws itself */
+.task-check.just-checked {
+  animation: check-pop 0.36s cubic-bezier(0.2, 0.9, 0.3, 1.45);
+}
+.task-check.just-checked svg path {
+  stroke-dasharray: 22;
+  animation: check-draw 0.32s 0.06s ease-out both;
+}
+@keyframes check-pop {
+  0% {
+    transform: scale(0.8);
+  }
+  55% {
+    transform: scale(1.16);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 22;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* rows come into a list softly; one that changed while on the screen lights up for a moment */
+.task-row,
+.board-card {
+  animation: row-in 0.26s ease-out backwards;
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.task-row.flash,
+.board-card.flash,
+.weekly-item.flash,
+tr.flash > td {
+  animation: live-flash 1.4s ease-out;
+}
+@keyframes live-flash {
+  0%,
+  25% {
+    background-color: var(--yellow-bg);
+  }
+}
+
+/* readiness rings and bars fill up as they show, and move when the number changes */
+@property --p {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+.ring {
+  animation: ring-fill 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  transition: --p 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes ring-fill {
+  from {
+    --p: 0;
+  }
+}
+.bar-fill {
+  animation: bar-grow 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+@keyframes bar-grow {
+  from {
+    width: 0;
+  }
+}
+
+/* a button pressed gives way a little */
+.btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+}
+.icon-btn {
+  transition: background 0.12s, color 0.12s, transform 0.08s;
+}
+.icon-btn:active {
+  transform: scale(0.92);
+}
+
+/* light and dark: the new look spreads out from the button (the browser's own transition) */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #main > .page,
+  .task-row,
+  .board-card,
+  .ring,
+  .bar-fill,
+  .rail-link .count,
+  .rail-group-head .count,
+  .bell .count {
+    animation: none;
+  }
 }

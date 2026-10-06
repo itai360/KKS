@@ -3,7 +3,7 @@
 // What comes up during the week is added here or from the bottom bar's "+"; holding it sends the summary
 // to the staff and moves what was left open to the next week's weekly (server/src/weekly.ts).
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { addDays, diffDays, shortDate, weekdayName } from '@shared/dates';
 import type { ExternalEvent } from '@shared/types';
@@ -11,7 +11,7 @@ import { WEEKLY_DONE_LABELS, WEEKLY_KIND_LABELS, weeklySummaryText, type WeeklyH
 import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
-import { TaskRow } from '../components/TaskRow';
+import { TaskRow, useLiveFlash } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Select } from '../components/ui';
 import { api } from '../lib/api';
@@ -331,25 +331,35 @@ function Items({ items, onEdit, empty, numbered }: { items: WeeklyItem[]; onEdit
 
 function ItemRow({ item: i, onEdit }: { item: WeeklyItem; onEdit: (i: WeeklyItem) => void }) {
   const toast = useToast();
+  // marked at once; the answer from the server takes over when it comes
+  const [mine, setMine] = useState<boolean | null>(null);
+  useEffect(() => {
+    setMine(null);
+  }, [i.done]);
+  const done = mine ?? i.done;
   const toggle = async () => {
+    const next = !done;
+    setMine(next);
     try {
-      await api.patch(`/api/weekly/items/${i.id}`, { done: !i.done });
+      await api.patch(`/api/weekly/items/${i.id}`, { done: next });
       emitLocalChange('weekly');
     } catch (e) {
+      setMine(null);
       toast({ title: (e as Error).message, tone: 'red' });
     }
   };
   const open = i.canEdit || i.canSettle;
+  const flash = useLiveFlash(`${i.done}|${i.title}|${i.outcome}|${i.ownerId}`);
   return (
-    <li className={`weekly-item${i.done ? ' done' : ''}`}>
+    <li className={`weekly-item${done ? ' done' : ''}${flash ? ' flash' : ''}`}>
       {i.kind !== 'point' && (
         <button
           type="button"
-          className={`task-check small${i.done ? ' checked' : ''}`}
+          className={`task-check small${done ? ' checked' : ''}${mine ? ' just-checked' : ''}`}
           role="checkbox"
-          aria-checked={i.done}
+          aria-checked={done}
           aria-label={`${WEEKLY_DONE_LABELS[i.kind]}: ${i.title}`}
-          title={i.canSettle ? (i.done ? `סומן ${WEEKLY_DONE_LABELS[i.kind]} - לחיצה מבטלת` : `סימון ${WEEKLY_DONE_LABELS[i.kind]}`) : WEEKLY_DONE_LABELS[i.kind]}
+          title={i.canSettle ? (done ? `סומן ${WEEKLY_DONE_LABELS[i.kind]} - לחיצה מבטלת` : `סימון ${WEEKLY_DONE_LABELS[i.kind]}`) : WEEKLY_DONE_LABELS[i.kind]}
           disabled={!i.canSettle}
           onClick={() => void toggle()}
         >

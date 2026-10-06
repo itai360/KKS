@@ -11,7 +11,7 @@ import { Icon } from '../components/Icon';
 import { WeeklyCard } from '../components/WeeklyCard';
 import { useNewTask } from '../components/NewTask';
 import { useToast } from '../components/Toasts';
-import { Bar, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
+import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDeadline, fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -141,7 +141,9 @@ function Stat({ n, icon, label, hint, alert, to }: { n: number; icon: string; la
         <span className="stat-label">{label}</span>
         <Icon name={icon} />
       </span>
-      <span className="stat-num">{n}</span>
+      <span className="stat-num">
+        <CountUp value={n} />
+      </span>
       <span className="stat-footer">
         <span className="stat-hint">{hint}</span>
         <Icon name="chevronLeft" size={16} />

@@ -33,13 +33,14 @@ export function useTaskMutation(taskId: number, onDone: (d: TaskDetail) => void)
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const run = async (fn: () => Promise<TaskDetail | void>, success?: string) => {
+  /** `action`: a button on the message that follows - "ביטול" right after marking it done */
+  const run = async (fn: () => Promise<TaskDetail | void>, success?: string, action?: { label: string; run: () => void }) => {
     setBusy(true);
     setError(null);
     try {
       const d = await fn();
       if (d) onDone(d);
-      if (success) toast({ title: success, tone: 'green' });
+      if (success) toast({ title: success, tone: 'green', action });
       emitLocalChange('tasks');
       return true;
     } catch (e) {
@@ -164,7 +165,16 @@ export function TaskActions({ detail, onChange, onDeleted }: { detail: TaskDetai
           submitLabel={needsApprovalToClose ? 'שלח לאישור' : 'הושלם'}
           m={m}
           onClose={() => setDialog(null)}
-          onSubmit={(note) => transition({ action: 'complete', note: note || undefined }, needsApprovalToClose ? 'נשלח לאישור מפקד' : 'המשימה הושלמה')}
+          onSubmit={(note) =>
+            m
+              .run(
+                () => api.post<TaskDetail>(`/api/tasks/${task.id}/transition`, { action: 'complete', note: note || undefined }),
+                needsApprovalToClose ? 'נשלח לאישור מפקד' : 'המשימה הושלמה',
+                // marked done by mistake: one press puts it back
+                needsApprovalToClose ? undefined : { label: 'ביטול', run: () => void m.run(() => api.post<TaskDetail>(`/api/tasks/${task.id}/transition`, { action: 'undo_complete' }), 'הסימון בוטל') },
+              )
+              .then((ok) => ok && setDialog(null))
+          }
           extra={detail.task.openDependencies > 0 ? <div className="info-box">שים לב: המשימה תלויה ב-{detail.task.openDependencies} משימות שעדיין פתוחות.</div> : undefined}
         />
       )}

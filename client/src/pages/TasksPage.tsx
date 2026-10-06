@@ -8,7 +8,7 @@ import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
-import { canQuickUpdate, TaskBulkScope, TaskCheck, TaskList, useTaskTick } from '../components/TaskRow';
+import { canQuickUpdate, prefetchTask, TaskBulkScope, TaskCheck, TaskList, useLiveFlash, useTaskTick } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
 import { api, qs } from '../lib/api';
@@ -262,8 +262,14 @@ function TaskTableRow({ t }: { t: Task }) {
   const navigate = useNavigate();
   const bulk = useBulk();
   const tick = useTaskTick(t);
+  const flash = useLiveFlash(`${t.status}|${t.deadline}|${t.ownerId}|${t.title}|${t.priority}|${t.overdue}`);
   return (
-    <tr className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}`} {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)), { role: false })}>
+    <tr
+      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}`}
+      {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)), { role: false })}
+      onPointerEnter={() => prefetchTask(t.id)}
+      onFocus={() => prefetchTask(t.id)}
+    >
       <td style={{ padding: 0, width: 6, background: 'var(--tone)' }} />
       <td style={{ maxWidth: 340 }}>
         <div className="strong row gap-6" style={{ textDecoration: tick.done ? 'line-through' : undefined }}>
@@ -371,12 +377,15 @@ function BoardCard({ t }: { t: Task }) {
   const navigate = useNavigate();
   const bulk = useBulk();
   const tick = useTaskTick(t);
+  const flash = useLiveFlash(`${t.status}|${t.deadline}|${t.ownerId}|${t.title}|${t.priority}|${t.overdue}`);
   return (
     <div
-      className={`board-card t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}`}
+      className={`board-card t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}`}
       draggable={!bulk?.active}
       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
       {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)))}
+      onPointerEnter={() => prefetchTask(t.id)}
+      onFocus={() => prefetchTask(t.id)}
     >
       <div className="task-title row gap-6">
         {bulk?.active ? <BulkCheck id={t.id} /> : <TaskCheck task={t} tick={tick} small />}

@@ -9,7 +9,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkToggle } from '../components/Bulk';
 import { GroupTaskRow, GroupTitle, TaskBulkScope, TaskList, TaskRow } from '../components/TaskRow';
-import { Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
+import { CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
@@ -157,7 +157,9 @@ function MiniStat({ n, label, alert, target }: { n: number; label: string; alert
   return (
     <button type="button" className={`card stat${alert ? ' alert' : ''}`} style={{ textAlign: 'start', cursor: n ? 'pointer' : 'default' }} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
       <span className="stat-label">{label}</span>
-      <span className="stat-num">{n}</span>
+      <span className="stat-num">
+        <CountUp value={n} />
+      </span>
     </button>
   );
 }

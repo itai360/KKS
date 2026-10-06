@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router';
+import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
 import type { Task, TaskRequest } from '@shared/types';
 import { pendingRequests, reportIssue } from '../lib/api';
 import { onStatus } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { checkForUpdate, onUpdate, updateReady } from '../lib/update';
-import { useApi } from '../lib/useApi';
+import { onWaiting, useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { addToWeekly } from './WeeklyAdd';
@@ -50,8 +50,26 @@ function ThemeButton() {
   useEffect(() => onThemeChange(() => setShown(shownTheme())), []);
   const next = shown === 'dark' ? 'light' : 'dark';
   const label = next === 'dark' ? 'מעבר למצב כהה' : 'מעבר למצב בהיר';
+  const flip = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const doc = document as Document & { startViewTransition?: (update: () => void) => { ready: Promise<void> } };
+    if (!doc.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return setThemePref(next);
+    // the new look spreads out from the button
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+    const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    doc
+      .startViewTransition(() => setThemePref(next))
+      .ready.then(() =>
+        document.documentElement.animate(
+          { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+          { duration: 480, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', pseudoElement: '::view-transition-new(root)' },
+        ),
+      )
+      .catch(() => undefined);
+  };
   return (
-    <button type="button" className="icon-btn theme-btn" onClick={() => setThemePref(next)} aria-label={label} title={label}>
+    <button type="button" className="icon-btn theme-btn" onClick={flip} aria-label={label} title={label}>
       <Icon name={shown === 'dark' ? 'sun' : 'moon'} />
     </button>
   );
@@ -231,13 +249,63 @@ export function Layout({ children }: { children: ReactNode }) {
     if (updateReady()) window.location.reload();
     else void checkForUpdate();
   }, [location.pathname]);
-  // a block body on purpose: newer browsers return a promise from scrollTo, and an effect that returns
-  // anything but a cleanup function makes React crash on the next screen change.
+  // Back (and Forward) return to where the screen was scrolled; a new screen starts at the top.
   // An address with "#section" is left to the screen, which scrolls to that section.
+  const navType = useNavigationType();
+  const scrolls = useRef(new Map<string, number>());
+  const shownPath = useRef(location.pathname);
   useEffect(() => {
-    if (!location.hash) window.scrollTo(0, 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on a screen change
-  }, [location.pathname]);
+    try {
+      history.scrollRestoration = 'manual';
+    } catch {
+      /* the browser keeps doing it */
+    }
+  }, []);
+  useEffect(() => {
+    const key = location.key;
+    let frame = 0;
+    const save = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        scrolls.current.set(key, window.scrollY);
+      });
+    };
+    window.addEventListener('scroll', save, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', save);
+      cancelAnimationFrame(frame);
+    };
+  }, [location.key]);
+  useEffect(() => {
+    const moved = shownPath.current !== location.pathname;
+    shownPath.current = location.pathname;
+    const y = navType === 'POP' ? scrolls.current.get(location.key) : undefined;
+    if (y === undefined) {
+      if (moved && !location.hash) window.scrollTo(0, 0);
+      return;
+    }
+    // the screen may still be filling in: try until it is tall enough, for up to a second - and stop
+    // the moment the person scrolls by themselves
+    let frame = 0;
+    let tries = 0;
+    const stop = () => cancelAnimationFrame(frame);
+    const go = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      window.scrollTo(0, Math.min(y, Math.max(0, max)));
+      if (max >= y || ++tries > 60) return;
+      frame = requestAnimationFrame(go);
+    };
+    go();
+    window.addEventListener('wheel', stop, { passive: true, once: true });
+    window.addEventListener('touchstart', stop, { passive: true, once: true });
+    return () => {
+      stop();
+      window.removeEventListener('wheel', stop);
+      window.removeEventListener('touchstart', stop);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on each move through the history
+  }, [location.key]);
 
   // a screen still loading (or empty) a few seconds after moving to it is reported, with what the browser is waiting for
   useEffect(() => {
@@ -357,7 +425,11 @@ export function Layout({ children }: { children: ReactNode }) {
             <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
               <Icon name={it.icon} />
               <span className="rail-label">{it.label}</span>
-              {!!it.count && <span className="count">{it.count > 99 ? '99+' : it.count}</span>}
+              {!!it.count && (
+                <span className="count" key={it.count}>
+                  {it.count > 99 ? '99+' : it.count}
+                </span>
+              )}
             </NavLink>
           ));
           if (!s.title)
@@ -383,7 +455,11 @@ export function Layout({ children }: { children: ReactNode }) {
                 <span className="rail-label">{s.title}</span>
                 {/* closed, with the screen on show inside: marked, so it is clear where one is */}
                 {!open && s.title === here && <span className="rail-group-here" aria-hidden="true" />}
-                {!open && total > 0 && <span className="count">{total > 99 ? '99+' : total}</span>}
+                {!open && total > 0 && (
+                  <span className="count" key={total}>
+                    {total > 99 ? '99+' : total}
+                  </span>
+                )}
                 <Icon name="chevronDown" size={15} className="rail-group-chev" />
               </button>
               <div className="rail-group-body" id={id} inert={!open}>
@@ -443,7 +519,11 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
             <NavLink to="/notifications" className="icon-btn bell" aria-label={`התראות${unread ? ` (${unread} חדשות)` : ''}`}>
               <Icon name="bell" />
-              {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
+              {unread > 0 && (
+                <span className="count" key={unread}>
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
             </NavLink>
             <ThemeButton />
             {!viewing && (
@@ -479,6 +559,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </div>
         )}
+        <TopProgress />
         <main id="main" tabIndex={-1}>
           <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
           <ShortcutsHelp />
@@ -590,4 +671,43 @@ function PlusMenu({ onClose, onTask, onWeekly }: { onClose: () => void; onTask: 
       </div>
     </>
   );
+}
+
+/**
+ * A thin bar along the top while a screen waits for what it shows (opened for the first time, a filter
+ * changed) - not for the refreshes in the background. Shown only past a moment, so a quick answer
+ * does not flash it.
+ */
+function TopProgress() {
+  const [state, setState] = useState<'' | 'on' | 'done'>('');
+  useEffect(() => {
+    let showTimer: ReturnType<typeof setTimeout> | null = null;
+    let hideTimer: ReturnType<typeof setTimeout> | null = null;
+    let on = false;
+    const off = onWaiting((n) => {
+      if (n > 0) {
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = null;
+        if (!on && !showTimer)
+          showTimer = setTimeout(() => {
+            showTimer = null;
+            on = true;
+            setState('on');
+          }, 160);
+        return;
+      }
+      if (showTimer) clearTimeout(showTimer);
+      showTimer = null;
+      if (!on) return;
+      on = false;
+      setState('done');
+      hideTimer = setTimeout(() => setState(''), 420);
+    });
+    return () => {
+      off();
+      if (showTimer) clearTimeout(showTimer);
+      if (hideTimer) clearTimeout(hideTimer);
+    };
+  }, []);
+  return <div className={`top-progress${state ? ` is-${state}` : ''}`} aria-hidden="true" />;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
@@ -237,8 +237,29 @@ export function Seg<T extends string>({
   /** options that are sentences: they wrap and share the width */
   wrap?: boolean;
 }) {
+  // the highlight slides from the option chosen before to the one chosen now
+  const ref = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<CSSProperties | null>(null);
+  const optionKey = options.map((o) => o.value).join('|');
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    const measure = () => {
+      const on = box.querySelector<HTMLElement>(':scope > button.on');
+      setPill(
+        on
+          ? ({ '--pill-x': `${on.offsetLeft}px`, '--pill-y': `${on.offsetTop}px`, '--pill-w': `${on.offsetWidth}px`, '--pill-h': `${on.offsetHeight}px` } as CSSProperties)
+          : null,
+      );
+    };
+    measure();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    ro?.observe(box);
+    return () => ro?.disconnect();
+  }, [value, optionKey]);
   return (
-    <div className={`seg${wrap ? ' seg-wrap' : ''}`} role="tablist">
+    <div className={`seg${wrap ? ' seg-wrap' : ''}${pill ? ' has-pill' : ''}`} role="tablist" ref={ref} style={pill ?? undefined}>
+      {pill && <span className="seg-pill" aria-hidden="true" />}
       {options.map((o) => (
         <button key={o.value} type="button" className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)} role="tab" aria-selected={value === o.value}>
           {o.icon && <Icon name={o.icon} />}
@@ -271,4 +292,28 @@ export function initials(name: string): string {
     .slice(0, 2)
     .map((p) => p[0])
     .join('');
+}
+
+/** a number that counts up to its value when it first shows, and moves to a new value when it changes */
+export function CountUp({ value, ms = 650 }: { value: number; ms?: number }) {
+  const [shown, setShown] = useState(0);
+  const from = useRef(0);
+  useEffect(() => {
+    const start = from.current;
+    from.current = value;
+    if (start === value || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setShown(value);
+      return;
+    }
+    const t0 = performance.now();
+    let frame = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / ms);
+      setShown(Math.round(start + (value - start) * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [value, ms]);
+  return <>{shown}</>;
 }

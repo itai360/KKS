@@ -445,6 +445,8 @@ export const transitionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('return'), note: z.string().trim().min(2, 'יש לכתוב מה חסר').max(2000) }),
   z.object({ action: z.literal('cancel'), reason: z.string().trim().min(2, 'יש לכתוב סיבת ביטול').max(500) }),
   z.object({ action: z.literal('reopen'), note: z.string().trim().max(1000).optional() }),
+  // "ביטול" right after marking it done: back as it was, as if it had not been marked
+  z.object({ action: z.literal('undo_complete') }),
   z.object({ action: z.literal('escalate'), note: z.string().trim().min(2, 'יש לפרט איזו החלטה נדרשת').max(1000) }),
   z.object({ action: z.literal('clear_attention'), note: z.string().trim().max(1000).optional() }),
 ]);
@@ -488,6 +490,9 @@ function completeNotifications(actor: UserRow, t: TaskRow, notifyCreator = true)
     );
   }
 }
+
+/** how long after marking a task done its "ביטול" still undoes it */
+export const UNDO_COMPLETE_MS = 2 * 60_000;
 
 export function transition(actor: UserRow, id: number, raw: TransitionInput): void {
   const input = transitionSchema.parse(raw);
@@ -613,6 +618,26 @@ export function transition(actor: UserRow, id: number, raw: TransitionInput): vo
         if (input.note) addUpdateRow(id, actor.id, 'instruction', input.note);
         logActivity({ taskId: id, weekId: t.week_id, userId: actor.id, action: 'reopened', text: `${who} פתח מחדש את המשימה${input.note ? `: ${input.note}` : ''}` });
         notify(involvedIds(t), { type: 'reopened', category: 'action', title: `המשימה "${t.title}" נפתחה מחדש`, body: input.note, taskId: id }, actor.id);
+        break;
+      }
+      case 'undo_complete': {
+        requireStatus('done');
+        // only the one who marked it done, and only a moment after - later it is reopened, with a note
+        const last = db().get<{ user_id: number | null }>("SELECT user_id FROM activity WHERE task_id = ? AND action = 'done' ORDER BY id DESC LIMIT 1", id);
+        const doneAt = t.completed_at ? Date.parse(t.completed_at) : 0;
+        if (!last || last.user_id !== actor.id || clock.now().getTime() - doneAt > UNDO_COMPLETE_MS) {
+          throw badRequest('כבר אי אפשר לבטל את הסימון - אפשר לפתוח את המשימה מחדש');
+        }
+        db().run("UPDATE tasks SET status = ?, completed_at = NULL, completed_late = NULL WHERE id = ?", t.started_at ? 'in_progress' : 'todo', id);
+        // what marking it done told others a moment ago is taken back
+        db().run(
+          `DELETE FROM notifications WHERE created_at >= ? AND ((task_id = ? AND type IN ('task_done', 'group_done'))
+             OR (type = 'dependency_done' AND task_id IN (SELECT task_id FROM task_dependencies WHERE depends_on_id = ?)))`,
+          t.completed_at,
+          id,
+          id,
+        );
+        logActivity({ taskId: id, weekId: t.week_id, userId: actor.id, action: 'undone', text: `${who} ביטל את הסימון כהושלמה` });
         break;
       }
       case 'escalate': {

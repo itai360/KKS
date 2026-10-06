@@ -7,7 +7,7 @@ import type { ActivityEntry, DayEndData, DisciplineLogEntry, DisciplineSummary, 
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { GroupTitle, TaskList } from '../components/TaskRow';
-import { Bar, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
+import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtLongDate, todayKey } from '../lib/format';
 import { api, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
@@ -219,7 +219,9 @@ function Num({ n, label, alert }: { n: number; label: string; alert?: boolean })
   return (
     <div className={`card stat${alert ? ' alert' : ''}`} style={{ cursor: 'default' }}>
       <span className="stat-label">{label}</span>
-      <span className="stat-num">{n}</span>
+      <span className="stat-num">
+        <CountUp value={n} />
+      </span>
     </div>
   );
 }

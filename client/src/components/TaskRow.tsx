@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { domainLabel, isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/constants';
 import type { Task } from '@shared/types';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
+import { prefetch } from '../lib/useApi';
 import { DeadlineText, PriorityBadge, StatusBadge } from './Badges';
 import { BulkCheck, bulkClick, BulkScope, useBulk } from './Bulk';
 import { Icon } from './Icon';
@@ -41,12 +42,21 @@ export function useTaskTick(task: Task, readOnly?: boolean) {
     if (!canCheck || busy) return;
     setBusy(true);
     if (!task.requiresApproval || isCommander) setTicked(true);
+    // a short buzz on a phone that has one: it was taken
+    try {
+      navigator.vibrate?.(12);
+    } catch {
+      /* not allowed here */
+    }
     try {
       const d = await api.post<{ task: Task }>(`/api/tasks/${task.id}/transition`, { action: 'complete' });
+      const closed = d.task.status === 'done';
       toast({
-        title: d.task.status === 'pending_approval' ? 'נשלח לאישור מפקד' : 'המשימה הושלמה',
+        title: closed ? 'המשימה הושלמה' : 'נשלח לאישור מפקד',
         body: task.title,
         tone: 'green',
+        // ticked by mistake: one press puts it back
+        action: closed ? { label: 'ביטול', run: () => void undo() } : undefined,
       });
       refreshSoon();
     } catch (err) {
@@ -56,7 +66,17 @@ export function useTaskTick(task: Task, readOnly?: boolean) {
       setBusy(false);
     }
   };
-  return { done, canCheck, busy, complete, open };
+  const undo = async () => {
+    try {
+      await api.post(`/api/tasks/${task.id}/transition`, { action: 'undo_complete' });
+      setTicked(false);
+      emitLocalChange('tasks');
+      toast({ title: 'הסימון בוטל', body: task.title, tone: 'gray' });
+    } catch (err) {
+      toast({ title: (err as Error).message, tone: 'red' });
+    }
+  };
+  return { done, canCheck, busy, complete, open, ticked };
 }
 
 /** The round "done" button of a task in a list, a table or on the board. */
@@ -65,7 +85,7 @@ export function TaskCheck({ task, tick, small }: { task: Task; tick: ReturnType<
   return (
     <button
       type="button"
-      className={`task-check${done ? ' checked' : ''}${small ? ' small' : ''}`}
+      className={`task-check${done ? ' checked' : ''}${tick.ticked ? ' just-checked' : ''}${small ? ' small' : ''}`}
       onClick={complete}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && e.stopPropagation()}
       disabled={!canCheck || busy}
@@ -77,16 +97,36 @@ export function TaskCheck({ task, tick, small }: { task: Task; tick: ReturnType<
   );
 }
 
+/** a row whose task just changed while it was on the screen - by anyone - lights up for a moment */
+export function useLiveFlash(signature: string): boolean {
+  const last = useRef(signature);
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    if (last.current === signature) return;
+    last.current = signature;
+    setFlash(true);
+    const timer = setTimeout(() => setFlash(false), 1400);
+    return () => clearTimeout(timer);
+  }, [signature]);
+  return flash;
+}
+
+/** the task's page, fetched while the pointer rests on its row - so it opens at once */
+export const prefetchTask = (id: number) => prefetch(`/api/tasks/${id}`);
+
 export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Task; showOwner?: boolean; extra?: ReactNode; readOnly?: boolean }) {
   const navigate = useNavigate();
   const bulk = useBulk();
   const tick = useTaskTick(task, readOnly);
   const { done, open } = tick;
+  const flash = useLiveFlash(`${task.status}|${task.deadline}|${task.ownerId}|${task.title}|${task.priority}|${task.overdue}`);
 
   return (
     <div
-      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}`}
+      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}`}
       {...openable(bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`)))}
+      onPointerEnter={() => prefetchTask(task.id)}
+      onFocus={() => prefetchTask(task.id)}
     >
       {bulk?.active ? <BulkCheck id={task.id} /> : <TaskCheck task={task} tick={tick} />}
       <div className="task-main">
