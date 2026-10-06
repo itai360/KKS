@@ -13,7 +13,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal, Seg, TimeInput } from './ui';
+import { DateInput, ErrorBox, Field, Modal, Seg, TimeInput } from './ui';
 
 export interface NewTaskInitial {
   title?: string;
@@ -92,7 +92,7 @@ const weekLabel = (w: { number: number; name: string; startDate: string; endDate
 export function DateTimeInputs({ date, time, onDate, onTime }: { date: string; time: string; onDate: (v: string) => void; onTime: (v: string) => void }) {
   return (
     <div className="row gap-6">
-      <input className="input" type="date" value={date} onChange={(e) => onDate(e.target.value)} required aria-label="תאריך" style={{ flex: 1.4 }} />
+      <DateInput value={date} onChange={(v) => onDate(v)} required aria-label="תאריך" style={{ flex: 1.4 }} />
       <TimeInput value={time} onChange={onTime} required aria-label="שעה" style={{ flex: 1 }} />
     </div>
   );

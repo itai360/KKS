@@ -8,7 +8,7 @@ import { addDays, longDate } from '@shared/dates';
 import type { RollCall, RollEntry } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Loading, PageHead } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { todayKey } from '../lib/format';
@@ -152,7 +152,7 @@ export function AttendancePage() {
           <button className="icon-btn" aria-label="היום הקודם" onClick={() => set({ date: addDays(date, -1) })}>
             <Icon name="chevronRight" />
           </button>
-          <input className="input mono" type="date" value={date} onChange={(e) => set({ date: e.target.value })} aria-label="תאריך" />
+          <DateInput value={date} onChange={(v) => set({ date: v })} aria-label="תאריך" />
           <button className="icon-btn" aria-label="היום הבא" onClick={() => set({ date: addDays(date, 1) })}>
             <Icon name="chevronLeft" />
           </button>

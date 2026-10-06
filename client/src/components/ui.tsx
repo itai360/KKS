@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as 
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
-import { parseTime, shapeTime } from '@shared/dates';
+import { fmtDateIL, parseDateIL, parseTime, shapeDate, shapeTime } from '@shared/dates';
 import { Icon } from './Icon';
 import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
@@ -282,6 +282,129 @@ export function TimeInput({
       }}
       onBlur={() => time && time !== draft && setDraft(time)}
     />
+  );
+}
+
+/**
+ * A date as Israel writes it - 06.10.2026, never 10/06/2026 - whatever language the device is set to
+ * (a browser's own date field follows the device). Typed (the dots come by themselves) or picked from
+ * the calendar beside it. `value` and `onChange` use "YYYY-MM-DD", or "" for none.
+ */
+export function DateInput({
+  value,
+  onChange,
+  min,
+  max,
+  className = 'input',
+  style,
+  required,
+  id,
+  'aria-label': ariaLabel,
+  'aria-invalid': ariaInvalid,
+  'data-autofocus': autofocus,
+  onBlur,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  min?: string;
+  max?: string;
+  'aria-invalid'?: boolean;
+  'data-autofocus'?: boolean;
+  className?: string;
+  style?: CSSProperties;
+  required?: boolean;
+  id?: string;
+  'aria-label'?: string;
+  onBlur?: () => void;
+}) {
+  const [draft, setDraft] = useState(fmtDateIL(value));
+  const sent = useRef(value ?? '');
+  const field = useRef<HTMLInputElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  // a new value from outside (a parsed sentence, a reset) replaces what is shown
+  useEffect(() => {
+    if ((value ?? '') !== sent.current) {
+      sent.current = value ?? '';
+      setDraft(fmtDateIL(value));
+    }
+  }, [value]);
+  const send = (v: string) => {
+    if (v === sent.current) return;
+    sent.current = v;
+    onChange(v);
+  };
+  const date = parseDateIL(draft, true);
+  const problem =
+    draft.trim() === '' ? '' : !date ? 'תאריך כמו 06.10.2026 - יום, חודש, שנה' : min && date < min ? `התאריך מוקדם מ-${fmtDateIL(min)}` : max && date > max ? `התאריך מאוחר מ-${fmtDateIL(max)}` : '';
+  // a form will not go out with a date that is not one
+  useEffect(() => {
+    field.current?.setCustomValidity(problem);
+  }, [problem]);
+  const open = () => {
+    const el = picker.current;
+    if (!el) return;
+    try {
+      el.showPicker();
+    } catch {
+      el.focus();
+      el.click();
+    }
+  };
+  return (
+    <span className="date-input" style={style}>
+      <input
+        ref={field}
+        id={id}
+        className={`${className}${problem ? ' missing' : ''}`}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        dir="ltr"
+        maxLength={10}
+        placeholder="dd.mm.yyyy"
+        required={required}
+        aria-label={ariaLabel}
+        aria-invalid={problem || ariaInvalid ? true : undefined}
+        data-autofocus={autofocus || undefined}
+        title={problem || undefined}
+        value={draft}
+        onChange={(e) => {
+          const next = shapeDate(e.target.value);
+          setDraft(next);
+          if (next === '') send('');
+          else {
+            const d = parseDateIL(next);
+            if (d) send(d);
+          }
+        }}
+        onBlur={() => {
+          // a short year counts once the field is left: 06.10.26 is 06.10.2026
+          if (date) {
+            setDraft(fmtDateIL(date));
+            send(date);
+          }
+          onBlur?.();
+        }}
+      />
+      <button type="button" className="date-input-pick" onClick={open} aria-label={ariaLabel ? `בחירה בלוח השנה - ${ariaLabel}` : 'בחירה בלוח השנה'} title="בחירה בלוח השנה">
+        <Icon name="calendar" size={16} />
+      </button>
+      <input
+        ref={picker}
+        className="date-input-native"
+        type="date"
+        tabIndex={-1}
+        aria-hidden="true"
+        value={date ?? ''}
+        min={min}
+        max={max}
+        onChange={(e) => {
+          setDraft(fmtDateIL(e.target.value));
+          send(e.target.value);
+          field.current?.focus();
+        }}
+      />
+    </span>
   );
 }
 

@@ -8,7 +8,7 @@ import { shortDate, weekdayName } from '@shared/dates';
 import type { PlanDocument, PlanEvent, PlanEventKind, PlanSectionKey, PlansOverview, PlanStatus } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -259,7 +259,7 @@ function ApproveDialog({ doc, onDone, onClose }: { doc: PlanDocument; onDone: (d
           <input className="input" value={by} onChange={(e) => setBy(e.target.value)} placeholder='דרגה, שם ותפקיד - לדוגמה: אל"ם ישראל ישראלי, מפקד הבה"ד' required data-autofocus />
         </Field>
         <Field label="תאריך האישור" required>
-          <input className="input" type="date" dir="ltr" value={on} max={todayKey()} onChange={(e) => setOn(e.target.value)} required style={{ maxWidth: 200 }} />
+          <DateInput value={on} max={todayKey()} onChange={(v) => setOn(v)} required style={{ maxWidth: 200 }} />
         </Field>
         <Field label="הערות והנחיות המאשר" hint='מה ביקש לשנות, להדגיש או לעדכן אותו. יופיע במסמך המודפס.'>
           <textarea className="textarea" rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />

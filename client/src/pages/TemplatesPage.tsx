@@ -7,7 +7,7 @@ import type { Template, TemplateItem } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -283,7 +283,7 @@ function ApplyTemplate({ template, onClose }: { template: Template; onClose: () 
         </Field>
         {!week && (
           <Field label="תאריך עוגן">
-            <input className="input" type="date" value={anchor} onChange={(e) => setAnchor(e.target.value)} style={{ maxWidth: 200 }} />
+            <DateInput value={anchor} onChange={(v) => setAnchor(v)} style={{ maxWidth: 200 }} />
           </Field>
         )}
         <div className="col gap-4">

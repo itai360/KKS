@@ -14,7 +14,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -479,7 +479,7 @@ function EventForm({
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="לדוגמה: מטווח" data-autofocus />
         </Field>
         <Field label="תאריך" required>
-          <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateInput value={date} onChange={(v) => setDate(v)} />
         </Field>
         <div className="row gap-6">
           <Field label="התחלה" required className="grow">
@@ -796,7 +796,7 @@ function CancelEvent({ event, openTasks, onClose }: { event: ScheduleEvent; open
         />
         {action === 'move' ? (
           <div className="row gap-6">
-            <input className="input" type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
+            <DateInput value={newDate} onChange={(v) => setNewDate(v)} />
             <TimeInput value={newTime} onChange={setNewTime} />
           </div>
         ) : (

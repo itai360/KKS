@@ -56,3 +56,30 @@ describe('a time of day as typed', () => {
     expect(['1', '14', '140', '1400', '9:', '14:0', '14000'].map(shapeTime)).toEqual(['1', '14', '1:40', '14:00', '9:', '14:0', '14:00']);
   });
 });
+
+describe('a date as typed', () => {
+  it('is day, month, year - as Israel writes it, whatever the device language', async () => {
+    const { parseDateIL, fmtDateIL, shapeDate } = await import('../dates');
+    expect(['06.10.2026', '6.10.2026', '6/10/2026', '06-10-2026', '06102026', '29.02.2028'].map((s) => parseDateIL(s))).toEqual(['2026-10-06', '2026-10-06', '2026-10-06', '2026-10-06', '2026-10-06', '2028-02-29']);
+    // a short year only once the field is left: "06.10.20" may still become 2026
+    expect([parseDateIL('06.10.26'), parseDateIL('06.10.26', true), parseDateIL('061026', true)]).toEqual([null, '2026-10-06', '2026-10-06']);
+    expect(['31.04.2026', '29.02.2027', '00.10.2026', '06.13.2026', '10/06', '', '2026-10-06'].map((s) => parseDateIL(s, true))).toEqual([null, null, null, null, null, null, null]);
+    expect([fmtDateIL('2026-10-06'), fmtDateIL(''), fmtDateIL('nope')]).toEqual(['06.10.2026', '', '']);
+    expect(['0', '06', '061', '0610', '06102', '06102026', '061020261', '06.', '06.10.', '6.', '6.10.2026', '6/10/26', '06.102', '06.10.20261'].map(shapeDate)).toEqual([
+      '0',
+      '06',
+      '06.1',
+      '06.10',
+      '06.10.2',
+      '06.10.2026',
+      '06.10.2026',
+      '06',
+      '06.10',
+      '6.',
+      '6.10.2026',
+      '6.10.26',
+      '06.10.2',
+      '06.10.2026',
+    ]);
+  });
+});

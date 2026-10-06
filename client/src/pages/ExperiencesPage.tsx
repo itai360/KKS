@@ -9,7 +9,7 @@ import type { Cadet, Experience } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -271,10 +271,10 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
           </Field>
         )}
         <Field label="מתאריך">
-          <input className="input" type="date" value={start} onChange={(e) => (setStart(e.target.value), end < e.target.value && setEnd(e.target.value))} />
+          <DateInput value={start} onChange={(v) => (setStart(v), end < v && setEnd(v))} />
         </Field>
         <Field label="עד תאריך">
-          <input className="input" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <DateInput value={end} onChange={(v) => setEnd(v)} />
         </Field>
         <Field label="מפקד חונך" className="span-2" hint="יקבל משימת משוב שמסתיימת ביום האחרון של ההתנסות">
           <select className="select" value={mentor} onChange={(e) => setMentor(e.target.value)}>

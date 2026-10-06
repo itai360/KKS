@@ -6,7 +6,7 @@ import { useState } from 'react';
 import type { CourseArchive, CoursesOverview, CourseStats } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { switchCourse } from '../lib/courses';
 import { fmtDateTime } from '../lib/format';
@@ -199,10 +199,10 @@ function EndCourse({ current, onClose }: { current: string; onClose: () => void 
         </Field>
         <div className="row wrap gap-16">
           <Field label="תאריך התחלה" className="grow">
-            <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <DateInput value={startDate} onChange={(v) => setStartDate(v)} />
           </Field>
           <Field label="תאריך סיום" className="grow">
-            <input className="input" type="date" value={endDate} min={startDate || undefined} onChange={(e) => setEndDate(e.target.value)} />
+            <DateInput value={endDate} min={startDate || undefined} onChange={(v) => setEndDate(v)} />
           </Field>
         </div>
         <label className="check course-sure">

@@ -32,7 +32,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg } from '../components/ui';
 import { api, changedFields, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
@@ -878,7 +878,7 @@ function ExemptionDialog({ cadet, onClose }: { cadet: Pick<Cadet, 'id' | 'fullNa
           <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: אישור רפואי" />
         </Field>
         <Field label="עד תאריך" hint="ריק - עד להודעה חדשה">
-          <input className="input" type="date" value={until} min={todayKey()} onChange={(e) => setUntil(e.target.value)} />
+          <DateInput value={until} min={todayKey()} onChange={(v) => setUntil(v)} />
         </Field>
         <ErrorBox error={error} />
       </div>
@@ -1178,7 +1178,7 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
       <div className="row wrap">
         <label className="field" style={{ width: 170 }}>
           <span>תאריך</span>
-          <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateInput value={date} onChange={(v) => setDate(v)} />
         </label>
         {!RESTRICTED_RECORD_KINDS.includes(kind) && (
           <label className="check small">

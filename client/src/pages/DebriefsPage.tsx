@@ -16,7 +16,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Seg, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { isoAt, todayKey } from '../lib/format';
@@ -384,12 +384,10 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
           <input className="input" value={effectiveTitle} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'event' ? 'לדוגמה: תחקיר מארס טורקי' : 'לדוגמה: תחקיר מטווח הפעלת כוח'} data-autofocus={!weekly || undefined} />
         </Field>
         <Field label={weekly ? 'תאריך התחקיר' : 'תאריך האירוע'}>
-          <input
-            className="input"
-            type="date"
+          <DateInput
             value={date}
-            onChange={(e) => {
-              setDateSet(e.target.value);
+            onChange={(v) => {
+              setDateSet(v);
               setPick(''); // the activities of the new day
             }}
           />

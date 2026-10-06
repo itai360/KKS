@@ -14,7 +14,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal } from './ui';
+import { DateInput, ErrorBox, Field, Modal } from './ui';
 
 const asType = (s: string): TalkType => ((TALK_TYPES as readonly string[]).includes(s) ? (s as TalkType) : 'שיחה יזומה');
 const byDate = (a: CadetRecord, b: CadetRecord) => b.occurredOn.localeCompare(a.occurredOn) || b.id - a.id;
@@ -134,7 +134,7 @@ export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; 
             </select>
           </Field>
           <Field label="תאריך השיחה">
-            <input className="input" type="date" dir="ltr" value={draft.date} max={todayKey()} onChange={(e) => update({ ...draft, date: e.target.value })} />
+            <DateInput value={draft.date} max={todayKey()} onChange={(v) => update({ ...draft, date: v })} />
           </Field>
         </div>
         <div className="talk-who small muted">
@@ -175,7 +175,7 @@ export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; 
               <input type="checkbox" checked={withTask} onChange={(e) => setWithTask(e.target.checked)} />
               לפתוח לי משימת המשך
             </label>
-            {withTask && <input className="input" type="date" dir="ltr" value={taskDate} min={todayKey()} onChange={(e) => setTaskDate(e.target.value)} aria-label="מועד משימת ההמשך" style={{ maxWidth: 180 }} />}
+            {withTask && <DateInput value={taskDate} min={todayKey()} onChange={(v) => setTaskDate(v)} aria-label="מועד משימת ההמשך" style={{ maxWidth: 180 }} />}
             {withTask && <span className="tiny muted">המשימה פרטית, כמו השיחה{draft.answers.next?.trim() ? `: "${draft.answers.next.trim().slice(0, 60)}"` : ''}</span>}
           </div>
         )}

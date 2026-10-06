@@ -17,7 +17,7 @@ import { useSession } from '../lib/session';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal, Seg } from './ui';
+import { DateInput, ErrorBox, Field, Modal, Seg } from './ui';
 
 type Value = string | number | null;
 const NUMBER_FIELDS: EvaluationField[] = EXAM_FIELDS.filter((k) => !EXAM_TEXT_FIELDS.includes(k));
@@ -116,7 +116,12 @@ export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) 
       const waiting = (Object.entries(editsRef.current) as [FileKey, Edit][]).some(([f, e]) => !sent(f, e) && !conflictsRef.current.includes(f));
       setEdits((cur) => {
         const out = { ...cur };
-        for (const [f, e] of sending) if (out[f]?.value === e.value) delete out[f];
+        for (const [f, e] of sending) {
+          if (out[f]?.value === e.value) delete out[f];
+          // changed again while this save was on its way: the next save builds on what was just saved,
+          // not on the version before it (that would look like someone else's change - a conflict with oneself)
+          else if (out[f]) out[f] = { ...out[f]!, base: fieldValue(next, f) };
+        }
         return out;
       });
       setStatus(waiting ? { state: 'pending' } : { state: 'saved', at: new Date().toISOString() });
@@ -274,11 +279,13 @@ function Input({ field, saver, file, type = 'text', placeholder, min, max, step,
     <>
       {long ? (
         <AutoText value={text} minRows={minRows} placeholder={placeholder} aria-label={aria} onChange={(e) => saver.change(field, e.target.value)} onBlur={() => void saver.flush()} />
+      ) : type === 'date' ? (
+        <DateInput value={text} aria-label={aria} onChange={(v) => saver.change(field, v || null, true)} onBlur={() => void saver.flush()} />
       ) : (
         <input
           className={`input${type === 'number' ? ' mono' : ''}`}
           type={type}
-          dir={type === 'date' || type === 'number' ? 'ltr' : undefined}
+          dir={type === 'number' ? 'ltr' : undefined}
           inputMode={type === 'number' ? 'decimal' : undefined}
           value={text}
           min={min}
@@ -286,7 +293,7 @@ function Input({ field, saver, file, type = 'text', placeholder, min, max, step,
           step={step}
           placeholder={placeholder}
           aria-label={aria}
-          onChange={(e) => saver.change(field, type === 'date' && !e.target.value ? null : e.target.value, type === 'date')}
+          onChange={(e) => saver.change(field, e.target.value)}
           onBlur={() => void saver.flush()}
         />
       )}
@@ -707,7 +714,7 @@ function DynamicsSection({ file, setFile }: { file: EvaluationFile; setFile: (f:
       )}
       <div className="row wrap gap-12 eval-add">
         <Field label="תאריך ההערכה">
-          <input className="input" type="date" dir="ltr" value={date} max={todayKey()} onChange={(e) => setDate(e.target.value)} />
+          <DateInput value={date} max={todayKey()} onChange={(v) => setDate(v)} />
         </Field>
         <Field label="ציון">
           <select className="select" value={score} onChange={(e) => setScore(e.target.value)}>
@@ -807,7 +814,7 @@ function NotesSection({ file, setFile, onHistory, authorName }: { file: Evaluati
       <div className="eval-add col gap-12">
         <div className="row wrap gap-12">
           <Field label="תאריך">
-            <input className="input" type="date" dir="ltr" value={date} max={todayKey()} onChange={(e) => setDate(e.target.value)} />
+            <DateInput value={date} max={todayKey()} onChange={(v) => setDate(v)} />
           </Field>
           <div className="small muted" style={{ alignSelf: 'flex-end', paddingBottom: 10 }}>
             ייכתב בשם: <b>{authorName}</b>

@@ -10,7 +10,7 @@ import { GuideImportCard } from '../components/Discipline';
 import { AbsencesCard } from '../components/Absences';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { ErrorBox, Field, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, ErrorBox, Field, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { demoHooks, IS_DEMO } from '../lib/demo';
 import { emitLocalChange } from '../lib/realtime';
@@ -148,10 +148,10 @@ function CourseSettingsCard() {
             <input className="input" value={s.courseSymbol} maxLength={12} onChange={(e) => setS({ ...s, courseSymbol: e.target.value })} />
           </Field>
           <Field label="תאריך התחלה">
-            <input className="input" type="date" value={s.startDate ?? ''} onChange={(e) => setS({ ...s, startDate: e.target.value || null })} />
+            <DateInput value={s.startDate ?? ''} onChange={(v) => setS({ ...s, startDate: v || null })} />
           </Field>
           <Field label="תאריך סיום">
-            <input className="input" type="date" value={s.endDate ?? ''} onChange={(e) => setS({ ...s, endDate: e.target.value || null })} />
+            <DateInput value={s.endDate ?? ''} onChange={(v) => setS({ ...s, endDate: v || null })} />
           </Field>
           <Field label="שעת דד-ליין ברירת מחדל">
             <TimeInput value={s.defaultDeadlineTime} onChange={(v) => setS({ ...s, defaultDeadlineTime: v })} />

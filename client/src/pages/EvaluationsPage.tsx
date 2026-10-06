@@ -22,7 +22,7 @@ import { FileDocument, HistoryDialog, LiveFile } from '../components/EvaluationF
 import { GradesImport } from '../components/GradesImport';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, initials } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, PageError, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime } from '../lib/format';
@@ -449,7 +449,7 @@ function ReferDialog({ cadetId, name, reasonInFile, onClose, onDone }: { cadetId
           <textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
         <Field label="מועד הוועדה (לא חובה)">
-          <input className="input" type="date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} style={{ maxWidth: 200 }} />
+          <DateInput value={meetingDate} onChange={(v) => setMeetingDate(v)} style={{ maxWidth: 200 }} />
         </Field>
         <ErrorBox error={error} />
       </div>

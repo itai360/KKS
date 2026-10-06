@@ -12,7 +12,7 @@ import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Bar, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg } from '../components/ui';
+import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -169,18 +169,16 @@ export function WeekForm({ week, onClose }: { week?: Week; onClose: () => void }
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: שבוע התקפה" />
             </Field>
             <Field label="תאריך התחלה" required>
-              <input
-                className="input"
-                type="date"
+              <DateInput
                 value={start}
-                onChange={(e) => {
-                  setStart(e.target.value);
-                  if (e.target.value) setEnd(addDays(e.target.value, 6));
+                onChange={(v) => {
+                  setStart(v);
+                  if (v) setEnd(addDays(v, 6));
                 }}
               />
             </Field>
             <Field label="תאריך סיום" required>
-              <input className="input" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+              <DateInput value={end} onChange={(v) => setEnd(v)} />
             </Field>
             <Field label='מפק"צ אחראי' className="span-2">
               <UserPicker value={lead} onChange={setLead} multiple={false} />
@@ -241,7 +239,7 @@ export function GenerateWeeks({ onClose }: { onClose: () => void }) {
     >
       <div className="col gap-16">
         <Field label="תאריך תחילת השבוע הראשון" hint={`${weekdayName(start || todayKey())} · כל שבוע נמשך 7 ימים`}>
-          <input className="input" type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ maxWidth: 220 }} />
+          <DateInput value={start} onChange={(v) => setStart(v)} style={{ maxWidth: 220 }} />
         </Field>
         <div className="col gap-6">
           {rows.map((r, i) => (

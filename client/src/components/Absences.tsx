@@ -10,7 +10,7 @@ import type { Absence } from '@shared/types';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field } from './ui';
+import { DateInput, ErrorBox, Field } from './ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -112,20 +112,18 @@ export function AbsencesCard({ userId, mine, canEdit }: { userId: number; mine: 
             </div>
             <div className="form-grid">
               <Field label="מתאריך" required>
-                <input
-                  className="input"
-                  type="date"
+                <DateInput
                   value={start}
                   min={todayKey()}
-                  onChange={(e) => {
-                    setStart(e.target.value);
-                    if (end < e.target.value) setEnd(e.target.value);
+                  onChange={(v) => {
+                    setStart(v);
+                    if (end < v) setEnd(v);
                   }}
                   data-autofocus
                 />
               </Field>
               <Field label="עד תאריך (כולל)" required>
-                <input className="input" type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
+                <DateInput value={end} min={start} onChange={(v) => setEnd(v)} />
               </Field>
               <Field label="הערה" className="span-2">
                 <input className="input" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="לא חובה - לדוגמה: זמין בטלפון לדברים דחופים" />

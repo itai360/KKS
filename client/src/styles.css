@@ -1615,6 +1615,55 @@ input::-webkit-date-and-time-value {
 .time-input::placeholder {
   font-family: var(--mono);
 }
+/* a date as Israel writes it, with the calendar beside it */
+.date-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.date-input > .input {
+  width: 100%;
+  min-width: 132px;
+  /* the field reads left to right inside a right-to-left page: the calendar is on its left */
+  padding-left: 38px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.date-input > .input::placeholder {
+  font-family: var(--mono);
+}
+.date-input-pick {
+  position: absolute;
+  left: 4px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.date-input-pick:hover {
+  color: var(--ink);
+  background: var(--gray-bg);
+}
+/* the browser's own date field, kept only for its calendar: under the field, invisible */
+.date-input-native {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* ---------- task rows ---------- */
 

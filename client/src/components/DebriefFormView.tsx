@@ -26,7 +26,7 @@ import { Icon } from './Icon';
 import { PriorLessons } from './DebriefBits';
 import { TaskList } from './TaskRow';
 import { useToast } from './Toasts';
-import { Bar, PageHead } from './ui';
+import { Bar, DateInput, PageHead } from './ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -688,14 +688,13 @@ function LessonRow({ lesson: l, now, editable, run }: { lesson: DebriefItem; now
           <>
             <OwnerSelect value={l.ownerId} onChange={(v) => void patch({ ownerId: v })} required={now} label="אחראי ללקח" />
             {now && (
-              <input
+              <DateInput
                 className={`input mono${l.dueDate ? '' : ' missing'}`}
-                type="date"
                 value={l.dueDate ?? ''}
                 min={todayKey()}
                 aria-label="עד מתי"
                 aria-invalid={!l.dueDate}
-                onChange={(e) => void patch({ dueDate: e.target.value || null })}
+                onChange={(v) => void patch({ dueDate: v || null })}
               />
             )}
             {!now && l.target && <span className="tiny muted">יוצג ב: {l.target}</span>}
@@ -751,7 +750,7 @@ function AddLesson({ debriefId, horizon, run, first }: { debriefId: number; hori
       />
       <div className="lesson-meta">
         <OwnerSelect value={owner} onChange={setOwner} required={false} label="אחראי ללקח החדש" />
-        {now && <input className="input mono" type="date" value={due} min={todayKey()} onChange={(e) => setDue(e.target.value)} aria-label="עד מתי" />}
+        {now && <DateInput value={due} min={todayKey()} onChange={(v) => setDue(v)} aria-label="עד מתי" />}
         <button className="btn btn-sm" disabled={!body.trim() || busy}>
           <Icon name="plus" /> הוספה
         </button>

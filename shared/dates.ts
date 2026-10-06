@@ -211,3 +211,36 @@ export function shapeTime(raw: string): string {
   const d = typed.replace(/\D/g, '').slice(0, 4);
   return d.length <= 2 ? d : `${d.slice(0, d.length - 2)}:${d.slice(-2)}`;
 }
+
+/**
+ * A date as Israel writes it - 06.10.2026 - into "YYYY-MM-DD": "6.10.2026", "06/10/26", "06102026".
+ * A two-digit year counts only when `short` (once the field is left), so typing "06.10.20" on the way
+ * to 2026 is not taken for 2020. null when it is not a date (yet).
+ */
+export function parseDateIL(raw: string, short = false): string | null {
+  const t = raw.trim();
+  const m = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4}|\d{2})$/.exec(t) ?? /^(\d{2})(\d{2})(\d{4}|\d{2})$/.exec(t);
+  if (!m || (m[3].length === 2 && !short)) return null;
+  const d = Number(m[1]);
+  const mo = Number(m[2]);
+  const y = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  if (y < 1900 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > new Date(Date.UTC(y, mo, 0)).getUTCDate()) return null;
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/** "2026-10-06" -> "06.10.2026" ("" for anything else) */
+export function fmtDateIL(key: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key ?? '');
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
+}
+
+/** what is typed, as a date takes shape: digits get their dots ("06102026" -> "06.10.2026"); dots typed by hand stay */
+export function shapeDate(raw: string): string {
+  const typed = raw.replace(/[^\d./-]/g, '').replace(/[/-]/g, '.');
+  // only the dots this function put there: back to digits, and shaped again
+  if (/[.]/.test(typed) && !/^\d{2}\.\d*$|^\d{2}\.\d{2}\.\d*$/.test(typed)) return typed.slice(0, 10);
+  const d = typed.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  return `${d.slice(0, 2)}.${d.slice(2, 4)}.${d.slice(4)}`;
+}
