@@ -7794,3 +7794,87 @@ tr.flash > td {
     animation: none;
   }
 }
+
+/* ---------------- dialogs: a smooth way out, and pulled down on a phone ---------------- */
+/* the still copy of a dialog just closed fades out in its place (ui.tsx, Modal) */
+.modal-backdrop.is-leaving {
+  animation: modal-fade-out 0.2s ease forwards;
+  pointer-events: none;
+}
+.modal-backdrop.is-leaving .modal {
+  animation: modal-pop-out 0.2s ease forwards;
+}
+@keyframes modal-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes modal-pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+}
+.modal-grab {
+  display: none;
+}
+@media (max-width: 860px) {
+  /* the sheet's handle: pull it (or the title) down and the dialog closes */
+  .modal-grab {
+    display: block;
+    position: relative;
+    flex-shrink: 0;
+    height: 22px;
+    margin-bottom: -12px;
+    touch-action: none;
+    cursor: grab;
+  }
+  .modal-grab::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 42px;
+    height: 4px;
+    margin-left: -21px;
+    border-radius: 2px;
+    background: var(--line-2);
+  }
+  .modal-head {
+    touch-action: none;
+  }
+  .modal {
+    transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  .modal.is-pulled {
+    transition: none;
+  }
+  .modal-backdrop.is-leaving .modal {
+    animation: sheet-out 0.22s ease forwards;
+  }
+  @keyframes sheet-out {
+    to {
+      transform: translateY(100%);
+    }
+  }
+}
+
+/* sections that open and close (details) grow and shrink instead of jumping, where the browser can */
+@supports selector(::details-content) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+  details::details-content {
+    height: 0;
+    overflow: clip;
+    transition: height 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), content-visibility 0.26s allow-discrete;
+  }
+  details[open]::details-content {
+    height: auto;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    details::details-content {
+      transition: none;
+    }
+  }
+}
