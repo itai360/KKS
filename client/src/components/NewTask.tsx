@@ -202,8 +202,8 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   const [priority, setPriority] = useState<Priority>(initial.priority ?? 'normal');
   const [domain, setDomain] = useState(initial.domain ?? '');
   const [domainNote, setDomainNote] = useState('');
-  const [weekId, setWeekId] = useState<string>(initial.weekId ? String(initial.weekId) : 'auto');
-  const [trackId, setTrackId] = useState<string>(initial.trackId ? String(initial.trackId) : 'auto');
+  const [weekId, setWeekId] = useState<string>(initial.weekId === null ? 'none' : initial.weekId ? String(initial.weekId) : 'auto');
+  const [trackId, setTrackId] = useState<string>(initial.trackId === null ? 'none' : initial.trackId ? String(initial.trackId) : 'auto');
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [visibility, setVisibility] = useState<Visibility>('normal');
   const [link, setLink] = useState('');

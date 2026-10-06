@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { domainLabel, isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/constants';
+import { domainLabel, isOpenStatus, PRIORITIES, PRIORITY_LABELS, type TaskStatus } from '@shared/constants';
 import type { Task } from '@shared/types';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
@@ -18,33 +18,40 @@ export function canQuickUpdate(t: Task, userId: number, commander: boolean): boo
 
 export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Task; showOwner?: boolean; extra?: ReactNode; readOnly?: boolean }) {
   const navigate = useNavigate();
-  const { user, isCommander } = useSession();
+  const { user, isCommander, viewing } = useSession();
   const toast = useToast();
   const bulk = useBulk();
   const [busy, setBusy] = useState(false);
-  // ticked: shown done at once, until the list comes back without it (or with it as done)
-  const [ticked, setTicked] = useState(false);
-  const open = isOpenStatus(task.status);
-  const canCheck = !readOnly && canQuickUpdate(task, user.id, isCommander) && open && task.status !== 'pending_approval';
-  const done = task.status === 'done' || ticked;
+  const saving = useRef(false);
+  // Optimistic feedback belongs to this snapshot only. A refresh or a reopened task wins.
+  const [optimistic, setOptimistic] = useState<{ source: Task; status: TaskStatus } | null>(null);
+  const status = optimistic?.source === task ? optimistic.status : task.status;
+  const open = isOpenStatus(status);
+  const canCheck = !readOnly && !viewing && canQuickUpdate(task, user.id, isCommander) && open && status !== 'pending_approval';
+  const done = status === 'done';
+  const canApprove = isCommander || (task.createdBy === user.id && task.creatorRole !== 'commander' && task.ownerId !== user.id);
+  const needsApproval = task.requiresApproval && !canApprove;
 
   const complete = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!canCheck || busy) return;
+    if (!canCheck || saving.current) return;
+    saving.current = true;
     setBusy(true);
-    if (!task.requiresApproval || isCommander) setTicked(true);
+    if (!needsApproval) setOptimistic({ source: task, status: 'done' });
     try {
       const d = await api.post<{ task: Task }>(`/api/tasks/${task.id}/transition`, { action: 'complete' });
+      setOptimistic({ source: task, status: d.task.status });
       toast({
-        title: d.task.status === 'pending_approval' ? 'נשלח לאישור מפקד' : 'המשימה הושלמה',
+        title: d.task.status === 'pending_approval' ? 'נשלח לאישור' : 'המשימה הושלמה',
         body: task.title,
         tone: 'green',
       });
       emitLocalChange('tasks');
     } catch (err) {
-      setTicked(false);
+      setOptimistic(null);
       toast({ title: (err as Error).message, tone: 'red' });
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   };
@@ -62,8 +69,8 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
         className={`task-check${done ? ' checked' : ''}`}
         onClick={complete}
         disabled={!canCheck || busy}
-        aria-label={done ? 'הושלמה' : 'סימון כהושלמה'}
-        title={canCheck ? (task.requiresApproval ? 'סימון כהושלמה (יישלח לאישור)' : 'סימון כהושלמה') : undefined}
+        aria-label={`${done ? 'הושלמה' : needsApproval ? 'שליחה לאישור' : 'סימון כהושלמה'}: ${task.title}`}
+        title={canCheck ? (needsApproval ? 'סימון כהושלמה (יישלח לאישור)' : 'סימון כהושלמה') : undefined}
       >
         <Icon name="check" />
       </button>
@@ -96,7 +103,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
       <div className="task-side">
         {extra}
         <PriorityBadge priority={task.priority} />
-        <StatusBadge status={task.status} overdue={task.overdue} />
+        <StatusBadge status={status} overdue={!done && task.overdue} />
       </div>
     </div>
   );

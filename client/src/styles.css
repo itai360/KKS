@@ -2689,6 +2689,242 @@ input::-webkit-date-and-time-value {
   min-width: 200px;
 }
 
+/* ---------- task workspace ---------- */
+
+.tasks-controls {
+  padding: 16px;
+  margin-bottom: 18px;
+}
+.tasks-search-row,
+.tasks-results-toolbar,
+.tasks-active-filters,
+.tasks-shortcuts,
+.tasks-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tasks-search-row > .btn {
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.tasks-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.tasks-search > svg {
+  position: absolute;
+  inset-inline-start: 12px;
+  top: 14px;
+  width: 18px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.tasks-search .input {
+  min-height: 46px;
+  width: 100%;
+  padding-inline: 38px 42px;
+}
+.tasks-search .input::-webkit-search-cancel-button {
+  display: none;
+}
+.tasks-search .icon-btn {
+  position: absolute;
+  inset-inline-end: 3px;
+  top: 3px;
+  width: 40px;
+  height: 40px;
+}
+.tasks-filter-count {
+  display: inline-grid;
+  place-items: center;
+  font: 12px var(--mono);
+  min-width: 20px;
+  height: 20px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+}
+.tasks-scopes {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-block: 14px 4px;
+  scrollbar-width: thin;
+}
+.tasks-scopes .chip {
+  flex-shrink: 0;
+  min-height: 38px;
+}
+.tasks-shortcuts {
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.tasks-shortcuts .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+}
+.tasks-shortcuts svg {
+  width: 14px;
+  height: 14px;
+}
+.tasks-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 16px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.tasks-filter-grid .field {
+  min-width: 0;
+  margin: 0;
+}
+.tasks-filter-grid .select {
+  width: 100%;
+  min-width: 0;
+}
+.tasks-routine {
+  grid-column: 1 / -1;
+}
+.tasks-active-filters {
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.tasks-filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 4px 9px;
+  background: var(--card-2);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  text-align: start;
+  cursor: pointer;
+}
+.tasks-filter-tag svg {
+  flex-shrink: 0;
+}
+.tasks-filter-tag:hover {
+  border-color: var(--ink-2);
+}
+.tasks-results-toolbar {
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.tasks-result-count {
+  font-size: 13px;
+  font-weight: 600;
+  margin-inline-end: auto;
+}
+.tasks-sort {
+  gap: 2px;
+}
+.tasks-sort .select {
+  width: 170px;
+  font-size: 13px;
+}
+.tasks-sort > .icon-btn {
+  font-size: 20px;
+}
+.tasks-empty {
+  padding: 20px 16px 30px;
+}
+.tasks-empty > .row {
+  justify-content: center;
+}
+.tasks-board {
+  scroll-snap-type: x proximity;
+}
+.tasks-board .board-col {
+  scroll-snap-align: start;
+}
+.tasks-board-hint {
+  margin-block: 0 12px;
+}
+.tasks-board-empty {
+  padding: 28px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  border: 1px dashed var(--line-2);
+  border-radius: 8px;
+}
+.tasks-board .board-card:not([draggable='true']) {
+  cursor: pointer;
+}
+.tasks-board-update {
+  width: 100%;
+  margin-top: 12px;
+}
+.tasks-board-blocker {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .tasks-controls {
+    padding: 12px;
+  }
+  .tasks-search-row {
+    gap: 6px;
+  }
+  .tasks-search-row > .btn {
+    padding-inline: 10px;
+  }
+  .tasks-search .input {
+    font-size: 16px;
+  }
+  .tasks-scopes {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+  .tasks-scopes .chip,
+  .tasks-shortcuts .chip,
+  .tasks-board-update {
+    min-height: 44px;
+  }
+  .tasks-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .tasks-filter-tag {
+    min-height: 40px;
+  }
+  .tasks-results-toolbar {
+    gap: 10px 6px;
+  }
+  .tasks-results-toolbar > .seg {
+    margin-inline-end: auto;
+  }
+  .tasks-results-toolbar > .tasks-result-count {
+    flex: 1 1 calc(100% - 225px);
+  }
+  .tasks-results-toolbar > .btn {
+    min-height: 38px;
+    font-size: 12px;
+    padding-inline: 10px;
+  }
+}
+@media (max-width: 380px) {
+  .tasks-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tasks-sort .select {
+    width: 148px;
+  }
+}
+
 /* ---------- weeks ---------- */
 
 .weeks-track {
