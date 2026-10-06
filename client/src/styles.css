@@ -406,6 +406,97 @@ p {
   padding: 14px 10px 6px;
 }
 
+/* a group of the menu (בקרה, צוערים ולקחים, כלים): its title opens and closes it */
+.rail-group {
+  margin-top: 6px;
+}
+.rail-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--rail-muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: start;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  transition: background 0.12s, color 0.12s;
+}
+.rail-group-head:hover {
+  background: var(--rail-2);
+  color: var(--rail-ink);
+}
+.rail-group-head > svg:first-child {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.rail-group-head .rail-label {
+  flex: 1;
+}
+.rail-group-head .count {
+  margin-inline-start: 0;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 18px;
+}
+.rail-group-chev {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.rail-group.open .rail-group-chev {
+  transform: rotate(180deg);
+}
+.rail-group.open .rail-group-head {
+  color: var(--rail-ink);
+}
+/* opening and closing slide smoothly, whatever the number of links */
+.rail-group-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+.rail-group.open .rail-group-body {
+  grid-template-rows: 1fr;
+}
+.rail-group-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-group-body,
+  .rail-group-chev {
+    transition: none;
+  }
+}
+/* folded to icons: the group's icon in the same place as the links' icons, its count as a dot */
+.rail-collapsed .rail .rail-group-head {
+  padding-inline: 13px;
+}
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-group-chev {
+  opacity: 0;
+}
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-group-head .count {
+  position: absolute;
+  top: 1px;
+  inset-inline-start: 26px;
+  padding: 0 4px;
+  font-size: 9.5px;
+  line-height: 15px;
+}
+
 .rail-link {
   display: flex;
   align-items: center;

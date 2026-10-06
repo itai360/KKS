@@ -24,6 +24,25 @@ interface NavItem {
   end?: boolean;
 }
 
+/** each group of the menu, by its title - shown alone when the menu is folded to icons */
+const GROUP_ICONS: Record<string, string> = { בקרה: 'eye', סקירה: 'eye', 'צוערים ולקחים': 'shield', כלים: 'zap' };
+const GROUPS_KEY = 'kks.navGroups';
+function readGroups(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(GROUPS_KEY) ?? '{}') as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+function saveGroups(g: Record<string, boolean>): Record<string, boolean> {
+  try {
+    localStorage.setItem(GROUPS_KEY, JSON.stringify(g));
+  } catch {
+    /* this visit only */
+  }
+  return g;
+}
+
 /** light or dark in one tap, beside the bell; "as the device" stays in the settings */
 function ThemeButton() {
   const [shown, setShown] = useState(shownTheme);
@@ -273,6 +292,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const path = location.pathname;
   const barIdx = path === '/' ? 0 : path.startsWith('/tasks') ? 1 : path.startsWith('/weeks') ? 3 : 4;
 
+  // the menu's groups (בקרה, צוערים ולקחים, כלים) open and close; each remembers how it was left,
+  // and the group of the screen on show opens by itself
+  const [groups, setGroups] = useState<Record<string, boolean>>(readGroups);
+  const here = sections.find((s) => s.title && s.items.some((it) => (it.end ? path === it.to : path === it.to || path.startsWith(`${it.to}/`))))?.title;
+  useEffect(() => {
+    if (here) setGroups((g) => (g[here] ? g : saveGroups({ ...g, [here]: true })));
+  }, [here]);
+  const groupOpen = (title: string) => groups[title] ?? false;
+  const toggleGroup = (title: string) => setGroups((g) => saveGroups({ ...g, [title]: !g[title] }));
+
   return (
     <div className={`app${folded ? ' rail-collapsed' : ''}${viewing ? ' viewing-past' : ''}`}>
       {/* keyboard and screen-reader users skip the menu */}
@@ -299,18 +328,37 @@ export function Layout({ children }: { children: ReactNode }) {
             <div className="brand-sub">מערכת ניהול קורס</div>
           </div>
         </div>
-        {sections.map((s, i) => (
-          <nav key={i} aria-label={s.title || 'ניהול שוטף'}>
-            {s.title && <div className="rail-section">{s.title}</div>}
-            {s.items.map((it) => (
-              <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
-                <Icon name={it.icon} />
-                <span className="rail-label">{it.label}</span>
-                {!!it.count && <span className="count">{it.count > 99 ? '99+' : it.count}</span>}
-              </NavLink>
-            ))}
-          </nav>
-        ))}
+        {sections.map((s, i) => {
+          const links = s.items.map((it) => (
+            <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
+              <Icon name={it.icon} />
+              <span className="rail-label">{it.label}</span>
+              {!!it.count && <span className="count">{it.count > 99 ? '99+' : it.count}</span>}
+            </NavLink>
+          ));
+          if (!s.title)
+            return (
+              <nav key={i} aria-label="ניהול שוטף">
+                {links}
+              </nav>
+            );
+          const open = groupOpen(s.title);
+          const total = s.items.reduce((n, it) => n + (it.count ?? 0), 0);
+          const id = `rail-group-${i}`;
+          return (
+            <nav key={i} aria-label={s.title} className={`rail-group${open ? ' open' : ''}`}>
+              <button type="button" className="rail-group-head" aria-expanded={open} aria-controls={id} onClick={() => toggleGroup(s.title!)} title={s.title}>
+                <Icon name={GROUP_ICONS[s.title] ?? 'layers'} />
+                <span className="rail-label">{s.title}</span>
+                {!open && total > 0 && <span className="count">{total > 99 ? '99+' : total}</span>}
+                <Icon name="chevronDown" size={15} className="rail-group-chev" />
+              </button>
+              <div className="rail-group-body" id={id} inert={!open}>
+                <div className="rail-group-inner">{links}</div>
+              </div>
+            </nav>
+          );
+        })}
         <NavLink to="/settings" className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`} style={{ marginTop: 14 }}>
           <Icon name="settings" />
           <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
