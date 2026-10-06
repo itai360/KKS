@@ -17,6 +17,7 @@ import { addExemption, addRecord, createExperience, giveFeedback, saveTeam } fro
 import { demoStep, linkLetters, saveGuide } from './discipline';
 import { addItem, createDebrief, itemToTask, updateDebrief } from './debriefs';
 import { createLinkDocument } from './documents';
+import { addWeeklyItem, holdWeekly, updateWeeklyItem } from './weekly';
 
 /** Fills an empty database with the demo course. Dates are relative to today. */
 export function seedDemoData(PASSWORD = 'kks12345'): { tasks: number; weeks: number; events: number } {
@@ -423,6 +424,28 @@ export function seedDemoData(PASSWORD = 'kks12345'): { tasks: number; weeks: num
   docs.forEach(([title, category, url, description], i) =>
     at(d(-15 + i, '12:00'), () => createLinkDocument(i < 2 ? cmd : u(S[i % 5]), { title, category, url, description, pinned: i === 1, weekId: i === 2 ? weekIds[3] : null })),
   );
+
+  // ---------------- the weekly (שבועי) ----------------
+  // last week's was held on its Thursday; this week's is filling up
+  const heldOn = addDays(sunday, -3);
+  const lastW = weekIds[1];
+  const put = (iso: string, who: number, weekId: number, kind: 'schedule' | 'closure' | 'topic' | 'point', title: string, more: { ownerId?: number; eventDate?: string; details?: string } = {}) =>
+    at(iso, () => addWeeklyItem(u(who), { weekId, kind, title, ...more }).id);
+  const settle = (id: number, outcome = '') => at(zonedIso(heldOn, '20:30', TZ), () => updateWeeklyItem(cmd, id, { done: true, outcome }));
+  settle(put(zonedIso(addDays(heldOn, -2), '13:00', TZ), ids.s2, lastW, 'topic', 'עומס השמירות בלילות'), 'מפצלים את השמירות לשני סבבים החל מהשבוע הבא');
+  settle(put(zonedIso(addDays(heldOn, -1), '18:00', TZ), ids.s4, lastW, 'topic', 'זמן אישי לצוערים בערבים'), 'שעה קבועה אחרי ארוחת הערב');
+  put(zonedIso(addDays(heldOn, -1), '19:00', TZ), ids.s1, lastW, 'topic', 'חלוקת התורנויות בסוף השבוע');
+  settle(put(zonedIso(addDays(heldOn, -3), '10:00', TZ), ids.s3, lastW, 'closure', 'אישור השטח לשבוע השטח', { ownerId: ids.s3 }));
+  settle(put(zonedIso(addDays(heldOn, -3), '10:30', TZ), ids.s1, lastW, 'closure', 'תיאום הסעות לשבוע השטח', { ownerId: ids.s5 }), 'שני אוטובוסים, יציאה ב-07:00');
+  put(zonedIso(addDays(heldOn, -1), '22:00', TZ), ids.cmd, lastW, 'point', 'שעות שינה מלאות בלילה שלפני היציאה לשטח');
+  put(zonedIso(heldOn, '17:00', TZ), ids.cmd, lastW, 'point', 'כל שינוי בלו"ז עובר דרכי מראש', { details: 'גם שינוי של חצי שעה - כדי שהתמונה אצלי תהיה מלאה' });
+  at(zonedIso(heldOn, '21:30', TZ), () => holdWeekly(cmd, lastW, { carry: true }));
+  put(d(-2, '16:00'), ids.s3, curWeek, 'topic', 'קצב ההתקדמות בשיעורי הכושר', { details: 'חלק מהצוערים לא עומדים ביעד של השבוע השני' });
+  put(d(-1, '09:00'), ids.s5, curWeek, 'topic', 'משוב הצוערים על שבוע היסודות');
+  put(d(-2, '11:00'), ids.s2, curWeek, 'closure', 'מדריך חיצוני לשיעור הניווט', { ownerId: ids.s4 });
+  put(d(-1, '12:00'), ids.cmd, curWeek, 'closure', 'רכב פינוי לתרגיל הלילה');
+  put(d(-1, '20:00'), ids.s1, curWeek, 'schedule', 'להקדים את ארוחת הבוקר ביום היציאה', { eventDate: addDays(sunday, 3) });
+  put(d(-1, '22:30'), ids.cmd, curWeek, 'point', 'להתחיל לאסוף חומר לסיכום אמצע הקורס');
 
   // ---------------- let the automation catch up to "now" ----------------
   db().run('UPDATE notifications SET read_at = created_at WHERE created_at < ?', d(-1, '00:00'));

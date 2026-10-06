@@ -72,6 +72,7 @@ import { createFileDocument, createLinkDocument, deleteDocument, documentRow, li
 import { getFile, sendStoredFile, uploadName } from './files';
 import { cadetsFromSpreadsheet, downloadGoogleSheet, downloadGoogleSheetNamed } from './sheets';
 import { deleteSocioRound, importSocio, previewSocio, readSocioSheets, socioOfCadet, socioRound, updateSocioRound } from './sociometric';
+import { addWeeklyItem, deleteWeeklyItem, holdWeekly, reopenWeekly, updateWeeklyItem, weeklyTarget, weeklyView } from './weekly';
 import { deleteGuide, disciplineLog, disciplineOverview, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
 import { bulkSchema, runBulk } from './bulk';
 import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
@@ -226,6 +227,25 @@ export function v3Router(): Router {
     res.json({ ok: true });
   });
   r.get('/cadets/:id/sociometric', (req, res) => res.json(socioOfCadet(me(req), id(req.params.id))));
+
+  // ---------------- the weekly (שבועי) ----------------
+  // each course week's staff meeting: anyone adds to it during the week, the commander holds it
+  r.get('/weekly/target', (req, res) => res.json(weeklyTarget(me(req))));
+  r.get('/weekly/:weekId', (req, res) => res.json(weeklyView(me(req), id(req.params.weekId))));
+  r.post('/weekly/items', (req, res) => res.json(addWeeklyItem(me(req), req.body)));
+  r.patch('/weekly/items/:id', (req, res) => {
+    updateWeeklyItem(me(req), id(req.params.id), req.body);
+    res.json({ ok: true });
+  });
+  r.delete('/weekly/items/:id', (req, res) => {
+    deleteWeeklyItem(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.post('/weekly/:weekId/hold', requireCommander, (req, res) => res.json(holdWeekly(me(req), id(req.params.weekId), req.body)));
+  r.post('/weekly/:weekId/reopen', requireCommander, (req, res) => {
+    reopenWeekly(me(req), id(req.params.weekId));
+    res.json({ ok: true });
+  });
 
   r.get('/evaluations/committees/:id', (req, res) => res.json(committeeDetail(me(req), id(req.params.id))));
   r.post('/evaluations/committees/:id/refresh', requireCommander, (req, res) => res.json(evaluationFile(me(req), refreshCommitteeVersion(me(req), id(req.params.id)))));

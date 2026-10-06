@@ -2,6 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout';
 import { NewTaskProvider } from './components/NewTask';
+import { WeeklyAddHost } from './components/WeeklyAdd';
 import { ToastProvider } from './components/Toasts';
 import { Empty, Loading } from './components/ui';
 import { SessionGate, useSession } from './lib/session';
@@ -56,6 +57,8 @@ const AlignmentPage = lazyPage(() => import('./pages/AlignmentPage'), 'Alignment
 const PlansPage = lazyPage(() => import('./pages/PlansPage'), 'PlansPage');
 const PlanPage = lazyPage(() => import('./pages/PlansPage'), 'PlanPage');
 const TalkPage = lazyPage(() => import('./pages/TalkPage'), 'TalkPage');
+const WeeklyHome = lazyPage(() => import('./pages/WeeklyPage'), 'WeeklyHome');
+const WeeklyPage = lazyPage(() => import('./pages/WeeklyPage'), 'WeeklyPage');
 
 /** An address that isn't a screen - say so, rather than silently landing on the home page. */
 function NotFound() {
@@ -100,6 +103,8 @@ function AuthedRoutes() {
               <Route path="/weeks" element={<WeeksPage />} />
               <Route path="/weeks/:id" element={<WeekPage />} />
               <Route path="/weeks/:id/order" element={<WeekOrderPage />} />
+              <Route path="/weekly" element={<WeeklyHome />} />
+              <Route path="/weekly/:weekId" element={<WeeklyPage />} />
               <Route path="/tracks" element={<TracksPage />} />
               <Route path="/tracks/:id" element={<TrackPage />} />
               <Route path="/plans" element={isCommander ? <PlansPage /> : <Navigate to="/" />} />
@@ -141,6 +146,7 @@ function AuthedRoutes() {
             </Routes>
           </Suspense>
         </Layout>
+        <WeeklyAddHost />
       </NewTaskProvider>
     </ToastProvider>
   );

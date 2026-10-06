@@ -9,6 +9,7 @@ import { matchesSearch, searchKey } from '@shared/search';
 import type { SearchResults } from '@shared/types';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
+import { addToWeekly } from './WeeklyAdd';
 import { api } from '../lib/api';
 import { fmtDeadline, todayKey } from '../lib/format';
 import { useSession } from '../lib/session';
@@ -97,6 +98,8 @@ function Palette({ pages, onClose }: { pages: { to: string; label: string; icon:
             { id: 'a:order', group: 'פעולות', label: `פקודת שבוע - ${cur.name}`, icon: 'file', run: go(`/weeks/${cur.id}/order`) },
           ]
         : []),
+      { id: 'a:weeklyadd', group: 'פעולות', label: 'הוספה לשבועי - נושא, סגירה מקצועית או הערה ללו"ז', icon: 'weekly', run: () => addToWeekly() },
+      { id: 'a:weeklynow', group: 'פעולות', label: 'השבועי הקרוב', icon: 'weekly', run: go('/weekly') },
       { id: 'a:weekly', group: 'פעולות', label: 'תחקיר שבועי חדש', icon: 'calendar', run: go('/debriefs?new=weekly') },
       { id: 'a:eventdebrief', group: 'פעולות', label: 'תחקיר מופע עצים חדש', icon: 'zap', run: go('/debriefs?new=event') },
       ...(isCommander

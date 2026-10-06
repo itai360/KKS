@@ -7091,3 +7091,421 @@ label.prev-task {
     display: none;
   }
 }
+
+/* ---------------- the weekly (שבועי) ---------------- */
+/* the meeting's order on top: four steps, each a jump to its part */
+.weekly-agenda {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.weekly-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: inherit;
+  min-width: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+.weekly-step:hover {
+  border-color: var(--line-2);
+  background: var(--hover);
+}
+.weekly-step > .grow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.weekly-step-title {
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.weekly-step-n {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 12px var(--mono);
+  background: var(--rail);
+  color: var(--rail-ink);
+}
+.weekly-section {
+  scroll-margin-top: calc(var(--top-h) + 12px);
+}
+.weekly-page .count-pill,
+.weekly-tasks .count-pill {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.weekly-hint {
+  margin: 0;
+}
+.weekly-held {
+  margin-bottom: 16px;
+  gap: 10px;
+  border-color: var(--green);
+  background: var(--green-bg);
+}
+.weekly-held .grow b {
+  color: var(--green-ink);
+}
+/* a line to add with Enter */
+.weekly-quick {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.weekly-quick .input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.weekly-quick .error-box {
+  flex-basis: 100%;
+}
+.weekly-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.weekly-items.numbered {
+  counter-reset: point;
+}
+.weekly-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.weekly-item:first-child {
+  border-top: none;
+  padding-top: 2px;
+}
+.weekly-items.numbered .weekly-item::before {
+  counter-increment: point;
+  content: counter(point) '.';
+  font: 700 13px var(--mono);
+  color: var(--muted);
+  min-width: 20px;
+  padding-top: 1px;
+}
+.weekly-item .task-check {
+  margin-top: 1px;
+}
+.weekly-item-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.weekly-item-title {
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+span.weekly-item-title {
+  cursor: default;
+}
+button.weekly-item-title:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.weekly-item.done .weekly-item-title {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--done-line);
+}
+.weekly-item-details {
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.weekly-outcome {
+  padding: 6px 10px;
+  border-inline-start: 3px solid var(--green);
+  background: var(--green-bg);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.weekly-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.weekly-item-meta .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+/* moving between the weeklies: as wide as a week's name */
+.weekly-week-pick {
+  width: 250px;
+  max-width: 100%;
+}
+/* the schedule: day after day, and a slim line on the week as a whole above them */
+.weekly-whole {
+  grid-column: 1 / -1;
+  padding-block: 4px;
+}
+.weekly-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.weekly-day {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.weekly-day.is-today {
+  border-color: var(--blue);
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+.weekly-day-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+}
+.weekly-day-head .badge {
+  margin-inline-start: 6px;
+}
+.weekly-none {
+  padding: 2px 0;
+}
+.weekly-event-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  min-width: 0;
+}
+.weekly-event-line > .grow {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.weekly-event-line.cancelled > .grow {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.weekly-event-time {
+  width: 44px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.weekly-event-line .icon-btn,
+.weekly-day-head .icon-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+}
+.weekly-notes {
+  margin-inline-start: 52px;
+}
+.weekly-notes .weekly-item {
+  padding: 6px 0;
+}
+.weekly-day > .weekly-notes {
+  margin-inline-start: 0;
+}
+.weekly-day .weekly-quick {
+  margin-inline-start: 0;
+}
+.weekly-tasks {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.weekly-tasks summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  min-height: 32px;
+}
+.weekly-tasks summary::-webkit-details-marker {
+  display: none;
+}
+.weekly-tasks[open] summary > svg:last-child {
+  transform: rotate(180deg);
+}
+.weekly-locked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--gray-bg);
+  color: var(--ink-2);
+}
+.weekly-hold-list {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.weekly-card-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  color: var(--ink-2);
+}
+.weekly-card-counts b {
+  display: block;
+  font-size: 18px;
+  color: var(--ink);
+}
+.weekly-add-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+}
+@media (max-width: 860px) {
+  .weekly-agenda {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .weekly-week-pick {
+    width: 100%;
+  }
+  .weekly-days {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .weekly-notes {
+    margin-inline-start: 0;
+  }
+}
+
+/* ---------------- the phone bar's "+": a task or the weekly ---------------- */
+.plus-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(10, 12, 8, 0.32);
+  animation: plus-fade 0.18s ease;
+}
+.plus-menu {
+  position: fixed;
+  z-index: 41;
+  left: 50%;
+  bottom: calc(10px + env(safe-area-inset-bottom) + 62px + 12px);
+  width: min(300px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plus-menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px 10px 12px;
+  border: none;
+  border-radius: 18px;
+  background: var(--rail);
+  color: var(--rail-ink);
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  animation: plus-rise 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+/* the nearer one rises first */
+.plus-menu button:last-child {
+  animation-delay: 0s;
+}
+.plus-menu button:first-child {
+  animation-delay: 0.05s;
+}
+.plus-menu button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.plus-menu button:active {
+  transform: scale(0.98);
+}
+.plus-menu .grow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.plus-menu-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--rail-ink);
+  color: var(--rail);
+}
+.plus-menu-icon svg {
+  width: 21px;
+  height: 21px;
+}
+.plus-menu-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+.plus-menu-sub {
+  font-size: 12px;
+  color: var(--rail-muted);
+}
+/* open: the "+" turns to a close mark */
+.bottom-nav .plus svg {
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.bottom-nav button.plus-open .plus svg {
+  transform: rotate(45deg);
+}
+@keyframes plus-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+}
+@keyframes plus-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plus-scrim,
+  .plus-menu button {
+    animation: none;
+  }
+  .bottom-nav .plus svg {
+    transition: none;
+  }
+}

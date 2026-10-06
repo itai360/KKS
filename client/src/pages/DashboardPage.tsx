@@ -8,6 +8,7 @@ import { staffHealthLabel } from '@shared/taskLogic';
 import { PendingAnnouncements } from '../components/Announcements';
 import { DisciplineCard } from '../components/DisciplineCard';
 import { Icon } from '../components/Icon';
+import { WeeklyCard } from '../components/WeeklyCard';
 import { useNewTask } from '../components/NewTask';
 import { useToast } from '../components/Toasts';
 import { Bar, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
@@ -119,6 +120,7 @@ export function DashboardPage() {
             <WeekCard data={data} />
           </div>
           <div className="dashboard-support">
+            <WeeklyCard />
             {data.roll && <RollCard roll={data.roll} />}
             <DisciplineCard />
             <StaffHealth data={data} />

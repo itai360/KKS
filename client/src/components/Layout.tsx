@@ -8,6 +8,7 @@ import { checkForUpdate, onUpdate, updateReady } from '../lib/update';
 import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
+import { addToWeekly } from './WeeklyAdd';
 import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
 import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
@@ -80,6 +81,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         title: 'תכנון הקורס',
         items: [
           { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
+          { to: '/weekly', label: 'שבועי', icon: 'weekly' },
           { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
           { to: '/plans', label: 'אישור תוכניות', icon: 'stamp' },
         ],
@@ -134,6 +136,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       title: 'תכנון הקורס',
       items: [
         { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
+        { to: '/weekly', label: 'שבועי', icon: 'weekly' },
         { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
       ],
     },
@@ -302,8 +305,16 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     setBarAway(false);
   }, [location.pathname]);
+  // the bar's "+": a new task or something for the weekly
+  const [plusOpen, setPlusOpen] = useState(false);
+  useEffect(() => {
+    setPlusOpen(false);
+  }, [location.pathname]);
+  useEffect(() => {
+    if (barAway) setPlusOpen(false);
+  }, [barAway]);
   const path = location.pathname;
-  const barIdx = path === '/' ? 0 : path.startsWith('/tasks') ? 1 : path.startsWith('/weeks') ? 3 : 4;
+  const barIdx = path === '/' ? 0 : path.startsWith('/tasks') ? 1 : path.startsWith('/weeks') || path.startsWith('/weekly') ? 3 : 4;
 
   // the menu's groups (תכנון הקורס, צוערים, בקרה, כלים) open and close; each remembers how it was left,
   // and the group of the screen on show opens by itself
@@ -486,7 +497,16 @@ export function Layout({ children }: { children: ReactNode }) {
           <Icon name="tasks" />
           משימות
         </NavLink>
-        <button onClick={() => !viewing && newTask()} aria-label={viewing ? 'קורס קודם - לקריאה בלבד' : 'משימה חדשה'} aria-disabled={viewing ? 'true' : undefined}>
+        <button
+          id="plus-button"
+          className={plusOpen ? 'plus-open' : ''}
+          onClick={() => !viewing && setPlusOpen((o) => !o)}
+          aria-label={viewing ? 'קורס קודם - לקריאה בלבד' : 'הוספה: משימה או שבועי'}
+          aria-disabled={viewing ? 'true' : undefined}
+          aria-haspopup="menu"
+          aria-expanded={plusOpen}
+          aria-controls={plusOpen ? 'plus-menu' : undefined}
+        >
           <span className="plus">
             <Icon name="plus" />
           </span>
@@ -500,6 +520,74 @@ export function Layout({ children }: { children: ReactNode }) {
           עוד
         </NavLink>
       </nav>
+      {plusOpen && (
+        <PlusMenu
+          onClose={() => setPlusOpen(false)}
+          onTask={() => {
+            setPlusOpen(false);
+            newTask();
+          }}
+          onWeekly={() => {
+            setPlusOpen(false);
+            addToWeekly();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** the phone bar's "+": the two things one adds on the move, rising above it */
+function PlusMenu({ onClose, onTask, onWeekly }: { onClose: () => void; onTask: () => void; onWeekly: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        document.getElementById('plus-button')?.focus();
+        return;
+      }
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      const items = [...(ref.current?.querySelectorAll<HTMLElement>('[role=menuitem]') ?? [])];
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      e.preventDefault();
+      items[(at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+    };
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element;
+      if (!ref.current?.contains(t) && !t.closest('#plus-button')) onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown);
+    };
+  }, [onClose]);
+  return (
+    <>
+      <div className="plus-scrim" aria-hidden="true" />
+      <div className="plus-menu" id="plus-menu" role="menu" aria-label="הוספה" ref={ref}>
+        <button type="button" role="menuitem" onClick={onTask}>
+          <span className="plus-menu-icon">
+            <Icon name="tasks" />
+          </span>
+          <span className="grow">
+            <span className="plus-menu-title">משימות</span>
+            <span className="plus-menu-sub">משימה חדשה עם אחראי ודד-ליין</span>
+          </span>
+        </button>
+        <button type="button" role="menuitem" onClick={onWeekly}>
+          <span className="plus-menu-icon">
+            <Icon name="weekly" />
+          </span>
+          <span className="grow">
+            <span className="plus-menu-title">שבועי</span>
+            <span className="plus-menu-sub">נושא, סגירה מקצועית או הערה לשבועי הקרוב</span>
+          </span>
+        </button>
+      </div>
+    </>
   );
 }

@@ -989,7 +989,6 @@ CREATE INDEX idx_tasks_track ON tasks(track_id);
   db.run('UPDATE tasks SET track_id = (SELECT id FROM tracks WHERE tracks.name = tasks.domain) WHERE track_id IS NULL');
 }
 
-/** a migration is SQL, or a step that changes data the way SQL alone can't */
 /** the sociometric: rounds (סוציומטרי אמצע...), and each cadet's place, average and criteria in a round */
 const SCHEMA_V33 = `
 CREATE TABLE socio_rounds (
@@ -1014,7 +1013,37 @@ CREATE TABLE socio_entries (
 );
 `;
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33];
+/** the weekly (שבועי) of each course week: when it was held, and what is brought to it - notes on the
+ * schedule, professional closures, topics to discuss and the commander's points */
+const SCHEMA_V34 = `
+CREATE TABLE weeklies (
+  week_id INTEGER PRIMARY KEY REFERENCES weeks(id) ON DELETE CASCADE,
+  held_at TEXT,
+  held_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE weekly_items (
+  id INTEGER PRIMARY KEY,
+  week_id INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('schedule', 'closure', 'topic', 'point')),
+  title TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  event_ref TEXT,
+  event_date TEXT,
+  owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  outcome TEXT NOT NULL DEFAULT '',
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  carried_from INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_weekly_items_week ON weekly_items(week_id, kind);
+`;
+
+/** a migration is SQL, or a step that changes data the way SQL alone can't */
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

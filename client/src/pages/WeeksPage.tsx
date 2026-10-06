@@ -444,6 +444,9 @@ export function WeekPage() {
                 <Icon name="edit" /> עריכה
               </button>
             )}
+            <Link to={`/weekly/${w.id}`} className="btn btn-ghost">
+              <Icon name="weekly" /> שבועי
+            </Link>
             <Link to={`/weeks/${w.id}/order`} className="btn btn-ghost">
               <Icon name="file" /> פקודת שבוע
             </Link>
