@@ -364,19 +364,7 @@ export interface Notification {
   snoozedUntil: string | null;
 }
 
-export type AttentionKind =
-  | 'overdue'
-  | 'due_soon'
-  | 'stale'
-  | 'blocked'
-  | 'approval'
-  | 'request'
-  | 'decision'
-  | 'readiness'
-  | 'overload'
-  | 'debrief'
-  | 'lessons'
-  | 'away';
+export type AttentionKind = 'overdue' | 'due_soon' | 'stale' | 'blocked' | 'approval' | 'request' | 'decision' | 'readiness' | 'overload' | 'debrief' | 'lessons' | 'away';
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -820,10 +808,34 @@ export interface EvaluationExams {
   endPushupsScore: number | null;
   finalA: number | null;
   finalB: number | null;
+  fitBaseTotal: number | null;
+  fitMidTotal: number | null;
+  fitEndTotal: number | null;
+  hashatz: number | null;
+  safraSayfa: number | null;
+  homeland: number | null;
+  pakahDebrief: number | null;
+  experienceGrade: number | null;
+  courseGrade: number | null;
 }
 
 /** an exam or fitness test of the file (shared/evaluation.ts names them) */
-export type ExamTest = 'fitBase' | 'readings' | 'fitMid' | 'midExam' | 'fitEnd' | 'finalExam';
+export type ExamTest =
+  | 'fitBase'
+  | 'readings'
+  | 'fitMid'
+  | 'midExam'
+  | 'fitEnd'
+  | 'finalExam'
+  | 'fitBaseTotal'
+  | 'fitMidTotal'
+  | 'fitEndTotal'
+  | 'hashatz'
+  | 'safraSayfa'
+  | 'homeland'
+  | 'pakahDebrief'
+  | 'experienceGrade'
+  | 'courseGrade';
 
 /** the fields of the file that are set one by one (shared/evaluation.ts names them) */
 export type EvaluationField =

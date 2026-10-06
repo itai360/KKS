@@ -49,6 +49,15 @@ export const EVALUATION_FIELDS: Record<EvaluationField, { label: string; section
   endPushupsScore: { label: 'כושר גופני סוף - ציון שכיבות סמיכה', section: 'exams' },
   finalA: { label: 'מבחן סוף - מועד א׳', section: 'exams' },
   finalB: { label: 'מבחן סוף - מועד ב׳', section: 'exams' },
+  fitBaseTotal: { label: 'כש״ג פתיחה - ציון כולל', section: 'exams' },
+  fitMidTotal: { label: 'כש״ג אמצע - ציון כולל', section: 'exams' },
+  fitEndTotal: { label: 'כש״ג סוף - ציון כולל', section: 'exams' },
+  hashatz: { label: 'ציון חש״צ', section: 'exams' },
+  safraSayfa: { label: 'ציון ספרא סייפא', section: 'exams' },
+  homeland: { label: 'ציון אדם נוף מולדתו', section: 'exams' },
+  pakahDebrief: { label: 'ציון פק״א ותחקיר', section: 'exams' },
+  experienceGrade: { label: 'ציון התנסויות', section: 'exams' },
+  courseGrade: { label: 'ציון סופי בקורס', section: 'exams' },
   committeeReason: { label: 'סיבת העלאה לוועדה', section: 'reason' },
   summary: { label: 'סיכום המ"פ', section: 'summary' },
   standing: { label: 'מצב בתיק', section: 'standing' },
@@ -61,15 +70,47 @@ type ExamKey = keyof EvaluationExams;
  * fitness test and the readings exam are in every file; the rest are added for the whole course
  * when it reaches them.
  */
-export const EXAM_TESTS: Record<ExamTest, { label: string; always: boolean } & ({ kind: 'fitness'; fields: [run: ExamKey, runScore: ExamKey, pushups: ExamKey, pushupsScore: ExamKey] } | { kind: 'exam'; fields: [a: ExamKey, b: ExamKey] })> = {
+export const EXAM_TESTS: Record<
+  ExamTest,
+  { label: string; always: boolean } & (
+    | { kind: 'fitness'; fields: [run: ExamKey, runScore: ExamKey, pushups: ExamKey, pushupsScore: ExamKey] }
+    | { kind: 'exam'; fields: [a: ExamKey, b: ExamKey] }
+    | { kind: 'score'; fields: [ExamKey] }
+  )
+> = {
   fitBase: { label: 'כושר גופני סף', always: true, kind: 'fitness', fields: ['runResult', 'runScore', 'pushups', 'pushupsScore'] },
   readings: { label: 'מבחן מקראות', always: true, kind: 'exam', fields: ['readingsA', 'readingsB'] },
   fitMid: { label: 'כושר גופני אמצע', always: false, kind: 'fitness', fields: ['midRunResult', 'midRunScore', 'midPushups', 'midPushupsScore'] },
   midExam: { label: 'מבחן אמצע', always: false, kind: 'exam', fields: ['midA', 'midB'] },
   fitEnd: { label: 'כושר גופני סוף', always: false, kind: 'fitness', fields: ['endRunResult', 'endRunScore', 'endPushups', 'endPushupsScore'] },
   finalExam: { label: 'מבחן סוף', always: false, kind: 'exam', fields: ['finalA', 'finalB'] },
+  fitBaseTotal: { label: 'כש״ג פתיחה - ציון כולל', always: false, kind: 'score', fields: ['fitBaseTotal'] },
+  fitMidTotal: { label: 'כש״ג אמצע - ציון כולל', always: false, kind: 'score', fields: ['fitMidTotal'] },
+  fitEndTotal: { label: 'כש״ג סוף - ציון כולל', always: false, kind: 'score', fields: ['fitEndTotal'] },
+  hashatz: { label: 'ציון חש״צ', always: false, kind: 'score', fields: ['hashatz'] },
+  safraSayfa: { label: 'ציון ספרא סייפא', always: false, kind: 'score', fields: ['safraSayfa'] },
+  homeland: { label: 'ציון אדם נוף מולדתו', always: false, kind: 'score', fields: ['homeland'] },
+  pakahDebrief: { label: 'ציון פק״א ותחקיר', always: false, kind: 'score', fields: ['pakahDebrief'] },
+  experienceGrade: { label: 'ציון התנסויות', always: false, kind: 'score', fields: ['experienceGrade'] },
+  courseGrade: { label: 'ציון סופי בקורס', always: false, kind: 'score', fields: ['courseGrade'] },
 };
-export const TEST_ORDER: ExamTest[] = ['fitBase', 'readings', 'fitMid', 'midExam', 'fitEnd', 'finalExam'];
+export const TEST_ORDER: ExamTest[] = [
+  'fitBase',
+  'fitBaseTotal',
+  'readings',
+  'hashatz',
+  'fitMid',
+  'fitMidTotal',
+  'midExam',
+  'fitEnd',
+  'fitEndTotal',
+  'finalExam',
+  'safraSayfa',
+  'homeland',
+  'pakahDebrief',
+  'experienceGrade',
+  'courseGrade',
+];
 export const EXAM_FIELDS: ExamKey[] = TEST_ORDER.flatMap((t) => EXAM_TESTS[t].fields);
 /** fields whose value is free text (a run time); the rest are numbers */
 export const EXAM_TEXT_FIELDS: ExamKey[] = ['runResult', 'midRunResult', 'endRunResult'];

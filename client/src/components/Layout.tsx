@@ -298,10 +298,10 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         {sections.map((s, i) => (
-          <nav key={i} aria-label={s.title}>
+          <nav key={i} aria-label={s.title || 'ניהול שוטף'}>
             {s.title && <div className="rail-section">{s.title}</div>}
             {s.items.map((it) => (
-              <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
+              <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
                 <Icon name={it.icon} />
                 <span className="rail-label">{it.label}</span>
                 {!!it.count && <span className="count">{it.count > 99 ? '99+' : it.count}</span>}

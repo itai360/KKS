@@ -14,8 +14,29 @@ import { z } from 'zod';
 import { COMMITTEE_DECISIONS, COMMITTEE_DECISION_LABELS, COMMITTEE_KINDS, committeeTo, DISCIPLINE_COMMITTEE_KIND, STANDING_LABELS, STANDINGS } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
 import { byTeamAndName } from '../../shared/sort';
-import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, examsEntered, shownTests, type EvaluationSection } from '../../shared/evaluation';
-import type { Committee, CommitteeDetail, EvaluationChange, EvaluationExams, EvaluationField, EvaluationFile, EvaluationListItem, EvaluationNote, EvaluationPoint, ExamTest } from '../../shared/types';
+import {
+  EVALUATION_FIELDS,
+  EVALUATION_SECTIONS,
+  EXAM_FIELDS,
+  EXAM_TESTS,
+  EXAM_TEXT_FIELDS,
+  examsEntered,
+  shownTests,
+  TEST_ORDER,
+  type EvaluationSection,
+} from '../../shared/evaluation';
+import type {
+  Committee,
+  CommitteeDetail,
+  EvaluationChange,
+  EvaluationExams,
+  EvaluationField,
+  EvaluationFile,
+  EvaluationListItem,
+  EvaluationNote,
+  EvaluationPoint,
+  ExamTest,
+} from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { cadetRow, canManageCadet, disciplineOrder, listExperiences, RECORD_BASE, toCadet, toRecord, type CadetRow, type RecordRow } from './cadets';
 import { badRequest, clock, forbidden, HttpError, notFound, nowIso, tz } from './core';
@@ -54,6 +75,16 @@ interface FileRow {
   end_pushups_score: number | null;
   final_a: number | null;
   final_b: number | null;
+  fit_base_total: number | null;
+  fit_mid_total: number | null;
+  fit_end_total: number | null;
+  hashatz: number | null;
+  safra_sayfa: number | null;
+  homeland: number | null;
+  pakah_debrief: number | null;
+  experience_grade: number | null;
+  course_grade: number | null;
+
   committee_reason: string;
   updated_at: string;
   updated_by_name: string | null;
@@ -153,7 +184,16 @@ function touched(actor: UserRow, cadetId: number): void {
 
 const asText = (v: unknown): string | null => (v === null || v === undefined || v === '' ? null : String(v));
 
-function remember(actor: UserRow, cadetId: number, section: EvaluationSection, action: EvaluationChange['action'], field: string, before: unknown, after: unknown, itemId: number | null = null): void {
+function remember(
+  actor: UserRow,
+  cadetId: number,
+  section: EvaluationSection,
+  action: EvaluationChange['action'],
+  field: string,
+  before: unknown,
+  after: unknown,
+  itemId: number | null = null,
+): void {
   db().run(
     'INSERT INTO evaluation_history(cadet_id, section, item_id, action, field, old_value, new_value, user_id, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     cadetId,
@@ -251,6 +291,15 @@ const EXAM_COLUMNS: Record<keyof EvaluationExams, keyof FileRow> = {
   endPushupsScore: 'end_pushups_score',
   finalA: 'final_a',
   finalB: 'final_b',
+  fitBaseTotal: 'fit_base_total',
+  fitMidTotal: 'fit_mid_total',
+  fitEndTotal: 'fit_end_total',
+  hashatz: 'hashatz',
+  safraSayfa: 'safra_sayfa',
+  homeland: 'homeland',
+  pakahDebrief: 'pakah_debrief',
+  experienceGrade: 'experience_grade',
+  courseGrade: 'course_grade',
 };
 
 function examsOf(f: FileRow | undefined): EvaluationExams {
@@ -258,7 +307,10 @@ function examsOf(f: FileRow | undefined): EvaluationExams {
 }
 
 /** the tests added for the whole course (the threshold fitness test and the readings exam are always there) */
-const addedTests = (): ExamTest[] => db().all<{ test: ExamTest }>('SELECT test FROM evaluation_tests').map((r) => r.test);
+const addedTests = (): ExamTest[] =>
+  db()
+    .all<{ test: ExamTest }>('SELECT test FROM evaluation_tests')
+    .map((r) => r.test);
 
 /** an added test that no file has a value in yet */
 function testIsEmpty(test: ExamTest): boolean {
@@ -293,7 +345,12 @@ function buildFile(viewer: UserRow, cadetId: number): EvaluationFile {
     layout: 2,
     cadet: toCadet(viewer, c, records),
     teamCommanderName,
-    general: { companyCommander: f?.company_commander ?? '', teamCommander: f?.team_commander ?? '', companyCommanderAuto: companyCommanderName(), teamCommanderAuto: teamCommanderName },
+    general: {
+      companyCommander: f?.company_commander ?? '',
+      teamCommander: f?.team_commander ?? '',
+      companyCommanderAuto: companyCommanderName(),
+      teamCommanderAuto: teamCommanderName,
+    },
     details: {
       firstName: c.first_name,
       lastName: c.last_name,
@@ -352,17 +409,28 @@ export function listEvaluations(actor: UserRow): EvaluationListItem[] {
     )
     .filter((c) => canManageCadet(actor, c))
     // active cadets first (the order SQL gave, kept by a stable sort), each part by team and name
-    .sort((a, b) => Number(a.status !== 'active') - Number(b.status !== 'active') || byTeamAndName({ team: a.team_name, last: a.last_name, first: a.first_name }, { team: b.team_name, last: b.last_name, first: b.first_name }));
+    .sort(
+      (a, b) =>
+        Number(a.status !== 'active') - Number(b.status !== 'active') ||
+        byTeamAndName({ team: a.team_name, last: a.last_name, first: a.first_name }, { team: b.team_name, last: b.last_name, first: b.first_name }),
+    );
   const files = new Map(
     db()
       .all<FileRow & { cadet_id: number }>('SELECT f.*, ub.display_name AS updated_by_name FROM evaluation_files f LEFT JOIN users ub ON ub.id = f.updated_by')
       .map((f) => [f.cadet_id, f]),
   );
-  const count = (table: string) => new Map(db().all<{ cadet_id: number; n: number }>(`SELECT cadet_id, count(*) AS n FROM ${table} GROUP BY cadet_id`).map((r) => [r.cadet_id, r.n]));
+  const count = (table: string) =>
+    new Map(
+      db()
+        .all<{ cadet_id: number; n: number }>(`SELECT cadet_id, count(*) AS n FROM ${table} GROUP BY cadet_id`)
+        .map((r) => [r.cadet_id, r.n]),
+    );
   const notes = count('evaluation_entries');
   const points = count('evaluation_points');
   const dynamics = new Map<number, { score: number; rank: number; occurredOn: string }>();
-  for (const d of db().all<{ cadet_id: number; score: number; rank: number; occurred_on: string }>('SELECT cadet_id, score, rank, occurred_on FROM evaluation_dynamics ORDER BY occurred_on, id')) {
+  for (const d of db().all<{ cadet_id: number; score: number; rank: number; occurred_on: string }>(
+    'SELECT cadet_id, score, rank, occurred_on FROM evaluation_dynamics ORDER BY occurred_on, id',
+  )) {
     dynamics.set(d.cadet_id, { score: d.score, rank: d.rank, occurredOn: d.occurred_on }); // the latest one
   }
   const committees = new Map<number, CommitteeRow>();
@@ -455,7 +523,6 @@ function normalize(field: EvaluationField, v: unknown): string | number | null {
   return (v as number | null) ?? null;
 }
 
-
 function currentValue(c: CadetRow, f: FileRow | undefined, field: EvaluationField): string | number | null {
   const rule = FIELD_RULES[field];
   if (rule.cadet) return c[rule.cadet];
@@ -466,7 +533,7 @@ function currentValue(c: CadetRow, f: FileRow | undefined, field: EvaluationFiel
 const same = (a: unknown, b: unknown) => (a ?? null) === (b ?? null) || (typeof a === 'string' && typeof b === 'string' && a.trim() === b.trim());
 
 /** sets fields of the file - all of them, or none when one of them changed meanwhile */
-export function updateEvaluationFields(actor: UserRow, cadetId: number, raw: unknown): void {
+export function updateEvaluationFields(actor: UserRow, cadetId: number, raw: unknown, broadcastChange = true): void {
   const c = openFile(actor, cadetId);
   const { changes, base } = fieldsSchema.parse(raw);
   const fields = Object.keys(changes).filter((k): k is EvaluationField => Object.hasOwn(FIELD_RULES, k));
@@ -498,18 +565,23 @@ export function updateEvaluationFields(actor: UserRow, cadetId: number, raw: unk
       if (field === 'summary') db().run('UPDATE evaluation_files SET commander_opinion_by = ?, commander_opinion_at = ? WHERE cadet_id = ?', actor.id, now, cadetId);
       remember(actor, cadetId, EVALUATION_FIELDS[field].section, 'set', field, before, v);
       if (field === 'standing') {
-        logActivity({ userId: actor.id, action: 'evaluation_standing', text: `${actor.display_name} עדכן את מצבו של ${fullName(c)} בתיק ההערכה: ${STANDING_LABELS[v as (typeof STANDINGS)[number]]}` });
-        if (v === 'risk') notify(commanderIds(), { type: 'evaluation', category: 'exception', title: `${fullName(c)} סומן "בסיכון" בתיק ההערכה`, link: `/evaluations/${cadetId}` }, actor.id);
+        logActivity({
+          userId: actor.id,
+          action: 'evaluation_standing',
+          text: `${actor.display_name} עדכן את מצבו של ${fullName(c)} בתיק ההערכה: ${STANDING_LABELS[v as (typeof STANDINGS)[number]]}`,
+        });
+        if (v === 'risk')
+          notify(commanderIds(), { type: 'evaluation', category: 'exception', title: `${fullName(c)} סומן "בסיכון" בתיק ההערכה`, link: `/evaluations/${cadetId}` }, actor.id);
       }
     }
     touched(actor, cadetId);
   });
-  changed('cadets');
+  if (broadcastChange) changed('cadets');
 }
 
 // ---------------- the exams the course has reached ----------------
 
-const testSchema = z.object({ test: z.enum(['fitMid', 'midExam', 'fitEnd', 'finalExam']) });
+const testSchema = z.object({ test: z.enum(TEST_ORDER).refine((t) => !EXAM_TESTS[t].always, 'המבחן קיים בכל תיק') });
 
 /** adds a test to the files of every cadet in the course - from any file its user may open */
 export function addExamTest(actor: UserRow, cadetId: number, raw: unknown): void {
@@ -543,7 +615,15 @@ export function addDynamics(actor: UserRow, cadetId: number, raw: unknown): void
   openFile(actor, cadetId);
   const d = dynamicsSchema.parse(raw);
   db().tx(() => {
-    const id = db().run('INSERT INTO evaluation_dynamics(cadet_id, occurred_on, score, rank, author_id, created_at) VALUES (?, ?, ?, ?, ?, ?)', cadetId, d.occurredOn, d.score, d.rank, actor.id, nowIso()).id;
+    const id = db().run(
+      'INSERT INTO evaluation_dynamics(cadet_id, occurred_on, score, rank, author_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      cadetId,
+      d.occurredOn,
+      d.score,
+      d.rank,
+      actor.id,
+      nowIso(),
+    ).id;
     remember(actor, cadetId, 'dynamics', 'add', 'dynamics', null, `${d.occurredOn}: ציון ${d.score}, מיקום ${d.rank}`, id);
     touched(actor, cadetId);
   });
@@ -742,10 +822,17 @@ const ACTION_WORDS: Record<EvaluationChange['action'], string> = { set: '', add:
 export function evaluationHistory(actor: UserRow, cadetId: number): EvaluationChange[] {
   openFile(actor, cadetId);
   return db()
-    .all<{ id: number; at: string; user_name: string | null; section: string; action: EvaluationChange['action']; field: string; old_value: string | null; new_value: string | null; item_id: number | null }>(
-      'SELECT h.*, u.display_name AS user_name FROM evaluation_history h LEFT JOIN users u ON u.id = h.user_id WHERE h.cadet_id = ? ORDER BY h.id DESC LIMIT 1000',
-      cadetId,
-    )
+    .all<{
+      id: number;
+      at: string;
+      user_name: string | null;
+      section: string;
+      action: EvaluationChange['action'];
+      field: string;
+      old_value: string | null;
+      new_value: string | null;
+      item_id: number | null;
+    }>('SELECT h.*, u.display_name AS user_name FROM evaluation_history h LEFT JOIN users u ON u.id = h.user_id WHERE h.cadet_id = ? ORDER BY h.id DESC LIMIT 1000', cadetId)
     .map((h) => {
       const field = EVALUATION_FIELDS[h.field as EvaluationField]?.label;
       const item = ITEM_LABELS[h.field];
@@ -792,7 +879,17 @@ export function referToCommittee(actor: UserRow, cadetId: number, raw: z.input<t
     ).id;
     const name = `${c.first_name} ${c.last_name}`.trim();
     logActivity({ userId: actor.id, action: 'committee_referral', text: `${actor.display_name} העביר את ${name} ${to(r.kind)}` });
-    notify([c.team_commander_id], { type: 'committee', category: 'action', title: `${name} הועבר ${to(r.kind)}`, body: 'תיק ההערכה שלו הוא מה שהוועדה תקבל - כדאי לוודא שהוא מלא ומעודכן.', link: `/evaluations/${cadetId}` }, actor.id);
+    notify(
+      [c.team_commander_id],
+      {
+        type: 'committee',
+        category: 'action',
+        title: `${name} הועבר ${to(r.kind)}`,
+        body: 'תיק ההערכה שלו הוא מה שהוועדה תקבל - כדאי לוודא שהוא מלא ומעודכן.',
+        link: `/evaluations/${cadetId}`,
+      },
+      actor.id,
+    );
     return id;
   });
   changed('cadets');
@@ -807,7 +904,10 @@ export function referToCommittee(actor: UserRow, cadetId: number, raw: z.input<t
 export function referForDiscipline(actor: UserRow, cadetId: number, recordId: number, notes: number): number {
   const now = nowIso();
   const list = db()
-    .all<{ occurred_on: string; title: string; category: string }>("SELECT occurred_on, title, category FROM cadet_records WHERE cadet_id = ? AND kind = 'discipline' AND formal = 1 ORDER BY occurred_on, id", cadetId)
+    .all<{ occurred_on: string; title: string; category: string }>(
+      "SELECT occurred_on, title, category FROM cadet_records WHERE cadet_id = ? AND kind = 'discipline' AND formal = 1 ORDER BY occurred_on, id",
+      cadetId,
+    )
     .map((n, i) => `${i + 1}. ${n.occurred_on.split('-').reverse().join('.')} - ${n.title || n.category || 'הערת משמעת'}`);
   const id = db().run(
     'INSERT INTO committees(cadet_id, kind, reason, referred_by, referred_at, snapshot, snapshot_at, from_record) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -861,7 +961,11 @@ export function decideCommittee(actor: UserRow, id: number, raw: z.input<typeof 
     // a dismissal also ends the cadet's course
     if (d.decision === 'dismissed') db().run("UPDATE cadets SET status = 'dropped', updated_at = ? WHERE id = ?", nowIso(), r.cadet_id);
     logActivity({ userId: actor.id, action: 'committee_decision', text: `${r.kind} של ${name}: ${COMMITTEE_DECISION_LABELS[d.decision]}` });
-    notify([c.team_commander_id], { type: 'committee', category: 'info', title: `החלטת ${r.kind} בעניין ${name}: ${COMMITTEE_DECISION_LABELS[d.decision]}`, link: `/evaluations/${r.cadet_id}` }, actor.id);
+    notify(
+      [c.team_commander_id],
+      { type: 'committee', category: 'info', title: `החלטת ${r.kind} בעניין ${name}: ${COMMITTEE_DECISION_LABELS[d.decision]}`, link: `/evaluations/${r.cadet_id}` },
+      actor.id,
+    );
   });
   changed('cadets');
   return r.cadet_id;
@@ -901,7 +1005,18 @@ interface LegacyFile {
   standing: EvaluationFile['standing'];
   teamOpinion?: { text: string; byName: string | null; at: string | null };
   commanderOpinion?: { text: string; byName: string | null; at: string | null };
-  entries?: { id: number; category: string; tone: 'positive' | 'improve' | 'exception'; title: string; body: string; occurredOn: string; shownOn: string | null; authorId: number; authorName: string; createdAt: string }[];
+  entries?: {
+    id: number;
+    category: string;
+    tone: 'positive' | 'improve' | 'exception';
+    title: string;
+    body: string;
+    occurredOn: string;
+    shownOn: string | null;
+    authorId: number;
+    authorName: string;
+    createdAt: string;
+  }[];
   scores: EvaluationFile['scores'];
   experiences: EvaluationFile['experiences'];
   discipline: EvaluationFile['discipline'];
@@ -929,7 +1044,20 @@ function fromLegacy(old: LegacyFile): EvaluationFile {
     }))
     .sort((a, b) => a.occurredOn.localeCompare(b.occurredOn) || a.id - b.id);
   if (old.teamOpinion?.text) {
-    notes.unshift({ id: 0, occurredOn: (old.teamOpinion.at ?? old.generatedAt).slice(0, 10), body: `חוות דעת מפקד הצוות:\n${old.teamOpinion.text}`, authorId: 0, authorName: old.teamOpinion.byName ?? '', createdAt: old.teamOpinion.at ?? old.generatedAt, updatedAt: old.teamOpinion.at ?? old.generatedAt, updatedByName: null, version: 1, edited: false, canEdit: false, legacy: null });
+    notes.unshift({
+      id: 0,
+      occurredOn: (old.teamOpinion.at ?? old.generatedAt).slice(0, 10),
+      body: `חוות דעת מפקד הצוות:\n${old.teamOpinion.text}`,
+      authorId: 0,
+      authorName: old.teamOpinion.byName ?? '',
+      createdAt: old.teamOpinion.at ?? old.generatedAt,
+      updatedAt: old.teamOpinion.at ?? old.generatedAt,
+      updatedByName: null,
+      version: 1,
+      edited: false,
+      canEdit: false,
+      legacy: null,
+    });
   }
   return {
     layout: 2,
@@ -958,4 +1086,20 @@ function fromLegacy(old: LegacyFile): EvaluationFile {
     canRefer: false,
     generatedAt: old.generatedAt,
   };
+}
+
+/** A compact, authorized snapshot for the import preview. No notes or committee data. */
+export function examImportCadets(actor: UserRow) {
+  const cadets = db()
+    .all<CadetRow>(
+      `SELECT c.*, t.name AS team_name, t.commander_id AS team_commander_id
+    FROM cadets c LEFT JOIN teams t ON t.id = c.team_id`,
+    )
+    .filter((c) => canManageCadet(actor, c));
+  const files = new Map(
+    db()
+      .all<FileRow & { cadet_id: number }>('SELECT * FROM evaluation_files')
+      .map((f) => [f.cadet_id, f]),
+  );
+  return cadets.map((c) => ({ id: c.id, fullName: fullName(c), personalNumber: c.personal_number, teamName: c.team_name, exams: examsOf(files.get(c.id)) }));
 }

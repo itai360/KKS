@@ -86,10 +86,16 @@ function columnIndex(ref: string): number {
 }
 
 /** The sheets of an .xlsx file, in workbook order. */
-export function readXlsx(buf: Buffer): { name: string; rows: Table }[] {
+export function readXlsx(buf: Buffer, options: { formatNumbers?: boolean } = {}): { name: string; rows: Table; rowNumbers: number[] }[] {
   const files = unzip(buf);
   const text = (name: string) => files.get(name)?.toString('utf8') ?? '';
   const shared = [...text('xl/sharedStrings.xml').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => texts(m[1]));
+  const formats = new Map(
+    [...text('xl/styles.xml').matchAll(/<numFmt\b[^>]*>/g)].map((m) => [Number(/numFmtId="(\d+)"/.exec(m[0])?.[1]), decode(/formatCode="([^"]*)"/.exec(m[0])?.[1] ?? '')]),
+  );
+  const styles = [...(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(text('xl/styles.xml'))?.[1] ?? '').matchAll(/<xf\b[^>]*>/g)].map((m) =>
+    Number(/numFmtId="(\d+)"/.exec(m[0])?.[1] ?? 0),
+  );
   const rels = new Map([...text('xl/_rels/workbook.xml.rels').matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/Id="([^"]+)"/.exec(m[0])?.[1], /Target="([^"]+)"/.exec(m[0])?.[1]]));
   const sheets = [...text('xl/workbook.xml').matchAll(/<sheet\b[^>]*>/g)].map((m) => ({
     name: decode(/name="([^"]*)"/.exec(m[0])?.[1] ?? ''),
@@ -99,20 +105,31 @@ export function readXlsx(buf: Buffer): { name: string; rows: Table }[] {
   return sheets.map(({ name, target }) => {
     const path = target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`;
     const rows: Table = [];
-    for (const row of text(path).matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+    const rowNumbers: number[] = [];
+    for (const row of text(path).matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)) {
       const cells: string[] = [];
-      for (const c of row[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      for (const c of row[2].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
         const attrs = c[1];
         const body = c[2] ?? '';
         const ref = /r="([A-Z]+)\d+"/.exec(attrs)?.[1];
         const type = /t="([^"]+)"/.exec(attrs)?.[1];
         const v = /<v>([\s\S]*?)<\/v>/.exec(body)?.[1];
-        const value = type === 's' ? (shared[Number(v)] ?? '') : type === 'inlineStr' ? texts(body) : v !== undefined ? decode(v) : '';
+        let value = type === 's' ? (shared[Number(v)] ?? '') : type === 'inlineStr' ? texts(body) : v !== undefined ? decode(v) : '';
+        if (options.formatNumbers && /<f\b/.test(body) && !value) value = 'נוסחה ללא תוצאה שמורה';
+        if (options.formatNumbers && (!type || type === 'n') && value !== '' && Number.isFinite(Number(value))) {
+          const id = styles[Number(/s="(\d+)"/.exec(attrs)?.[1] ?? 0)];
+          const format = (formats.get(id) ?? '').replace(/"[^"]*"|\\./g, '');
+          if ([18, 19, 20, 21, 45, 46, 47].includes(id) || /(?:\[h\]|\[m\]|h+:|m+:s)/i.test(format)) {
+            const seconds = Math.round(Number(value) * 86400);
+            value = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+          } else if ([9, 10].includes(id) || format.includes('%')) value = String(Math.round(Number(value) * 100 * 1e8) / 1e8);
+        }
         cells[ref ? columnIndex(ref) : cells.length] = value.trim();
       }
       rows.push(Array.from(cells, (x) => x ?? ''));
+      rowNumbers.push(Number(/r="(\d+)"/.exec(row[1])?.[1]) || rows.length);
     }
-    return { name, rows };
+    return { name, rows, rowNumbers };
   });
 }
 
@@ -128,11 +145,11 @@ export function readCsv(text: string): Table {
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (quoted) {
-      if (ch === '"' && text[i + 1] === '"') cell += '"', i++;
+      if (ch === '"' && text[i + 1] === '"') ((cell += '"'), i++);
       else if (ch === '"') quoted = false;
       else cell += ch;
     } else if (ch === '"' && !cell) quoted = true;
-    else if (ch === sep) row.push(cell.trim()), (cell = '');
+    else if (ch === sep) (row.push(cell.trim()), (cell = ''));
     else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && text[i + 1] === '\n') i++;
       row.push(cell.trim());
@@ -145,8 +162,8 @@ export function readCsv(text: string): Table {
   return rows;
 }
 
-export function readSpreadsheet(buf: Buffer): { name: string; rows: Table }[] {
-  if (buf.length >= 4 && buf.readUInt32LE(0) === 0x04034b50) return readXlsx(buf);
+export function readSpreadsheet(buf: Buffer, options: { formatNumbers?: boolean } = {}): { name: string; rows: Table; rowNumbers?: number[] }[] {
+  if (buf.length >= 4 && buf.readUInt32LE(0) === 0x04034b50) return readXlsx(buf, options);
   return [{ name: 'קובץ', rows: readCsv(buf.toString('utf8')) }];
 }
 
@@ -163,7 +180,11 @@ const TITLES: [RegExp, 'first' | 'last' | 'full' | 'pn' | 'phone' | 'team'][] = 
 const titleOf = (cell: string) => TITLES.find(([re]) => re.test(cell.replace(/\s+/g, ' ').trim()))?.[1] ?? null;
 const isNumber = (s: string) => /^\d+(\.\d+)?$/.test(s.trim());
 const filled = (r: string[]) => r.filter((x) => x.trim() !== '');
-const clean = (s: string) => s.replace(/[\t;,]+/g, ' ').replace(/\s+/g, ' ').trim();
+const clean = (s: string) =>
+  s
+    .replace(/[\t;,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 export interface SheetImport {
   text: string;
@@ -247,10 +268,7 @@ export function googleDownloadUrls(raw: string): string[] {
     throw badRequest('צריך קישור ל-Google Sheets או לקובץ ב-Google Drive');
   }
   const gid = u.searchParams.get('gid') ?? /gid=(\d+)/.exec(u.hash)?.[1];
-  return [
-    `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx${gid ? `&gid=${gid}` : ''}`,
-    `https://drive.google.com/uc?export=download&id=${id}`,
-  ];
+  return [`https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx${gid ? `&gid=${gid}` : ''}`, `https://drive.google.com/uc?export=download&id=${id}`];
 }
 
 let fetcher = async (url: string): Promise<Response> => fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15_000) });

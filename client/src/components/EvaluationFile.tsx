@@ -65,7 +65,8 @@ interface Edit {
   /** what the field held when the user started changing it */
   base: Value;
 }
-type SaveState = { state: 'idle' } | { state: 'pending' } | { state: 'saving' } | { state: 'saved'; at: string } | { state: 'failed'; error: string } | { state: 'conflict'; error: string };
+type SaveState =
+  { state: 'idle' } | { state: 'pending' } | { state: 'saving' } | { state: 'saved'; at: string } | { state: 'failed'; error: string } | { state: 'conflict'; error: string };
 
 export function useFileSaver(file: EvaluationFile, setFile: (f: EvaluationFile) => void) {
   const [edits, setEdits] = useState<Partial<Record<EvaluationField, Edit>>>({});
@@ -255,14 +256,45 @@ function ConflictBox({ field, saver, file }: { field: EvaluationField; saver: Sa
 }
 
 /** one field of the file, saved as it is typed */
-function Input({ field, saver, file, type = 'text', placeholder, min, max, step, long, minRows, label }: { field: EvaluationField; saver: Saver; file: EvaluationFile; type?: string; placeholder?: string; min?: number; max?: number; step?: number; long?: boolean; minRows?: number; label?: string }) {
+function Input({
+  field,
+  saver,
+  file,
+  type = 'text',
+  placeholder,
+  min,
+  max,
+  step,
+  long,
+  minRows,
+  label,
+}: {
+  field: EvaluationField;
+  saver: Saver;
+  file: EvaluationFile;
+  type?: string;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  long?: boolean;
+  minRows?: number;
+  label?: string;
+}) {
   const v = saver.value(field);
   const text = v === null || v === undefined ? '' : String(v);
   const aria = label ?? EVALUATION_FIELDS[field].label;
   return (
     <>
       {long ? (
-        <AutoText value={text} minRows={minRows} placeholder={placeholder} aria-label={aria} onChange={(e) => saver.change(field, e.target.value)} onBlur={() => void saver.flush()} />
+        <AutoText
+          value={text}
+          minRows={minRows}
+          placeholder={placeholder}
+          aria-label={aria}
+          onChange={(e) => saver.change(field, e.target.value)}
+          onBlur={() => void saver.flush()}
+        />
       ) : (
         <input
           className={`input${type === 'number' ? ' mono' : ''}`}
@@ -294,7 +326,11 @@ function Section({ n, title, children, className, hint, id }: { n?: number; titl
         </h3>
       </div>
       <div className="card-body col gap-12">
-        {hint && <p className="small muted" style={{ margin: 0 }}>{hint}</p>}
+        {hint && (
+          <p className="small muted" style={{ margin: 0 }}>
+            {hint}
+          </p>
+        )}
         {children}
       </div>
     </section>
@@ -315,7 +351,11 @@ export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; s
           <div className="label-caps">{EVALUATION_SECTIONS.standing}</div>
           <div className="small muted">תקין, במעקב או בסיכון - איך הצוער עומד כרגע בקורס.</div>
         </div>
-        <Seg<Standing> value={saver.value('standing') as Standing} options={STANDINGS.map((s) => ({ value: s, label: STANDING_LABELS[s] }))} onChange={(s) => saver.change('standing', s, true)} />
+        <Seg<Standing>
+          value={saver.value('standing') as Standing}
+          options={STANDINGS.map((s) => ({ value: s, label: STANDING_LABELS[s] }))}
+          onChange={(s) => saver.change('standing', s, true)}
+        />
       </div>
 
       <Section n={1} id="eval-1" title={EVALUATION_SECTIONS.general}>
@@ -336,7 +376,11 @@ export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; s
             </tr>
           </tbody>
         </table>
-        {(!file.general.companyCommander || !file.general.teamCommander) && <p className="tiny muted" style={{ margin: 0 }}>שדה ריק מציג את השם מהמערכת (מפקד הקורס ומפקד הצוות).</p>}
+        {(!file.general.companyCommander || !file.general.teamCommander) && (
+          <p className="tiny muted" style={{ margin: 0 }}>
+            שדה ריק מציג את השם מהמערכת (מפקד הקורס ומפקד הצוות).
+          </p>
+        )}
       </Section>
 
       <Section n={2} id="eval-2" title={EVALUATION_SECTIONS.details} hint="שם ומספר אישי מכרטיס הצוער - שינוי כאן מעדכן גם את הכרטיס.">
@@ -458,15 +502,31 @@ function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile:
       setBusy(false);
     }
   };
-  const add = (t: ExamTest) => void act(() => api.post<EvaluationFile>(`/api/evaluations/${file.cadet.id}/tests`, { test: t }), `"${EXAM_TESTS[t].label}" נוסף לתיקים של כל הצוערים`);
+  const add = (t: ExamTest) =>
+    void act(() => api.post<EvaluationFile>(`/api/evaluations/${file.cadet.id}/tests`, { test: t }), `"${EXAM_TESTS[t].label}" נוסף לתיקים של כל הצוערים`);
   const remove = async (t: ExamTest) => {
     const label = EXAM_TESTS[t].label;
-    if (!(await ask({ title: `להסיר את "${label}"?`, body: 'הוא יוסר מתיקי ההערכה של כל הצוערים. עדיין לא הוזנו בו נתונים, ואפשר להוסיף אותו שוב בכל שלב.', confirm: 'הסרה', danger: true }))) return;
+    if (
+      !(await ask({
+        title: `להסיר את "${label}"?`,
+        body: 'הוא יוסר מתיקי ההערכה של כל הצוערים. עדיין לא הוזנו בו נתונים, ואפשר להוסיף אותו שוב בכל שלב.',
+        confirm: 'הסרה',
+        danger: true,
+      }))
+    )
+      return;
     void act(() => api.del<EvaluationFile>(`/api/evaluations/${file.cadet.id}/tests/${t}`), `"${label}" הוסר מהתיקים`);
   };
   const removeButton = (t: ExamTest) =>
     file.removableTests.includes(t) && (
-      <button type="button" className="icon-btn eval-test-remove" disabled={busy} aria-label={`הסרת "${EXAM_TESTS[t].label}" מהתיקים`} title="הסרה מהתיקים" onClick={() => void remove(t)}>
+      <button
+        type="button"
+        className="icon-btn eval-test-remove"
+        disabled={busy}
+        aria-label={`הסרת "${EXAM_TESTS[t].label}" מהתיקים`}
+        title="הסרה מהתיקים"
+        onClick={() => void remove(t)}
+      >
         <Icon name="x" size={14} />
       </button>
     );
@@ -484,6 +544,23 @@ function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile:
           </thead>
           {file.tests.map((t) => {
             const test = EXAM_TESTS[t];
+            if (test.kind === 'score')
+              return (
+                <tbody key={t}>
+                  <tr>
+                    <th scope="row">
+                      <span className="eval-test-name">
+                        {test.label}
+                        {removeButton(t)}
+                      </span>
+                    </th>
+                    <td colSpan={2}>
+                      <span className="eval-cell-label">ציון 0-100</span>
+                      <ExamInput field={test.fields[0]} saver={saver} file={file} />
+                    </td>
+                  </tr>
+                </tbody>
+              );
             if (test.kind === 'exam') {
               const [a, b] = test.fields;
               return (
@@ -673,7 +750,17 @@ function DynamicsSection({ file, setFile }: { file: EvaluationFile; setFile: (f:
 
 const legacyTag = (n: EvaluationNote) => (n.legacy ? [n.legacy.tone ? EVAL_TONE_LABELS[n.legacy.tone] : '', n.legacy.category].filter(Boolean).join(' · ') : '');
 
-function NotesSection({ file, setFile, onHistory, authorName }: { file: EvaluationFile; setFile: (f: EvaluationFile) => void; onHistory: (itemId?: number) => void; authorName: string }) {
+function NotesSection({
+  file,
+  setFile,
+  onHistory,
+  authorName,
+}: {
+  file: EvaluationFile;
+  setFile: (f: EvaluationFile) => void;
+  onHistory: (itemId?: number) => void;
+  authorName: string;
+}) {
   const toast = useToast();
   const [date, setDate] = useState(todayKey());
   const [body, setBody] = useDraft(`evaluation-note:${file.cadet.id}`);
@@ -936,7 +1023,14 @@ function ItemEditor({
               {f.long ? (
                 <AutoText value={editing[f.key] ?? ''} minRows={3} onChange={(e) => setEditing({ ...editing, [f.key]: e.target.value })} />
               ) : (
-                <input className="input" type={f.type ?? 'text'} dir={f.type === 'date' ? 'ltr' : undefined} value={editing[f.key] ?? ''} onChange={(e) => setEditing({ ...editing, [f.key]: e.target.value })} style={{ maxWidth: 280 }} />
+                <input
+                  className="input"
+                  type={f.type ?? 'text'}
+                  dir={f.type === 'date' ? 'ltr' : undefined}
+                  value={editing[f.key] ?? ''}
+                  onChange={(e) => setEditing({ ...editing, [f.key]: e.target.value })}
+                  style={{ maxWidth: 280 }}
+                />
               )}
             </Field>
           ))}
@@ -944,7 +1038,12 @@ function ItemEditor({
             <div className="eval-conflict" role="alert">
               <div className="strong small">{conflict.error}</div>
               {conflict.saved ? (
-                <div className="eval-conflict-text">{fields.map((f) => conflict.saved![f.key]).filter(Boolean).join('\n\n')}</div>
+                <div className="eval-conflict-text">
+                  {fields
+                    .map((f) => conflict.saved![f.key])
+                    .filter(Boolean)
+                    .join('\n\n')}
+                </div>
               ) : (
                 <div className="small">{noun} נמחקה בינתיים.</div>
               )}
@@ -1150,6 +1249,13 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
             {(file.tests ?? shownTests([], e)).flatMap((t) => {
               const test = EXAM_TESTS[t];
               const v = (k: keyof EvaluationExams) => valueOr(e[k] ?? null);
+              if (test.kind === 'score')
+                return [
+                  <tr key={t}>
+                    <th scope="row">{test.label}</th>
+                    <td colSpan={2}>{v(test.fields[0])}</td>
+                  </tr>,
+                ];
               if (test.kind === 'exam')
                 return [
                   <tr key={t}>

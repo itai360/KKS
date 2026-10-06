@@ -58,7 +58,8 @@ export function createApp(opts: { staticDir?: string } = {}) {
       res.setHeader('Cache-Control', 'no-store');
       next();
     },
-    express.json({ limit: '1mb' }),
+    // Bulk grade previews include several workbooks, but remain below the cloud request cap.
+    (req, res, next) => express.json({ limit: /^\/evaluations\/import\/(preview|apply)$/.test(req.path) ? '3mb' : '1mb' })(req, res, next),
     compressJson,
     loadUser,
     csrfGuard,

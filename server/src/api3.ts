@@ -82,6 +82,7 @@ import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pi
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
 import { approvePlan, planDocument, plansOverview, savePlan } from './plans';
+import { applyGrades, gradeSheets, previewGrades } from './gradeImport';
 
 const id = (v: unknown): number => {
   const n = Number(v);
@@ -186,6 +187,9 @@ export function v3Router(): Router {
   // every change answers with the cadet's file as the user may see it
 
   r.get('/evaluations', (req, res) => res.json(listEvaluations(me(req))));
+  r.post('/evaluations/import/file', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => res.json(gradeSheets(req.body)));
+  r.post('/evaluations/import/preview', (req, res) => res.json(previewGrades(me(req), req.body)));
+  r.post('/evaluations/import/apply', (req, res) => res.json(applyGrades(me(req), req.body)));
   r.get('/evaluations/committees/:id', (req, res) => res.json(committeeDetail(me(req), id(req.params.id))));
   r.post('/evaluations/committees/:id/refresh', requireCommander, (req, res) => res.json(evaluationFile(me(req), refreshCommitteeVersion(me(req), id(req.params.id)))));
   r.post('/evaluations/committees/:id/decision', requireCommander, (req, res) => res.json(evaluationFile(me(req), decideCommittee(me(req), id(req.params.id), req.body))));
