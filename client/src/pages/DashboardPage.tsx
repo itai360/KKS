@@ -1,7 +1,7 @@
 // Sections 4, 5, 32, 49 - the commander's home: understand the course in 10 seconds.
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { ABSENCE_REASON_LABELS, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, ATTENDANCE_TONES } from '@shared/constants';
 import type { AttentionItem, AttentionKind, DashboardData } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
@@ -35,114 +35,142 @@ const KIND_LABEL: Record<AttentionKind, string> = {
 
 export function DashboardPage() {
   const { user } = useSession();
-  const { data, error, loading } = useApi<DashboardData>('/api/dashboard', ['tasks', 'weeks', 'events', 'requests']);
+  const { data, error, loading, reload } = useApi<DashboardData>('/api/dashboard', ['tasks', 'weeks', 'events', 'requests', 'cadets']);
   const navigate = useNavigate();
   const newTask = useNewTask();
   const [cmd, setCmd] = useState('');
   useTick();
 
   return (
-    <div className="page">
+    <div className="page dashboard-page">
       <PageHead
         eyebrow={fmtLongDate(todayKey())}
         title={`${greeting()}, ${greetName(user.displayName)}`}
         docTitle="דף הבית"
-        sub="מה חייב להסתיים היום, מה באיחור, מה נתקע ואיפה נדרשת החלטה שלך."
+        sub="תמונת המצב של הקורס, והדברים שצריכים אותך היום."
         actions={
           <>
             <button className="btn" onClick={() => navigate('/briefing')}>
               <Icon name="sun" /> תדריך בוקר
             </button>
-            <button className="btn btn-primary" onClick={() => newTask()}>
-              <Icon name="plus" /> משימה
-            </button>
+            <Link className="btn" to="/my">
+              <Icon name="my" /> המשימות שלי
+            </Link>
           </>
         }
       />
       <ErrorBox error={error} />
+      {error && (
+        <button className="btn mb-12" onClick={() => void reload()}>
+          <Icon name="repeat" /> ניסיון נוסף
+        </button>
+      )}
       {loading && !data ? (
         <Loading rows={4} />
       ) : data ? (
         <div className="fade-in col gap-16">
           <SetupNudge />
-          <TwoStepNudge />
           <PendingAnnouncements />
-          <div className="stats">
-            <Stat n={data.stats.today} label="לביצוע היום" hint="משימות שצריכות להסתיים היום" onClick={() => navigate('/tasks?scope=today')} />
-            <Stat n={data.stats.overdue} label="באיחור" hint="עבר הדד-ליין ולא הושלמו" alert={data.stats.overdue > 0} onClick={() => navigate('/tasks?scope=overdue')} />
-            <Stat n={data.stats.week} label="לביצוע השבוע" hint="פתוחות ב-7 הימים הקרובים" onClick={() => navigate('/tasks?scope=week')} />
-            <Stat n={data.stats.doneThisWeek} label="הושלמו השבוע" hint="נסגרו מתחילת השבוע" onClick={() => navigate('/tasks?scope=done')} />
+          <div className="stats dashboard-stats" aria-label="סיכום המשימות">
+            <Stat n={data.stats.today} icon="sun" label="לביצוע היום" hint="משימות לסיום היום" to="/tasks?scope=today" />
+            <Stat n={data.stats.overdue} icon="clock" label="באיחור" hint="עבר המועד, נדרש טיפול" alert={data.stats.overdue > 0} to="/tasks?scope=overdue" />
+            <Stat n={data.stats.week} icon="calendar" label="לביצוע השבוע" hint="ב-7 הימים הקרובים" to="/tasks?scope=week" />
+            <Stat n={data.stats.doneThisWeek} icon="check" label="הושלמו השבוע" hint="נסגרו מתחילת השבוע" to="/tasks?scope=done" />
           </div>
 
-          <form
-            className="nl-box"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!cmd.trim()) return newTask();
-              newTask({ text: cmd.trim(), heading: 'פקודה מהירה' }, () => setCmd(''));
-            }}
-          >
-            <input className="input" value={cmd} onChange={(e) => setCmd(e.target.value)} placeholder='פקודה מהירה: "מפק"צ 4 להכין מסמך לקראת שבוע הגנה עד מחר 12:00"' aria-label="פקודה מהירה" />
-            <button className="btn btn-primary btn-sm" type="submit">
-              <Icon name="zap" /> פתח
-            </button>
-          </form>
+          <details className="dashboard-command-details">
+            <summary>
+              <Icon name="zap" />
+              <span className="grow strong">משימה במשפט אחד</span>
+              <span className="small muted hide-mobile">מי, מה ועד מתי</span>
+              <Icon name="chevronDown" />
+            </summary>
+            <form
+              className="dashboard-command"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!cmd.trim()) return newTask();
+                newTask({ text: cmd.trim(), heading: 'פקודה מהירה' }, () => setCmd(''));
+              }}
+            >
+              <label htmlFor="dashboard-command" className="sr-only">
+                משימה במשפט אחד
+              </label>
+              <input
+                id="dashboard-command"
+                className="input"
+                value={cmd}
+                onChange={(e) => setCmd(e.target.value)}
+                placeholder='למשל: מפק"צ 2 להכין תדריך עד מחר ב-12:00'
+                aria-describedby="command-hint"
+              />
+              <button className="btn btn-primary" type="submit">
+                <Icon name="plus" /> יצירת משימה
+              </button>
+              <span id="command-hint" className="tiny muted">
+                כותבים מי, מה ועד מתי. אפשר לבדוק ולערוך לפני השליחה.
+              </span>
+            </form>
+          </details>
 
-          <div className="split">
+          <div className="dashboard-workspace">
+            <TodayEvents data={data} />
             <Attention items={data.attention} />
-            <div className="col gap-16 sticky-side">
-              <WeekCard data={data} />
-              {data.roll && <RollCard roll={data.roll} />}
-              <DisciplineCard />
-              <StaffHealth data={data} />
-              <TodayEvents data={data} />
-              <QuickActions />
-            </div>
+            <WeekCard data={data} />
           </div>
+          <div className="dashboard-support">
+            {data.roll && <RollCard roll={data.roll} />}
+            <DisciplineCard />
+            <StaffHealth data={data} />
+            <QuickActions />
+          </div>
+          <TwoStepNudge />
         </div>
       ) : null}
     </div>
   );
 }
 
-function Stat({ n, label, hint, alert, onClick }: { n: number; label: string; hint: string; alert?: boolean; onClick: () => void }) {
+function Stat({ n, icon, label, hint, alert, to }: { n: number; icon: string; label: string; hint: string; alert?: boolean; to: string }) {
   return (
-    <button className={`card stat${alert ? ' alert' : ''}`} onClick={onClick} type="button" style={{ textAlign: 'start' }}>
-      <span className="stat-label">{label}</span>
+    <Link className={`card stat${alert ? ' alert' : ''}`} to={to}>
+      <span className="stat-heading">
+        <span className="stat-label">{label}</span>
+        <Icon name={icon} />
+      </span>
       <span className="stat-num">{n}</span>
-      <span className="stat-hint">{hint}</span>
-    </button>
+      <span className="stat-footer">
+        <span className="stat-hint">{hint}</span>
+        <Icon name="chevronLeft" size={16} />
+      </span>
+    </Link>
   );
 }
 
 // Lanes follow the colour language of section 18: red first, then decisions,
 // then what is about to slip, then quiet signals.
-const LANES: { key: string; title: string; tone: string; kinds: AttentionKind[] }[] = [
-  { key: 'red', title: 'באיחור, חסמים והחלטות', tone: 'red', kinds: ['decision', 'overdue'] },
-  { key: 'approve', title: 'ממתין לאישורך', tone: 'blue', kinds: ['approval', 'request'] },
-  { key: 'soon', title: 'דד-ליין ב-24 השעות הקרובות', tone: 'orange', kinds: ['due_soon'] },
-  { key: 'risk', title: 'שבועות בסיכון', tone: 'orange', kinds: ['readiness'] },
-  { key: 'quiet', title: 'חסמים, עומס, היעדרויות ומשימות שלא עודכנו', tone: 'yellow', kinds: ['blocked', 'stale', 'overload', 'away'] },
-  { key: 'learn', title: 'למידה ושיפור', tone: 'purple', kinds: ['debrief', 'lessons'] },
+const LANES: { key: string; label: string; title: string; tone: string; kinds: AttentionKind[] }[] = [
+  { key: 'red', label: 'דחוף', title: 'באיחור, חסמים והחלטות', tone: 'red', kinds: ['decision', 'overdue'] },
+  { key: 'approve', label: 'לאישורך', title: 'ממתין לאישורך', tone: 'blue', kinds: ['approval', 'request'] },
+  { key: 'soon', label: 'בקרוב', title: 'דד-ליין ב-24 השעות הקרובות', tone: 'orange', kinds: ['due_soon'] },
+  { key: 'risk', label: 'שבועות בסיכון', title: 'שבועות בסיכון', tone: 'orange', kinds: ['readiness'] },
+  { key: 'quiet', label: 'למעקב', title: 'חסמים, עומס, היעדרויות ומשימות שלא עודכנו', tone: 'yellow', kinds: ['blocked', 'stale', 'overload', 'away'] },
+  { key: 'learn', label: 'למידה', title: 'למידה ושיפור', tone: 'purple', kinds: ['debrief', 'lessons'] },
 ];
 const LANE_LIMIT = 4;
 
 function Attention({ items }: { items: AttentionItem[] }) {
-  const navigate = useNavigate();
   const toast = useToast();
   const [busy, setBusy] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [filter, setFilter] = useState('all');
 
   // a blocker the owner escalated to the commander belongs with the red items
   const laneOf = (i: AttentionItem) => (i.kind === 'blocked' && i.tone === 'red' ? 'red' : LANES.find((l) => l.kinds.includes(i.kind))?.key);
-  const lanes = LANES.map((l) => ({ ...l, items: items.filter((i) => laneOf(i) === l.key) })).filter((l) => l.items.length);
+  const lanes = LANES.map((l) => ({ ...l, items: items.filter((i) => laneOf(i) === l.key) }));
+  const visible = lanes.filter((l) => l.items.length && (filter === 'all' || l.key === filter));
 
-  const open = (i: AttentionItem) => {
-    if (i.link) navigate(i.link);
-    else if (i.taskId) navigate(`/tasks/${i.taskId}`);
-    else if (i.weekId) navigate(`/weeks/${i.weekId}`);
-    else if (i.userId) navigate(`/team/${i.userId}`);
-  };
+  const destination = (i: AttentionItem) => i.link || (i.taskId ? `/tasks/${i.taskId}` : i.weekId ? `/weeks/${i.weekId}` : i.userId ? `/team/${i.userId}` : '/tasks');
 
   const act = async (e: React.MouseEvent, i: AttentionItem, approve: boolean) => {
     e.stopPropagation();
@@ -160,77 +188,112 @@ function Attention({ items }: { items: AttentionItem[] }) {
   };
 
   return (
-    <section className="card" aria-labelledby="attn-title">
+    <section className="card dashboard-attention" aria-labelledby="attn-title">
       <div className="card-head">
-        <Icon name="target" />
-        <h2 id="attn-title" className="grow" style={{ fontFamily: 'var(--display)', fontSize: 28, lineHeight: 1 }}>
-          דורש את תשומת לבי
-        </h2>
-        <div className="row gap-6 hide-mobile">
-          {lanes.map((l) => (
-            <a key={l.key} href={`#lane-${l.key}`} className={`badge t-${l.tone}`} title={l.title}>
-              {l.items.length}
-            </a>
-          ))}
+        <span className="dashboard-section-icon">
+          <Icon name="target" />
+        </span>
+        <div className="grow">
+          <h2 id="attn-title">לטיפול שלך</h2>
+          <p className="small muted">מהדחוף ביותר ועד הדברים שכדאי לעקוב אחריהם</p>
         </div>
+        <span className="badge" aria-label={`${items.length} פריטים לטיפול`}>
+          {items.length}
+        </span>
       </div>
-      {lanes.length === 0 ? (
-        <Empty icon="check" title="הכל מתקדם כמתוכנן" text="אין חריגות שמחייבות את התערבותך כרגע." />
-      ) : (
-        lanes.map((l) => {
-          const all = !!expanded[l.key];
-          const list = all ? l.items : l.items.slice(0, LANE_LIMIT);
-          return (
-            <div key={l.key} id={`lane-${l.key}`} className="attn">
-              <div className="group-title" style={{ margin: 0, padding: '12px 18px 6px' }}>
+      {items.length > 0 && (
+        <div className="attention-filters" role="group" aria-label="סינון פריטים לטיפול">
+          <button className={`chip${filter === 'all' ? ' on' : ''}`} aria-pressed={filter === 'all'} aria-controls="attention-results" onClick={() => setFilter('all')}>
+            הכל <span>{items.length}</span>
+          </button>
+          {lanes
+            .filter((l) => l.items.length || filter === l.key)
+            .map((l) => (
+              <button
+                key={l.key}
+                className={`chip${filter === l.key ? ' on' : ''}`}
+                aria-pressed={filter === l.key}
+                aria-controls="attention-results"
+                onClick={() => setFilter(l.key)}
+              >
                 <span className={`dot t-${l.tone}`} />
-                <span>{l.title}</span>
-                <span className="n">{l.items.length}</span>
-                <span className="line" />
-              </div>
-              {list.map((i, idx) => (
-                <div
-                  key={`${i.kind}-${i.taskId ?? i.weekId ?? i.userId}-${i.requestId ?? idx}`}
-                  className={`attn-item t-${i.tone}`}
-                  {...openable(() => open(i))}
-                >
-                  <span className="attn-bar" />
-                  <div style={{ minWidth: 0 }}>
-                    <div className="attn-kind">
-                      {KIND_LABEL[i.kind]}
-                      {i.count && i.count > 1 ? ` · ${i.count} אנשי סגל` : ''}
-                    </div>
-                    <div className="attn-title">{i.title}</div>
-                    <div className="attn-sub">
-                      {[i.ownerName && (i.kind === 'readiness' ? `מפק"צ: ${i.ownerName}` : `אחראי: ${i.ownerName}`), i.deadline && `דד-ליין: ${fmtDeadline(i.deadline)}`, i.subtitle]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </div>
-                  </div>
-                  <div className="row gap-6">
-                    {(i.kind === 'approval' || i.kind === 'request') && (
-                      <button className="btn btn-sm btn-primary" disabled={busy !== null} onClick={(e) => void act(e, i, true)}>
-                        אשר
-                      </button>
-                    )}
-                    {i.kind === 'request' && (
-                      <button className="btn btn-sm" disabled={busy !== null} onClick={(e) => void act(e, i, false)}>
-                        דחה
-                      </button>
-                    )}
-                    <Icon name="chevronLeft" className="faint" size={18} />
-                  </div>
-                </div>
-              ))}
-              {l.items.length > LANE_LIMIT && (
-                <button className="btn btn-ghost btn-sm" style={{ margin: '4px 14px 10px' }} onClick={() => setExpanded({ ...expanded, [l.key]: !all })}>
-                  {all ? 'הצג פחות' : `הצג עוד ${l.items.length - LANE_LIMIT}`}
-                </button>
-              )}
-            </div>
-          );
-        })
+                {l.label}
+                <span>{l.items.length}</span>
+              </button>
+            ))}
+        </div>
       )}
+      <div id="attention-results">
+        {items.length === 0 ? (
+          <Empty icon="check" title="הכל מתקדם כמתוכנן" text="אין חריגות שמחייבות את התערבותך כרגע." />
+        ) : visible.length === 0 ? (
+          <Empty
+            icon="check"
+            title="אין כרגע פריטים בקבוצה הזו"
+            text={
+              <button className="btn btn-ghost" onClick={() => setFilter('all')}>
+                לכל הפריטים
+              </button>
+            }
+          />
+        ) : (
+          visible.map((l) => {
+            const all = !!expanded[l.key];
+            const list = all ? l.items : l.items.slice(0, LANE_LIMIT);
+            return (
+              <div key={l.key} id={`lane-${l.key}`} className="attn">
+                <div className="group-title attention-group-title">
+                  <span className={`dot t-${l.tone}`} />
+                  <span>{l.title}</span>
+                  <span className="n">{l.items.length}</span>
+                  <span className="line" />
+                </div>
+                {list.map((i, idx) => (
+                  <div key={`${i.kind}-${i.taskId ?? i.weekId ?? i.userId}-${i.requestId ?? idx}`} className={`attn-item dashboard-attn-item t-${i.tone}`}>
+                    <Link className="attention-link" to={destination(i)}>
+                      <span className="attn-bar" />
+                      <div style={{ minWidth: 0 }}>
+                        <div className="attn-kind">
+                          {KIND_LABEL[i.kind]}
+                          {i.count && i.count > 1 ? ` · ${i.count} אנשי סגל` : ''}
+                        </div>
+                        <div className="attn-title">{i.title}</div>
+                        <div className="attn-sub">
+                          {[
+                            i.ownerName && (i.kind === 'readiness' ? `מפק"צ: ${i.ownerName}` : `אחראי: ${i.ownerName}`),
+                            i.deadline && `דד-ליין: ${fmtDeadline(i.deadline)}`,
+                            i.subtitle,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </div>
+                      </div>
+                      <Icon name="chevronLeft" className="faint" size={18} />
+                    </Link>
+                    {(i.kind === 'approval' || i.kind === 'request') && (
+                      <div className="row gap-6 attention-actions">
+                        <button className="btn btn-sm btn-primary" disabled={busy !== null} onClick={(e) => void act(e, i, true)} aria-label={`אישור: ${i.title}`}>
+                          אשר
+                        </button>
+                        {i.kind === 'request' && (
+                          <button className="btn btn-sm" disabled={busy !== null} onClick={(e) => void act(e, i, false)} aria-label={`דחייה: ${i.title}`}>
+                            דחה
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {l.items.length > LANE_LIMIT && (
+                  <button className="btn btn-ghost attention-more" aria-expanded={all} onClick={() => setExpanded({ ...expanded, [l.key]: !all })}>
+                    {all ? 'הצג פחות' : `הצג עוד ${l.items.length - LANE_LIMIT}`}
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
     </section>
   );
 }
@@ -243,7 +306,7 @@ function WeekCard({ data }: { data: DashboardData }) {
   }[];
   if (!weeks.length) {
     return (
-      <div className="card card-pad">
+      <div className="card card-pad dashboard-weeks">
         <div className="label-caps">שבועות הקורס</div>
         <p className="small muted mt-8">עדיין לא הוגדרו שבועות.</p>
         <button className="btn btn-sm mt-12" onClick={() => navigate('/settings#weeks')}>
@@ -253,9 +316,17 @@ function WeekCard({ data }: { data: DashboardData }) {
     );
   }
   return (
-    <div className="card">
+    <section className="card dashboard-weeks" aria-label="שבועות הקורס">
+      <div className="card-head">
+        <Icon name="layers" />
+        <h3 className="grow">השבוע בקורס</h3>
+        <Link className="btn btn-ghost btn-sm" to="/weeks">
+          לכל השבועות
+          <Icon name="chevronLeft" size={15} />
+        </Link>
+      </div>
       {weeks.map(({ label, w }, i) => (
-        <div key={w.id} className="row" style={{ padding: '14px 18px', borderTop: i ? '1px solid var(--line)' : undefined, cursor: 'pointer' }} {...openable(() => navigate(`/weeks/${w.id}`))}>
+        <Link key={w.id} className="row week-summary" style={{ borderTop: i ? '1px solid var(--line)' : undefined }} to={`/weeks/${w.id}`}>
           <div className="grow">
             <div className="label-caps">{label}</div>
             <div className="strong" style={{ fontSize: 17 }}>
@@ -268,10 +339,13 @@ function WeekCard({ data }: { data: DashboardData }) {
               {w.doneTasks}/{w.totalTasks} משימות {w.approvedAt ? '· אושר' : ''}
             </div>
           </div>
-          <Ring value={w.readiness} size={72} tone={w.totalTasks === 0 ? 'gray' : undefined} />
-        </div>
+          <div className="week-readiness">
+            <Ring value={w.readiness} size={64} tone={w.totalTasks === 0 ? 'gray' : undefined} />
+            <span className="tiny muted">מוכנות</span>
+          </div>
+        </Link>
       ))}
-    </div>
+    </section>
   );
 }
 
@@ -332,33 +406,57 @@ function StaffHealth({ data }: { data: DashboardData }) {
 }
 
 function TodayEvents({ data }: { data: DashboardData }) {
-  const navigate = useNavigate();
+  const [expanded, setExpanded] = useState(false);
+  const events = expanded ? data.todayEvents : data.todayEvents.slice(0, 3);
   return (
-    <div className="card">
+    <section className="card dashboard-schedule" aria-labelledby="today-title">
       <div className="card-head">
-        <h3 className="grow">לו"ז היום</h3>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/schedule')}>
-          ללו"ז
-        </button>
+        <Icon name="calendar" />
+        <h3 id="today-title" className="grow">
+          לו"ז היום
+        </h3>
+        <Link className="btn btn-ghost btn-sm" to="/schedule">
+          ללו"ז המלא
+          <Icon name="chevronLeft" size={15} />
+        </Link>
       </div>
       {data.todayEvents.length === 0 ? (
-        <div className="card-body small muted">אין אירועים בלו"ז להיום.</div>
+        <div className="card-body small muted">
+          אין אירועים מתוכננים להיום.{' '}
+          <Link to="/schedule?new=1" className="dashboard-inline-link">
+            הוספת אירוע
+          </Link>
+        </div>
       ) : (
-        data.todayEvents.map((e) => (
-          <div key={e.id} className="health" {...openable(() => navigate(`/schedule?date=${e.date}&event=${e.id}`))}>
-            <span className="mono strong" style={{ width: 48 }}>
-              {e.startTime}
+        events.map((e) => (
+          <Link key={e.id} className="dashboard-event" to={`/schedule?date=${e.date}&event=${e.id}`}>
+            <span className="dashboard-event-time mono">
+              <b>{e.startTime}</b>
+              {e.endTime && <span>{e.endTime}</span>}
             </span>
-            <span className="grow">{e.title}</span>
+            <span className="dashboard-event-marker" aria-hidden="true" />
+            <span className="grow">
+              <b>{e.title}</b>
+              {(e.location || e.ownerName) && <span className="dashboard-event-detail">{[e.location, e.ownerName].filter(Boolean).join(' · ')}</span>}
+            </span>
             {e.taskTotal > 0 && (
-              <span className={`tiny mono ${e.taskDone < e.taskTotal ? 'text-orange' : 'text-green'}`}>
-                {e.taskDone}/{e.taskTotal}
+              <span className={`badge ${e.taskDone < e.taskTotal ? 't-orange' : 't-green'}`} title="משימות הכנה שהושלמו">
+                <span className="mono">
+                  {e.taskDone}/{e.taskTotal}
+                </span>
+                <span className="sr-only"> משימות הכנה שהושלמו</span>
               </span>
             )}
-          </div>
+          </Link>
         ))
       )}
-    </div>
+      {data.todayEvents.length > 3 && (
+        <button className="btn btn-ghost agenda-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+          {expanded ? 'הצג פחות' : `עוד ${data.todayEvents.length - 3} אירועים היום`}
+          <Icon name="chevronDown" size={16} />
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -441,7 +539,9 @@ function SetupNudge() {
     <div className="card card-pad row wrap setup-nudge">
       <Icon name="flag" />
       <div className="grow">
-        <div className="strong">הקמת הקורס - {done} מתוך {steps.length}</div>
+        <div className="strong">
+          הקמת הקורס - {done} מתוך {steps.length}
+        </div>
         <div className="small muted">הצעד הבא: {next.label}. אחרי ההקמה המערכת מתחילה לעבוד בשבילך - משימות, לו"ז ותמונת מצב.</div>
       </div>
       <button className="btn btn-primary" onClick={() => navigate('/settings')}>

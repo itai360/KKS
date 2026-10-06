@@ -949,8 +949,21 @@ ALTER TABLE experiences ADD COLUMN kind TEXT NOT NULL DEFAULT 'role' CHECK (kind
 ALTER TABLE experiences ADD COLUMN span TEXT CHECK (span IN ('first_half', 'second_half', 'full'));
 `;
 
+// Grades present in the course workbook; no existing grade is changed.
+const SCHEMA_V31 = `
+ALTER TABLE evaluation_files ADD COLUMN fit_base_total REAL;
+ALTER TABLE evaluation_files ADD COLUMN fit_mid_total REAL;
+ALTER TABLE evaluation_files ADD COLUMN fit_end_total REAL;
+ALTER TABLE evaluation_files ADD COLUMN hashatz REAL;
+ALTER TABLE evaluation_files ADD COLUMN safra_sayfa REAL;
+ALTER TABLE evaluation_files ADD COLUMN homeland REAL;
+ALTER TABLE evaluation_files ADD COLUMN pakah_debrief REAL;
+ALTER TABLE evaluation_files ADD COLUMN experience_grade REAL;
+ALTER TABLE evaluation_files ADD COLUMN course_grade REAL;
+`;
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

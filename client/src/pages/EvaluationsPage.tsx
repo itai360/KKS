@@ -3,7 +3,7 @@
 // and the cadet's team commander open it.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import {
   CADET_STATUS_LABELS,
   CADET_STATUS_TONES,
@@ -19,6 +19,7 @@ import { shortDate } from '@shared/dates';
 import type { Committee, CommitteeDetail, EvaluationFile, EvaluationListItem, Team } from '@shared/types';
 import { NoteDots, NotesBadge, noteTone, timeLabel } from '../components/Discipline';
 import { FileDocument, HistoryDialog, LiveFile } from '../components/EvaluationFile';
+import { GradeImport } from '../components/GradeImport';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, PageError, Field, Loading, Modal, PageHead, initials } from '../components/ui';
@@ -42,10 +43,10 @@ export function EvaluationsPage() {
   const team = params.get('team') ?? '';
   const view = params.get('view') ?? '';
   const [q, setQ] = useState('');
-  const { isCommander } = useSession();
+  const { isCommander, viewing } = useSession();
+  const [importing, setImporting] = useState(false);
   const list = useApi<EvaluationListItem[]>('/api/evaluations', ['cadets']);
   const teams = useApi<Team[]>('/api/teams', ['cadets']);
-  const navigate = useNavigate();
 
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params);
@@ -59,7 +60,15 @@ export function EvaluationsPage() {
     (c) =>
       (!team || String(c.teamId ?? '') === team) &&
       matchesSearch(q, c.fullName, c.personalNumber) &&
-      (view === 'watch' ? c.standing !== 'ok' : view === 'committee' ? !!c.committee && !c.committee.decision : view === 'reason' ? c.hasCommitteeReason : view === 'nosummary' ? !c.hasSummary : true),
+      (view === 'watch'
+        ? c.standing !== 'ok'
+        : view === 'committee'
+          ? !!c.committee && !c.committee.decision
+          : view === 'reason'
+            ? c.hasCommitteeReason
+            : view === 'nosummary'
+              ? !c.hasSummary
+              : true),
   );
   const grouped = useMemo(() => {
     const map = new Map<string, EvaluationListItem[]>();
@@ -74,36 +83,58 @@ export function EvaluationsPage() {
         title="תיקי הערכה"
         sub={'תיק חי שמלווה כל צוער לאורך הקורס - פתוח למ"פ ולמפק"צ האחראי על הצוער בלבד. אפשר להשלים ולעדכן כל סעיף בכל שלב.'}
         actions={
-          <button
-            className="btn"
-            title="ייצוא הרשימה המסוננת לאקסל"
-            disabled={!shown.length}
-            onClick={() =>
-              void saveCsv(
-                'תיקי-הערכה',
-                ['שם מלא', 'מספר אישי', 'צוות', 'מצב', 'התייחסויות', 'נקודות קריטיות', 'ציונים שהוזנו', 'דינמיקה אחרונה - ציון', 'דינמיקה אחרונה - מיקום', 'סיכום מ"פ', 'הערות משמעת', 'עודכן לאחרונה', 'ועדה'],
-                shown.map((c) => [
-                  c.fullName,
-                  c.personalNumber,
-                  c.teamName ?? '',
-                  STANDING_LABELS[c.standing],
-                  c.notes,
-                  c.points,
-                  `${c.exams}/${c.examsTotal}`,
-                  c.lastDynamics?.score ?? '',
-                  c.lastDynamics?.rank ?? '',
-                  c.hasSummary ? 'נכתב' : '',
-                  c.disciplineNotes,
-                  c.updatedAt ? `${fmtDateTime(c.updatedAt)}${c.updatedByName ? ` (${c.updatedByName})` : ''}` : '',
-                  c.committee ? (c.committee.decision ? COMMITTEE_DECISION_LABELS[c.committee.decision] : 'ממתינה') : '',
-                ]),
-              )
-            }
-          >
-            <Icon name="download" /> ייצוא
-          </button>
+          <>
+            {!viewing && (
+              <button className="btn btn-primary" disabled={!all.length} onClick={() => setImporting(true)}>
+                <Icon name="upload" /> ייבוא ציונים
+              </button>
+            )}
+            <button
+              className="btn"
+              title="ייצוא הרשימה המסוננת לאקסל"
+              disabled={!shown.length}
+              onClick={() =>
+                void saveCsv(
+                  'תיקי-הערכה',
+                  [
+                    'שם מלא',
+                    'מספר אישי',
+                    'צוות',
+                    'מצב',
+                    'התייחסויות',
+                    'נקודות קריטיות',
+                    'ציונים שהוזנו',
+                    'דינמיקה אחרונה - ציון',
+                    'דינמיקה אחרונה - מיקום',
+                    'סיכום מ"פ',
+                    'הערות משמעת',
+                    'עודכן לאחרונה',
+                    'ועדה',
+                  ],
+                  shown.map((c) => [
+                    c.fullName,
+                    c.personalNumber,
+                    c.teamName ?? '',
+                    STANDING_LABELS[c.standing],
+                    c.notes,
+                    c.points,
+                    `${c.exams}/${c.examsTotal}`,
+                    c.lastDynamics?.score ?? '',
+                    c.lastDynamics?.rank ?? '',
+                    c.hasSummary ? 'נכתב' : '',
+                    c.disciplineNotes,
+                    c.updatedAt ? `${fmtDateTime(c.updatedAt)}${c.updatedByName ? ` (${c.updatedByName})` : ''}` : '',
+                    c.committee ? (c.committee.decision ? COMMITTEE_DECISION_LABELS[c.committee.decision] : 'ממתינה') : '',
+                  ]),
+                )
+              }
+            >
+              <Icon name="download" /> ייצוא
+            </button>
+          </>
         }
       />
+      {importing && <GradeImport onClose={() => setImporting(false)} />}
       {myTeams.length > 1 && (
         <div className="chips chips-scroll mb-12">
           <button className={`chip${!team ? ' on' : ''}`} onClick={() => set('team', '')}>
@@ -117,7 +148,7 @@ export function EvaluationsPage() {
         </div>
       )}
       <div className="filters">
-        <input className="input" placeholder="חיפוש לפי שם או מספר אישי" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" aria-label="חיפוש צוערים בתיקי הערכה" placeholder="חיפוש לפי שם או מספר אישי" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="select" value={view} onChange={(e) => set('view', e.target.value)} aria-label="תצוגה">
           <option value="">כל הצוערים</option>
           <option value="committee">בדרך לוועדה ({all.filter((c) => c.committee && !c.committee.decision).length})</option>
@@ -127,10 +158,21 @@ export function EvaluationsPage() {
         </select>
       </div>
       <ErrorBox error={list.error} />
+      {list.error && (
+        <button className="btn mb-12" onClick={() => void list.reload()}>
+          ניסיון נוסף
+        </button>
+      )}
       {list.loading && !list.data ? (
         <Loading rows={4} />
-      ) : !all.length ? (
-        <Empty icon="folder" title={isCommander ? 'אין צוערים עדיין' : 'אין צוערים באחריותך'} text={isCommander ? 'צוערים מופיעים כאן אחרי שמוסיפים אותם בעמוד הצוערים.' : 'תיק הערכה פתוח למ"פ ולמפק"צ האחראי על הצוער. כשצוות ישויך אליך, תיקי הצוערים שלו יופיעו כאן.'} />
+      ) : list.error && !list.data ? null : !all.length ? (
+        <Empty
+          icon="folder"
+          title={isCommander ? 'אין צוערים עדיין' : 'אין צוערים באחריותך'}
+          text={
+            isCommander ? 'צוערים מופיעים כאן אחרי שמוסיפים אותם בעמוד הצוערים.' : 'תיק הערכה פתוח למ"פ ולמפק"צ האחראי על הצוער. כשצוות ישויך אליך, תיקי הצוערים שלו יופיעו כאן.'
+          }
+        />
       ) : !shown.length ? (
         <Empty icon="search" title="אין צוערים להצגה" text="נסו חיפוש או תצוגה אחרים." />
       ) : (
@@ -143,7 +185,7 @@ export function EvaluationsPage() {
             </div>
             <div className="card">
               {rows.map((c) => (
-                <div key={c.cadetId} className="health" onClick={() => navigate(`/evaluations/${c.cadetId}`)} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/evaluations/${c.cadetId}`)}>
+                <Link key={c.cadetId} className="health evaluation-list-link" to={`/evaluations/${c.cadetId}`}>
                   <div className="avatar">{initials(c.fullName)}</div>
                   <div className="grow">
                     <div className="strong">{c.fullName}</div>
@@ -165,7 +207,7 @@ export function EvaluationsPage() {
                   )}
                   <span className={`badge t-${STANDING_TONES[c.standing]}`}>{STANDING_LABELS[c.standing]}</span>
                   <Icon name="chevronLeft" size={16} className="faint" />
-                </div>
+                </Link>
               ))}
             </div>
           </section>
@@ -232,7 +274,9 @@ export function EvaluationFilePage() {
           </Link>
         }
         title={`תיק הערכה - ${c.fullName}`}
-        sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, data.teamCommanderName && `מפק"צ: ${data.teamCommanderName}`, CADET_STATUS_LABELS[c.status]].filter(Boolean).join(' · ')}
+        sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, data.teamCommanderName && `מפק"צ: ${data.teamCommanderName}`, CADET_STATUS_LABELS[c.status]]
+          .filter(Boolean)
+          .join(' · ')}
         actions={
           <>
             <Link className="btn" to={`/cadets/${c.id}`}>
@@ -276,7 +320,10 @@ export function EvaluationFilePage() {
               </button>
               <button
                 className="btn btn-sm btn-ghost"
-                onClick={async () => (await ask({ title: 'לבטל את ההעברה לוועדה?', body: 'אפשר להעביר שוב בכל עת.', confirm: 'ביטול ההעברה', cancel: 'חזרה' })) && void act(() => api.del(`/api/evaluations/committees/${pending.id}`), 'ההעברה לוועדה בוטלה')}
+                onClick={async () =>
+                  (await ask({ title: 'לבטל את ההעברה לוועדה?', body: 'אפשר להעביר שוב בכל עת.', confirm: 'ביטול ההעברה', cancel: 'חזרה' })) &&
+                  void act(() => api.del(`/api/evaluations/committees/${pending.id}`), 'ההעברה לוועדה בוטלה')
+                }
               >
                 ביטול
               </button>
@@ -289,7 +336,9 @@ export function EvaluationFilePage() {
         <ContextColumn file={data} />
       </div>
       {dialog === 'refer' && <ReferDialog cadetId={c.id} name={c.fullName} reasonInFile={data.committeeReason} onClose={() => setDialog(null)} onDone={setData} />}
-      {dialog && typeof dialog === 'object' && 'decide' in dialog && <DecisionDialog committee={dialog.decide} name={c.fullName} onClose={() => setDialog(null)} onDone={setData} />}
+      {dialog && typeof dialog === 'object' && 'decide' in dialog && (
+        <DecisionDialog committee={dialog.decide} name={c.fullName} onClose={() => setDialog(null)} onDone={setData} />
+      )}
       {dialog && typeof dialog === 'object' && 'history' in dialog && <HistoryDialog cadetId={c.id} itemId={dialog.history} onClose={() => setDialog(null)} />}
     </div>
   );
@@ -301,12 +350,18 @@ function ContextColumn({ file, readOnly = false }: { file: EvaluationFile; readO
     <div className="col gap-16 sticky-side eval-context">
       <div className="label-caps">מתיק הצוער</div>
       <DisciplineCard file={file} />
-      <SideCard title="שיחות אישיות" empty="אין שיחות מתועדות." items={file.talks.map((r) => `${dateLabel(r.occurredOn)} · ${r.category || r.title || 'שיחה'}${r.authorName ? ` (${r.authorName})` : ''}`)} />
+      <SideCard
+        title="שיחות אישיות"
+        empty="אין שיחות מתועדות."
+        items={file.talks.map((r) => `${dateLabel(r.occurredOn)} · ${r.category || r.title || 'שיחה'}${r.authorName ? ` (${r.authorName})` : ''}`)}
+      />
       <SideCard title="הערכות לפי קריטריון" empty="אין הערכות בציון בתיק הצוער." items={file.scores.map((s) => `${s.criterion}: ${s.average.toFixed(1)} (${s.count})`)} />
       <SideCard
         title="התנסויות"
         empty="אין התנסויות שהסתיימו."
-        items={file.experiences.map((x) => `${x.role} · ${dateLabel(x.startDate)}${x.score !== null ? ` · ציון ${x.score}` : ''}${x.strengths ? ` · חוזקות: ${x.strengths.slice(0, 60)}` : ''}`)}
+        items={file.experiences.map(
+          (x) => `${x.role} · ${dateLabel(x.startDate)}${x.score !== null ? ` · ציון ${x.score}` : ''}${x.strengths ? ` · חוזקות: ${x.strengths.slice(0, 60)}` : ''}`,
+        )}
       />
       {file.committees.length > 0 && (
         <div className="card">
@@ -394,7 +449,19 @@ function SideCard({ title, items, empty }: { title: string; items: string[]; emp
   );
 }
 
-function ReferDialog({ cadetId, name, reasonInFile, onClose, onDone }: { cadetId: number; name: string; reasonInFile: string; onClose: () => void; onDone: (f: EvaluationFile) => void }) {
+function ReferDialog({
+  cadetId,
+  name,
+  reasonInFile,
+  onClose,
+  onDone,
+}: {
+  cadetId: number;
+  name: string;
+  reasonInFile: string;
+  onClose: () => void;
+  onDone: (f: EvaluationFile) => void;
+}) {
   const toast = useToast();
   const [kind, setKind] = useState<string>(COMMITTEE_KINDS[0]);
   // the reason written in the file (section 6), to adjust if needed
@@ -526,7 +593,9 @@ export function CommitteePage() {
           </Link>
         }
         title={`${x.kind} - ${file.cadet.fullName}`}
-        sub={[file.cadet.personalNumber && `מ.א. ${file.cadet.personalNumber}`, file.cadet.teamName, file.teamCommanderName && `מפק"צ: ${file.teamCommanderName}`].filter(Boolean).join(' · ')}
+        sub={[file.cadet.personalNumber && `מ.א. ${file.cadet.personalNumber}`, file.cadet.teamName, file.teamCommanderName && `מפק"צ: ${file.teamCommanderName}`]
+          .filter(Boolean)
+          .join(' · ')}
         actions={
           <button className="btn" onClick={() => window.print()}>
             <Icon name="print" /> הדפסה
