@@ -25,7 +25,7 @@ interface NavItem {
 }
 
 /** each group of the menu, by its title - shown alone when the menu is folded to icons */
-const GROUP_ICONS: Record<string, string> = { בקרה: 'eye', סקירה: 'eye', 'צוערים ולקחים': 'shield', כלים: 'zap' };
+const GROUP_ICONS: Record<string, string> = { 'תכנון הקורס': 'plan', צוערים: 'cap', בקרה: 'pulse', כלים: 'wrench' };
 const GROUPS_KEY = 'kks.navGroups';
 function readGroups(): Record<string, boolean> {
   try {
@@ -64,6 +64,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
   // messages from the staff's WhatsApp group that came in since this person last looked
   const alignment = useApi<{ n: number }>('/api/alignment/unseen', ['alignment', 'alignment-seen']).data?.n ?? 0;
 
+  // the same groups for everyone, in the order a day goes: plan the course, the cadets, keeping track, the tools
   if (isCommander) {
     return [
       {
@@ -71,11 +72,26 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
           { to: '/', label: 'בית', icon: 'home', end: true },
           { to: '/my', label: 'המשימות שלי', icon: 'my' },
           { to: '/tasks', label: 'כל המשימות', icon: 'tasks' },
+          { to: '/schedule', label: 'לו"ז', icon: 'calendar' },
+          { to: '/team', label: 'הסגל', icon: 'users' },
+        ],
+      },
+      {
+        title: 'תכנון הקורס',
+        items: [
           { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
           { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
           { to: '/plans', label: 'אישור תוכניות', icon: 'stamp' },
-          { to: '/schedule', label: 'לו"ז', icon: 'calendar' },
-          { to: '/team', label: 'צוות', icon: 'users' },
+        ],
+      },
+      {
+        title: 'צוערים',
+        items: [
+          { to: '/cadets', label: 'צוערים', icon: 'shield' },
+          { to: '/attendance', label: 'מצבה', icon: 'check' },
+          { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
+          { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
+          { to: '/experiences', label: 'התנסויות', icon: 'target' },
         ],
       },
       {
@@ -84,23 +100,12 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
           { to: '/requests', label: 'אישורים ובקשות', icon: 'inbox', count: pending },
           { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
           { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
-          { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
           { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
-          { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
+          { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
           { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
+          { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
           { to: '/activity', label: 'יומן פעילות', icon: 'history' },
-        ],
-      },
-      {
-        title: 'צוערים ולקחים',
-        items: [
-          { to: '/cadets', label: 'צוערים', icon: 'shield' },
-          { to: '/attendance', label: 'מצבה', icon: 'check' },
-          { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
-          { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
-          { to: '/experiences', label: 'התנסויות', icon: 'target' },
-          { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
-          { to: '/documents', label: 'מסמכים', icon: 'file' },
+          { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
         ],
       },
       {
@@ -108,9 +113,10 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         items: [
           { to: '/command', label: 'פקודות שלי', icon: 'zap' },
           { to: '/meeting', label: 'ישיבת סגל', icon: 'message' },
+          { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
+          { to: '/documents', label: 'מסמכים', icon: 'file' },
           { to: '/templates', label: 'תבניות', icon: 'template' },
           { to: '/recurring', label: 'משימות חוזרות', icon: 'repeat' },
-          { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
           { to: '/courses', label: 'קורסים קודמים', icon: 'history' },
         ],
       },
@@ -121,38 +127,43 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       items: [
         { to: '/', label: 'המשימות שלי', icon: 'home', end: true },
         { to: '/tasks', label: 'משימות', icon: 'tasks' },
-        { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
-        { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
         { to: '/schedule', label: 'לו"ז', icon: 'calendar' },
       ],
     },
     {
-      title: 'סקירה',
+      title: 'תכנון הקורס',
       items: [
-        { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
-        { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
-        { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
-        { to: `/requests`, label: 'הבקשות שלי', icon: 'inbox' },
-        { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
-        { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
-        { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
+        { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
+        { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
       ],
     },
     {
-      title: 'צוערים ולקחים',
+      title: 'צוערים',
       items: [
         { to: '/cadets', label: 'צוערים', icon: 'shield' },
         { to: '/attendance', label: 'מצבה', icon: 'check' },
         { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
         { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
         { to: '/experiences', label: 'התנסויות', icon: 'target' },
-        { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
-        { to: '/documents', label: 'מסמכים', icon: 'file' },
+      ],
+    },
+    {
+      title: 'בקרה',
+      items: [
+        { to: '/requests', label: 'הבקשות שלי', icon: 'inbox' },
+        { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
+        { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
+        { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
+        { to: '/day-end', label: 'סיכום יום', icon: 'moon' },
+        { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
+        { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
       ],
     },
     {
       title: 'כלים',
       items: [
+        { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
+        { to: '/documents', label: 'מסמכים', icon: 'file' },
         { to: '/templates', label: 'תבניות', icon: 'template' },
         { to: '/recurring', label: 'משימות חוזרות', icon: 'repeat' },
       ],
@@ -294,7 +305,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const path = location.pathname;
   const barIdx = path === '/' ? 0 : path.startsWith('/tasks') ? 1 : path.startsWith('/weeks') ? 3 : 4;
 
-  // the menu's groups (בקרה, צוערים ולקחים, כלים) open and close; each remembers how it was left,
+  // the menu's groups (תכנון הקורס, צוערים, בקרה, כלים) open and close; each remembers how it was left,
   // and the group of the screen on show opens by itself
   const [groups, setGroups] = useState<Record<string, boolean>>(readGroups);
   const here = sections.find((s) => s.title && s.items.some((it) => (it.end ? path === it.to : path === it.to || path.startsWith(`${it.to}/`))))?.title;
@@ -348,10 +359,19 @@ export function Layout({ children }: { children: ReactNode }) {
           const total = s.items.reduce((n, it) => n + (it.count ?? 0), 0);
           const id = `rail-group-${i}`;
           return (
-            <nav key={i} aria-label={s.title} className={`rail-group${open ? ' open' : ''}`}>
-              <button type="button" className="rail-group-head" aria-expanded={open} aria-controls={id} onClick={() => toggleGroup(s.title!)} title={s.title}>
+            <nav key={i} aria-label={s.title} className={`rail-group${open ? ' open' : ''}${s.title === here ? ' here' : ''}`}>
+              <button
+                type="button"
+                className="rail-group-head"
+                aria-expanded={open}
+                aria-controls={id}
+                onClick={() => toggleGroup(s.title!)}
+                title={s.title === here && !open ? `${s.title} - המסך הפתוח נמצא כאן` : s.title}
+              >
                 <Icon name={GROUP_ICONS[s.title] ?? 'layers'} />
                 <span className="rail-label">{s.title}</span>
+                {/* closed, with the screen on show inside: marked, so it is clear where one is */}
+                {!open && s.title === here && <span className="rail-group-here" aria-hidden="true" />}
                 {!open && total > 0 && <span className="count">{total > 99 ? '99+' : total}</span>}
                 <Icon name="chevronDown" size={15} className="rail-group-chev" />
               </button>

@@ -149,7 +149,7 @@ export function Empty({ title, text, icon = 'check' }: { title: string; text?: R
 
 export function Loading({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="list" aria-busy="true" aria-label="טוען">
+    <div className="list" role="status" aria-busy="true" aria-label="טוען">
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="skeleton" />
       ))}

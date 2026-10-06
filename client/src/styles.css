@@ -406,7 +406,7 @@ p {
   padding: 14px 10px 6px;
 }
 
-/* a group of the menu (בקרה, צוערים ולקחים, כלים): its title opens and closes it */
+/* a group of the menu (תכנון הקורס, צוערים, בקרה, כלים): its title opens and closes it */
 .rail-group {
   margin-top: 6px;
 }
@@ -461,6 +461,34 @@ p {
 }
 .rail-group.open .rail-group-head {
   color: var(--rail-ink);
+}
+/* the links of an open group sit under its title, along a thin line */
+.rail-group-inner {
+  margin-inline-start: 18px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--rail-2);
+}
+/* folded to icons the links keep the icons' column - open or peeking alike */
+.rail-collapsed .rail .rail-group-inner {
+  margin-inline-start: 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+.rail-group.here:not(.open) .rail-group-head {
+  color: var(--rail-ink);
+  background: color-mix(in srgb, var(--rail-2) 70%, transparent);
+}
+.rail-group-here {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rail-ink);
+  flex-shrink: 0;
+}
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-group-here {
+  position: absolute;
+  top: 6px;
+  inset-inline-start: 30px;
 }
 /* opening and closing slide smoothly, whatever the number of links */
 .rail-group-body {

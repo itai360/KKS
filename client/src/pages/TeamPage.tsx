@@ -19,7 +19,7 @@ export function TeamPage() {
   const navigate = useNavigate();
   return (
     <div className="page">
-      <PageHead title="הצוות" sub="אצל מי יש עומס או עיכוב - בלי לעבור איש-איש ולשאול." />
+      <PageHead title="הסגל" sub="אצל מי יש עומס או עיכוב - בלי לעבור איש-איש ולשאול." />
       <ErrorBox error={error} />
       {loading && !data ? (
         <Loading rows={3} />
