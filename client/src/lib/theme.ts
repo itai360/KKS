@@ -17,6 +17,23 @@ export function applyTheme(pref: ThemePref = themePref()): void {
   const root = document.documentElement;
   if (pref === 'auto') delete root.dataset.theme;
   else root.dataset.theme = pref;
+  syncBrowserBar();
+}
+
+/**
+ * A phone's browser paints its address bar (and the status bar of the app on the home screen) in
+ * the page's colour - light in light mode, dark in dark mode - so the top of the screen is one piece.
+ */
+export function syncBrowserBar(): void {
+  if (typeof document === 'undefined') return;
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.appendChild(meta);
+  }
+  const paper = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
+  if (paper) meta.content = paper;
 }
 
 const CHANGED = 'kks-theme';

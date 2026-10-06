@@ -338,13 +338,35 @@ export function Seg<T extends string>({
   );
 }
 
-export function PageHead({ eyebrow, title, sub, actions, docTitle }: { eyebrow?: ReactNode; title: ReactNode; sub?: ReactNode; actions?: ReactNode; docTitle?: string }) {
+export function PageHead({
+  eyebrow,
+  title,
+  tags,
+  sub,
+  actions,
+  docTitle,
+}: {
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  /** beside the title, not in it: a status to change, a count - in the app's own font, whatever the title's */
+  tags?: ReactNode;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  docTitle?: string;
+}) {
   usePageTitle(docTitle ?? (typeof title === 'string' ? title : null));
   return (
     <div className="page-head">
       <div className="titles">
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-        <h1 className="page-title">{title}</h1>
+        {tags ? (
+          <div className="page-title-row">
+            <h1 className="page-title">{title}</h1>
+            <div className="page-tags">{tags}</div>
+          </div>
+        ) : (
+          <h1 className="page-title">{title}</h1>
+        )}
         {sub && <div className="page-sub">{sub}</div>}
       </div>
       {actions && <div className="page-actions">{actions}</div>}

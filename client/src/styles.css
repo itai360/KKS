@@ -274,9 +274,11 @@ p {
   color: var(--rail-muted);
 }
 
+@media (hover: hover) {
 .rail-toggle:hover {
   color: var(--rail-ink);
   background: var(--rail-2);
+}
 }
 
 /* folded to icons: a medium screen, or the person's choice. Opening it (hover) only widens it:
@@ -429,9 +431,11 @@ p {
   position: relative;
   transition: background 0.12s, color 0.12s;
 }
+@media (hover: hover) {
 .rail-group-head:hover {
   background: var(--rail-2);
   color: var(--rail-ink);
+}
 }
 .rail-group-head > svg:first-child {
   width: 18px;
@@ -545,9 +549,11 @@ p {
   opacity: 0.85;
 }
 
+@media (hover: hover) {
 .rail-link:hover {
   background: var(--rail-2);
   color: #fff;
+}
 }
 
 .rail-link.active {
@@ -771,6 +777,32 @@ p {
   letter-spacing: 0.01em;
 }
 
+/* a title with tags beside it (a cadet's status): the tags keep the app's font and size */
+.page-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.page-tags {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: var(--font);
+  font-size: 13px;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+/* a field or button that ends up inside a title never takes the title's display font */
+.page-title :is(input, select, textarea, button) {
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
 .page-sub {
   color: var(--muted);
   margin-top: 6px;
@@ -892,9 +924,11 @@ p {
   height: 17px;
 }
 
+@media (hover: hover) {
 .btn:hover {
   background: var(--card-2);
   border-color: var(--ink-2);
+}
 }
 
 .btn:active {
@@ -912,9 +946,11 @@ p {
   color: var(--paper);
 }
 
+@media (hover: hover) {
 .btn-primary:hover {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
+}
 }
 
 .btn-danger {
@@ -922,9 +958,11 @@ p {
   border-color: rgba(201, 50, 27, 0.35);
 }
 
+@media (hover: hover) {
 .btn-danger:hover {
   background: var(--red-bg);
   border-color: var(--red);
+}
 }
 
 .btn-ghost {
@@ -932,9 +970,11 @@ p {
   border-color: transparent;
 }
 
+@media (hover: hover) {
 .btn-ghost:hover {
   background: var(--hover);
   border-color: transparent;
+}
 }
 
 .btn-sm {
@@ -966,8 +1006,10 @@ p {
   color: var(--ink-2);
 }
 
+@media (hover: hover) {
 .icon-btn:hover {
   background: var(--hover);
+}
 }
 
 .icon-btn svg {
@@ -1119,8 +1161,10 @@ input::-webkit-date-and-time-value {
   transition: all 0.12s;
 }
 
+@media (hover: hover) {
 .chip:hover {
   border-color: var(--ink-2);
+}
 }
 
 .chip.on {
@@ -1316,9 +1360,11 @@ input::-webkit-date-and-time-value {
   transition: transform 0.12s, box-shadow 0.12s;
 }
 
+@media (hover: hover) {
 .stat:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 18px -8px rgba(25, 28, 24, 0.3);
+}
 }
 
 .stat-num {
@@ -1576,9 +1622,11 @@ input::-webkit-date-and-time-value {
   padding: 16px 18px;
 }
 
+@media (hover: hover) {
 .week-summary:hover,
 .dashboard-event:hover {
   background: var(--card-2);
+}
 }
 
 .week-readiness {
@@ -1892,12 +1940,17 @@ input::-webkit-date-and-time-value {
   border-radius: 999px;
   background: none;
   color: var(--ink);
-  font: 500 14px/1 var(--mono);
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
+@media (hover: hover) {
 .dp-day:hover:not(:disabled) {
   background: var(--gray-bg);
+}
 }
 .dp-day.is-shabbat,
 .dp-dow.is-shabbat {
@@ -1963,9 +2016,11 @@ input::-webkit-date-and-time-value {
   color: var(--muted);
   cursor: pointer;
 }
+@media (hover: hover) {
 .date-input-pick:hover {
   color: var(--ink);
   background: var(--gray-bg);
+}
 }
 
 /* ---------- task rows ---------- */
@@ -1991,10 +2046,12 @@ input::-webkit-date-and-time-value {
   cursor: pointer;
 }
 
+@media (hover: hover) {
 .task-row:hover {
   border-color: var(--line-2);
   border-right-color: var(--tone, var(--gray));
   box-shadow: 0 4px 14px -6px rgba(25, 28, 24, 0.25);
+}
 }
 
 /* done: grey and struck through - not faded, so its badges and times stay readable */
@@ -2023,9 +2080,11 @@ input::-webkit-date-and-time-value {
   height: 14px;
 }
 
+@media (hover: hover) {
 .task-check:hover {
   border-color: var(--green);
   color: var(--green-ink);
+}
 }
 
 .task-check.checked {
@@ -2154,8 +2213,10 @@ input::-webkit-date-and-time-value {
   border-bottom: none;
 }
 
+@media (hover: hover) {
 .attn-item:hover {
   background: var(--card-2);
+}
 }
 
 .attn-bar {
@@ -2614,9 +2675,11 @@ input::-webkit-date-and-time-value {
   border-color: var(--red);
   color: #fff;
 }
+@media (hover: hover) {
 .btn-danger-solid:hover {
   background: var(--red-ink);
   border-color: var(--red-ink);
+}
 }
 
 .modal-head {
@@ -2718,8 +2781,10 @@ input::-webkit-date-and-time-value {
   cursor: pointer;
   transition: background 0.15s;
 }
+@media (hover: hover) {
 .toast-action:hover {
   background: color-mix(in srgb, var(--paper) 26%, transparent);
+}
 }
 .toast-close {
   flex-shrink: 0;
@@ -2736,9 +2801,11 @@ input::-webkit-date-and-time-value {
   opacity: 0.55;
   cursor: pointer;
 }
+@media (hover: hover) {
 .toast-close:hover,
 .toast-close:focus-visible {
   opacity: 1;
+}
 }
 .toast-action:focus-visible,
 .toast-close:focus-visible {
@@ -2966,9 +3033,11 @@ input::-webkit-date-and-time-value {
   overflow: hidden;
 }
 
+@media (hover: hover) {
 .week-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 24px -12px rgba(25, 28, 24, 0.35);
+}
 }
 
 .week-card.current {
@@ -3058,8 +3127,10 @@ input::-webkit-date-and-time-value {
   transition: background 0.1s;
 }
 
+@media (hover: hover) {
 .event-row:hover {
   background: var(--card-2);
+}
 }
 
 .event-row:last-child {
@@ -3135,8 +3206,10 @@ input::-webkit-date-and-time-value {
   cursor: pointer;
 }
 
+@media (hover: hover) {
 .table tr.click:hover td {
   background: var(--card-2);
+}
 }
 
 .num-cell {
@@ -3158,9 +3231,11 @@ input::-webkit-date-and-time-value {
   transition: transform 0.12s, box-shadow 0.12s;
 }
 
+@media (hover: hover) {
 .staff-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 24px -12px rgba(25, 28, 24, 0.35);
+}
 }
 
 .staff-nums {
@@ -3196,8 +3271,10 @@ input::-webkit-date-and-time-value {
   border-bottom: none;
 }
 
+@media (hover: hover) {
 .health:hover {
   background: var(--card-2);
+}
 }
 
 /* ---------- login ---------- */
@@ -3866,8 +3943,10 @@ input::-webkit-date-and-time-value {
   box-shadow: inset -3px 0 0 var(--blue, #3b6fd4);
 }
 
+@media (hover: hover) {
 .event-row.external:hover {
   background: none;
+}
 }
 
 /* evaluation files */
@@ -4020,8 +4099,10 @@ tr.selected td {
   cursor: pointer;
 }
 
+@media (hover: hover) {
 .cal-dayhead .dn:hover:not(:disabled) {
   background: var(--paper-2);
+}
 }
 
 .cal-dayhead .dn:disabled {
@@ -4155,8 +4236,10 @@ tr.selected td {
   color: var(--green-ink);
 }
 
+@media (hover: hover) {
 .cal-event:hover {
   filter: brightness(1.12);
+}
 }
 
 .cal-event:focus-visible {
@@ -4319,8 +4402,10 @@ tr.selected td {
   font-weight: 600;
 }
 
+@media (hover: hover) {
 .cal-chip.timed:hover {
   background: var(--paper-2);
+}
 }
 
 .cal-chip.cancelled {
@@ -4396,8 +4481,10 @@ tr.selected td {
   color: var(--muted);
 }
 
+@media (hover: hover) {
 .cal-cell-day:hover {
   background: var(--paper-2);
+}
 }
 
 .cal-cell.today .cal-cell-day {
@@ -4417,9 +4504,11 @@ tr.selected td {
   cursor: pointer;
 }
 
+@media (hover: hover) {
 .cal-more:hover {
   background: var(--paper-2);
   color: var(--ink);
+}
 }
 
 .cal-hint {
@@ -4565,7 +4654,10 @@ tr.selected td {
   border-radius: 999px;
   background: var(--tone-bg);
   color: var(--tone-ink, var(--tone));
-  font: 600 13px/1 var(--font);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
   letter-spacing: 0;
   white-space: nowrap;
 }
@@ -4576,8 +4668,12 @@ input.status-pill {
   padding-left: 28px;
   background: var(--tone-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233a3f38' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat left 10px center;
 }
-.page-head h1 .badge {
-  font: 600 12px/1 var(--font);
+.page-head h1 .badge,
+.page-tags .badge {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
   letter-spacing: 0;
   vertical-align: middle;
 }
@@ -4619,9 +4715,11 @@ input.status-pill:disabled {
   flex: none;
   color: var(--muted);
 }
+@media (hover: hover) {
 .health .exemption-add:hover {
   color: var(--ink);
   background: var(--gray-bg);
+}
 }
 
 /* picking a cadet in a dialog */
@@ -4650,9 +4748,11 @@ input.status-pill:disabled {
 .pick-row:last-child {
   border-bottom: 0;
 }
+@media (hover: hover) {
 .pick-row:hover,
 .pick-row:focus-visible {
   background: var(--card-2);
+}
 }
 
 /* discipline notes: the count on the cadet page, and the enforcement ladder */
@@ -4800,8 +4900,10 @@ button.stat:disabled {
   color: var(--ink-2);
 }
 
+@media (hover: hover) {
 .dform-toc a:hover {
   background: var(--gray-bg);
+}
 }
 
 .dform-toc a.ok .dsec-num {
@@ -4922,9 +5024,11 @@ button.stat:disabled {
   font-size: 15px;
 }
 
+@media (hover: hover) {
 .dq-choice button:hover,
 .dq-rating button:hover {
   border-color: var(--tone);
+}
 }
 
 .dq-choice button[aria-pressed='true'],
@@ -5178,10 +5282,12 @@ button.fab-missing {
   transition: border-color 0.12s, box-shadow 0.12s;
 }
 
+@media (hover: hover) {
 .kind-card:hover,
 .kind-card:focus-visible {
   border-color: var(--tone);
   box-shadow: 0 0 0 1px var(--tone);
+}
 }
 
 .kind-icon {
@@ -5888,8 +5994,10 @@ button.fab-missing {
   transition: transform 0.35s ease;
 }
 
+@media (hover: hover) {
 .theme-btn:hover svg {
   transform: rotate(-20deg);
+}
 }
 
 @media (max-width: 760px) {
@@ -6607,8 +6715,10 @@ button.fab-missing {
   cursor: pointer;
 }
 
+@media (hover: hover) {
 .roll-choices button:hover {
   border-color: var(--tone);
+}
 }
 
 .roll-choices button[aria-pressed='true'] {
@@ -6755,9 +6865,11 @@ button.fab-missing {
   transition: transform 0.12s, background 0.12s;
 }
 
+@media (hover: hover) {
 .back-top:hover,
 .modal-back:hover {
   background: var(--gray-bg);
+}
 }
 
 .back-top:active,
@@ -6806,8 +6918,10 @@ body:has(.app.rail-collapsed) .modal-back {
   cursor: default;
 }
 
+@media (hover: hover) {
 .course-stats .chip:hover {
   border-color: var(--line-2);
+}
 }
 
 .course-carry {
@@ -7171,8 +7285,10 @@ label.prev-task {
   border-top: 1px solid var(--line);
   color: inherit;
 }
+@media (hover: hover) {
 .socio-history-row:hover {
   color: var(--ink);
+}
 }
 @media (max-width: 600px) {
   .socio-card-stats {
@@ -7216,9 +7332,11 @@ label.prev-task {
   min-width: 0;
   transition: border-color 0.15s, background 0.15s;
 }
+@media (hover: hover) {
 .weekly-step:hover {
   border-color: var(--line-2);
   background: var(--hover);
+}
 }
 .weekly-step > .grow {
   display: flex;
@@ -7239,7 +7357,9 @@ label.prev-task {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font: 700 12px var(--mono);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
   background: var(--rail);
   color: var(--rail-ink);
 }
@@ -7302,7 +7422,9 @@ label.prev-task {
 .weekly-items.numbered .weekly-item::before {
   counter-increment: point;
   content: counter(point) '.';
-  font: 700 13px var(--mono);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
   color: var(--muted);
   min-width: 20px;
   padding-top: 1px;
@@ -7330,9 +7452,11 @@ label.prev-task {
 span.weekly-item-title {
   cursor: default;
 }
+@media (hover: hover) {
 button.weekly-item-title:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
 }
 .weekly-item.done .weekly-item-title {
   color: var(--muted);
@@ -7876,5 +8000,61 @@ tr.flash > td {
     details::details-content {
       transition: none;
     }
+  }
+}
+
+/* ---------------- phone browsers (Safari on iPhone, Chrome and Samsung on Android) ---------------- */
+html {
+  /* the sizes set here stay as they are - no enlarging of text when the phone is turned sideways */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* a tap shows the app's own pressed look, not the browser's grey box */
+  -webkit-tap-highlight-color: transparent;
+}
+@media (max-width: 860px) {
+  /* Safari on a phone zooms the whole page into a field smaller than 16px when it is tapped;
+     at 16px it stays put. (The :not() parts only lift this rule above the fields' own sizes.) */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']),
+  select:not([data-a]):not([data-b]),
+  textarea:not([data-a]):not([data-b]) {
+    font-size: 16px;
+  }
+  input.status-pill {
+    height: 32px;
+  }
+  /* the notch and the rounded corners: the bars and the page keep clear of them (also sideways) */
+  :root {
+    --top-h: calc(54px + env(safe-area-inset-top, 0px));
+  }
+  .topbar {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+  .page {
+    padding-left: max(14px, env(safe-area-inset-left, 0px));
+    padding-right: max(14px, env(safe-area-inset-right, 0px));
+  }
+  .bottom-nav {
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+  }
+}
+/* a touch screen has no pointer resting on things: a tap gets a short pressed look instead */
+@media (hover: none) {
+  .task-row:active,
+  .board-card:active,
+  .week-card:active,
+  .health:active,
+  .stat:active,
+  .attn-item:active,
+  .staff-card:active,
+  .event-row:active,
+  .kind-card:active,
+  .weekly-step:active,
+  .week-summary:active,
+  .dashboard-event:active,
+  .table tr.click:active td {
+    background: var(--hover);
   }
 }

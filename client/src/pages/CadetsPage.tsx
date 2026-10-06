@@ -566,9 +566,11 @@ export function CadetPage() {
             צוערים · {c.teamName ?? 'ללא צוות'}
           </Link>
         }
-        title={
+        title={c.fullName}
+        tags={
           <>
-            {c.fullName} <StatusPill cadet={c} /> <NotesBadge count={c.disciplineNotes} />
+            <StatusPill cadet={c} />
+            <NotesBadge count={c.disciplineNotes} />
           </>
         }
         docTitle={c.fullName}
@@ -1349,7 +1351,7 @@ function Development({ detail }: { detail: CadetDetail }) {
                 {[1, 2, 3, 4, 5].map((v) => (
                   <g key={v}>
                     <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeWidth={1} />
-                    <text x={W - pad.r + 8} y={y(v) + 3.5} fontSize={10} fill="var(--muted)" fontFamily="var(--mono)" textAnchor="start">
+                    <text x={W - pad.r + 8} y={y(v) + 3.5} fontSize={11} fill="var(--muted)" fontFamily="var(--mono)" textAnchor="start">
                       {v}
                     </text>
                   </g>
@@ -1363,7 +1365,7 @@ function Development({ detail }: { detail: CadetDetail }) {
                 ))}
                 {points.map((p, i) =>
                   i === 0 || i === points.length - 1 ? (
-                    <text key={`d${p.date}`} x={x(i)} y={H - 6} fontSize={10} fill="var(--muted)" textAnchor="middle" fontFamily="var(--mono)">
+                    <text key={`d${p.date}`} x={x(i)} y={H - 6} fontSize={11} fill="var(--muted)" textAnchor="middle" fontFamily="var(--mono)">
                       {shortDate(p.date)}
                     </text>
                   ) : null,

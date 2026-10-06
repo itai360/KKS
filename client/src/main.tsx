@@ -12,9 +12,11 @@ import { App } from './App';
 import { reportIssue } from './lib/api';
 import { dropUnusedServiceWorker } from './lib/push';
 import { watchForUpdates } from './lib/update';
-import { applyTheme } from './lib/theme';
+import { applyTheme, onThemeChange, syncBrowserBar } from './lib/theme';
 
 applyTheme();
+// the device switched between light and dark while following it: the browser's bar follows too
+onThemeChange(syncBrowserBar);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
