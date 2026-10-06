@@ -14,7 +14,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg, Select, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -215,11 +215,11 @@ export function SchedulePage() {
         <h2 className="cal-title">{viewTitle(view === 'list' ? 'day' : view, date)}</h2>
         <span className="grow" />
         {view !== 'list' && (
-          <select className="select cal-tasks" value={tasksShown} onChange={(e) => setTasksShown(e.target.value as TasksShown)} aria-label="דד-ליינים של משימות ביומן">
+          <Select className="select cal-tasks" value={tasksShown} onChange={(e) => setTasksShown(e.target.value as TasksShown)} aria-label="דד-ליינים של משימות ביומן">
             <option value="mine">דד-ליינים: שלי</option>
             <option value="all">דד-ליינים: כל המשימות</option>
             <option value="none">בלי דד-ליינים</option>
-          </select>
+          </Select>
         )}
         <Seg value={view} options={VIEWS} onChange={setView} />
       </div>
@@ -493,14 +493,14 @@ function EventForm({
           <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} />
         </Field>
         <Field label="אחראי">
-          <select className="select" value={owner} onChange={(e) => setOwner(e.target.value)}>
+          <Select className="select" value={owner} onChange={(e) => setOwner(e.target.value)}>
             <option value="">ללא</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.displayName}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="הערות" className="span-2">
           <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} />

@@ -11,7 +11,7 @@ import { useSession } from '../lib/session';
 import { Icon } from './Icon';
 import { DateTimeInputs, UserPicker } from './NewTask';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal, Seg } from './ui';
+import { ErrorBox, Field, Modal, Seg, Select } from './ui';
 
 type Dialog =
   | null
@@ -522,21 +522,21 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
         {p.canEdit && (
           <>
             <Field label="עדיפות">
-              <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
+              <Select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
                 {PRIORITIES.map((x) => (
                   <option key={x} value={x}>
                     {PRIORITY_LABELS[x]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="תחום">
-              <select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
+              <Select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
                 <option value="">ללא</option>
                 {settings.domains.map((d) => (
                   <option key={d}>{d}</option>
                 ))}
-              </select>
+              </Select>
             </Field>
             {domain === OTHER_DOMAIN && (
               <Field label="איזה תחום?">
@@ -544,33 +544,33 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
               </Field>
             )}
             <Field label="שבוע בקורס">
-              <select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+              <Select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
                 <option value="">ללא שבוע</option>
                 {weeks.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="ציר בקורס">
-              <select className="select" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
+              <Select className="select" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
                 <option value="">ללא ציר</option>
                 {tracks.map((tr) => (
                   <option key={tr.id} value={tr.id}>
                     {tr.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="נראות">
-              <select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
+              <Select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
                 {VISIBILITIES.map((v) => (
                   <option key={v} value={v}>
                     {VISIBILITY_LABELS[v]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <label className="check span-2">
               <input type="checkbox" checked={requiresApproval} onChange={(e) => setRequiresApproval(e.target.checked)} />

@@ -32,7 +32,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
 import { api, changedFields, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
@@ -161,14 +161,14 @@ export function CadetsPage() {
       </div>
       <div className="filters">
         <input className="input" placeholder="חיפוש לפי שם או מספר אישי" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="select" value={status} onChange={(e) => set('status', e.target.value === 'active' ? '' : e.target.value)} aria-label="סטטוס">
+        <Select className="select" value={status} onChange={(e) => set('status', e.target.value === 'active' ? '' : e.target.value)} aria-label="סטטוס">
           {CADET_STATUSES.map((s) => (
             <option key={s} value={s}>
               {CADET_STATUS_LABELS[s]}
             </option>
           ))}
           <option value="all">הכל</option>
-        </select>
+        </Select>
         <button type="button" className={`chip${notesOnly ? ' on' : ''}`} onClick={() => set('notes', notesOnly ? '' : '1')} aria-pressed={notesOnly}>
           עם הערות משמעת
         </button>
@@ -326,24 +326,24 @@ function CadetForm({ cadet, teams, defaultTeam, onClose }: { cadet?: Cadet; team
           <input className="input" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>
         <Field label="צוות">
-          <select className="select" value={teamId} onChange={(e) => setTeamId(e.target.value)} disabled={!!cadet && !isCommander}>
+          <Select className="select" value={teamId} onChange={(e) => setTeamId(e.target.value)} disabled={!!cadet && !isCommander}>
             {isCommander && <option value="">ללא צוות</option>}
             {teams.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {cadet && (
           <Field label="סטטוס">
-            <select className="select" value={status} onChange={(e) => setStatus(e.target.value as CadetStatus)}>
+            <Select className="select" value={status} onChange={(e) => setStatus(e.target.value as CadetStatus)}>
               {CADET_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {CADET_STATUS_LABELS[s]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         )}
         <Field label="הערות כלליות (גלויות למפקד הצוות ולמפקד הקורס)" className="span-2">
@@ -435,14 +435,14 @@ function ImportCadets({ teams, onClose }: { teams: Team[]; onClose: () => void }
           אפשר גם להדביק רשימה או לכתוב שורה לכל צוער: <b>שם מלא, מספר אישי, טלפון, צוות</b>. רק השם חובה. עם שורת כותרות (למשל "שם פרטי", "שם משפחה", "מספר אישי", "צוות") העמודות יזוהו לפי הכותרות. צוותים שלא קיימים ייווצרו. צוער שכבר ברשימה (לפי מספר אישי) לא ייווסף שוב - הוא יעבור לצוות שברשימה. קישור ל-Google צריך להיות משותף ל"כל מי שיש לו את הקישור".
         </div>
         <Field label="שיוך כל הרשימה לצוות (לא חובה)">
-          <select className="select" value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ maxWidth: 260 }}>
+          <Select className="select" value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ maxWidth: 260 }}>
             <option value="">לפי עמודת הצוות ברשימה</option>
             {teams.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <textarea className="textarea" style={{ minHeight: 220, fontFamily: 'var(--mono)' }} value={text} onChange={(e) => setText(e.target.value)} placeholder={'דניאל כהן, 8123456, 050-1234567, צוות 1\nמאיה לוי, 8123457, , צוות 2'} data-autofocus />
         <ErrorBox error={error} />
@@ -483,7 +483,7 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
               onBlur={(e) => e.target.value.trim() && e.target.value !== t.name && void run(() => api.put(`/api/teams/${t.id}`, { name: e.target.value.trim(), commanderId: t.commanderId }))}
               aria-label="שם הצוות"
             />
-            <select
+            <Select
               className="select"
               style={{ width: 180 }}
               value={t.commanderId ?? ''}
@@ -496,7 +496,7 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
                   {s.displayName}
                 </option>
               ))}
-            </select>
+            </Select>
             <span className="tiny muted mono">{t.cadetCount}</span>
             <button
               className="icon-btn"
@@ -708,13 +708,13 @@ function StatusPill({ cadet }: { cadet: Cadet }) {
     }
   };
   return (
-    <select className={tone} value={cadet.status} disabled={busy} onChange={(e) => void change(e.target.value as CadetStatus)} aria-label="סטטוס הצוער" title="שינוי סטטוס">
+    <Select fit className={tone} value={cadet.status} disabled={busy} onChange={(e) => void change(e.target.value as CadetStatus)} aria-label="סטטוס הצוער" title="שינוי סטטוס">
       {CADET_STATUSES.map((s) => (
         <option key={s} value={s}>
           {CADET_STATUS_LABELS[s]}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -864,12 +864,7 @@ function ExemptionDialog({ cadet, onClose }: { cadet: Pick<Cadet, 'id' | 'fullNa
     >
       <div className="col gap-12">
         <Field label="ממה הצוער פטור" required>
-          <input className="input" list="exemption-subjects" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="לדוגמה: גילוח" data-autofocus />
-          <datalist id="exemption-subjects">
-            {subjects.map((x) => (
-              <option key={x} value={x} />
-            ))}
-          </datalist>
+          <SuggestInput value={subject} onChange={setSubject} options={subjects} placeholder="לדוגמה: גילוח" data-autofocus />
         </Field>
         <Field label="פירוט (גלוי לכל הסגל)">
           <input className="input" value={details} onChange={(e) => setDetails(e.target.value)} placeholder="לדוגמה: פטור מריצות עד הבדיקה הבאה" />
@@ -1067,7 +1062,7 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
       )}
       {kind === 'discipline' && offenses.length > 0 && (
         <Field label="המקרה לפי מדרג האכיפה">
-          <select className="select" value={offense} onChange={(e) => pickOffense(e.target.value)}>
+          <Select className="select" value={offense} onChange={(e) => pickOffense(e.target.value)}>
             <option value="">אחר / לא מהמדרג</option>
             {sortHe([...new Set(offenses.map((o) => o.category))]).map((cat) => (
               <optgroup key={cat || '-'} label={cat || 'מקרים'}>
@@ -1081,7 +1076,7 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
                   ))}
               </optgroup>
             ))}
-          </select>
+          </Select>
         </Field>
       )}
       {kind === 'discipline' && offenses.length === 0 && isCommander && guide.data && (
@@ -1129,7 +1124,7 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
       )}
       {kind === 'discipline' && formal && letters.length > 0 && (
         <div className="row wrap gap-6">
-          <select className="select grow" value={letter ?? ''} onChange={(e) => setLetterSet(e.target.value === '' ? null : Number(e.target.value))} aria-label="נוסח הערת המשמעת" style={{ minWidth: 200 }}>
+          <Select className="select grow" value={letter ?? ''} onChange={(e) => setLetterSet(e.target.value === '' ? null : Number(e.target.value))} aria-label="נוסח הערת המשמעת" style={{ minWidth: 200 }}>
             <option value="">נוסח הערת המשמעת מהמסמך...</option>
             {sortHe(
               letters.map((l, i) => ({ l, i })),
@@ -1139,7 +1134,7 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
                 {l.title}
               </option>
             ))}
-          </select>
+          </Select>
           <button type="button" className="btn btn-sm" disabled={letter === null} onClick={insertLetter}>
             הוספת הנוסח
           </button>
@@ -1199,13 +1194,13 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
           </Field>
           {cadet.canManage && (
             <Field label="אחראי">
-              <select className="select" value={taskOwner} onChange={(e) => setTaskOwner(Number(e.target.value))}>
+              <Select className="select" value={taskOwner} onChange={(e) => setTaskOwner(Number(e.target.value))}>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.displayName}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           )}
           <Field label="דד-ליין">

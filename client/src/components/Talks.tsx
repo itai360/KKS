@@ -14,7 +14,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { DateInput, ErrorBox, Field, Modal } from './ui';
+import { DateInput, ErrorBox, Field, Modal, Select } from './ui';
 
 const asType = (s: string): TalkType => ((TALK_TYPES as readonly string[]).includes(s) ? (s as TalkType) : 'שיחה יזומה');
 const byDate = (a: CadetRecord, b: CadetRecord) => b.occurredOn.localeCompare(a.occurredOn) || b.id - a.id;
@@ -125,13 +125,13 @@ export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; 
       <div className="col gap-16 talk-form">
         <div className="row wrap gap-12">
           <Field label="סוג השיחה" className="grow">
-            <select className="input" value={draft.type} onChange={(e) => update({ ...draft, type: asType(e.target.value) })}>
+            <Select className="input" value={draft.type} onChange={(e) => update({ ...draft, type: asType(e.target.value) })}>
               {TALK_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="תאריך השיחה">
             <DateInput value={draft.date} max={todayKey()} onChange={(v) => update({ ...draft, date: v })} />

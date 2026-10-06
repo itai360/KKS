@@ -22,7 +22,7 @@ import { FileDocument, HistoryDialog, LiveFile } from '../components/EvaluationF
 import { GradesImport } from '../components/GradesImport';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, PageError, PageHead } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, PageError, PageHead, Select } from '../components/ui';
 import { api } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime } from '../lib/format';
@@ -127,13 +127,13 @@ export function EvaluationsPage() {
       )}
       <div className="filters">
         <input className="input" placeholder="חיפוש לפי שם או מספר אישי" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="select" value={view} onChange={(e) => set('view', e.target.value)} aria-label="תצוגה">
+        <Select className="select" value={view} onChange={(e) => set('view', e.target.value)} aria-label="תצוגה">
           <option value="">כל הצוערים</option>
           <option value="committee">בדרך לוועדה ({all.filter((c) => c.committee && !c.committee.decision).length})</option>
           <option value="nosummary">בלי סיכום מ"פ ({all.filter((c) => !c.hasSummary).length})</option>
           <option value="watch">במעקב ובסיכון ({all.filter((c) => c.standing !== 'ok').length})</option>
           <option value="reason">עם סיבת העלאה לוועדה ({all.filter((c) => c.hasCommitteeReason).length})</option>
-        </select>
+        </Select>
       </div>
       <ErrorBox error={list.error} />
       {list.loading && !list.data ? (
@@ -439,11 +439,11 @@ function ReferDialog({ cadetId, name, reasonInFile, onClose, onDone }: { cadetId
       <div className="col gap-12">
         <div className="info-box">תיק ההערכה, כפי שהוא עכשיו, יישמר כגרסה שהוועדה מקבלת. עד שהוועדה מחליטה אפשר לעדכן את הגרסה. מפקד הצוות יקבל הודעה.</div>
         <Field label="סוג הוועדה">
-          <select className="select" value={kind} onChange={(e) => setKind(e.target.value)}>
+          <Select className="select" value={kind} onChange={(e) => setKind(e.target.value)}>
             {COMMITTEE_KINDS.map((k) => (
               <option key={k}>{k}</option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="סיבת ההעברה">
           <textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -490,13 +490,13 @@ function DecisionDialog({ committee, name, onClose, onDone }: { committee: Commi
     >
       <div className="col gap-12">
         <Field label="ההחלטה">
-          <select className="select" value={decision} onChange={(e) => setDecision(e.target.value as CommitteeDecision)}>
+          <Select className="select" value={decision} onChange={(e) => setDecision(e.target.value as CommitteeDecision)}>
             {COMMITTEE_DECISIONS.map((d) => (
               <option key={d} value={d}>
                 {COMMITTEE_DECISION_LABELS[d]}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {decision === 'dismissed' && <div className="info-box">הסטטוס של הצוער ישתנה ל"הודח / פרש".</div>}
         <Field label="נימוקים ותנאים">

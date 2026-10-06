@@ -26,7 +26,7 @@ import { Icon } from './Icon';
 import { PriorLessons } from './DebriefBits';
 import { TaskList } from './TaskRow';
 import { useToast } from './Toasts';
-import { Bar, DateInput, PageHead } from './ui';
+import { Bar, DateInput, PageHead, Select } from './ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -637,14 +637,14 @@ function LessonsCard({
 function OwnerSelect({ value, onChange, required, label }: { value: number | null; onChange: (v: number | null) => void; required: boolean; label: string }) {
   const { users } = useSession();
   return (
-    <select className={`select${required && !value ? ' missing' : ''}`} value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)} aria-label={label} aria-invalid={required && !value}>
+    <Select className={`select${required && !value ? ' missing' : ''}`} value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)} aria-label={label} aria-invalid={required && !value}>
       <option value="">{required ? 'אחראי...' : 'אחראי (לא חובה)'}</option>
       {users.map((u) => (
         <option key={u.id} value={u.id}>
           {u.displayName}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 

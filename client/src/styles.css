@@ -1615,6 +1615,157 @@ input::-webkit-date-and-time-value {
 .time-input::placeholder {
   font-family: var(--mono);
 }
+/* ---------- picking from a list, a time, a date (pickers.tsx) ---------- */
+.combo-input {
+  appearance: none;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c7068' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 12px center;
+  padding-left: 30px;
+}
+.combo-input:focus {
+  cursor: text;
+}
+.combo-input[aria-expanded='true'] {
+  border-color: var(--ink-2);
+}
+.pop {
+  z-index: 500;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  animation: pop-in 0.12s ease-out;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.combo-list {
+  padding: 4px;
+}
+.combo-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.combo-option.is-active {
+  background: var(--gray-bg);
+}
+.combo-option.is-chosen {
+  font-weight: 600;
+}
+.combo-option[aria-disabled='true'] {
+  color: var(--faint);
+  cursor: default;
+}
+.combo-group {
+  padding: 8px 10px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.combo-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.time-list .combo-option {
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 10px;
+  direction: ltr;
+}
+/* the calendar: Hebrew, Sunday on the right */
+.dp-pop {
+  padding: 10px;
+}
+.dp-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.dp-title {
+  flex: 1;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+}
+.dp-nav {
+  width: 34px;
+  height: 34px;
+}
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.dp-dow {
+  padding: 4px 0 6px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.dp-day {
+  aspect-ratio: 1;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink);
+  font: 500 14px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.dp-day:hover:not(:disabled) {
+  background: var(--gray-bg);
+}
+.dp-day.is-shabbat,
+.dp-dow.is-shabbat {
+  color: var(--muted);
+}
+.dp-day.is-today {
+  border-color: var(--ink-2);
+  font-weight: 700;
+}
+.dp-day.is-chosen {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--card);
+  font-weight: 700;
+}
+.dp-day:disabled {
+  color: var(--line-2);
+  cursor: not-allowed;
+}
+.dp-day:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.dp-foot {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
 /* a date as Israel writes it, with the calendar beside it */
 .date-input {
   position: relative;
@@ -1651,18 +1802,6 @@ input::-webkit-date-and-time-value {
 .date-input-pick:hover {
   color: var(--ink);
   background: var(--gray-bg);
-}
-/* the browser's own date field, kept only for its calendar: under the field, invisible */
-.date-input-native {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  pointer-events: none;
 }
 
 /* ---------- task rows ---------- */
@@ -4147,7 +4286,8 @@ tr.selected td {
   letter-spacing: 0;
   white-space: nowrap;
 }
-select.status-pill {
+select.status-pill,
+input.status-pill {
   appearance: none;
   cursor: pointer;
   padding-left: 28px;
@@ -4158,11 +4298,13 @@ select.status-pill {
   letter-spacing: 0;
   vertical-align: middle;
 }
-select.status-pill:focus-visible {
+select.status-pill:focus-visible,
+input.status-pill:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
-select.status-pill:disabled {
+select.status-pill:disabled,
+input.status-pill:disabled {
   opacity: 0.7;
 }
 

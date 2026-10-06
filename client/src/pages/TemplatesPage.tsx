@@ -7,7 +7,7 @@ import type { Template, TemplateItem } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -194,7 +194,7 @@ function TemplateEditor({ template, onClose }: { template: Template | null; onCl
                   </button>
                 </div>
                 <div className="row wrap gap-6 mt-8">
-                  <select className="select" style={{ width: 170, height: 34 }} value={it.owner ?? ''} onChange={(e) => upd(i, { owner: e.target.value })} aria-label="אחראי">
+                  <Select className="select" style={{ width: 170, height: 34 }} value={it.owner ?? ''} onChange={(e) => upd(i, { owner: e.target.value })} aria-label="אחראי">
                     <option value="">אחראי: לבחירה בהפעלה</option>
                     {kind !== 'activity' && <option value="week_lead">מפק"צ השבוע</option>}
                     {kind === 'activity' && <option value="event_owner">אחראי הפעילות</option>}
@@ -203,20 +203,20 @@ function TemplateEditor({ template, onClose }: { template: Template | null; onCl
                         {u.displayName}
                       </option>
                     ))}
-                  </select>
-                  <select className="select" style={{ width: 130, height: 34 }} value={it.domain ?? ''} onChange={(e) => upd(i, { domain: e.target.value })} aria-label="תחום">
+                  </Select>
+                  <Select className="select" style={{ width: 130, height: 34 }} value={it.domain ?? ''} onChange={(e) => upd(i, { domain: e.target.value })} aria-label="תחום">
                     <option value="">תחום</option>
                     {settings.domains.map((d) => (
                       <option key={d}>{d}</option>
                     ))}
-                  </select>
-                  <select className="select" style={{ width: 120, height: 34 }} value={it.priority ?? 'normal'} onChange={(e) => upd(i, { priority: e.target.value as Priority })} aria-label="עדיפות">
+                  </Select>
+                  <Select className="select" style={{ width: 120, height: 34 }} value={it.priority ?? 'normal'} onChange={(e) => upd(i, { priority: e.target.value as Priority })} aria-label="עדיפות">
                     {PRIORITIES.map((p) => (
                       <option key={p} value={p}>
                         {PRIORITY_LABELS[p]}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   {kind === 'activity' && <input className="input" style={{ width: 130, height: 34 }} value={it.stage ?? ''} onChange={(e) => upd(i, { stage: e.target.value })} placeholder="שלב (תיאומים...)" />}
                   <span className="tiny muted">{it.offsetDays === 0 ? 'ביום עצמו' : it.offsetDays < 0 ? `${-it.offsetDays} ימים לפני` : `${it.offsetDays} ימים אחרי`}</span>
                 </div>
@@ -272,14 +272,14 @@ function ApplyTemplate({ template, onClose }: { template: Template; onClose: () 
     >
       <div className="col gap-16">
         <Field label="לאיזה שבוע?">
-          <select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+          <Select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
             {isCommander && <option value="">ללא שבוע - לפי תאריך</option>}
             {myWeeks.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name} ({shortDate(w.startDate)})
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {!week && (
           <Field label="תאריך עוגן">

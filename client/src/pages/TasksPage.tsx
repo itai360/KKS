@@ -10,7 +10,7 @@ import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
 import { canQuickUpdate, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Loading, openable, PageHead, Seg } from '../components/ui';
+import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { fmtDateTime } from '../lib/format';
@@ -136,15 +136,15 @@ export function TasksPage() {
       </button>
       <div className={`filters${filtersOpen ? '' : ' mobile-collapsed'}`}>
         <input className="input" placeholder="מילת מפתח..." value={f.q} onChange={(e) => set('q', e.target.value)} aria-label="חיפוש במשימות" />
-        <select className="select" value={f.owner} onChange={(e) => set('owner', e.target.value)} aria-label="איש סגל">
+        <Select className="select" value={f.owner} onChange={(e) => set('owner', e.target.value)} aria-label="איש סגל">
           <option value="">כל הסגל</option>
           {people.map((u) => (
             <option key={u.id} value={u.id}>
               {u.displayName}
             </option>
           ))}
-        </select>
-        <select className="select" value={f.week} onChange={(e) => set('week', e.target.value)} aria-label="שבוע">
+        </Select>
+        <Select className="select" value={f.week} onChange={(e) => set('week', e.target.value)} aria-label="שבוע">
           <option value="">כל השבועות</option>
           <option value="none">ללא שבוע</option>
           {weeks.map((w) => (
@@ -152,8 +152,8 @@ export function TasksPage() {
               {w.name}
             </option>
           ))}
-        </select>
-        <select className="select" value={f.track} onChange={(e) => set('track', e.target.value)} aria-label="ציר">
+        </Select>
+        <Select className="select" value={f.track} onChange={(e) => set('track', e.target.value)} aria-label="ציר">
           <option value="">כל הצירים</option>
           <option value="none">ללא ציר</option>
           {tracks.map((t) => (
@@ -161,14 +161,14 @@ export function TasksPage() {
               {t.name}
             </option>
           ))}
-        </select>
-        <select className="select" value={f.domain} onChange={(e) => set('domain', e.target.value)} aria-label="תחום">
+        </Select>
+        <Select className="select" value={f.domain} onChange={(e) => set('domain', e.target.value)} aria-label="תחום">
           <option value="">כל התחומים</option>
           {settings.domains.map((d) => (
             <option key={d}>{d}</option>
           ))}
-        </select>
-        <select className="select" value={f.status} onChange={(e) => set('status', e.target.value)} aria-label="סטטוס">
+        </Select>
+        <Select className="select" value={f.status} onChange={(e) => set('status', e.target.value)} aria-label="סטטוס">
           <option value="">כל הסטטוסים</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -176,15 +176,15 @@ export function TasksPage() {
             </option>
           ))}
           <option value="overdue">באיחור</option>
-        </select>
-        <select className="select" value={f.priority} onChange={(e) => set('priority', e.target.value)} aria-label="עדיפות">
+        </Select>
+        <Select className="select" value={f.priority} onChange={(e) => set('priority', e.target.value)} aria-label="עדיפות">
           <option value="">כל העדיפויות</option>
           {PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {PRIORITY_LABELS[p]}
             </option>
           ))}
-        </select>
+        </Select>
         <label className="check small">
           <input type="checkbox" checked={f.routine === '1'} onChange={(e) => set('routine', e.target.checked ? '1' : '')} />
           כולל משימות שגרה

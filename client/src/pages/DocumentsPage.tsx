@@ -6,7 +6,7 @@ import type { CourseDocument } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
+import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { fileSize, fmtAgo } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -220,21 +220,21 @@ function DocForm({ doc, onClose }: { doc?: CourseDocument; onClose: () => void }
             <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={file?.name} />
           </Field>
           <Field label="קטגוריה">
-            <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <Select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
               {DOCUMENT_CATEGORIES.map((c) => (
                 <option key={c}>{c}</option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="שבוע (לא חובה)">
-            <select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+            <Select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
               <option value="">ללא</option>
               {weeks.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="תיאור" className="span-2">
             <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />

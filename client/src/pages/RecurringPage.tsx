@@ -7,7 +7,7 @@ import type { RecurringRule } from '@shared/types';
 import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, TimeInput } from '../components/ui';
+import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -207,7 +207,7 @@ function RuleEditor({ rule, onClose }: { rule: RecurringRule | null; onClose: ()
             <TimeInput value={time} onChange={setTime} />
           </Field>
           <Field label="אחראי">
-            <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+            <Select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
               <option value="week_lead">מפק"צ השבוע</option>
               <option value="all">כל הסגל (עותק לכל אחד)</option>
               {users.map((u) => (
@@ -215,24 +215,24 @@ function RuleEditor({ rule, onClose }: { rule: RecurringRule | null; onClose: ()
                   {u.displayName}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="עדיפות">
-            <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
+            <Select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
                   {PRIORITY_LABELS[p]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="תחום">
-            <select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
+            <Select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
               <option value="">ללא</option>
               {settings.domains.map((d) => (
                 <option key={d}>{d}</option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         <Field label="פירוט">

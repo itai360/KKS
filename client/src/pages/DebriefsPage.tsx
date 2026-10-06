@@ -16,7 +16,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Seg, Select, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { isoAt, todayKey } from '../lib/format';
@@ -368,7 +368,7 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
               ) : undefined
             }
           >
-            <select className="select" value={week?.id ?? ''} onChange={(e) => (setWeekSet(Number(e.target.value)), setTitle(''))} data-autofocus>
+            <Select className="select" value={week?.id ?? ''} onChange={(e) => (setWeekSet(Number(e.target.value)), setTitle(''))} data-autofocus>
               {!weeks && <option value="">טוען שבועות...</option>}
               {[...(weeks ?? [])]
                 .sort((a, b) => a.startDate.localeCompare(b.startDate))
@@ -377,7 +377,7 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
                     שבוע {w.number} · {w.name} ({shortDate(w.startDate)}-{shortDate(w.endDate)})
                   </option>
                 ))}
-            </select>
+            </Select>
           </Field>
         )}
         <Field label="נושא התחקיר" required className="span-2">
@@ -394,7 +394,7 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
         </Field>
         {!weekly && (
         <Field label={kind === 'event' ? 'המופע בלו"ז' : 'פעילות בלו"ז'} hint={loadingDay ? 'טוען את הפעילויות של היום...' : !known.length ? `אין פעילויות ב-${shortDate(date)} בלו"ז וביומן` : undefined}>
-          <select className="select" value={chosen?.key ?? ''} onChange={(e) => setPick(e.target.value)}>
+          <Select className="select" value={chosen?.key ?? ''} onChange={(e) => setPick(e.target.value)}>
             <option value="">ללא</option>
             {kept && <option value={kept.key}>{label(kept)}</option>}
             {schedule.length > 0 && (
@@ -415,17 +415,17 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
                 ))}
               </optgroup>
             )}
-          </select>
+          </Select>
         </Field>
         )}
         <Field label="מנחה">
-          <select className="select" value={facilitator} onChange={(e) => setFacilitator(e.target.value)}>
+          <Select className="select" value={facilitator} onChange={(e) => setFacilitator(e.target.value)}>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.displayName}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="משתתפים">
           <input className="input" value={participants} onChange={(e) => setParticipants(e.target.value)} placeholder="לדוגמה: סגל הצוות, מדריכי ירי" />
@@ -788,7 +788,7 @@ function ItemToRecurring({ item, onClose, onDone }: { item: DebriefItem; onClose
             <TimeInput value={time} onChange={setTime} />
           </Field>
           <Field label="אחראי">
-            <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+            <Select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
               <option value="week_lead">מפק"צ השבוע</option>
               <option value="all">כל הסגל</option>
               {users.map((u) => (
@@ -796,7 +796,7 @@ function ItemToRecurring({ item, onClose, onDone }: { item: DebriefItem; onClose
                   {u.displayName}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         <ErrorBox error={error} />
@@ -853,13 +853,13 @@ function ItemToTemplate({ item, onClose, onDone }: { item: DebriefItem; onClose:
         ) : (
           <>
             <Field label="תבנית">
-              <select className="select" value={chosen} onChange={(e) => setTemplateId(e.target.value)}>
+              <Select className="select" value={chosen} onChange={(e) => setTemplateId(e.target.value)}>
                 {list.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name} ({t.kind === 'activity' ? 'פעילות' : t.kind === 'week' ? 'שבוע' : 'כללית'})
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="שם השלב">
               <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} data-autofocus />

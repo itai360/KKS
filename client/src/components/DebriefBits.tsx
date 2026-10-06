@@ -11,7 +11,7 @@ import type { BankLesson } from '@shared/types';
 import { Icon } from './Icon';
 import { DateTimeInputs } from './NewTask';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal } from './ui';
+import { ErrorBox, Field, Modal, Select } from './ui';
 import { api } from '../lib/api';
 import { isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -167,13 +167,13 @@ function LessonToTask({ lesson, context, onClose, onSave }: { lesson: BankLesson
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} data-autofocus />
         </Field>
         <Field label="אחראי" required>
-          <select className="select" value={owner} onChange={(e) => setOwner(Number(e.target.value))}>
+          <Select className="select" value={owner} onChange={(e) => setOwner(Number(e.target.value))}>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.id === user.id ? `אני (${u.displayName})` : u.displayName}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="דד-ליין" required>
           <DateTimeInputs date={date} time={time} onDate={setDate} onTime={setTime} />

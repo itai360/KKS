@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Modal } from './ui';
+import { ErrorBox, Modal, Select } from './ui';
 
 type Sheet = { name: string; rows: string[][] };
 type Status = 'pending' | 'done' | 'skipped';
@@ -265,13 +265,13 @@ export function GradesImport({ onClose }: { onClose: () => void }) {
         {!finished && source && source.sheets.length > 1 && (
           <label className="row gap-6 small">
             גליון{many ? ` ב-${source.file}` : ''}:
-            <select className="select" style={{ maxWidth: 240 }} value={source.sheet} onChange={(e) => pickSheet(Number(e.target.value))} disabled={busy}>
+            <Select className="select" style={{ maxWidth: 240 }} value={source.sheet} onChange={(e) => pickSheet(Number(e.target.value))} disabled={busy}>
               {source.sheets.map((s, i) => (
                 <option key={i} value={i}>
                   {s.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {!finished && preview && (
@@ -370,13 +370,13 @@ function GradeRow({
       <tr className={skip ? 'muted' : ''}>
         <th scope="row">{col.header}</th>
         <td>
-          <select className="select" value={col.target} aria-label={`לאן נכנסת העמודה ${col.header}`} onChange={(e) => onRoute(e.target.value as GradeTarget)} disabled={busy}>
+          <Select className="select" value={col.target} aria-label={`לאן נכנסת העמודה ${col.header}`} onChange={(e) => onRoute(e.target.value as GradeTarget)} disabled={busy}>
             {targets.map((t) => (
               <option key={t.value} value={t.value}>
                 {label(col, t)}
               </option>
             ))}
-          </select>
+          </Select>
         </td>
         <td className="mono">
           {skip ? (

@@ -13,7 +13,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { DateInput, ErrorBox, Field, Modal, Seg, TimeInput } from './ui';
+import { DateInput, ErrorBox, Field, Modal, Seg, Select, TimeInput } from './ui';
 
 export interface NewTaskInitial {
   title?: string;
@@ -345,7 +345,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
         </Field>
 
         <Field label="שבוע בקורס" hint={weekId === 'auto' ? (autoWeek ? `לפי הדד-ליין: ${weekLabel(autoWeek)}` : date ? 'הדד-ליין לא נופל באף שבוע' : 'נקבע לפי הדד-ליין') : undefined}>
-          <select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+          <Select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
             <option value="auto">{autoWeek ? `אוטומטי - ${autoWeek.name}` : 'אוטומטי לפי הדד-ליין'}</option>
             <option value="none">ללא שבוע</option>
             {[...weeks]
@@ -355,11 +355,11 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
                   {weekLabel(w)}
                 </option>
               ))}
-          </select>
+          </Select>
         </Field>
 
         <Field label="ציר בקורס" hint={trackId === 'auto' ? (autoTrack ? `לפי התחום: ${autoTrack.name}` : 'ללא ציר - או בחירת ציר מהרשימה') : undefined}>
-          <select className="select" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
+          <Select className="select" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
             <option value="auto">{autoTrack ? `אוטומטי - ${autoTrack.name}` : 'אוטומטי לפי התחום'}</option>
             <option value="none">ללא ציר</option>
             {tracks.map((t) => (
@@ -367,7 +367,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
 
         <Field label="אחראי" required hint={!isCommander ? 'אפשר לבחור את עצמך או כל איש סגל אחר; משימה למפקד הקורס - רק בשבוע שבאחריותך' : undefined}>
@@ -418,12 +418,12 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
               <Seg value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] }))} />
             </Field>
             <Field label="תחום">
-              <select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
+              <Select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
                 <option value="">ללא</option>
                 {settings.domains.map((d) => (
                   <option key={d}>{d}</option>
                 ))}
-              </select>
+              </Select>
             </Field>
             {domain === OTHER_DOMAIN && (
               <Field label="איזה תחום?">
@@ -431,13 +431,13 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
               </Field>
             )}
             <Field label="נראות">
-              <select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
+              <Select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
                 {VISIBILITIES.map((v) => (
                   <option key={v} value={v}>
                     {VISIBILITY_LABELS[v]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="קישור / מסמך">
               <input className="input" type="url" dir="ltr" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://drive.google.com/..." />

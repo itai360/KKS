@@ -12,7 +12,7 @@ import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg } from '../components/ui';
+import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -253,7 +253,7 @@ export function GenerateWeeks({ onClose }: { onClose: () => void }) {
                 {start && `${shortDate(addDays(start, i * 7))}-${shortDate(addDays(start, i * 7 + 6))}`}
               </span>
               <input className="input grow" value={r.name} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} style={{ minWidth: 160 }} />
-              <select
+              <Select
                 className="select"
                 style={{ width: 170 }}
                 value={r.lead ?? ''}
@@ -266,7 +266,7 @@ export function GenerateWeeks({ onClose }: { onClose: () => void }) {
                     {s.displayName}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button className="icon-btn" aria-label="הסר" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
                 <Icon name="x" size={16} />
               </button>
@@ -755,7 +755,7 @@ function OpenWeek({ detail, onClose }: { detail: WeekDetail; onClose: () => void
                         </span>
                       </span>
                     </label>
-                    <select
+                    <Select
                       className="select"
                       style={{ width: 170, height: 32, fontSize: 13 }}
                       value={owners[String(i)] ?? ''}
@@ -769,7 +769,7 @@ function OpenWeek({ detail, onClose }: { detail: WeekDetail; onClose: () => void
                     >
                       <option value="">{ownerLabel(it.owner)}</option>
                       <OwnerOptions />
-                    </select>
+                    </Select>
                   </div>
                 );
               })}
@@ -993,13 +993,13 @@ function Lessons({ detail }: { detail: WeekDetail }) {
           <div className="col gap-6">
             <input className="input" placeholder="שם המשימה (לדוגמה: סגירת מדריכים עד יום שלישי)" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
             {canAssign ? (
-              <select className="select" value={owner[0]} onChange={(e) => setOwner([Number(e.target.value)])} aria-label="אחראי">
+              <Select className="select" value={owner[0]} onChange={(e) => setOwner([Number(e.target.value)])} aria-label="אחראי">
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.displayName}
                   </option>
                 ))}
-              </select>
+              </Select>
             ) : (
               <div className="tiny muted">המשימה תיפתח עליך</div>
             )}

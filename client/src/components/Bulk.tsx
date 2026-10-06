@@ -9,7 +9,7 @@ import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal, openable } from './ui';
+import { ErrorBox, Field, Modal, openable, Select } from './ui';
 import { ask } from './Confirm';
 
 export interface BulkAction {
@@ -233,13 +233,13 @@ function AskDialog({ action, count, onClose, onApply }: { action: BulkAction; co
     >
       <Field label={ask.label}>
         {ask.options ? (
-          <select className="select" value={value} onChange={(e) => setValue(e.target.value)} data-autofocus>
+          <Select className="select" value={value} onChange={(e) => setValue(e.target.value)} data-autofocus>
             {ask.options.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <input className="input" type={ask.type === 'number' ? 'number' : 'text'} value={value} onChange={(e) => setValue(e.target.value)} placeholder={ask.placeholder} data-autofocus />
         )}

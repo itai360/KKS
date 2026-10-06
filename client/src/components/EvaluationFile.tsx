@@ -17,7 +17,7 @@ import { useSession } from '../lib/session';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { DateInput, ErrorBox, Field, Modal, Seg } from './ui';
+import { DateInput, ErrorBox, Field, Modal, Seg, Select } from './ui';
 
 type Value = string | number | null;
 const NUMBER_FIELDS: EvaluationField[] = EXAM_FIELDS.filter((k) => !EXAM_TEXT_FIELDS.includes(k));
@@ -717,20 +717,20 @@ function DynamicsSection({ file, setFile }: { file: EvaluationFile; setFile: (f:
           <DateInput value={date} max={todayKey()} onChange={(v) => setDate(v)} />
         </Field>
         <Field label="ציון">
-          <select className="select" value={score} onChange={(e) => setScore(e.target.value)}>
+          <Select className="select" value={score} onChange={(e) => setScore(e.target.value)}>
             <option value="">בחירה</option>
             {[1, 2, 3, 4, 5].map((n) => (
               <option key={n}>{n}</option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="מיקום בצוות">
-          <select className="select" value={rank} onChange={(e) => setRank(e.target.value)}>
+          <Select className="select" value={rank} onChange={(e) => setRank(e.target.value)}>
             <option value="">בחירה</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
               <option key={n}>{n}</option>
             ))}
-          </select>
+          </Select>
         </Field>
         <button type="button" className="btn btn-primary" disabled={busy || !date || !score || !rank} onClick={() => void add()}>
           <Icon name="plus" /> הוספת הערכה

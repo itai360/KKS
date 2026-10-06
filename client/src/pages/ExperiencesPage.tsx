@@ -9,7 +9,7 @@ import type { Cadet, Experience } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -236,7 +236,7 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
         )}
         {!experience && !cadetId && (
           <Field label="צוער" required className="span-2">
-            <select className="select" value={cadet} onChange={(e) => setCadet(e.target.value)}>
+            <Select className="select" value={cadet} onChange={(e) => setCadet(e.target.value)}>
               <option value="">בחירת צוער...</option>
               {(cadets.data ?? [])
                 .filter((c) => c.canManage)
@@ -246,20 +246,20 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
                     {c.fullName} {c.teamName ? `(${c.teamName})` : ''}
                   </option>
                 ))}
-            </select>
+            </Select>
           </Field>
         )}
         {isBroad ? (
           <>
             <Field label="סוג התנסות רוחב" required className="span-2">
-              <select className="select" value={broad} onChange={(e) => setBroad(e.target.value)} data-autofocus>
+              <Select className="select" value={broad} onChange={(e) => setBroad(e.target.value)} data-autofocus>
                 <option value="">בחירה...</option>
                 {BROAD_EXPERIENCES.map((b) => (
                   <option key={b} value={b}>
                     {b}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <ChoiceField label="תקופה" id="exp-span" required hint={courseStart && courseEnd ? 'התאריכים מתמלאים לפי תאריכי הקורס, ואפשר לשנות אותם' : 'תאריכי הקורס לא הוגדרו - מלאו את התאריכים ידנית'}>
               <Seg<ExperienceSpan> wrap value={span ?? ('' as ExperienceSpan)} onChange={pickSpan} options={EXPERIENCE_SPANS.map((s) => ({ value: s, label: SPAN_LABELS[s] }))} />
@@ -277,14 +277,14 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
           <DateInput value={end} onChange={(v) => setEnd(v)} />
         </Field>
         <Field label="מפקד חונך" className="span-2" hint="יקבל משימת משוב שמסתיימת ביום האחרון של ההתנסות">
-          <select className="select" value={mentor} onChange={(e) => setMentor(e.target.value)}>
+          <Select className="select" value={mentor} onChange={(e) => setMentor(e.target.value)}>
             <option value="">ללא (המשימה תיפתח עליך)</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.displayName}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="מטרות ההתנסות" className="span-2">
           <textarea className="textarea" value={goals} onChange={(e) => setGoals(e.target.value)} placeholder="לדוגמה: קבלת החלטות תחת לחץ, שליטה בקשר, הוצאת פקודות" />
