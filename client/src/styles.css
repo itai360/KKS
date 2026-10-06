@@ -1915,6 +1915,20 @@ input::-webkit-date-and-time-value {
   color: #fff;
 }
 
+.nowrap {
+  white-space: nowrap;
+}
+
+/* in the table and on the board: a little smaller, beside the title */
+.task-check.small {
+  width: 22px;
+  height: 22px;
+}
+.task-check.small svg {
+  width: 12px;
+  height: 12px;
+}
+
 .task-check:disabled {
   cursor: default;
   opacity: 0.4;

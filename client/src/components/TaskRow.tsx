@@ -16,19 +16,27 @@ export function canQuickUpdate(t: Task, userId: number, commander: boolean): boo
   return commander || t.ownerId === userId || t.participantIds.includes(userId) || t.createdBy === userId;
 }
 
-export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Task; showOwner?: boolean; extra?: ReactNode; readOnly?: boolean }) {
-  const navigate = useNavigate();
+// several ticks in a row: the list refreshes once, a moment after the last, so rows do not move under the pointer
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+function refreshSoon() {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    emitLocalChange('tasks');
+  }, 1200);
+}
+
+/** Marking a task done from a list: shown done at once, then the list moves it to the completed. */
+export function useTaskTick(task: Task, readOnly?: boolean) {
   const { user, isCommander } = useSession();
   const toast = useToast();
-  const bulk = useBulk();
   const [busy, setBusy] = useState(false);
   // ticked: shown done at once, until the list comes back without it (or with it as done)
   const [ticked, setTicked] = useState(false);
   const open = isOpenStatus(task.status);
   const canCheck = !readOnly && canQuickUpdate(task, user.id, isCommander) && open && task.status !== 'pending_approval';
   const done = task.status === 'done' || ticked;
-
-  const complete = async (e: React.MouseEvent) => {
+  const complete = async (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     if (!canCheck || busy) return;
     setBusy(true);
@@ -40,7 +48,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
         body: task.title,
         tone: 'green',
       });
-      emitLocalChange('tasks');
+      refreshSoon();
     } catch (err) {
       setTicked(false);
       toast({ title: (err as Error).message, tone: 'red' });
@@ -48,26 +56,39 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
       setBusy(false);
     }
   };
+  return { done, canCheck, busy, complete, open };
+}
+
+/** The round "done" button of a task in a list, a table or on the board. */
+export function TaskCheck({ task, tick, small }: { task: Task; tick: ReturnType<typeof useTaskTick>; small?: boolean }) {
+  const { done, canCheck, busy, complete } = tick;
+  return (
+    <button
+      type="button"
+      className={`task-check${done ? ' checked' : ''}${small ? ' small' : ''}`}
+      onClick={complete}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && e.stopPropagation()}
+      disabled={!canCheck || busy}
+      aria-label={done ? `הושלמה: ${task.title}` : `סימון כהושלמה: ${task.title}`}
+      title={canCheck ? (task.requiresApproval ? 'סימון כהושלמה (יישלח לאישור)' : 'סימון כהושלמה') : undefined}
+    >
+      <Icon name="check" />
+    </button>
+  );
+}
+
+export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Task; showOwner?: boolean; extra?: ReactNode; readOnly?: boolean }) {
+  const navigate = useNavigate();
+  const bulk = useBulk();
+  const tick = useTaskTick(task, readOnly);
+  const { done, open } = tick;
 
   return (
     <div
       className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}`}
       {...openable(bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`)))}
     >
-      {bulk?.active ? (
-        <BulkCheck id={task.id} />
-      ) : (
-      <button
-        type="button"
-        className={`task-check${done ? ' checked' : ''}`}
-        onClick={complete}
-        disabled={!canCheck || busy}
-        aria-label={done ? 'הושלמה' : 'סימון כהושלמה'}
-        title={canCheck ? (task.requiresApproval ? 'סימון כהושלמה (יישלח לאישור)' : 'סימון כהושלמה') : undefined}
-      >
-        <Icon name="check" />
-      </button>
-      )}
+      {bulk?.active ? <BulkCheck id={task.id} /> : <TaskCheck task={task} tick={tick} />}
       <div className="task-main">
         <div className="task-title">{task.title}</div>
         <div className="task-meta">

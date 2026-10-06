@@ -8,7 +8,7 @@ import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
-import { canQuickUpdate, TaskBulkScope, TaskList } from '../components/TaskRow';
+import { canQuickUpdate, TaskBulkScope, TaskCheck, TaskList, useTaskTick } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
 import { api, qs } from '../lib/api';
@@ -213,8 +213,6 @@ export function TasksPage() {
 }
 
 function TaskTable({ tasks }: { tasks: Task[] }) {
-  const navigate = useNavigate();
-  const bulk = useBulk();
   const [sort, setSort] = useState<'deadline' | 'priority' | 'owner' | 'status'>('deadline');
   const sorted = useMemo(() => {
     const rank = { low: 0, normal: 1, high: 2, critical: 3 };
@@ -251,43 +249,52 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
         </thead>
         <tbody>
           {shown.map((t) => (
-            <tr key={t.id} className={`click t-${t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)), { role: false })}>
-              <td style={{ padding: 0, width: 6, background: 'var(--tone)' }} />
-              <td style={{ maxWidth: 340 }}>
-                <div className="strong row gap-6" style={{ textDecoration: t.status === 'done' ? 'line-through' : undefined }}>
-                  <BulkCheck id={t.id} />
-                  {t.title}
-                </div>
-                {t.subtaskTotal > 0 && (
-                  <div className="tiny muted mono">
-                    {t.subtaskDone}/{t.subtaskTotal} משימות משנה
-                  </div>
-                )}
-              </td>
-              <td>
-                {t.ownerName}
-                {t.participantIds.length > 0 && <span className="muted"> +{t.participantIds.length}</span>}
-              </td>
-              <td className="small muted">{t.createdByName}</td>
-              <td className="small">{t.domain || <span className="faint">-</span>}</td>
-              <td className="small">{t.weekName || <span className="faint">-</span>}</td>
-              <td style={{ whiteSpace: 'nowrap' }}>
-                <span className="task-meta" style={{ marginTop: 0 }}>
-                  <DeadlineText task={t} />
-                </span>
-              </td>
-              <td>
-                <PriorityBadge priority={t.priority} hideNormal={false} />
-              </td>
-              <td style={{ whiteSpace: 'nowrap' }}>
-                <StatusBadge status={t.status} overdue={t.overdue} />
-              </td>
-            </tr>
+            <TaskTableRow key={t.id} t={t} />
           ))}
         </tbody>
       </table>
       {more}
     </div>
+  );
+}
+
+function TaskTableRow({ t }: { t: Task }) {
+  const navigate = useNavigate();
+  const bulk = useBulk();
+  const tick = useTaskTick(t);
+  return (
+    <tr className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}`} {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)), { role: false })}>
+      <td style={{ padding: 0, width: 6, background: 'var(--tone)' }} />
+      <td style={{ maxWidth: 340 }}>
+        <div className="strong row gap-6" style={{ textDecoration: tick.done ? 'line-through' : undefined }}>
+          {bulk?.active ? <BulkCheck id={t.id} /> : <TaskCheck task={t} tick={tick} small />}
+          <span>{t.title}</span>
+        </div>
+        {t.subtaskTotal > 0 && (
+          <div className="tiny muted mono">
+            {t.subtaskDone}/{t.subtaskTotal} משימות משנה
+          </div>
+        )}
+      </td>
+      <td>
+        {t.ownerName}
+        {t.participantIds.length > 0 && <span className="muted"> +{t.participantIds.length}</span>}
+      </td>
+      <td className="small muted nowrap">{t.createdByName}</td>
+      <td className="small nowrap">{t.domain || <span className="faint">-</span>}</td>
+      <td className="small nowrap">{t.weekName || <span className="faint">-</span>}</td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <span className="task-meta" style={{ marginTop: 0 }}>
+          <DeadlineText task={t} />
+        </span>
+      </td>
+      <td>
+        <PriorityBadge priority={t.priority} hideNormal={false} />
+      </td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <StatusBadge status={tick.done ? 'done' : t.status} overdue={!tick.done && t.overdue} />
+      </td>
+    </tr>
   );
 }
 
@@ -349,38 +356,44 @@ function Board({ tasks }: { tasks: Task[] }) {
 }
 
 function BoardCards({ tasks }: { tasks: Task[] }) {
-  const navigate = useNavigate();
-  const bulk = useBulk();
   const { shown, more } = useIncremental(tasks, 60);
   return (
     <>
       {shown.map((t) => (
-        <div
-          key={t.id}
-          className={`board-card t-${t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}`}
-          draggable={!bulk?.active}
-          onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
-          {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)))}
-        >
-          <div className="task-title row gap-6">
-            <BulkCheck id={t.id} />
-            {t.title}
-          </div>
-          <div className="task-meta">
-            <span>{t.ownerName}</span>
-            <span className="sep">
-              <DeadlineText task={t} />
-            </span>
-          </div>
-          <div className="row gap-4 mt-8 wrap">
-            <PriorityBadge priority={t.priority} />
-            {t.overdue && <span className="badge t-red">באיחור</span>}
-            {t.domain && <span className="badge">{t.domain}</span>}
-          </div>
-        </div>
+        <BoardCard key={t.id} t={t} />
       ))}
       {more}
     </>
+  );
+}
+
+function BoardCard({ t }: { t: Task }) {
+  const navigate = useNavigate();
+  const bulk = useBulk();
+  const tick = useTaskTick(t);
+  return (
+    <div
+      className={`board-card t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}`}
+      draggable={!bulk?.active}
+      onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
+      {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)))}
+    >
+      <div className="task-title row gap-6">
+        {bulk?.active ? <BulkCheck id={t.id} /> : <TaskCheck task={t} tick={tick} small />}
+        <span style={{ textDecoration: tick.done ? 'line-through' : undefined }}>{t.title}</span>
+      </div>
+      <div className="task-meta">
+        <span>{t.ownerName}</span>
+        <span className="sep">
+          <DeadlineText task={t} />
+        </span>
+      </div>
+      <div className="row gap-4 mt-8 wrap">
+        <PriorityBadge priority={t.priority} />
+        {t.overdue && <span className="badge t-red">באיחור</span>}
+        {t.domain && <span className="badge">{t.domain}</span>}
+      </div>
+    </div>
   );
 }
 
