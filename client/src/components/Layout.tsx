@@ -317,7 +317,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </NavLink>
         <div className="rail-foot">
           <div className="avatar">{initials(user.displayName)}</div>
-          <div className="grow rail-user">
+          <div className="grow rail-user" title={`${user.displayName} - ${isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}`}>
             <div className="strong small">{user.displayName}</div>
             <div className="tiny" style={{ color: 'var(--rail-muted)' }}>
               {isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}

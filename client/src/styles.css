@@ -334,6 +334,16 @@ p {
   transition-duration: 0.1s;
 }
 
+/* folded: no scrollbar narrowing the width the icons and their highlight are centred in - on a computer
+   with classic scrollbars it pushed the highlight off the icon. The wheel and a finger still scroll it,
+   and it comes back when the menu opens. */
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) {
+  scrollbar-width: none;
+}
+.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible)))::-webkit-scrollbar {
+  display: none;
+}
+
 /* a section title keeps its height, shown as a line */
 .rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-section {
   color: transparent;
@@ -453,8 +463,23 @@ p {
   border-top: 1px solid var(--rail-2);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   padding-inline: 8px;
+}
+
+/* the name and the role on a line each, never broken into short pieces */
+.rail-user {
+  min-width: 0;
+}
+.rail-user > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rail-foot .icon-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
 }
 
 .avatar {
