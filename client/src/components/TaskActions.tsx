@@ -11,7 +11,9 @@ import { useSession } from '../lib/session';
 import { Icon } from './Icon';
 import { DateTimeInputs, UserPicker } from './NewTask';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal, Seg, Select } from './ui';
+import { ErrorBox, Field, Modal, MoreMenu, Seg, Select } from './ui';
+import { useMedia } from '../lib/media';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 
 type Dialog =
   | null
@@ -57,6 +59,7 @@ export function TaskActions({ detail, onChange, onDeleted }: { detail: TaskDetai
   const { task, permissions: p } = detail;
   const { isCommander, user } = useSession();
   const [dialog, setDialog] = useState<Dialog>(null);
+  const phone = useMedia(BOTTOM_BAR_MEDIA);
   const m = useTaskMutation(task.id, onChange);
   const open = isOpenStatus(task.status);
   const involved = task.ownerId === user.id || task.participantIds.includes(user.id);
@@ -153,7 +156,21 @@ export function TaskActions({ detail, onChange, onDeleted }: { detail: TaskDetai
         </div>
       )}
       {buttons.length > 0 && <div className="row wrap gap-6">{buttons}</div>}
-      {secondary.length > 0 && <div className="row wrap gap-6 mt-12">{secondary}</div>}
+      {secondary.length > 0 && (
+        <div className="row wrap gap-6 mt-12">
+          {/* on a phone: the first in sight, the rest in "עוד" - not three rows of small buttons */}
+          {phone && secondary.length > 2 ? (
+            <>
+              {secondary[0]}
+              <MoreMenu small title="עוד פעולות במשימה">
+                {secondary.slice(1)}
+              </MoreMenu>
+            </>
+          ) : (
+            secondary
+          )}
+        </div>
+      )}
       {!dialog && <ErrorBox error={m.error} />}
 
       {dialog === 'block' && <BlockDialog detail={detail} m={m} onClose={() => setDialog(null)} onSubmit={(body) => transition({ action: 'block', ...body }, 'החסם נרשם')} />}

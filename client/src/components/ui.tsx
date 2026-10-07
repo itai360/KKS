@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { Children, cloneElement, Fragment, isValidElement, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
@@ -7,6 +7,9 @@ import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
 import { useSheetGesture } from './sheetGesture';
 import { lockScroll } from '../lib/scrollLock';
+import { useMedia } from '../lib/media';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
+import { Sheet } from './pickers';
 
 // the pickers live in their own module; every screen imports them from here as before
 export { DateInput, Select, SuggestInput, TimeInput } from './pickers';
@@ -379,8 +382,69 @@ export function PageHead({
         )}
         {sub && <div className="page-sub">{sub}</div>}
       </div>
-      {actions && <div className="page-actions">{actions}</div>}
+      {actions && <PageActions>{actions}</PageActions>}
     </div>
+  );
+}
+
+/** the actions as a flat list: fragments opened, nothing for what is not shown */
+function flatActions(nodes: ReactNode, path = ''): ReactElement[] {
+  const out: ReactElement[] = [];
+  Children.forEach(nodes, (n, i) => {
+    if (!isValidElement(n)) return;
+    if (n.type === Fragment) out.push(...flatActions((n.props as { children?: ReactNode }).children, `${path}${i}.`));
+    else out.push(cloneElement(n, { key: n.key ?? `${path}${i}` }));
+  });
+  return out;
+}
+
+const classOf = (el: ReactElement) => String((el.props as { className?: string }).className ?? '');
+
+/**
+ * A screen's actions. On a phone the header stays short: the main action (and a switch like table / list)
+ * in sight, the others in "עוד" - a sheet of full-width rows - instead of rows of small buttons before
+ * the content even starts. A computer shows them all.
+ */
+function PageActions({ children }: { children: ReactNode }) {
+  const phone = useMedia(BOTTOM_BAR_MEDIA);
+  if (!phone) return <div className="page-actions">{children}</div>;
+  const all = flatActions(children).filter((el) => !/\bhide-mobile\b/.test(classOf(el)));
+  const keep = (el: ReactElement) => /\bbtn-primary\b/.test(classOf(el)) || el.type === Seg || (el.props as { 'data-keep'?: boolean })['data-keep'];
+  const rest = all.filter((el) => !keep(el));
+  const primary = all.some((el) => /\bbtn-primary\b/.test(classOf(el)));
+  // a menu for one or two quick links would only hide them
+  if (rest.length < 2 || (!primary && rest.length < 3)) return <div className="page-actions">{children}</div>;
+  return (
+    <div className="page-actions">
+      {all.filter(keep)}
+      <MoreMenu>{rest}</MoreMenu>
+    </div>
+  );
+}
+
+/** "עוד": actions that need not be in sight, as full-width rows in a sheet - a choice made closes it */
+export function MoreMenu({ children, title = 'עוד פעולות', small }: { children: ReactNode; title?: string; small?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const more = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button ref={more} type="button" className={`btn page-more${small ? ' btn-sm' : ''}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+        <Icon name="more" /> עוד
+      </button>
+      <Sheet open={open} title={title} onClose={() => setOpen(false)} back={more} className="page-more-sheet">
+        <div
+          className="pick-sheet-body page-more-list"
+          // after the choice has done its part (a file chooser keeps the sheet open)
+          onClick={(e) => {
+            const t = e.target as HTMLElement;
+            if (t.closest('label, input, select, textarea')) return;
+            if (t.closest('button, a')) setOpen(false);
+          }}
+        >
+          {children}
+        </div>
+      </Sheet>
+    </>
   );
 }
 

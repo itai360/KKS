@@ -51,16 +51,33 @@ export function MyTasksPage() {
       ) : data ? (
         <div className="fade-in">
           <PendingAnnouncements spaced />
-          <div className="stats">
-            <MiniStat n={data.stats.today} label="היום" target="group-today" />
-            <MiniStat n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
-            <MiniStat n={data.stats.week} label="השבוע" target="group-week" />
-            <MiniStat n={data.stats.doneToday} label="הושלמו היום" target="group-done" />
-          </div>
+          {/* four zeros say nothing: with nothing open and nothing done today, the empty state says it */}
+          {(total > 0 || data.stats.doneToday > 0) && (
+            <div className="stats">
+              <MiniStat n={data.stats.today} label="היום" target="group-today" />
+              <MiniStat n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
+              <MiniStat n={data.stats.week} label="השבוע" target="group-week" />
+              <MiniStat n={data.stats.doneToday} label="הושלמו היום" target="group-done" />
+            </div>
+          )}
 
           <div className="split mt-16">
             <div>
-              {total === 0 && <Empty title="אין משימות פתוחות" text="כל הכבוד. משימות חדשות יופיעו כאן ברגע שייפתחו." />}
+              {total === 0 && (
+                <Empty
+                  title="אין משימות פתוחות"
+                  text={
+                    <>
+                      כל הכבוד. משימות חדשות יופיעו כאן ברגע שייפתחו.
+                      <span className="empty-actions">
+                        <button className="btn" onClick={() => navigate('/tasks')}>
+                          לכל המשימות <Icon name="chevronLeft" size={15} />
+                        </button>
+                      </span>
+                    </>
+                  }
+                />
+              )}
               {data.overdue.length > 0 && (
                 <>
                   <GroupTitle id="group-overdue" title="באיחור" count={data.overdue.length} tone="red" />

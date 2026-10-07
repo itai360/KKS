@@ -147,14 +147,17 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
 
       <div className="split">
         <div className="col gap-16">
-          <div className="card">
-            <div className="card-head">
-              <h3>פירוט</h3>
+          {t.description && (
+            <div className="card">
+              <div className="card-head">
+                <h3>פירוט</h3>
+              </div>
+              <div className="card-body" style={{ whiteSpace: 'pre-wrap' }}>
+                {t.description}
+              </div>
             </div>
-            <div className="card-body" style={{ whiteSpace: 'pre-wrap' }}>
-              {t.description || <span className="muted small">לא נוסף פירוט.</span>}
-            </div>
-          </div>
+          )}
+          <QuickAdds detail={detail} onChange={onChange} />
           <Subtasks detail={detail} />
           <Dependencies detail={detail} onChange={onChange} />
           <Updates detail={detail} onChange={onChange} />
@@ -311,11 +314,48 @@ function Details({ task: t }: { task: Task }) {
   );
 }
 
+/** a task's subtasks, to break it into parts */
+const addSubtask = (newTask: ReturnType<typeof useNewTask>, t: Task) =>
+  newTask({ parentId: t.id, weekId: t.weekId, trackId: t.trackId, ownerIds: [t.ownerId], domain: t.domain, deadline: t.deadline, heading: `משימת משנה: ${t.title}` });
+
+/**
+ * What a task can still be given - parts, an order with another task - in one row, instead of an empty
+ * card for each. Once it has some, they get their own card.
+ */
+function QuickAdds({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
+  const newTask = useNewTask();
+  const [adding, setAdding] = useState(false);
+  const t = detail.task;
+  const may = (detail.permissions.canEdit || detail.permissions.canUpdateStatus) && t.status !== 'done' && t.status !== 'cancelled';
+  const sub = may && !detail.subtasks.length;
+  const dep = may && !detail.dependsOn.length && !detail.blocks.length;
+  if (!sub && !dep) return null;
+  return (
+    <div className="card card-pad quick-adds">
+      <span className="small muted">להוסיף למשימה:</span>
+      <div className="chips">
+        {sub && (
+          <button type="button" className="chip" onClick={() => addSubtask(newTask, t)} title="לפרק משימה מורכבת לחלקים - והמשימה תקבל אחוז התקדמות">
+            <Icon name="plus" size={14} /> משימת משנה
+          </button>
+        )}
+        {dep && (
+          <button type="button" className="chip" onClick={() => setAdding(true)} title='משימה שחייבת להסתיים קודם - לדוגמה "בניית לו"ז" לפני "הפצת לו"ז לסגל"'>
+            <Icon name="dependency" size={14} /> תלות במשימה אחרת
+          </button>
+        )}
+      </div>
+      {adding && <AddDependency detail={detail} onClose={() => setAdding(false)} onChange={onChange} />}
+    </div>
+  );
+}
+
 function Subtasks({ detail }: { detail: TaskDetail }) {
   const newTask = useNewTask();
   const t = detail.task;
   const canAdd = detail.permissions.canEdit || detail.permissions.canUpdateStatus;
-  if (!detail.subtasks.length && !canAdd) return null;
+  // none yet: offered in the row of what can be added
+  if (!detail.subtasks.length) return null;
   return (
     <div className="card">
       <div className="card-head">
@@ -326,10 +366,7 @@ function Subtasks({ detail }: { detail: TaskDetail }) {
           </span>
         )}
         {canAdd && (
-          <button
-            className="btn btn-sm"
-            onClick={() => newTask({ parentId: t.id, weekId: t.weekId, trackId: t.trackId, ownerIds: [t.ownerId], domain: t.domain, deadline: t.deadline, heading: `משימת משנה: ${t.title}` })}
-          >
+          <button className="btn btn-sm" onClick={() => addSubtask(newTask, t)}>
             <Icon name="plus" /> הוספה
           </button>
         )}
@@ -340,7 +377,7 @@ function Subtasks({ detail }: { detail: TaskDetail }) {
             <Bar value={Math.round((t.subtaskDone / t.subtaskTotal) * 100)} label="משימות משנה שהושלמו" />
           </div>
         )}
-        {detail.subtasks.length ? <TaskList tasks={detail.subtasks} /> : <p className="small muted">אפשר לפרק משימה מורכבת למשימות משנה - והמשימה הראשית תקבל אחוז התקדמות.</p>}
+        <TaskList tasks={detail.subtasks} />
       </div>
     </div>
   );
@@ -350,7 +387,8 @@ function Dependencies({ detail, onChange }: { detail: TaskDetail; onChange: (d: 
   const [adding, setAdding] = useState(false);
   const m = useTaskMutation(detail.task.id, onChange);
   const canEdit = detail.permissions.canEdit || detail.permissions.canUpdateStatus;
-  if (!detail.dependsOn.length && !detail.blocks.length && !canEdit) return null;
+  // none yet: offered in the row of what can be added
+  if (!detail.dependsOn.length && !detail.blocks.length) return null;
   return (
     <div className="card">
       <div className="card-head">
@@ -363,7 +401,6 @@ function Dependencies({ detail, onChange }: { detail: TaskDetail; onChange: (d: 
         )}
       </div>
       <div className="card-body col gap-6">
-        {!detail.dependsOn.length && !detail.blocks.length && <p className="small muted">לדוגמה: "בניית לו"ז" חייבת להסתיים לפני "הפצת לו"ז לסגל".</p>}
         {detail.dependsOn.length > 0 && <div className="label-caps">חייבת להסתיים קודם</div>}
         {detail.dependsOn.map((d) => (
           <div key={d.id} className="row small">

@@ -42,6 +42,20 @@ const KIND_HINT: Record<DebriefItemKind, string> = {
 const KIND_ICONS: Record<DebriefKind, string> = { weekly: 'calendar', company: 'cap', event: 'zap', general: 'lightbulb' };
 const isKind = (v: string | null): v is DebriefKind => DEBRIEF_KINDS.includes(v as DebriefKind);
 
+const ITEM_ONE: Record<(typeof DEBRIEF_ITEM_KINDS)[number], string> = { fact: 'עובדה אחת', finding: 'ממצא אחד', conclusion: 'מסקנה אחת', lesson: 'לקח אחד' };
+
+/** a debrief's contents in a few words: "2 עובדות · ממצא אחד · 2 לקחים" - or that there is nothing yet */
+function contentsOf(d: Debrief): string {
+  if (d.kind === 'company') {
+    const n = companyPoints(d);
+    return n ? (n === 1 ? 'נושא אחד' : `${n} נושאים`) : 'עוד אין נושאים';
+  }
+  const kinds = d.kind === 'general' ? DEBRIEF_ITEM_KINDS : (['lesson'] as const);
+  const parts = kinds.filter((k) => d.itemCounts[k] > 0).map((k) => (d.itemCounts[k] === 1 ? ITEM_ONE[k] : `${d.itemCounts[k]} ${DEBRIEF_ITEM_LABELS[k]}`));
+  // a form's debrief (weekly, an event) has its answers even before a lesson is drawn from it
+  return parts.length ? parts.join(' · ') : d.kind === 'general' ? 'עוד לא נכתב בו דבר' : 'עוד בלי לקחים';
+}
+
 export function DebriefsPage() {
   const [params, setParams] = useSearchParams();
   const { data, error, loading } = useApi<Debrief[]>('/api/debriefs', ['debriefs', 'tasks']);
@@ -120,23 +134,12 @@ export function DebriefsPage() {
                       {d.presenterName && <span className="sep">מעביר: {d.presenterName}</span>}
                       {d.facilitatorName && <span className="sep">{d.kind === 'company' ? 'אחראי' : 'מנחה'}: {d.facilitatorName}</span>}
                     </div>
+                    {/* what is in it, in one line - only what there is */}
+                    <div className="task-meta debrief-counts">{contentsOf(d)}</div>
                   </div>
                   <div className="task-side">
                     <KindBadge kind={d.kind} />
-                    {d.kind === 'general' || d.kind === 'company' ? (
-                      d.kind === 'company' ? (
-                        <span className="badge">{companyPoints(d) === 1 ? 'נושא אחד' : `${companyPoints(d)} נושאים`}</span>
-                      ) : (
-                      DEBRIEF_ITEM_KINDS.map((k) => (
-                        <span key={k} className="badge" title={DEBRIEF_ITEM_LABELS[k]}>
-                          {DEBRIEF_ITEM_LABELS[k]} {d.itemCounts[k]}
-                        </span>
-                      ))
-                      )
-                    ) : (
-                      <span className="badge">{d.itemCounts.lesson === 1 ? 'לקח אחד' : `${d.itemCounts.lesson} לקחים`}</span>
-                    )}
-                    {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks} משימות פתוחות</span>}
+                    {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks === 1 ? 'משימה פתוחה' : `${d.openTasks} משימות פתוחות`}</span>}
                     <span className={`badge ${d.status === 'final' ? 't-green' : 't-yellow'}`}>{d.status === 'final' ? 'סוכם' : 'טיוטה'}</span>
                   </div>
                 </BulkRow>
