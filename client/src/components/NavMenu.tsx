@@ -1,8 +1,9 @@
 // Every screen in one place, as tiles: the sheet that rises from the course's name at the top of a phone
 // (Layout), and the "כל המסכים" page. The person on top, a search, the three screens they use most,
 // then the menu's groups - each closed until its title is tapped (a search opens the ones it finds in),
-// the screen on show marked, counts on what waits. Where the phone's bar is at the bottom, its screens
-// are not offered again on top or among the main ones (a search still finds them).
+// the screen on show marked, counts on what waits. The home page (the logo is home) and the schedule
+// are not among the main ones, and where the phone's bar is at the bottom, neither are its screens -
+// not on top either (a search still finds them all).
 
 import { useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -16,8 +17,10 @@ import { Empty, initials } from './ui';
 
 export interface MenuSection {
   title?: string;
-  items: { to: string; label: string; icon: string; count?: number; end?: boolean }[];
+  items: MenuItem[];
 }
+
+type MenuItem = { to: string; label: string; icon: string; count?: number; end?: boolean };
 
 /** each group's own mark beside its title */
 const SECTION_ICONS: Record<string, string> = { ראשי: 'home', 'תכנון הקורס': 'plan', צוערים: 'cap', בקרה: 'pulse', כלים: 'wrench', 'חשבון והעדפות': 'settings' };
@@ -39,23 +42,24 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
   const searching = !!query.trim();
   // the phone's bar below has these already
   const onBar = useMemo(() => new Set(typeof matchMedia === 'function' && matchMedia(BOTTOM_BAR_MEDIA).matches ? bottomBarScreens(isCommander) : []), [isCommander]);
+  // the menu's own tiles leave out the home page (the logo is home), the schedule (it has its own place:
+  // the bar below on a phone, the side menu on a computer) and whatever else the bar below has
+  const kept = (it: MenuItem) => !it.end && it.to !== '/' && it.to !== '/schedule' && !onBar.has(it.to);
+  const account = accountItems(unread);
   // the main screens are a group like the others ("ראשי"); on top instead, the three this person uses most
-  const all: MenuSection[] = [
-    ...nav.map((s) => (s.title ? s : { title: 'ראשי', items: s.items.filter((it) => searching || !onBar.has(it.to)) })),
-    { title: 'חשבון והעדפות', items: accountItems(unread) },
-  ];
-  const items = all.flatMap((s) => s.items);
-  const offeredKey = items
-    .filter((it) => !it.end && it.to !== '/' && !onBar.has(it.to))
+  const all: MenuSection[] = [...nav.map((s) => (s.title ? s : { title: 'ראשי', items: s.items.filter((it) => searching || kept(it)) })), { title: 'חשבון והעדפות', items: account }];
+  const everything = [...nav.flatMap((s) => s.items), ...account];
+  const offeredKey = everything
+    .filter(kept)
     .map((it) => it.to)
     .join(',');
   // read once as the menu opens: tiles do not swap under the finger. Before there is a habit to go by:
-  // the first screens of the menu - past the home page (the logo is home) and the bar's
+  // the first screens of the menu that it offers
   const top = useMemo(() => {
     const offered = offeredKey.split(',').filter(Boolean);
     return frequentScreens(user.id, offered, offered);
   }, [user.id, offeredKey]);
-  const frequent = top.map((to) => items.find((it) => it.to === to)).filter((it): it is MenuSection['items'][number] => !!it);
+  const frequent = top.map((to) => everything.find((it) => it.to === to)).filter((it): it is MenuItem => !!it);
   const sections = all.map((s) => ({ ...s, items: s.items.filter((it) => matchesSearch(query, it.label, s.title ?? '')) })).filter((s) => s.items.length);
   const count = sections.reduce((sum, s) => sum + s.items.length, 0);
   const here = (to: string, end?: boolean) => (end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`));
@@ -203,7 +207,7 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
   );
 }
 
-function MenuTile({ item: it, on, index, onNavigate }: { item: MenuSection['items'][number]; on: boolean; index: number; onNavigate?: () => void }) {
+function MenuTile({ item: it, on, index, onNavigate }: { item: MenuItem; on: boolean; index: number; onNavigate?: () => void }) {
   return (
     <Link to={it.to} className={`menu-tile${on ? ' is-here' : ''}`} aria-current={on ? 'page' : undefined} style={{ ['--i' as string]: index }} onClick={() => onNavigate?.()}>
       <span className="menu-tile-icon">
