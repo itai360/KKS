@@ -28,6 +28,7 @@ import { todayKey } from '../lib/format';
 import { Icon } from './Icon';
 import { useSheetGesture } from './sheetGesture';
 import { usePresence } from '../lib/presence';
+import { usePeriodSwipe } from './periodSwipe';
 import { lockScroll } from '../lib/scrollLock';
 
 // ---------------- the floating layer ----------------
@@ -947,6 +948,7 @@ function Calendar({
   onClose,
   onClear,
   focusInside,
+  swipe,
 }: {
   id: string;
   value: string;
@@ -957,11 +959,15 @@ function Calendar({
   /** a date that may stay empty: on a phone, where nothing is typed, it is cleared from here */
   onClear?: () => void;
   focusInside: boolean;
+  /** on a phone: the month turns with the finger, like a page */
+  swipe?: boolean;
 }) {
   const today = todayKey();
   const [cursor, setCursor] = useState(value || today);
   const [month, setMonth] = useState(monthOf(value || today));
   const grid = useRef<HTMLDivElement>(null);
+  const page = useRef<HTMLDivElement>(null);
+  usePeriodSwipe(page, { enabled: !!swipe, onStep: (dir) => setMonth((m) => shiftMonth(m, dir)) });
   const allowed = (k: string) => (!min || k >= min) && (!max || k <= max);
   // six weeks from the Sunday on or before the 1st: the same height every month
   const start = addDays(firstOf(month), -weekdayOf(firstOf(month)));
@@ -1006,6 +1012,8 @@ function Calendar({
           <Icon name="chevronLeft" size={18} />
         </button>
       </div>
+      <div className="period-clip">
+      <div className="period-swipe" ref={page}>
       <div className="dp-grid" ref={grid} onKeyDown={onKey}>
         {DAY_LETTERS.map((d, i) => (
           <div key={d} className={`dp-dow${i === 6 ? ' is-shabbat' : ''}`} aria-hidden="true">
@@ -1033,6 +1041,8 @@ function Calendar({
             </button>
           );
         })}
+      </div>
+      </div>
       </div>
       <div className="dp-foot">
         {[
@@ -1212,6 +1222,7 @@ export function DateInput({
                   : undefined
               }
               focusInside
+              swipe
             />
           </div>
         </Sheet>

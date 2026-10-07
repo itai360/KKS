@@ -11,6 +11,8 @@ import { CalendarView } from '../components/CalendarView';
 import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
+import { usePeriodSwipe } from '../components/periodSwipe';
+import { usePhonePicker } from '../components/pickers';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
@@ -107,6 +109,8 @@ export function SchedulePage() {
     set({ view: v });
   };
   const step = (dir: 1 | -1) => set({ date: stepDate(view === 'list' ? 'day' : view, date, dir), event: null });
+  const swipeArea = useRef<HTMLDivElement>(null);
+  usePeriodSwipe(swipeArea, { enabled: usePhonePicker(), onStep: step });
 
   // t: today, j/k: next/previous, a/d/w/m: list/day/week/month (n stays "new task", everywhere)
   const keys = useRef({ step, setView, set, today });
@@ -238,6 +242,9 @@ export function SchedulePage() {
         </div>
       )}
       <ErrorBox error={error} />
+      {/* on a phone the day, week or month turns with the finger, like a page */}
+      <div className="period-clip">
+      <div className="period-swipe" ref={swipeArea}>
       {view !== 'list' ? (
         loading && !data ? (
           <div className="card card-body">
@@ -322,6 +329,8 @@ export function SchedulePage() {
         )}
       </div>
       )}
+      </div>
+      </div>
       {view !== 'list' && (
         <div className="cal-hint small muted no-print">
           {canAdd ? 'לחיצה או גרירה על זמן פנוי - אירוע חדש · גרירת אירוע - הזזה · גרירת הקצה התחתון - שינוי משך · ' : ''}

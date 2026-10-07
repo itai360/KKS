@@ -2393,6 +2393,17 @@ input::-webkit-date-and-time-value {
   }
 }
 
+/* a day, a week or a month turned by the finger on a phone (periodSwipe.ts): the page moving out
+   past the side never makes the screen wider */
+.period-clip {
+  overflow-x: clip;
+}
+@media (pointer: coarse) {
+  .period-swipe {
+    touch-action: pan-y;
+  }
+}
+
 /* done: grey and struck through - not faded, so its badges and times stay readable */
 .task-row.done .task-title {
   color: var(--muted);
