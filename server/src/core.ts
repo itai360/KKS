@@ -2,6 +2,7 @@
 
 import { DEFAULT_DOMAINS } from '../../shared/constants';
 import { DEFAULT_TZ } from '../../shared/dates';
+import { DEFAULT_STAFF_GROUPS } from '../../shared/staffGroups';
 import type { CourseSettings } from '../../shared/types';
 import { z } from 'zod';
 import { db } from './db';
@@ -65,6 +66,7 @@ const DEFAULT_SETTINGS: CourseSettings = {
   overloadThreshold: 12,
   readinessWarnThreshold: 70,
   domains: DEFAULT_DOMAINS,
+  staffGroups: DEFAULT_STAFF_GROUPS,
 };
 
 let settingsCache: CourseSettings | null = null;

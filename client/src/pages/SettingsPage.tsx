@@ -23,6 +23,8 @@ import { GenerateWeeks } from './WeeksPage';
 import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupported } from '../lib/push';
 import { ask } from '../components/Confirm';
 import { TwoFactorSettings } from '../components/TwoFactor';
+import { STAFF_GROUP_RULE_LABELS, type StaffGroupDef } from '@shared/staffGroups';
+import { useStaffGroups } from '../lib/taskGroups';
 
 export function SettingsPage() {
   const { isCommander, user } = useSession();
@@ -36,6 +38,7 @@ export function SettingsPage() {
             <CourseSettingsCard />
             <StaffCard />
             <DomainsCard />
+            <StaffGroupsCard />
             <PermissionsCard />
             <GuideImportCard />
             <BackupCard />
@@ -394,6 +397,121 @@ function DomainsCard() {
           }}
         >
           <input className="input" value={add} onChange={(e) => setAdd(e.target.value)} placeholder="תחום חדש (לדוגמה: רפואה)" style={{ maxWidth: 260 }} />
+          <button className="btn" disabled={!add.trim()}>
+            <Icon name="plus" /> הוסף
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/** The groups tasks go to together: a task given to one of them shows once, under its name. */
+function StaffGroupsCard() {
+  const { settings, users, user } = useSession();
+  const toast = useToast();
+  const resolved = useStaffGroups();
+  const [groups, setGroups] = useState<StaffGroupDef[]>(settings.staffGroups);
+  const [add, setAdd] = useState('');
+  useEffect(() => {
+    setGroups(settings.staffGroups);
+  }, [settings.staffGroups]);
+  const people = users.filter((u) => u.active);
+  const save = async (list: StaffGroupDef[]) => {
+    const before = groups;
+    setGroups(list);
+    try {
+      await api.patch('/api/settings', { staffGroups: list });
+      emitLocalChange('settings');
+    } catch (e) {
+      setGroups(before);
+      toast({ title: (e as Error).message, tone: 'red' });
+    }
+  };
+  const change = (id: string, patch: Partial<StaffGroupDef>) => void save(groups.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+  const rename = (g: StaffGroupDef, name: string) => {
+    const v = name.trim();
+    if (!v || v === g.name) return;
+    if (groups.some((x) => x.id !== g.id && x.name === v)) return toast({ title: 'כבר יש קבוצה בשם הזה', tone: 'red' });
+    change(g.id, { name: v });
+  };
+  return (
+    <div className="card" id="groups">
+      <div className="card-head">
+        <Icon name="users" />
+        <h3 className="grow">קבוצות סגל</h3>
+      </div>
+      <div className="card-body col gap-16">
+        <p className="small muted" style={{ margin: 0 }}>
+          משימה שניתנה לכמה אנשים מופיעה ברשימות פעם אחת, עם שם הקבוצה שלה בעמודה &quot;קבוצה&quot; - ולא כשורה לכל אחד. בחלון משימה חדשה אפשר לבחור קבוצה בלחיצה.
+        </p>
+        {groups.map((g) => {
+          const members = resolved.find((r) => r.id === g.id)?.memberIds ?? [];
+          return (
+            <div key={g.id} className="col gap-6 group-def">
+              <div className="row gap-8 wrap">
+                <input
+                  className="input"
+                  defaultValue={g.name}
+                  key={g.name}
+                  aria-label="שם הקבוצה"
+                  maxLength={40}
+                  style={{ maxWidth: 220, fontWeight: 600 }}
+                  onBlur={(e) => rename(g, e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                />
+                <span className="small muted grow">{STAFF_GROUP_RULE_LABELS[g.rule]}</span>
+                {g.rule === 'custom' && (
+                  <button
+                    className="icon-btn"
+                    aria-label={`מחיקת הקבוצה ${g.name}`}
+                    title="מחיקת הקבוצה"
+                    onClick={async () => {
+                      if (await ask({ title: `למחוק את הקבוצה "${g.name}"?`, body: 'המשימות עצמן לא נמחקות - הן פשוט יוצגו עם שמות האנשים.', confirm: 'מחיקה', danger: true })) void save(groups.filter((x) => x.id !== g.id));
+                    }}
+                  >
+                    <Icon name="trash" size={16} />
+                  </button>
+                )}
+              </div>
+              {g.rule === 'custom' ? (
+                <div className="chips">
+                  {people.map((u) => {
+                    const on = g.memberIds.includes(u.id);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        className={`chip${on ? ' on' : ''}`}
+                        aria-pressed={on}
+                        onClick={() => change(g.id, { memberIds: on ? g.memberIds.filter((x) => x !== u.id) : [...g.memberIds, u.id] })}
+                      >
+                        {u.id === user.id ? `אני (${u.displayName})` : u.displayName}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="small">
+                  {members.length ? members.map((id) => users.find((u) => u.id === id)?.displayName ?? '').join(', ') : <span className="muted">{g.rule === 'teamCommanders' ? 'אין עדיין צוות עם מפקד - מגדירים במסך הצוערים' : 'אין אנשי סגל פעילים'}</span>}
+                </div>
+              )}
+              {g.rule === 'custom' && g.memberIds.length < 2 && <span className="tiny text-orange">בחר לפחות שני אנשים כדי שמשימות יופיעו תחת הקבוצה</span>}
+            </div>
+          );
+        })}
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const v = add.trim();
+            if (!v) return;
+            if (groups.some((g) => g.name === v)) return toast({ title: 'כבר יש קבוצה בשם הזה', tone: 'red' });
+            void save([...groups, { id: `g${Date.now().toString(36)}`, name: v, rule: 'custom', memberIds: [] }]);
+            setAdd('');
+          }}
+        >
+          <input className="input" value={add} onChange={(e) => setAdd(e.target.value)} placeholder="קבוצה חדשה (לדוגמה: צוות הדרכה)" maxLength={40} style={{ maxWidth: 260 }} />
           <button className="btn" disabled={!add.trim()}>
             <Icon name="plus" /> הוסף
           </button>

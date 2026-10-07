@@ -8,7 +8,7 @@ import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
-import { canQuickUpdate, prefetchTask, TaskBulkScope, TaskCheck, TaskList, useLiveFlash, useTaskTick } from '../components/TaskRow';
+import { canQuickUpdate, GroupTag, prefetchTask, ProgressBadge, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useTaskTick } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
 import { api, qs } from '../lib/api';
@@ -18,6 +18,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useIncremental } from '../lib/incremental';
 import { useApi, useTick } from '../lib/useApi';
+import { foldTasks, groupLabel, type TaskView } from '../lib/taskGroups';
 
 type View = 'table' | 'list' | 'board';
 // a remembered view is a convenience: storage can be missing or blocked
@@ -48,7 +49,7 @@ const SCOPES: [string, string][] = [
 
 export function TasksPage() {
   const [params, setParams] = useSearchParams();
-  const { staff, users, weeks, tracks, settings, isCommander } = useSession();
+  const { staff, users, weeks, tracks, settings, isCommander, user, userName } = useSession();
   const newTask = useNewTask();
   const toast = useToast();
   const [view, setView] = useState<View>(() => (window.innerWidth < 860 ? 'list' : ((readPref('kks.tasksView') as View | null) ?? 'table')));
@@ -84,6 +85,9 @@ export function TasksPage() {
     recurring: f.routine === '1' ? undefined : '0',
   })}`;
   const { data, error, loading } = useApi<Task[]>(url);
+  // a task given to a group is one row, under the group's name - unless the list is one person's
+  const collapse = !f.owner;
+  const rows = useMemo(() => foldTasks(data ?? [], user.id, collapse), [data, collapse, user.id]);
   const changeView = (v: View) => {
     setView(v);
     writePref('kks.tasksView', v);
@@ -93,11 +97,11 @@ export function TasksPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
-    <TaskBulkScope tasks={data ?? []}>
+    <TaskBulkScope tasks={data ?? []} collapse={collapse}>
     <div className="page">
       <PageHead
         title="כל המשימות"
-        sub={data ? `${data.length} משימות` : undefined}
+        sub={data ? `${rows.length} משימות` : undefined}
         actions={
           <>
             <BulkToggle />
@@ -112,7 +116,7 @@ export function TasksPage() {
             />
             <button
               className="btn hide-mobile"
-              onClick={() => data && exportCsv(data).catch((e: Error) => toast({ title: e.message, tone: 'red' }))}
+              onClick={() => data && exportCsv(data, userName).catch((e: Error) => toast({ title: e.message, tone: 'red' }))}
               disabled={!data?.length}
               title="ייצוא הרשימה המסוננת לאקסל"
             >
@@ -201,28 +205,34 @@ export function TasksPage() {
       ) : !data?.length ? (
         <Empty icon="filter" title="אין משימות" text="אין משימות שתואמות את הסינון." />
       ) : view === 'list' ? (
-        <TaskList tasks={data} />
+        <TaskList tasks={data} collapse={collapse} />
       ) : view === 'table' ? (
-        <TaskTable tasks={data} />
+        <TaskTable rows={rows} />
       ) : (
-        <Board tasks={data} />
+        <Board rows={rows} />
       )}
     </div>
     </TaskBulkScope>
   );
 }
 
-function TaskTable({ tasks }: { tasks: Task[] }) {
-  const [sort, setSort] = useState<'deadline' | 'priority' | 'owner' | 'status'>('deadline');
+function TaskTable({ rows }: { rows: TaskView[] }) {
+  const { userName } = useSession();
+  const [sort, setSort] = useState<'deadline' | 'priority' | 'owner' | 'group' | 'status'>('deadline');
   const sorted = useMemo(() => {
     const rank = { low: 0, normal: 1, high: 2, critical: 3 };
-    const list = [...tasks];
-    if (sort === 'priority') list.sort((a, b) => rank[b.priority] - rank[a.priority] || a.deadline.localeCompare(b.deadline));
-    else if (sort === 'owner') list.sort((a, b) => a.ownerName.localeCompare(b.ownerName, 'he') || a.deadline.localeCompare(b.deadline));
-    else if (sort === 'status') list.sort((a, b) => STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status) || a.deadline.localeCompare(b.deadline));
-    else list.sort((a, b) => a.deadline.localeCompare(b.deadline));
+    const list = [...rows];
+    const owner = (r: TaskView) => (r.folded ? '' : r.task.ownerName);
+    const group = (r: TaskView) => groupLabel(r.task, userName) || '\uffff';
+    const byDeadline = (a: TaskView, b: TaskView) => a.task.deadline.localeCompare(b.task.deadline);
+    if (sort === 'priority') list.sort((a, b) => rank[b.task.priority] - rank[a.task.priority] || byDeadline(a, b));
+    else if (sort === 'owner') list.sort((a, b) => owner(a).localeCompare(owner(b), 'he') || byDeadline(a, b));
+    // tasks of the same group together, people on their own last
+    else if (sort === 'group') list.sort((a, b) => group(a).localeCompare(group(b), 'he') || byDeadline(a, b));
+    else if (sort === 'status') list.sort((a, b) => STATUSES.indexOf(a.task.status) - STATUSES.indexOf(b.task.status) || byDeadline(a, b));
+    else list.sort(byDeadline);
     return list;
-  }, [tasks, sort]);
+  }, [rows, sort, userName]);
   const { shown, more } = useIncremental(sorted);
   const th = (key: typeof sort, label: string) => (
     <th>
@@ -239,6 +249,7 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
             <th style={{ width: 6, padding: 0 }} />
             <th>משימה</th>
             {th('owner', 'אחראי')}
+            {th('group', 'קבוצה')}
             <th>יצר</th>
             <th>תחום</th>
             <th>שבוע</th>
@@ -248,8 +259,8 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
           </tr>
         </thead>
         <tbody>
-          {shown.map((t) => (
-            <TaskTableRow key={t.id} t={t} />
+          {shown.map((r) => (
+            <TaskTableRow key={r.task.id} t={r.task} folded={r.folded} />
           ))}
         </tbody>
       </table>
@@ -258,10 +269,11 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
   );
 }
 
-function TaskTableRow({ t }: { t: Task }) {
+function TaskTableRow({ t, folded }: { t: Task; folded: boolean }) {
   const navigate = useNavigate();
   const bulk = useBulk();
-  const tick = useTaskTick(t);
+  const tick = useTaskTick(t, folded);
+  const tag = useGroupTag(t, !folded);
   const flash = useLiveFlash(`${t.status}|${t.deadline}|${t.ownerId}|${t.title}|${t.priority}|${t.overdue}`);
   return (
     <tr
@@ -282,9 +294,16 @@ function TaskTableRow({ t }: { t: Task }) {
           </div>
         )}
       </td>
-      <td>
-        {t.ownerName}
-        {t.participantIds.length > 0 && <span className="muted"> +{t.participantIds.length}</span>}
+      <td className="nowrap">{folded ? <GroupDone t={t} /> : t.ownerName}</td>
+      <td className="nowrap">
+        {tag ? (
+          <span className="row gap-6">
+            <GroupTag label={tag} />
+            {!folded && <ProgressBadge task={t} />}
+          </span>
+        ) : (
+          <span className="faint">-</span>
+        )}
       </td>
       <td className="small muted nowrap">{t.createdByName}</td>
       <td className="small nowrap">{t.domain || <span className="faint">-</span>}</td>
@@ -304,9 +323,21 @@ function TaskTableRow({ t }: { t: Task }) {
   );
 }
 
+/** a row for a whole group, in the owner's column: how many have done theirs */
+function GroupDone({ t }: { t: Task }) {
+  const { userName } = useSession();
+  const left = t.groupCopies.filter((c) => !c.done).map((c) => userName(c.ownerId));
+  const done = t.groupCopies.length - left.length;
+  return (
+    <span className="small muted" title={left.length ? `עוד לא: ${left.join(', ')}` : undefined}>
+      {done === t.groupCopies.length ? 'כולם השלימו' : `${done} מתוך ${t.groupCopies.length} השלימו`}
+    </span>
+  );
+}
+
 const BOARD_COLUMNS: TaskStatus[] = ['todo', 'in_progress', 'waiting', 'pending_approval', 'done'];
 
-function Board({ tasks }: { tasks: Task[] }) {
+function Board({ rows }: { rows: TaskView[] }) {
   const navigate = useNavigate();
   const toast = useToast();
   const { user, isCommander } = useSession();
@@ -314,8 +345,11 @@ function Board({ tasks }: { tasks: Task[] }) {
 
   const drop = async (taskId: number, to: TaskStatus) => {
     setOver(null);
-    const t = tasks.find((x) => x.id === taskId);
-    if (!t || t.status === to) return;
+    const row = rows.find((x) => x.task.id === taskId);
+    if (!row || row.task.status === to) return;
+    // a whole group's card moves as its people do their copies
+    if (row.folded) return toast({ title: 'משימה של קבוצה מתקדמת כשכל אחד מעדכן את שלו', body: 'פתח אותה כדי לראות מי השלים', tone: 'blue' });
+    const t = row.task;
     if (!canQuickUpdate(t, user.id, isCommander)) return toast({ title: 'רק האחראים יכולים לעדכן סטטוס', tone: 'red' });
     let action: string | null = null;
     if (to === 'in_progress' && t.status === 'todo') action = 'start';
@@ -337,7 +371,7 @@ function Board({ tasks }: { tasks: Task[] }) {
   return (
     <div className="board">
       {BOARD_COLUMNS.map((col) => {
-        const list = tasks.filter((t) => t.status === col);
+        const list = rows.filter((r) => r.task.status === col);
         return (
           <div
             key={col}
@@ -353,7 +387,7 @@ function Board({ tasks }: { tasks: Task[] }) {
               <StatusBadge status={col} />
               <span className="mono tiny muted">{list.length}</span>
             </div>
-            <BoardCards tasks={list} />
+            <BoardCards rows={list} />
           </div>
         );
       })}
@@ -361,27 +395,28 @@ function Board({ tasks }: { tasks: Task[] }) {
   );
 }
 
-function BoardCards({ tasks }: { tasks: Task[] }) {
-  const { shown, more } = useIncremental(tasks, 60);
+function BoardCards({ rows }: { rows: TaskView[] }) {
+  const { shown, more } = useIncremental(rows, 60);
   return (
     <>
-      {shown.map((t) => (
-        <BoardCard key={t.id} t={t} />
+      {shown.map((r) => (
+        <BoardCard key={r.task.id} t={r.task} folded={r.folded} />
       ))}
       {more}
     </>
   );
 }
 
-function BoardCard({ t }: { t: Task }) {
+function BoardCard({ t, folded }: { t: Task; folded: boolean }) {
   const navigate = useNavigate();
   const bulk = useBulk();
-  const tick = useTaskTick(t);
+  const tick = useTaskTick(t, folded);
+  const tag = useGroupTag(t, !folded);
   const flash = useLiveFlash(`${t.status}|${t.deadline}|${t.ownerId}|${t.title}|${t.priority}|${t.overdue}`);
   return (
     <div
       className={`board-card t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}`}
-      draggable={!bulk?.active}
+      draggable={!bulk?.active && !folded}
       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
       {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)))}
       onPointerEnter={() => prefetchTask(t.id)}
@@ -392,12 +427,14 @@ function BoardCard({ t }: { t: Task }) {
         <span style={{ textDecoration: tick.done ? 'line-through' : undefined }}>{t.title}</span>
       </div>
       <div className="task-meta">
-        <span>{t.ownerName}</span>
+        {!folded && <span>{t.ownerName}</span>}
+        {tag && <GroupTag label={tag} className={folded ? '' : 'sep'} />}
         <span className="sep">
           <DeadlineText task={t} />
         </span>
       </div>
       <div className="row gap-4 mt-8 wrap">
+        <ProgressBadge task={t} />
         <PriorityBadge priority={t.priority} />
         {t.overdue && <span className="badge t-red">באיחור</span>}
         {t.domain && <span className="badge">{t.domain}</span>}
@@ -406,14 +443,16 @@ function BoardCard({ t }: { t: Task }) {
   );
 }
 
-function exportCsv(tasks: Task[]) {
+// each person's copy on its own line - the group in its own column - so it can be followed in the sheet
+function exportCsv(tasks: Task[], userName: (id: number) => string) {
   return saveCsv(
     'משימות',
-    ['משימה', 'אחראי', 'משתתפים', 'יצר', 'תחום', 'שבוע', 'דד-ליין', 'עדיפות', 'סטטוס', 'באיחור', 'הושלמה'],
+    ['משימה', 'אחראי', 'קבוצה', 'משתתפים', 'יצר', 'תחום', 'שבוע', 'דד-ליין', 'עדיפות', 'סטטוס', 'באיחור', 'הושלמה'],
     tasks.map((t) => [
       t.title,
       t.ownerName,
-      t.participantIds.length,
+      groupLabel(t, userName),
+      t.participantIds.map(userName).join(', '),
       t.createdByName,
       t.domain,
       t.weekName ?? '',

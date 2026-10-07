@@ -6,6 +6,7 @@ import { nowIso } from './core';
 import { db } from './db';
 import { sendPush } from './push';
 import { broadcast, pushNotification, type Topic } from './realtime';
+import { forgetStaffGroups } from './staffGroups';
 
 /** something automation does once (a reminder, a daily brief): true the first time for a key */
 export function firstTime(key: string): boolean {
@@ -13,6 +14,7 @@ export function firstTime(key: string): boolean {
 }
 
 export function changed(...topics: Topic[]): void {
+  forgetStaffGroups();
   db().onCommit(() => broadcast(...topics));
 }
 

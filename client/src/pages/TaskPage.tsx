@@ -143,7 +143,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
         </div>
       </div>
 
-      {detail.group && <GroupCard group={detail.group} />}
+      {detail.group && <GroupCard group={detail.group} name={detail.task.groupName} />}
 
       <div className="split">
         <div className="col gap-16">
@@ -195,13 +195,13 @@ function RequestDecision({ requestId }: { requestId: number }) {
   );
 }
 
-function GroupCard({ group }: { group: NonNullable<TaskDetail['group']> }) {
+function GroupCard({ group, name }: { group: NonNullable<TaskDetail['group']>; name: string | null }) {
   const pct = group.total ? Math.round((group.done / group.total) * 100) : 0;
   return (
     <div className="card card-pad mb-12" style={{ marginBottom: 16 }}>
       <div className="row wrap">
         <div className="grow">
-          <div className="label-caps">משימה לכל הסגל</div>
+          <div className="label-caps">{name ? `משימה לקבוצה: ${name}` : 'משימה לכמה אנשים - עותק לכל אחד'}</div>
           <div className="strong" style={{ fontSize: 20 }}>
             {group.done} מתוך {group.total} השלימו
           </div>

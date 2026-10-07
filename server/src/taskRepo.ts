@@ -6,6 +6,7 @@ import type { Task, TaskPermissions } from '../../shared/types';
 import type { UserRow } from './auth';
 import { clock, getSettings, notFound } from './core';
 import { db } from './db';
+import { groupNameOf } from './staffGroups';
 
 export interface TaskRow {
   id: number;
@@ -60,6 +61,7 @@ export interface TaskRow {
   subtask_done: number;
   open_deps: number;
   participant_ids: string | null;
+  group_copies: string | null;
 }
 
 const BASE = `
@@ -70,7 +72,9 @@ SELECT t.*, o.display_name AS owner_name, c.display_name AS created_by_name, c.r
   (SELECT count(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'done') AS subtask_done,
   (SELECT count(*) FROM task_dependencies d JOIN tasks dt ON dt.id = d.depends_on_id
      WHERE d.task_id = t.id AND dt.status NOT IN ('done', 'cancelled')) AS open_deps,
-  (SELECT group_concat(p.user_id) FROM task_participants p WHERE p.task_id = t.id) AS participant_ids
+  (SELECT group_concat(p.user_id) FROM task_participants p WHERE p.task_id = t.id) AS participant_ids,
+  (SELECT group_concat(g.id || ':' || g.owner_id || ':' || (g.status = 'done')) FROM tasks g
+     WHERE g.group_id = t.group_id AND g.status <> 'cancelled') AS group_copies
 FROM tasks t
 JOIN users o ON o.id = t.owner_id
 JOIN users c ON c.id = t.created_by
@@ -105,13 +109,15 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     now,
     staleDays,
   );
+  const participantIds = participantsOf(r);
+  const groupCopies = r.group_id && r.group_copies ? r.group_copies.split(',').map((c) => c.split(':').map(Number)).map(([id, ownerId, done]) => ({ id, ownerId, done: done === 1 })) : [];
   return {
     id: r.id,
     title: r.title,
     description: r.description,
     ownerId: r.owner_id,
     ownerName: r.owner_name,
-    participantIds: participantsOf(r),
+    participantIds,
     createdBy: r.created_by,
     createdByName: r.created_by_name,
     creatorRole: r.creator_role,
@@ -128,6 +134,8 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     eventTitle: r.event_title,
     parentId: r.parent_id,
     groupId: r.group_id,
+    groupCopies,
+    groupName: groupNameOf(groupCopies.length ? groupCopies.map((c) => c.ownerId) : [r.owner_id, ...participantIds], r.created_by),
     meetingId: r.meeting_id,
     recurringRuleId: r.recurring_rule_id,
     cadetId: r.cadet_id,

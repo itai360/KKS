@@ -11,6 +11,8 @@ import { emitLocalChange } from './realtime';
 interface Waiting {
   entity: string;
   id: number;
+  /** everything the row stands for (a task's copies, one for each person) - usually just the item */
+  ids: number[];
   topics: string[];
 }
 
@@ -36,7 +38,7 @@ export function useRemoving(entity: string | undefined, id: number): boolean {
   );
 }
 
-const body = (w: Waiting) => JSON.stringify({ entity: w.entity, action: 'delete', ids: [w.id] });
+const body = (w: Waiting) => JSON.stringify({ entity: w.entity, action: 'delete', ids: w.ids });
 
 async function send(w: Waiting, label: string, toast: ToastFn): Promise<void> {
   const k = keyOf(w.entity, w.id);
@@ -49,6 +51,8 @@ async function send(w: Waiting, label: string, toast: ToastFn): Promise<void> {
     if (r.failed.length) {
       back();
       toast({ title: 'לא נמחק', body: `${label}: ${r.failed[0].error}`, tone: 'red' });
+      // some of what the row stood for may have gone: the list shows what is left
+      if (r.done) emitLocalChange(...w.topics);
       return;
     }
     emitLocalChange(...w.topics);
@@ -58,10 +62,10 @@ async function send(w: Waiting, label: string, toast: ToastFn): Promise<void> {
   }
 }
 
-export function quickDelete({ entity, id, label, topics, toast }: { entity: string; id: number; label: string; topics: string[]; toast: ToastFn }): void {
+export function quickDelete({ entity, id, ids = [id], label, topics, toast }: { entity: string; id: number; ids?: number[]; label: string; topics: string[]; toast: ToastFn }): void {
   const k = keyOf(entity, id);
   if (hidden.has(k)) return;
-  const w: Waiting = { entity, id, topics };
+  const w: Waiting = { entity, id, ids, topics };
   hidden.add(k);
   waiting.set(k, w);
   tell();

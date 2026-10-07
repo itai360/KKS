@@ -2,6 +2,7 @@
 
 import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
 import type { ExperienceKind, ExperienceSpan } from './experiences';
+import type { StaffGroupDef } from './staffGroups';
 import type {
   AbsenceReason,
   AttendanceStatus,
@@ -56,6 +57,8 @@ export interface CourseSettings {
   overloadThreshold: number;
   readinessWarnThreshold: number;
   domains: string[];
+  /** the groups tasks go to together (staffGroups.ts) */
+  staffGroups: StaffGroupDef[];
 }
 
 export interface Task {
@@ -83,6 +86,10 @@ export interface Task {
   eventTitle: string | null;
   parentId: number | null;
   groupId: string | null;
+  /** a copy for each person: all the copies (not cancelled) - whose each is, and whether it is done */
+  groupCopies: { id: number; ownerId: number; done: boolean }[];
+  /** the group the task went to - its copies' people, or its owner with its participants (staffGroups.ts) */
+  groupName: string | null;
   meetingId: number | null;
   recurringRuleId: number | null;
   cadetId: number | null;

@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { domainLabel, isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/constants';
 import type { Task } from '@shared/types';
 import { api } from '../lib/api';
 import { haptic } from '../lib/haptics';
+import { namesOf } from '@shared/staffGroups';
+import { collapseGroups, expandUnits, foldTasks, groupView, isGrouped, peopleOf } from '../lib/taskGroups';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { prefetch } from '../lib/useApi';
@@ -111,10 +113,50 @@ export function useLiveFlash(signature: string): boolean {
 /** the task's page, fetched while the pointer rests on its row - so it opens at once */
 export const prefetchTask = (id: number) => prefetch(`/api/tasks/${id}`);
 
-export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Task; showOwner?: boolean; extra?: ReactNode; readOnly?: boolean }) {
+/** who a task went to, beside its owner: its group's name ("סגל"), or the names of people who are not one group */
+export function useGroupTag(task: Task, ownerShown: boolean): string {
+  const { userName } = useSession();
+  const people = peopleOf(task);
+  if (people.length < 2) return '';
+  if (task.groupName) return task.groupName;
+  // one task they share, its owner already named: who shares it with them
+  if (!isGrouped(task) && ownerShown) return `עם ${namesOf(task.participantIds.map(userName))}`;
+  return namesOf(people.map(userName));
+}
+
+/** a copy for each person: how many have done theirs */
+export function groupProgressOf(task: Task): { done: number; total: number } | null {
+  if (!isGrouped(task)) return null;
+  return { done: task.groupCopies.filter((c) => c.done).length, total: task.groupCopies.length };
+}
+
+export function GroupTag({ label, className = '' }: { label: string; className?: string }) {
+  return (
+    <span className={`group-tag ${className}`} title="קבוצה">
+      <Icon name="users" size={12} />
+      {label}
+    </span>
+  );
+}
+
+export function ProgressBadge({ task }: { task: Task }) {
+  const p = groupProgressOf(task);
+  if (!p) return null;
+  const all = p.done === p.total;
+  return (
+    <span className={`badge mono t-${all ? 'green' : 'blue'}`} title={`${p.done} מתוך ${p.total} השלימו`} aria-label={`${p.done} מתוך ${p.total} השלימו`}>
+      {p.done}/{p.total}
+    </span>
+  );
+}
+
+export function TaskRow({ task, showOwner = true, extra, readOnly, folded }: { task: Task; showOwner?: boolean; extra?: ReactNode; readOnly?: boolean; folded?: boolean }) {
   const navigate = useNavigate();
   const bulk = useBulk();
-  const tick = useTaskTick(task, readOnly);
+  // a row for the whole group is no one's copy to tick
+  const tick = useTaskTick(task, readOnly || folded);
+  const ownerShown = showOwner && !folded;
+  const tag = useGroupTag(task, ownerShown);
   const { done, open } = tick;
   const flash = useLiveFlash(`${task.status}|${task.deadline}|${task.ownerId}|${task.title}|${task.priority}|${task.overdue}`);
   // on a phone, swiped toward its leading side it is done (the round button stays for everyone else),
@@ -133,13 +175,9 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
       <div className="task-main">
         <div className="task-title">{task.title}</div>
         <div className="task-meta">
-          {showOwner && (
-            <span>
-              {task.ownerName}
-              {task.participantIds.length > 0 && ` +${task.participantIds.length}`}
-            </span>
-          )}
-          <span className={showOwner ? 'sep' : ''}>
+          {ownerShown && <span>{task.ownerName}</span>}
+          {tag && <GroupTag label={tag} className={ownerShown ? 'sep' : ''} />}
+          <span className={ownerShown || tag ? 'sep' : ''}>
             <DeadlineText task={task} />
           </span>
           {task.domain && <span className="sep">{domainLabel(task.domain, task.domainNote)}</span>}
@@ -157,6 +195,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
       </div>
       <div className="task-side">
         {extra}
+        <ProgressBadge task={task} />
         <PriorityBadge priority={task.priority} />
         <StatusBadge status={task.status} overdue={task.overdue} />
       </div>
@@ -165,30 +204,30 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
   );
 }
 
-/** The copies of an all-staff task as one row: its progress, not anyone's copy to tick. */
-export function GroupTaskRow({ task, done, total }: { task: Task; done: number; total: number }) {
-  const all = done === total;
-  return (
-    <TaskRow
-      task={{ ...task, ownerName: 'כל הסגל', participantIds: [], status: all ? 'done' : 'todo', tone: all ? 'green' : task.tone, overdue: !all && task.overdue }}
-      readOnly
-      extra={<span className={`badge t-${all ? 'green' : 'blue'}`}>{done}/{total} השלימו</span>}
-    />
-  );
+/** A task given to a group as one row: under its group's name, with how many have done theirs - not anyone's copy to tick. */
+export function GroupTaskRow({ task }: { task: Task }) {
+  const { user } = useSession();
+  return <TaskRow task={groupView({ task, copies: [task] }, user.id)} folded />;
 }
 
 /** Selecting tasks on a page and changing them together (wrap the page, put <BulkToggle /> in its actions). */
-export function TaskBulkScope({ tasks, children }: { tasks: Task[]; children: ReactNode }) {
+export function TaskBulkScope({ tasks, collapse = true, children }: { tasks: Task[]; /** one row for each task given to a group, as the lists show it */ collapse?: boolean; children: ReactNode }) {
   const { users, weeks, settings, user, isCommander } = useSession();
   const active = users.filter((u) => u.active);
+  // a row for a whole group stands for all of its copies
+  const { rows, expand } = useMemo(() => {
+    const units = collapse ? collapseGroups(tasks, user.id) : tasks.map((t) => ({ task: t, copies: [t] }));
+    return { rows: units.map((u) => u.task), expand: collapse ? expandUnits(units, user.id) : undefined };
+  }, [tasks, collapse, user.id]);
   return (
     <BulkScope
       entity="tasks"
       noun="משימות"
       topics={['tasks', 'weeks']}
-      ids={tasks.map((t) => t.id)}
+      ids={rows.map((t) => t.id)}
+      expand={expand}
       // deleted in place only where the server would delete it: by its creator, or by the commander
-      deletable={tasks.filter((t) => isCommander || t.createdBy === user.id).map((t) => t.id)}
+      deletable={rows.filter((t) => isCommander || t.createdBy === user.id).map((t) => t.id)}
       actions={[
         { key: 'complete', label: 'הושלמו', icon: 'check' },
         { key: 'start', label: 'בטיפול', icon: 'play' },
@@ -206,14 +245,16 @@ export function TaskBulkScope({ tasks, children }: { tasks: Task[]; children: Re
   );
 }
 
-export function TaskList({ tasks, empty, showOwner = true }: { tasks: Task[]; empty?: ReactNode; showOwner?: boolean }) {
-  const { shown, more } = useIncremental(tasks);
+export function TaskList({ tasks, empty, showOwner = true, collapse = true }: { tasks: Task[]; empty?: ReactNode; showOwner?: boolean; /** false: one person's tasks - each copy is theirs */ collapse?: boolean }) {
+  const { user } = useSession();
+  const rows = useMemo(() => foldTasks(tasks, user.id, collapse), [tasks, collapse, user.id]);
+  const { shown, more } = useIncremental(rows);
   if (!tasks.length) return <>{empty ?? <Empty title="אין משימות" />}</>;
   return (
     <>
       <div className="list">
-        {shown.map((t) => (
-          <TaskRow key={t.id} task={t} showOwner={showOwner} />
+        {shown.map((r) => (
+          <TaskRow key={r.task.id} task={r.task} showOwner={showOwner} folded={r.folded} />
         ))}
       </div>
       {more}

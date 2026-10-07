@@ -37,7 +37,7 @@ interface BulkState {
   selected: Set<number>;
   toggle: (id: number) => void;
   /** one item deleted at once from its row (swipe, trash, Delete), with a moment to bring it back - where the list deletes */
-  quick: null | { entity: string; topics: string[]; allowed: (id: number) => boolean };
+  quick: null | { entity: string; topics: string[]; allowed: (id: number) => boolean; idsOf: (id: number) => number[] };
 }
 
 const Ctx = createContext<BulkState | null>(null);
@@ -55,6 +55,7 @@ export function BulkScope({
   topics = ['*'],
   quickDelete: quick = true,
   deletable,
+  expand,
   children,
 }: {
   entity: string;
@@ -67,6 +68,8 @@ export function BulkScope({
   quickDelete?: boolean;
   /** the items one may delete, when not all of the list (a task: its creator, or the commander) */
   deletable?: number[];
+  /** the items an action reaches, when a row stands for more than itself (a task's copies, one for each person) */
+  expand?: (action: string, ids: number[]) => number[];
   children: ReactNode;
 }) {
   const toast = useToast();
@@ -103,16 +106,20 @@ export function BulkScope({
     const list = [...selected];
     if (!list.length) return;
     if (a.confirm && !(await ask({ title: a.confirm.replace('{n}', String(list.length)), confirm: a.label, danger: a.danger }))) return;
+    const reach = expand ? expand(a.key, list) : list;
+    if (!reach.length) return toast({ title: `${a.label} לא חל על מה שנבחר`, tone: 'orange' });
     setBusy(true);
     try {
-      const r = await api.post<{ done: number; failed: { id: number; error: string }[] }>('/api/bulk', { entity, action: a.key, ids: list, value: value ?? a.value });
+      const r = await api.post<{ done: number; failed: { id: number; error: string }[] }>('/api/bulk', { entity, action: a.key, ids: reach, value: value ?? a.value });
       emitLocalChange(...topics);
       if (r.failed.length) {
         const reasons = [...new Set(r.failed.map((f) => f.error))].join('; ');
         toast({ title: `${a.label}: ${r.done} בוצעו, ${r.failed.length} לא`, body: reasons, tone: r.done ? 'orange' : 'red' });
-        setSelected(new Set(r.failed.map((f) => f.id)));
+        // what failed stays selected - the rows it was reached through
+        const failed = new Set(r.failed.map((f) => f.id));
+        setSelected(new Set(list.filter((id) => (expand ? expand(a.key, [id]) : [id]).some((x) => failed.has(x)))));
       } else {
-        toast({ title: `${a.label}: ${r.done} ${noun}`, tone: 'green' });
+        toast({ title: `${a.label}: ${list.length} ${noun}`, tone: 'green' });
         setActive(false);
       }
     } catch (e) {
@@ -128,9 +135,9 @@ export function BulkScope({
   const quickState = useMemo(() => {
     if (!canDelete) return null;
     const own = new Set((deletableKey ?? idKey).split(',').filter(Boolean).map(Number));
-    return { entity, topics, allowed: (id: number) => own.has(id) };
+    return { entity, topics, allowed: (id: number) => own.has(id), idsOf: (id: number) => (expand ? expand('delete', [id]) : [id]) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canDelete, entity, idKey, deletableKey, topics.join(',')]);
+  }, [canDelete, entity, idKey, deletableKey, topics.join(','), expand]);
   const value = useMemo<BulkState>(() => ({ active, setActive, selected, toggle, quick: quickState }), [active, selected, quickState]);
   const shown = actions.filter((a) => a.show !== false);
 
@@ -227,7 +234,7 @@ export function SwipeRow({ itemId, label, done, children, className = '' }: { it
     const t = setTimeout(() => setGone(true), 340);
     return () => clearTimeout(t);
   }, [removing]);
-  const remove = () => q && quickDelete({ entity: q.entity, id: itemId, label, topics: q.topics, toast });
+  const remove = () => q && quickDelete({ entity: q.entity, id: itemId, ids: q.idsOf(itemId), label, topics: q.topics, toast });
   const row = useRef<HTMLDivElement>(null);
   const phone = usePhonePicker();
   useSwipeAction(row, { enabled: phone && !b?.active && !removing && (!!q || !!done), lead: done?.run, trail: q ? remove : undefined });

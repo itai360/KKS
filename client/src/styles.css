@@ -2581,6 +2581,29 @@ input::-webkit-date-and-time-value {
   color: var(--faint);
 }
 
+/* the group a task went to - "סגל", "מפק"צים" - in its own column, instead of a row for each person (taskGroups.ts) */
+.group-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  color: var(--ink-2);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-tag svg {
+  flex: none;
+  color: var(--blue);
+}
+
+.group-def + .group-def {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
 .task-meta .deadline {
   font-family: var(--mono);
   font-size: 12.5px;

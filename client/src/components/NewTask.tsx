@@ -11,6 +11,7 @@ import { dateKeyOf, fmtDeadline, fmtTime, getTz, isoAt, todayKey } from '../lib/
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { useStaffGroups } from '../lib/taskGroups';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { DateInput, ErrorBox, Field, Modal, Seg, Select, TimeInput } from './ui';
@@ -124,6 +125,9 @@ export function UserPicker({
   const people = users; // alphabetical, as the session keeps them
   const heavy = (n: number) => (n >= settings.overloadThreshold ? 't-red' : n >= Math.ceil(settings.overloadThreshold * 0.6) ? 't-orange' : '');
   const awayChosen = all ? [] : value.map((id) => ({ u: users.find((x) => x.id === id), l: loadOf(id) })).filter((x) => x.u && x.l?.away);
+  // the course's groups at one press - "מפק"צים", "פורום מוביל" (all the staff is "כל הסגל" where it is offered)
+  const groups = useStaffGroups().filter((g) => multiple && g.memberIds.length > 1 && !(allowAll && g.rule === 'staff'));
+  const isChosen = (ids: number[]) => !all && ids.length === value.length && ids.every((id) => value.includes(id));
   return (
     <div className="col gap-6">
       <div className="chips">
@@ -132,6 +136,24 @@ export function UserPicker({
             <Icon name="users" size={15} /> כל הסגל
           </button>
         )}
+        {groups.map((g) => {
+          const on = isChosen(g.memberIds);
+          return (
+            <button
+              key={`g-${g.id}`}
+              type="button"
+              className={`chip chip-group${on ? ' on' : ''}`}
+              aria-pressed={on}
+              title={g.memberIds.map((id) => users.find((u) => u.id === id)?.displayName ?? '').join(', ')}
+              onClick={() => {
+                onAll?.(false);
+                onChange(on ? [] : g.memberIds);
+              }}
+            >
+              <Icon name="users" size={15} /> {g.name}
+            </button>
+          );
+        })}
         {people.map((u) => {
           const on = !all && value.includes(u.id);
           const l = loadOf(u.id);

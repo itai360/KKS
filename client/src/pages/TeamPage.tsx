@@ -154,7 +154,7 @@ export function StaffPage() {
               </button>
             ))}
           </div>
-          <TaskList tasks={lists[tab].tasks} showOwner={false} empty={<Empty title="אין משימות" />} />
+          <TaskList tasks={lists[tab].tasks} showOwner={false} collapse={false} empty={<Empty title="אין משימות" />} />
         </div>
         <div className="col gap-16 sticky-side">
           <AbsencesCard userId={Number(id)} mine={Number(id) === user.id} canEdit={isCommander || Number(id) === user.id} />
@@ -163,7 +163,7 @@ export function StaffPage() {
               <h3>הקרובות ביותר</h3>
             </div>
             <div className="card-body">
-              {data.upcoming.length ? <TaskList tasks={data.upcoming.slice(0, 5)} showOwner={false} /> : <p className="small muted">אין משימות קרובות.</p>}
+              {data.upcoming.length ? <TaskList tasks={data.upcoming.slice(0, 5)} showOwner={false} collapse={false} /> : <p className="small muted">אין משימות קרובות.</p>}
             </div>
           </div>
           <div className="card">

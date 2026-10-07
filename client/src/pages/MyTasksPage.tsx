@@ -134,10 +134,7 @@ export function MyTasksPage() {
                     <p className="small muted">אין משימות כלליות פתוחות.</p>
                   ) : (
                     <div className="list">
-                      {data.teamTasks.slice(0, 8).map((t) => {
-                        const g = t.groupId ? data.groupProgress[t.groupId] : undefined;
-                        return g && g.total > 1 ? <GroupTaskRow key={t.id} task={t} done={g.done} total={g.total} /> : <TaskRow key={t.id} task={t} />;
-                      })}
+                      {data.teamTasks.slice(0, 8).map((t) => (t.groupCopies.length > 1 ? <GroupTaskRow key={t.id} task={t} /> : <TaskRow key={t.id} task={t} />))}
                     </div>
                   )}
                 </div>

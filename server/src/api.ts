@@ -63,6 +63,7 @@ import {
   shiftEventTasks,
   updateEvent,
 } from './schedule';
+import { staffGroups } from './staffGroups';
 import { canEdit, canView, getTaskRow, isCommander, mustTaskRow, visibleTasks } from './taskRepo';
 import {
   isoDateTime,
@@ -417,6 +418,8 @@ export function apiRouter(): Router {
   });
 
   r.get('/settings', (_req, res) => res.json(getSettings()));
+  // the groups tasks go to together, with who is in each now (staffGroups.ts)
+  r.get('/staff-groups', (_req, res) => res.json(staffGroups()));
 
   const settingsSchema = z
     .object({
@@ -437,6 +440,17 @@ export function apiRouter(): Router {
       overloadThreshold: z.number().int().min(1).max(200),
       readinessWarnThreshold: z.number().int().min(0).max(100),
       domains: z.array(z.string().trim().min(1).max(60)).min(1).max(40),
+      staffGroups: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(40),
+            name: z.string().trim().min(1, 'לקבוצה צריך שם').max(40),
+            rule: z.enum(['staff', 'teamCommanders', 'custom']),
+            memberIds: z.array(z.number().int().positive()).max(200),
+          }),
+        )
+        .max(20)
+        .refine((gs) => new Set(gs.map((g) => g.id)).size === gs.length && new Set(gs.map((g) => g.name)).size === gs.length, 'יש שתי קבוצות באותו שם'),
     })
     .partial();
 

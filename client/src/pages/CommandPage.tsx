@@ -6,7 +6,8 @@ import { parseTaskText } from '@shared/parser';
 import type { Task } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, quickDeadlines } from '../components/NewTask';
-import { GroupTaskRow, TaskRow } from '../components/TaskRow';
+import { TaskRow } from '../components/TaskRow';
+import { foldTasks } from '../lib/taskGroups';
 import { useToast } from '../components/Toasts';
 import { ErrorBox, Field, PageHead } from '../components/ui';
 import { api } from '../lib/api';
@@ -168,29 +169,17 @@ export function CommandPage() {
   );
 }
 
-/** Latest orders; the copies of an all-staff order collapse into one row with its progress. */
+/** Latest orders; the copies of an order given to a group collapse into one row, under the group's name, with its progress. */
 function RecentOrders({ tasks }: { tasks: Task[] }) {
+  const { user } = useSession();
   const sorted = [...tasks].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const rows: { task: Task; done?: number; total?: number }[] = [];
-  const groups = new Map<string, { task: Task; done?: number; total?: number }>();
-  for (const t of sorted) {
-    if (!t.groupId) {
-      rows.push({ task: t });
-      continue;
-    }
-    let g = groups.get(t.groupId);
-    if (!g) {
-      g = { task: t, done: 0, total: 0 };
-      groups.set(t.groupId, g);
-      rows.push(g);
-    }
-    g.total! += t.status === 'cancelled' ? 0 : 1;
-    g.done! += t.status === 'done' ? 1 : 0;
-  }
+  const rows = foldTasks(sorted, user.id);
   if (!rows.length) return <p className="small muted">משימות שתפתח יופיעו כאן עם הסטטוס שלהן.</p>;
   return (
     <div className="list">
-      {rows.slice(0, 15).map(({ task, done, total }) => (total ? <GroupTaskRow key={task.id} task={task} done={done!} total={total} /> : <TaskRow key={task.id} task={task} />))}
+      {rows.slice(0, 15).map((r) => (
+        <TaskRow key={r.task.id} task={r.task} folded={r.folded} />
+      ))}
     </div>
   );
 }
