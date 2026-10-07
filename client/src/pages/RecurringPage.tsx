@@ -75,7 +75,7 @@ export function RecurringPage() {
       ) : (
         <div className="card">
           {data.map((r) => (
-            <BulkRow key={r.id} itemId={r.id} className="health" style={{ opacity: r.active ? 1 : 0.55, cursor: isCommander ? 'pointer' : 'default' }} onOpen={isCommander ? () => setEditing(r) : undefined}>
+            <BulkRow key={r.id} itemId={r.id} label={r.title} className="health" style={{ opacity: r.active ? 1 : 0.55, cursor: isCommander ? 'pointer' : 'default' }} onOpen={isCommander ? () => setEditing(r) : undefined}>
               <BulkCheck id={r.id} />
               <Icon name="repeat" className="muted" size={18} />
               <div className="grow">

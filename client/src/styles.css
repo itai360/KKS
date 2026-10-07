@@ -2345,10 +2345,35 @@ input::-webkit-date-and-time-value {
 }
 }
 
-/* a row swiped toward its leading side on a phone (swipeAction.ts): what is behind it - done - grows as it goes */
+/* a row acted on in place (Bulk.tsx SwipeRow, swipeAction.ts): on a phone swiped toward its leading
+   side (left) it is done, toward its trailing side (right) deleted - what is behind it grows as it goes;
+   on a computer a trash shows on the row under the pointer. Deleted, it folds away. */
 .swipe-wrap {
   position: relative;
+  display: grid;
+  grid-template-rows: 1fr;
   border-radius: var(--radius-sm);
+  transition: grid-template-rows 0.34s var(--spring), opacity 0.22s ease, margin 0.34s var(--spring);
+}
+.swipe-wrap[hidden] {
+  display: none;
+}
+.swipe-row {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+}
+.swipe-wrap.is-removing {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+/* in a spaced list, the gap it leaves closes too */
+.list > .swipe-wrap.is-removing {
+  margin-bottom: -8px;
+}
+.swipe-wrap.is-removing > .swipe-row {
+  overflow: hidden;
 }
 .swipe-pad {
   position: absolute;
@@ -2358,23 +2383,25 @@ input::-webkit-date-and-time-value {
   gap: 8px;
   padding-inline: 18px;
   border-radius: var(--radius-sm);
-  /* the same deep green in light and dark: white on it reads in both */
-  background: #287740;
   color: #fff;
   font-size: 14px;
   font-weight: 700;
   opacity: 0;
   pointer-events: none;
 }
-.swipe-wrap.is-swiping .swipe-pad {
+/* the same deep colours in light and dark: white on them reads in both */
+.swipe-pad.is-lead {
+  background: #287740;
+}
+.swipe-pad.is-trail {
+  justify-content: flex-end;
+  background: #b42c17;
+}
+.swipe-wrap[data-swipe='lead'].is-swiping .swipe-pad.is-lead,
+.swipe-wrap[data-swipe='trail'].is-swiping .swipe-pad.is-trail {
   opacity: 1;
 }
-/* moved past the screen's edge, the row stays inside its place - the page never grows wider (and a
-   phone never zooms out) */
-.swipe-wrap.is-swiping {
-  overflow: hidden;
-}
-/* the mark grows toward its full size as the swipe nears the point where letting go marks it */
+/* the mark grows toward its full size as the swipe nears the point where letting go does it */
 .swipe-pad svg {
   transform: scale(calc(0.55 + 0.45 * var(--swipe, 0)));
   transition: transform 0.12s;
@@ -2386,10 +2413,69 @@ input::-webkit-date-and-time-value {
   transform: scale(1.15);
   transition: transform 0.36s var(--spring-bounce);
 }
+/* moved past the screen's edge, the row stays inside its place - the page never grows wider */
+.swipe-wrap.is-swiping {
+  overflow: hidden;
+}
 @media (pointer: coarse) {
   /* sideways is the row's own gesture; up and down stays the page's scroll */
-  .swipe-wrap > .task-row {
+  .swipe-row {
     touch-action: pan-y;
+  }
+}
+/* the trash on the row under the pointer (or in focus), at its end - where its badges give way to it */
+.quick-del {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--muted);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) scale(0.85);
+  transition: opacity 0.15s, transform 0.34s var(--spring), color 0.15s, background 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+.quick-del:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) scale(1);
+}
+@media (hover: hover) {
+  .swipe-row:hover > .quick-del,
+  .swipe-row:focus-within > .quick-del {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(-50%) scale(1);
+  }
+  .quick-del:hover {
+    border-color: var(--red);
+    background: var(--red);
+    color: #fff;
+  }
+}
+@media (hover: none) {
+  /* a finger swipes instead */
+  .quick-del {
+    display: none;
+  }
+}
+.quick-del:active {
+  transform: translateY(-50%) scale(0.9);
+  transition-duration: 0.1s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .swipe-wrap {
+    transition: opacity 0.18s ease;
   }
 }
 

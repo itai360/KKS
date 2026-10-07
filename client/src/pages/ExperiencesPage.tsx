@@ -6,7 +6,7 @@ import { shortDate } from '@shared/dates';
 import { BROAD_EXPERIENCES, EXPERIENCE_KIND_LABELS, EXPERIENCE_SPANS, SPAN_LABELS, SPAN_SHORT, spanDates, type ExperienceKind, type ExperienceSpan } from '@shared/experiences';
 import { byHe } from '@shared/sort';
 import type { Cadet, Experience } from '@shared/types';
-import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
+import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
@@ -98,6 +98,7 @@ export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolea
   const [editing, setEditing] = useState(false);
   const p = PHASE[x.phase];
   return (
+    <SwipeRow itemId={x.id} label={`${x.role} - ${x.cadetName}`}>
     <div className={`card card-pad t-${p.tone}`} style={{ borderRight: '4px solid var(--tone)', padding: compact ? 12 : 16 }}>
       <div className="row wrap gap-6">
         {x.canEdit && <BulkCheck id={x.id} />}
@@ -156,6 +157,7 @@ export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolea
       {feedback && <FeedbackDialog x={x} onClose={() => setFeedback(false)} />}
       {editing && <ExperienceForm experience={x} onClose={() => setEditing(false)} />}
     </div>
+    </SwipeRow>
   );
 }
 

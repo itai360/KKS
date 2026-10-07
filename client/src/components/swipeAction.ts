@@ -1,16 +1,17 @@
-// A row swiped sideways on a phone, as in Mail on iPhone: it follows the finger 1:1 toward its leading
-// side (left, in a right-to-left page), and the action behind it grows as it goes - armed, with a tick,
-// once letting go would do it. Let go, the direction and speed of the swipe decide (where it is heading,
-// not where it stopped); either way the row springs home with the finger's speed. The other way it only
-// gives a little. Up and down is the page's scroll, untouched.
+// A row swiped sideways on a phone, as in Mail on iPhone. Toward its leading side (left, in a
+// right-to-left page) it is done; toward its trailing side (right) it is deleted. It follows the finger
+// 1:1, and the action behind it grows as it goes - armed, with a tick, once letting go would do it
+// (deleting asks a longer pull). Let go, the direction and speed of the swipe decide (where it is
+// heading, not where it stopped); either way the row springs home with the finger's speed. A side
+// without an action only gives a little. Up and down is the page's scroll, untouched.
 
 import { useEffect, useRef, type RefObject } from 'react';
 import { haptic } from '../lib/haptics';
 import { animateSpring, project, rubberband, velocityOf, type SpringRun } from '../lib/spring';
 
-export function useSwipeAction(row: RefObject<HTMLElement | null>, { enabled, onCommit }: { enabled: boolean; onCommit: () => void }): void {
-  const commit = useRef(onCommit);
-  commit.current = onCommit;
+export function useSwipeAction(row: RefObject<HTMLElement | null>, { enabled, lead, trail }: { enabled: boolean; lead?: () => void; trail?: () => void }): void {
+  const acts = useRef({ lead, trail });
+  acts.current = { lead, trail };
   useEffect(() => {
     const el = row.current;
     const wrap = el?.parentElement;
@@ -19,14 +20,17 @@ export function useSwipeAction(row: RefObject<HTMLElement | null>, { enabled, on
     let run: SpringRun | null = null;
     let swallowUntil = 0;
     let g: null | { x0: number; y0: number; from: number; mode: 'wait' | 'drag' | 'off'; points: { y: number; t: number }[]; armed: boolean } = null;
-    const reach = () => (el.offsetWidth || 300) * 0.38;
+    // leading (done) is a left swipe - negative; trailing (delete) a right one, and a little further
+    const reach = (v: number) => (el.offsetWidth || 300) * (v < 0 ? 0.38 : 0.46);
+    const has = (v: number) => (v < 0 ? !!acts.current.lead : !!acts.current.trail);
 
     const paint = (v: number) => {
       x = v;
       el.style.transform = v ? `translate3d(${v}px, 0, 0)` : '';
       el.style.transition = v ? 'none' : '';
-      const progress = Math.min(1, Math.max(0, -v) / reach());
+      const progress = v && has(v) ? Math.min(1, Math.abs(v) / reach(v)) : 0;
       wrap.style.setProperty('--swipe', progress.toFixed(3));
+      wrap.dataset.swipe = v < 0 ? 'lead' : v > 0 ? 'trail' : '';
       wrap.classList.toggle('is-swiping', v !== 0);
       wrap.classList.toggle('is-armed', progress >= 1);
     };
@@ -70,11 +74,12 @@ export function useSwipeAction(row: RefObject<HTMLElement | null>, { enabled, on
       if (e.cancelable) e.preventDefault();
       const raw = g.from + (t.clientX - g.x0);
       const w = el.offsetWidth || 300;
-      // toward the action it follows freely, softening past the point where it is armed; the other way it barely gives
-      paint(raw > 0 ? rubberband(raw, w, 0.2) : raw < -reach() ? -reach() + rubberband(raw + reach(), w) : raw);
+      // toward an action it follows freely, softening past the point where it is armed; a side with none barely gives
+      const r = reach(raw);
+      paint(!has(raw) ? rubberband(raw, w, 0.2) : Math.abs(raw) > r ? Math.sign(raw) * (r + rubberband(Math.abs(raw) - r, w)) : raw);
       g.points.push({ y: t.clientX, t: e.timeStamp });
       if (g.points.length > 12) g.points.shift();
-      const armed = raw <= -reach();
+      const armed = has(raw) && Math.abs(raw) >= r;
       if (armed !== g.armed) {
         g.armed = armed;
         if (armed) haptic('tick');
@@ -92,7 +97,9 @@ export function useSwipeAction(row: RefObject<HTMLElement | null>, { enabled, on
       swallowUntil = performance.now() + 400;
       const v = velocityOf(was.points);
       const heading = x + project(v, 0.99);
-      if (heading <= -reach() && v < 200) commit.current();
+      // a finger already heading back says no
+      const reversing = Math.abs(v) > 200 && Math.sign(v) !== Math.sign(x);
+      if (has(heading) && Math.abs(heading) >= reach(heading) && !reversing) (heading < 0 ? acts.current.lead : acts.current.trail)?.();
       home(v);
     };
     const click = (e: MouseEvent) => {

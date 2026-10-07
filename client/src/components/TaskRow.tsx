@@ -8,10 +8,8 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { prefetch } from '../lib/useApi';
 import { DeadlineText, PriorityBadge, StatusBadge } from './Badges';
-import { BulkCheck, bulkClick, BulkScope, useBulk } from './Bulk';
+import { BulkCheck, bulkClick, BulkScope, SwipeRow, useBulk } from './Bulk';
 import { Icon } from './Icon';
-import { usePhonePicker } from './pickers';
-import { useSwipeAction } from './swipeAction';
 import { useToast } from './Toasts';
 import { useIncremental } from '../lib/incremental';
 import { Empty, openable } from './ui';
@@ -119,21 +117,13 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
   const tick = useTaskTick(task, readOnly);
   const { done, open } = tick;
   const flash = useLiveFlash(`${task.status}|${task.deadline}|${task.ownerId}|${task.title}|${task.priority}|${task.overdue}`);
-  // on a phone, swiped toward its leading side it is done - the round button stays for everyone else
-  const row = useRef<HTMLDivElement>(null);
-  const swipe = usePhonePicker() && tick.canCheck && !done && !tick.busy && !bulk?.active;
-  useSwipeAction(row, { enabled: swipe, onCommit: () => void tick.complete() });
+  // on a phone, swiped toward its leading side it is done (the round button stays for everyone else),
+  // and toward its trailing side deleted - where the list deletes
+  const canSwipeDone = tick.canCheck && !done && !tick.busy;
 
   return (
-    <div className="swipe-wrap">
-      {swipe && (
-        <div className="swipe-pad" aria-hidden="true">
-          <Icon name="check" size={20} />
-          <span>{task.requiresApproval ? 'לאישור' : 'בוצע'}</span>
-        </div>
-      )}
+    <SwipeRow itemId={task.id} label={task.title} done={canSwipeDone ? { label: task.requiresApproval ? 'לאישור' : 'בוצע', run: () => void tick.complete() } : null}>
     <div
-      ref={row}
       className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}`}
       {...openable(bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`)))}
       onPointerEnter={() => prefetchTask(task.id)}
@@ -171,7 +161,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
         <StatusBadge status={task.status} overdue={task.overdue} />
       </div>
     </div>
-    </div>
+    </SwipeRow>
   );
 }
 
@@ -189,7 +179,7 @@ export function GroupTaskRow({ task, done, total }: { task: Task; done: number; 
 
 /** Selecting tasks on a page and changing them together (wrap the page, put <BulkToggle /> in its actions). */
 export function TaskBulkScope({ tasks, children }: { tasks: Task[]; children: ReactNode }) {
-  const { users, weeks, settings } = useSession();
+  const { users, weeks, settings, user, isCommander } = useSession();
   const active = users.filter((u) => u.active);
   return (
     <BulkScope
@@ -197,6 +187,8 @@ export function TaskBulkScope({ tasks, children }: { tasks: Task[]; children: Re
       noun="משימות"
       topics={['tasks', 'weeks']}
       ids={tasks.map((t) => t.id)}
+      // deleted in place only where the server would delete it: by its creator, or by the commander
+      deletable={tasks.filter((t) => isCommander || t.createdBy === user.id).map((t) => t.id)}
       actions={[
         { key: 'complete', label: 'הושלמו', icon: 'check' },
         { key: 'start', label: 'בטיפול', icon: 'play' },

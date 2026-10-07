@@ -109,7 +109,7 @@ export function DebriefsPage() {
           ) : (
             <div className="list">
               {shown.map((d) => (
-                <BulkRow key={d.id} itemId={d.id} className="task-row t-gray" style={{ gridTemplateColumns: 'auto 1fr auto' }} onOpen={() => navigate(`/debriefs/${d.id}`)}>
+                <BulkRow key={d.id} itemId={d.id} label={d.title} className="task-row t-gray" style={{ gridTemplateColumns: 'auto 1fr auto' }} onOpen={() => navigate(`/debriefs/${d.id}`)}>
                   <BulkCheck id={d.id} />
                   <div className="task-main">
                     <div className="task-title">{d.title}</div>

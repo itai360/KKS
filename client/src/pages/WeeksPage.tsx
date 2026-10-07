@@ -9,7 +9,7 @@ import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { CalendarWeeksModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
-import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
+import { BulkCheck, bulkClick, BulkScope, BulkToggle, SwipeRow, useBulk } from '../components/Bulk';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg, Select } from '../components/ui';
@@ -89,8 +89,8 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
             const current = w.startDate <= today && w.endDate >= today;
             const until = diffDays(w.startDate, today);
             return (
+              <SwipeRow key={w.id} itemId={w.id} label={w.name}>
               <div
-                key={w.id}
                 className={`card week-card${current ? ' current' : ''}${bulk?.selected.has(w.id) ? ' selected' : ''}`}
                 {...openable(bulkClick(bulk, w.id, () => navigate(`/weeks/${w.id}`)))}
                 onPointerEnter={() => prefetch(`/api/weeks/${w.id}`)}
@@ -125,6 +125,7 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
                   <Ring value={w.readiness} size={64} tone={w.totalTasks === 0 ? 'gray' : undefined} />
                 </div>
               </div>
+              </SwipeRow>
             );
           })}
         </div>

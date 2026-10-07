@@ -78,6 +78,7 @@ export function CadetsPage() {
 
   return (
     <BulkScope
+      quickDelete={false}
       entity="cadets"
       noun="צוערים"
       topics={['cadets']}
@@ -467,7 +468,7 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
     }
   };
   return (
-    <BulkScope entity="teams" noun="צוותים" topics={['cadets']} ids={teams.map((t) => t.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} צוותים? הצוערים שלהם יישארו ללא צוות.' }]}>
+    <BulkScope quickDelete={false} entity="teams" noun="צוותים" topics={['cadets']} ids={teams.map((t) => t.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} צוותים? הצוערים שלהם יישארו ללא צוות.' }]}>
     <Modal title="צוותים ומפקדי צוות" onClose={onClose}>
       <div className="col gap-6">
         {teams.length > 1 && (

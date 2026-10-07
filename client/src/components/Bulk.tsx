@@ -4,10 +4,13 @@
 // opening while selecting. The actions go to /api/bulk in one request (see
 // server/src/bulk.ts), which reports items that could not be changed.
 
-import { createContext, useContext, useEffect, useMemo, useState, type HTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { api } from '../lib/api';
+import { quickDelete, useRemoving } from '../lib/quickDelete';
 import { emitLocalChange } from '../lib/realtime';
 import { Icon } from './Icon';
+import { usePhonePicker } from './pickers';
+import { useSwipeAction } from './swipeAction';
 import { useToast } from './Toasts';
 import { ErrorBox, Field, Modal, openable, Select } from './ui';
 import { ask } from './Confirm';
@@ -33,6 +36,8 @@ interface BulkState {
   setActive: (v: boolean) => void;
   selected: Set<number>;
   toggle: (id: number) => void;
+  /** one item deleted at once from its row (swipe, trash, Delete), with a moment to bring it back - where the list deletes */
+  quick: null | { entity: string; topics: string[]; allowed: (id: number) => boolean };
 }
 
 const Ctx = createContext<BulkState | null>(null);
@@ -48,6 +53,8 @@ export function BulkScope({
   actions,
   noun,
   topics = ['*'],
+  quickDelete: quick = true,
+  deletable,
   children,
 }: {
   entity: string;
@@ -56,6 +63,10 @@ export function BulkScope({
   /** what the items are called, plural: "משימות" */
   noun: string;
   topics?: string[];
+  /** false: deleting goes only through selecting and a question (people's records - cadets, teams) */
+  quickDelete?: boolean;
+  /** the items one may delete, when not all of the list (a task: its creator, or the commander) */
+  deletable?: number[];
   children: ReactNode;
 }) {
   const toast = useToast();
@@ -111,7 +122,16 @@ export function BulkScope({
     }
   };
 
-  const value = useMemo<BulkState>(() => ({ active, setActive, selected, toggle }), [active, selected]);
+  // deleting one item from its row: where the list deletes, and only items it would delete
+  const canDelete = quick && actions.some((a) => a.key === 'delete' && a.show !== false);
+  const deletableKey = deletable?.join(',');
+  const quickState = useMemo(() => {
+    if (!canDelete) return null;
+    const own = new Set((deletableKey ?? idKey).split(',').filter(Boolean).map(Number));
+    return { entity, topics, allowed: (id: number) => own.has(id) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canDelete, entity, idKey, deletableKey, topics.join(',')]);
+  const value = useMemo<BulkState>(() => ({ active, setActive, selected, toggle, quick: quickState }), [active, selected, quickState]);
   const shown = actions.filter((a) => a.show !== false);
 
   return (
@@ -189,18 +209,85 @@ export function bulkClick(b: BulkState | null, id: number, otherwise: () => void
   return () => (b?.active ? b.toggle(id) : otherwise());
 }
 
-/** A row that opens on click, and toggles while selecting. */
-export function BulkRow({ itemId, onOpen, className = '', children, ...rest }: { itemId: number; onOpen?: () => void; className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, 'onClick' | 'id'>) {
+/**
+ * A row of a list that can be acted on in place: on a phone, swiped toward its trailing side (right)
+ * it is deleted, and toward its leading side (left) it is done - when given that; on a computer, a
+ * trash shows on the row under the pointer, and the Delete key deletes the row in focus. Deleting asks
+ * nothing: the row folds away, and a message offers to bring it back until the deletion is sent.
+ */
+export function SwipeRow({ itemId, label, done, children, className = '' }: { itemId: number; label: string; done?: { label: string; run: () => void } | null; children: ReactNode; className?: string }) {
   const b = useBulk();
+  const toast = useToast();
+  const q = b?.quick && b.quick.allowed(itemId) ? b.quick : null;
+  const removing = useRemoving(b?.quick?.entity, itemId);
+  // folded away: out of the page a moment later, once its fold has played
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    if (!removing) return setGone(false);
+    const t = setTimeout(() => setGone(true), 340);
+    return () => clearTimeout(t);
+  }, [removing]);
+  const remove = () => q && quickDelete({ entity: q.entity, id: itemId, label, topics: q.topics, toast });
+  const row = useRef<HTMLDivElement>(null);
+  const phone = usePhonePicker();
+  useSwipeAction(row, { enabled: phone && !b?.active && !removing && (!!q || !!done), lead: done?.run, trail: q ? remove : undefined });
   return (
     <div
-      {...(onOpen ? openable(() => (b?.active ? b.toggle(itemId) : onOpen())) : {})}
-      {...rest}
-      className={`${className}${b?.selected.has(itemId) ? ' selected' : ''}`}
-      onClick={b?.active ? () => b.toggle(itemId) : onOpen}
+      className={`swipe-wrap${removing ? ' is-removing' : ''}${className ? ` ${className}` : ''}`}
+      hidden={gone}
+      onKeyDown={(e) => {
+        if (e.key !== 'Delete' || !q || b?.active || (e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
+        e.preventDefault();
+        remove();
+      }}
     >
-      {children}
+      {done && (
+        <div className="swipe-pad is-lead" aria-hidden="true">
+          <Icon name="check" size={20} />
+          <span>{done.label}</span>
+        </div>
+      )}
+      {q && (
+        <div className="swipe-pad is-trail" aria-hidden="true">
+          <Icon name="trash" size={19} />
+          <span>מחיקה</span>
+        </div>
+      )}
+      <div className="swipe-row" ref={row}>
+        {children}
+        {q && !b?.active && (
+          <button
+            type="button"
+            className="quick-del no-print"
+            aria-label={`מחיקה: ${label}`}
+            title="מחיקה (Delete)"
+            onClick={(e) => {
+              e.stopPropagation();
+              remove();
+            }}
+          >
+            <Icon name="trash" size={15} />
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+/** A row that opens on click, and toggles while selecting - deleted in place where its list deletes. */
+export function BulkRow({ itemId, label = 'הפריט', onOpen, className = '', children, ...rest }: { itemId: number; label?: string; onOpen?: () => void; className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, 'onClick' | 'id'>) {
+  const b = useBulk();
+  return (
+    <SwipeRow itemId={itemId} label={label}>
+      <div
+        {...(onOpen ? openable(() => (b?.active ? b.toggle(itemId) : onOpen())) : {})}
+        {...rest}
+        className={`${className}${b?.selected.has(itemId) ? ' selected' : ''}`}
+        onClick={b?.active ? () => b.toggle(itemId) : onOpen}
+      >
+        {children}
+      </div>
+    </SwipeRow>
   );
 }
 

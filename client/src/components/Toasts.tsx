@@ -13,6 +13,8 @@ interface Toast {
   link?: string | null;
   /** a button on the message - "ביטול" right after an action */
   action?: { label: string; run: () => void };
+  /** called once when it is gone - expired, closed, swiped away or pushed out by newer ones */
+  onEnd?: () => void;
 }
 
 const Ctx = createContext<(t: Omit<Toast, 'id'>) => void>(() => undefined);
@@ -30,7 +32,15 @@ const lifetime = (t: Omit<Toast, 'id'>) => (t.action ? 8000 : t.tone === 'red' ?
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const shown = useRef<Toast[]>([]);
   const navigate = useNavigate();
+  // a message's end is told once, however it goes (a deletion waits for it to be sent)
+  const ended = useRef(new Set<number>());
+  const end = (t: Toast) => {
+    if (ended.current.has(t.id)) return;
+    ended.current.add(t.id);
+    t.onEnd?.();
+  };
 
   const push = useCallback((t: Omit<Toast, 'id'>) => {
     // the same message twice in a moment (a double click that was sent once) shows once
@@ -39,9 +49,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (lastShown.key === key && now - lastShown.at < 1500) return;
     lastShown = { key, at: now };
     const id = ++seq;
-    setToasts((list) => [...list.slice(-3), { ...t, id }]);
+    // four at most: the oldest makes room
+    const next = [...shown.current, { ...t, id }];
+    const out = next.slice(0, Math.max(0, next.length - 4));
+    shown.current = next.slice(-4);
+    setToasts(shown.current);
+    out.forEach(end);
   }, []);
-  const remove = useCallback((id: number) => setToasts((list) => list.filter((x) => x.id !== id)), []);
+  const remove = useCallback((id: number) => {
+    const gone = shown.current.find((x) => x.id === id);
+    shown.current = shown.current.filter((x) => x.id !== id);
+    setToasts(shown.current);
+    if (gone) end(gone);
+  }, []);
 
   useEffect(
     () =>

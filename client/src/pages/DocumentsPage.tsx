@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { DOCUMENT_CATEGORIES } from '@shared/constants';
 import type { CourseDocument } from '@shared/types';
-import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
+import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
@@ -104,7 +104,8 @@ function DocGrid({ docs, onEdit }: { docs: CourseDocument[]; onEdit: (d: CourseD
   return (
     <div className="grid-3">
       {docs.map((d) => (
-        <div key={d.id} className="card card-pad col gap-6" style={{ padding: 14 }}>
+        <SwipeRow key={d.id} itemId={d.id} label={d.title}>
+        <div className="card card-pad col gap-6" style={{ padding: 14 }}>
           <div className="row gap-6">
             {d.canEdit && <BulkCheck id={d.id} />}
             <Icon name={d.kind === 'file' ? 'file' : 'link'} className="muted" />
@@ -129,6 +130,7 @@ function DocGrid({ docs, onEdit }: { docs: CourseDocument[]; onEdit: (d: CourseD
             {[d.fileName && `${d.fileName} · ${fileSize(d.size)}`, d.weekName, d.uploadedByName, fmtAgo(d.createdAt)].filter(Boolean).join(' · ')}
           </div>
         </div>
+        </SwipeRow>
       ))}
     </div>
   );

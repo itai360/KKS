@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { PRIORITIES, PRIORITY_LABELS, type Priority } from '@shared/constants';
 import { addDays, shortDate, weekdayName } from '@shared/dates';
 import type { Template, TemplateItem } from '@shared/types';
-import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
+import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select, TimeInput } from '../components/ui';
@@ -49,7 +49,8 @@ export function TemplatesPage() {
       ) : (
         <div className="grid-2 fade-in">
           {data.map((t) => (
-            <div key={t.id} className="card">
+            <SwipeRow key={t.id} itemId={t.id} label={t.name}>
+            <div className="card">
               <div className="card-head">
                 <BulkCheck id={t.id} />
                 <div className="grow">
@@ -86,6 +87,7 @@ export function TemplatesPage() {
                 </div>
               </div>
             </div>
+            </SwipeRow>
           ))}
         </div>
       )}

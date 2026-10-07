@@ -125,6 +125,7 @@ export function NotificationsPage() {
             <BulkRow
               key={n.id}
               itemId={n.id}
+              label={n.title}
               className={`attn-item t-${TONE[n.category]}`}
               onOpen={() => void open(n)}
               style={{ background: n.read ? undefined : 'var(--card-2)' }}

@@ -6,7 +6,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { type CalendarView as CalendarViewName, stepDate, viewDays, viewTitle } from '@shared/calendarGrid';
 import { addDays, shortDate, weekdayName } from '@shared/dates';
 import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
-import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
+import { BulkCheck, bulkClick, BulkScope, BulkToggle, SwipeRow, useBulk } from '../components/Bulk';
 import { CalendarView } from '../components/CalendarView';
 import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { GoogleCalendarModal } from '../components/GoogleCalendar';
@@ -387,6 +387,7 @@ function ExternalEventModal({ event: e, onClose }: { event: ExternalEvent; onClo
 function CourseEventRow({ e, isNow, onOpen }: { e: ScheduleEvent; isNow: boolean; onOpen: () => void }) {
   const bulk = useBulk();
   return (
+    <SwipeRow itemId={e.id} label={e.title}>
     <div className={`event-row${e.cancelled ? ' cancelled' : ''}${isNow ? ' now' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, e.id, onOpen))}>
       <div className="event-time">
         <BulkCheck id={e.id} />
@@ -416,6 +417,7 @@ function CourseEventRow({ e, isNow, onOpen }: { e: ScheduleEvent; isNow: boolean
         )}
       </div>
     </div>
+    </SwipeRow>
   );
 }
 
