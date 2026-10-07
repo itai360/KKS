@@ -41,6 +41,7 @@ export function Modal({
   narrow,
   closable = true,
   readOnly,
+  className,
 }: {
   title: ReactNode;
   onClose: () => void;
@@ -53,6 +54,8 @@ export function Modal({
   closable?: boolean;
   /** only text to read: the body itself takes focus, so it scrolls from the keyboard */
   readOnly?: boolean;
+  /** a look of its own (the menu sheet) */
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(closable ? onClose : () => undefined);
@@ -161,7 +164,7 @@ export function Modal({
   return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && void tryClose.current()}>
       <div
-        className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${pull ? ' is-pulled' : ''}`}
+        className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${className ? ` ${className}` : ''}${pull ? ' is-pulled' : ''}`}
         role="dialog"
         aria-modal="true"
         ref={ref}

@@ -13,7 +13,8 @@ import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
 import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { ShortcutsHelp } from './Shortcuts';
-import { initials } from './ui';
+import { initials, Modal } from './ui';
+import { NavMenu } from './NavMenu';
 import { switchCourse } from '../lib/courses';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 
@@ -107,7 +108,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       {
         title: 'צוערים',
         items: [
-          { to: '/cadets', label: 'צוערים', icon: 'shield' },
+          { to: '/cadets', label: 'צוערים', icon: 'cap' },
           { to: '/attendance', label: 'מצבה', icon: 'check' },
           { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
           { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
@@ -161,7 +162,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
     {
       title: 'צוערים',
       items: [
-        { to: '/cadets', label: 'צוערים', icon: 'shield' },
+        { to: '/cadets', label: 'צוערים', icon: 'cap' },
         { to: '/attendance', label: 'מצבה', icon: 'check' },
         { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
         { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
@@ -382,7 +383,24 @@ export function Layout({ children }: { children: ReactNode }) {
     if (barAway) setPlusOpen(false);
   }, [barAway]);
   const path = location.pathname;
-  const barIdx = path === '/' ? 0 : path.startsWith('/tasks') ? 1 : path.startsWith('/weeks') || path.startsWith('/weekly') ? 3 : 4;
+  // the phone's bar, right to left: tasks, cadets, "+", weeks, schedule; on any other screen no tab is marked
+  // (everything else is in the menu under the course mark at the top)
+  const tasksHome = isCommander ? '/tasks' : '/';
+  const barIdx =
+    path.startsWith('/tasks') || path === '/my' || (!isCommander && path === '/')
+      ? 0
+      : path.startsWith('/cadets')
+        ? 1
+        : path.startsWith('/weeks') || path.startsWith('/weekly')
+          ? 3
+          : path.startsWith('/schedule')
+            ? 4
+            : -1;
+  // the course mark at the top of a phone opens every screen, as a sheet over the page
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   // the menu's groups (תכנון הקורס, צוערים, בקרה, כלים) open and close; each remembers how it was left,
   // and the group of the screen on show opens by itself
@@ -492,10 +510,19 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="main">
         <header className="topbar">
           <BackButton />
-          <NavLink to="/" className="top-brand">
-            <div className="brand-mark">{symbol.slice(0, 3)}</div>
-            <span className="small">{settings.courseName}</span>
-          </NavLink>
+          <button
+            type="button"
+            className={`top-brand${menuOpen ? ' is-open' : ''}`}
+            onClick={() => setMenuOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={menuOpen}
+            aria-label={`${settings.courseName} - כל המסכים`}
+            title="כל המסכים"
+          >
+            <span className="brand-mark">{symbol.slice(0, 3)}</span>
+            <span className="small top-brand-name">{settings.courseName}</span>
+            <Icon name="chevronDown" size={15} className="top-brand-chev" />
+          </button>
           <form
             className="search"
             role="search"
@@ -567,16 +594,16 @@ export function Layout({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      <nav className={`bottom-nav${barAway ? ' away' : ''}`} aria-label="ניווט" style={{ ['--idx' as string]: barIdx }}>
-        {/* slides to the current tab; on any other screen, "עוד" holds it */}
+      <nav className={`bottom-nav${barAway ? ' away' : ''}${barIdx < 0 ? ' no-tab' : ''}`} aria-label="ניווט" style={{ ['--idx' as string]: Math.max(0, barIdx) }}>
+        {/* slides to the current tab */}
         <span className="nav-ind" aria-hidden />
-        <NavLink to="/" end className={barIdx === 0 ? 'active' : ''}>
-          <Icon name="home" />
-          בית
-        </NavLink>
-        <NavLink to="/tasks" className={barIdx === 1 ? 'active' : ''}>
+        <NavLink to={tasksHome} end={tasksHome === '/'} className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
           <Icon name="tasks" />
           משימות
+        </NavLink>
+        <NavLink to="/cadets" className={() => (barIdx === 1 ? 'active' : '')} aria-current={barIdx === 1 ? 'page' : undefined}>
+          <Icon name="cap" />
+          צוערים
         </NavLink>
         <button
           id="plus-button"
@@ -592,15 +619,20 @@ export function Layout({ children }: { children: ReactNode }) {
             <Icon name="plus" />
           </span>
         </button>
-        <NavLink to="/weeks" className={barIdx === 3 ? 'active' : ''}>
+        <NavLink to="/weeks" className={() => (barIdx === 3 ? 'active' : '')} aria-current={barIdx === 3 ? 'page' : undefined}>
           <Icon name="layers" />
           שבועות
         </NavLink>
-        <NavLink to="/more" className={barIdx === 4 ? 'active' : ''}>
-          <Icon name="more" />
-          עוד
+        <NavLink to="/schedule" className={() => (barIdx === 4 ? 'active' : '')} aria-current={barIdx === 4 ? 'page' : undefined}>
+          <Icon name="calendar" />
+          לו"ז
         </NavLink>
       </nav>
+      {menuOpen && (
+        <Modal title="כל המסכים" onClose={() => setMenuOpen(false)} className="menu-sheet">
+          <NavMenu sections={sections} onNavigate={() => setMenuOpen(false)} />
+        </Modal>
+      )}
       {plusOpen && (
         <PlusMenu
           onClose={() => setPlusOpen(false)}

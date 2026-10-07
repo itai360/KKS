@@ -8058,3 +8058,165 @@ html {
     background: var(--hover);
   }
 }
+
+/* ---------------- every screen in one place: the menu under the course mark (NavMenu) ---------------- */
+/* the course mark at the top of a phone is a button: it opens the menu over the page */
+.top-brand {
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 4px 6px 4px 8px;
+  margin: -4px -6px;
+  border-radius: 12px;
+  cursor: pointer;
+  min-width: 0;
+  transition: background 0.15s;
+}
+.top-brand:active,
+.top-brand.is-open {
+  background: var(--hover);
+}
+.top-brand-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.top-brand-chev {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+.top-brand.is-open .top-brand-chev {
+  transform: rotate(180deg);
+}
+/* a screen that is not one of the bar's tabs: no tab marked */
+.bottom-nav.no-tab .nav-ind {
+  opacity: 0;
+}
+.nav-ind {
+  transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.1), opacity 0.2s;
+}
+
+.nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  outline: none;
+}
+.nav-menu-me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+}
+.nav-menu-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.nav-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 2px 8px;
+}
+.menu-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
+  gap: 8px;
+}
+.menu-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 88px;
+  padding: 12px 6px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  transition: transform 0.12s, border-color 0.15s, background 0.15s;
+  animation: tile-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 16ms);
+}
+.menu-tile:active {
+  transform: scale(0.95);
+}
+@media (hover: hover) {
+  .menu-tile:hover {
+    border-color: var(--line-2);
+    background: var(--card-2);
+  }
+}
+.menu-tile-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  transition: background 0.15s, color 0.15s;
+}
+.menu-tile-label {
+  overflow-wrap: anywhere;
+}
+/* the screen on show */
+.menu-tile.is-here {
+  border-color: var(--ink);
+}
+.menu-tile.is-here .menu-tile-icon {
+  background: var(--ink);
+  color: var(--paper);
+}
+.menu-tile-count {
+  position: absolute;
+  top: 7px;
+  inset-inline-end: 7px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+}
+@keyframes tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+/* the sheet: the menu fills it, with room to scroll */
+.modal.menu-sheet {
+  max-width: 560px;
+}
+.modal.menu-sheet .modal-body {
+  padding-top: 12px;
+}
+@media (max-width: 860px) {
+  .modal.menu-sheet {
+    max-height: 90vh;
+    max-height: 90dvh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-tile {
+    animation: none;
+  }
+}
