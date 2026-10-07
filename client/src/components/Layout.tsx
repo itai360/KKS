@@ -527,19 +527,24 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="main">
         <header className="topbar">
           <BackButton />
-          <button
-            type="button"
-            className={`top-brand${menuOpen ? ' is-open' : ''}`}
-            onClick={() => setMenuOpen(true)}
-            aria-haspopup="dialog"
-            aria-expanded={menuOpen}
-            aria-label={`${settings.courseName} - כל המסכים`}
-            title="כל המסכים"
-          >
-            <span className="brand-mark">{symbol.slice(0, 3)}</span>
-            <span className="small top-brand-name">{settings.courseName}</span>
-            <Icon name="chevronDown" size={15} className="top-brand-chev" />
-          </button>
+          <div className={`top-brand${menuOpen ? ' is-open' : ''}`}>
+            {/* the mark goes home - from anywhere; already there, back to the top */}
+            <NavLink
+              to="/"
+              end
+              className="top-brand-home"
+              aria-label="דף הבית"
+              title="דף הבית"
+              onClick={() => path === '/' && window.scrollTo({ top: 0, behavior: 'smooth' })}
+            >
+              <span className="brand-mark">{symbol.slice(0, 4)}</span>
+            </NavLink>
+            {/* the course's name opens every screen, as a sheet over the page */}
+            <button type="button" className="top-brand-menu" onClick={() => setMenuOpen(true)} aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={`${settings.courseName} - כל המסכים`} title="כל המסכים">
+              <span className="small top-brand-name">{settings.courseName}</span>
+              <Icon name="chevronDown" size={15} className="top-brand-chev" />
+            </button>
+          </div>
           <form
             className="search"
             role="search"

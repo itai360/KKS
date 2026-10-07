@@ -656,9 +656,14 @@ p {
 }
 
 .top-brand .brand-mark {
-  width: 32px;
-  height: 32px;
-  font-size: 18px;
+  /* as wide as the course's symbol needs (קק"ס, all four letters) - never cut */
+  width: auto;
+  min-width: 34px;
+  height: 34px;
+  padding: 3px 6px 0;
+  font-size: 19px;
+  letter-spacing: 0;
+  white-space: nowrap;
   background: var(--rail);
   color: var(--rail-ink);
 }
@@ -8304,22 +8309,38 @@ html {
 }
 
 /* ---------------- every screen in one place: the menu under the course mark (NavMenu) ---------------- */
-/* the course mark at the top of a phone is a button: it opens the menu over the page */
+/* at the top of a phone: the course mark goes home, the course's name opens the menu over the page */
 .top-brand {
+  min-width: 0;
+  gap: 4px;
+}
+.top-brand-home {
+  display: grid;
+  flex-shrink: 0;
+  border-radius: 12px;
+  transition: transform 0.12s;
+}
+.top-brand-home:active {
+  transform: scale(0.94);
+}
+.top-brand-menu {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
   font: inherit;
   font-weight: 700;
-  color: inherit;
-  background: none;
-  border: none;
-  padding: 4px 6px 4px 8px;
-  margin: -4px -6px;
-  border-radius: 12px;
   cursor: pointer;
-  min-width: 0;
   transition: background 0.15s;
 }
-.top-brand:active,
-.top-brand.is-open {
+.top-brand-menu:active,
+.top-brand.is-open .top-brand-menu {
   background: var(--hover);
 }
 .top-brand-name {
@@ -8362,13 +8383,90 @@ html {
 .nav-menu-sections {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
-.nav-menu-title {
+/* a group of the menu: its title opens it, the tiles slide down under it */
+.nav-menu-group {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+.nav-menu-head {
+  margin: 0;
+  font-size: inherit;
+}
+.nav-menu-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 0 2px 8px;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 15px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.nav-menu-toggle:active {
+  background: var(--hover);
+}
+.nav-menu-toggle:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.nav-menu-toggle-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  transition: background 0.2s, color 0.2s;
+}
+.nav-menu-group.is-open .nav-menu-toggle-icon {
+  background: var(--ink);
+  color: var(--paper);
+}
+.nav-menu-chev {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.nav-menu-group.is-open .nav-menu-chev {
+  transform: rotate(180deg);
+}
+.nav-menu-here {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.menu-tile-count.is-inline {
+  position: static;
+}
+.nav-menu-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.nav-menu-group.is-open .nav-menu-body {
+  grid-template-rows: 1fr;
+}
+.nav-menu-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.nav-menu-group .menu-tiles {
+  padding: 2px 10px 12px;
 }
 .menu-tiles {
   display: grid;
@@ -8393,8 +8491,11 @@ html {
   font-weight: 600;
   line-height: 1.25;
   transition: transform 0.12s, border-color 0.15s, background 0.15s;
+}
+/* the tiles come in one after another - on opening the menu, and on opening a group */
+.nav-menu-section.is-open .menu-tile {
   animation: tile-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
-  animation-delay: calc(var(--i, 0) * 16ms);
+  animation-delay: calc(var(--i, 0) * 18ms);
 }
 .menu-tile:active {
   transform: scale(0.95);
@@ -8460,7 +8561,11 @@ html {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .menu-tile {
+  .nav-menu-section.is-open .menu-tile {
     animation: none;
+  }
+  .nav-menu-body,
+  .nav-menu-chev {
+    transition: none;
   }
 }

@@ -1,6 +1,7 @@
-// Every screen in one place, as tiles: the sheet that rises from the course mark at the top of a phone
-// (Layout), and the "כל המסכים" page. The person on top, a search, then the menu's groups - the screen
-// on show marked, counts on what waits.
+// Every screen in one place, as tiles: the sheet that rises from the course's name at the top of a phone
+// (Layout), and the "כל המסכים" page. The person on top, a search, then the menu's groups - each closed
+// until its title is tapped (a search opens the ones it finds in), the screen on show marked, counts on
+// what waits.
 
 import { useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -22,6 +23,7 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
   const { user, logout, isCommander, unread } = useSession();
   const location = useLocation();
   const [query, setQuery] = useState('');
+  const [opened, setOpened] = useState<Record<string, boolean>>({});
   const [theme, setTheme] = useState(shownTheme);
   const search = useRef<HTMLInputElement>(null);
   const sections = [
@@ -39,6 +41,7 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
     .filter((s) => s.items.length);
   const count = sections.reduce((sum, s) => sum + s.items.length, 0);
   const here = (to: string, end?: boolean) => (end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`));
+  const searching = !!query.trim();
   const clear = () => {
     setQuery('');
     search.current?.focus();
@@ -113,14 +116,14 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
             }
           />
         )}
-        {sections.map((s, i) => (
-          <section key={s.title ?? i} className="nav-menu-section" aria-label={s.title || 'ראשי'}>
-            {s.title && (
-              <h2 className="label-caps nav-menu-title">
-                <Icon name={SECTION_ICONS[s.title] ?? 'layers'} size={14} />
-                {s.title}
-              </h2>
-            )}
+        {sections.map((s, i) => {
+          // the main screens (no title) are always in sight; a group opens by its title
+          const open = !s.title || searching || !!opened[s.title];
+          const total = s.items.reduce((sum, it) => sum + (it.count ?? 0), 0);
+          const isHere = s.items.some((it) => here(it.to, it.end));
+          const bodyId = `nav-menu-group-${i}`;
+          n = 0;
+          const tiles = (
             <div className="menu-tiles">
               {s.items.map((it) => {
                 const on = here(it.to, it.end);
@@ -146,8 +149,55 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
                 );
               })}
             </div>
-          </section>
-        ))}
+          );
+          if (!s.title)
+            return (
+              <section key={i} className="nav-menu-section is-open" aria-label="ראשי">
+                {tiles}
+              </section>
+            );
+          const title = s.title;
+          return (
+            <section key={title} className={`nav-menu-section nav-menu-group${open ? ' is-open' : ''}${isHere ? ' is-here' : ''}`} aria-label={title}>
+              <h2 className="nav-menu-head">
+                <button
+                  type="button"
+                  className="nav-menu-toggle"
+                  aria-expanded={open}
+                  aria-controls={bodyId}
+                  disabled={searching}
+                  onClick={(e) => {
+                    const group = e.currentTarget.closest('section');
+                    const opening = !opened[title];
+                    setOpened((o) => ({ ...o, [title]: !o[title] }));
+                    // opened low in the sheet: once it has slid open, the whole of it comes into sight
+                    if (opening && group)
+                      setTimeout(() => group.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }), 280);
+                  }}
+                >
+                  <span className="nav-menu-toggle-icon">
+                    <Icon name={SECTION_ICONS[title] ?? 'layers'} size={18} />
+                  </span>
+                  <span className="grow">{title}</span>
+                  {/* closed: where the screen on show is, and how much waits inside */}
+                  {!open && isHere && <span className="nav-menu-here" aria-label="המסך הפתוח נמצא כאן" />}
+                  {!open && total > 0 && (
+                    <span className="menu-tile-count is-inline" aria-label={`${total} ממתינים`}>
+                      {total > 99 ? '99+' : total}
+                    </span>
+                  )}
+                  <span className="tiny muted mono nav-menu-n" aria-hidden="true">
+                    {s.items.length}
+                  </span>
+                  <Icon name="chevronDown" size={16} className="nav-menu-chev" />
+                </button>
+              </h2>
+              <div className="nav-menu-body" id={bodyId} inert={!open}>
+                <div className="nav-menu-inner">{tiles}</div>
+              </div>
+            </section>
+          );
+        })}
       </div>
     </div>
   );
