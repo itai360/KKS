@@ -1,11 +1,13 @@
 // Every screen in one place, as tiles: the sheet that rises from the course's name at the top of a phone
 // (Layout), and the "כל המסכים" page. The person on top, a search, the three screens they use most,
 // then the menu's groups - each closed until its title is tapped (a search opens the ones it finds in),
-// the screen on show marked, counts on what waits.
+// the screen on show marked, counts on what waits. Where the phone's bar is at the bottom, its screens
+// are not offered again on top or among the main ones (a search still finds them).
 
 import { useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { matchesSearch } from '@shared/search';
+import { BOTTOM_BAR_MEDIA, bottomBarScreens } from '../lib/bottomBar';
 import { frequentScreens } from '../lib/frequent';
 import { useSession } from '../lib/session';
 import { setThemePref, shownTheme } from '../lib/theme';
@@ -34,25 +36,29 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
   const [opened, setOpened] = useState<Record<string, boolean>>({});
   const [theme, setTheme] = useState(shownTheme);
   const search = useRef<HTMLInputElement>(null);
+  const searching = !!query.trim();
+  // the phone's bar below has these already
+  const onBar = useMemo(() => new Set(typeof matchMedia === 'function' && matchMedia(BOTTOM_BAR_MEDIA).matches ? bottomBarScreens(isCommander) : []), [isCommander]);
   // the main screens are a group like the others ("ראשי"); on top instead, the three this person uses most
-  const all: MenuSection[] = [...nav.map((s) => ({ ...s, title: s.title || 'ראשי' })), { title: 'חשבון והעדפות', items: accountItems(unread) }];
+  const all: MenuSection[] = [
+    ...nav.map((s) => (s.title ? s : { title: 'ראשי', items: s.items.filter((it) => searching || !onBar.has(it.to)) })),
+    { title: 'חשבון והעדפות', items: accountItems(unread) },
+  ];
   const items = all.flatMap((s) => s.items);
-  const mainKey = (nav.find((s) => !s.title)?.items ?? []).map((it) => it.to).join(',');
-  // read once as the menu opens: tiles do not swap under the finger
-  const top = useMemo(
-    () => {
-      const offered = items.filter((it) => !it.end && it.to !== '/').map((it) => it.to);
-      // before there is a habit to go by: the main screens, past the home page (the logo is home)
-      return frequentScreens(user.id, offered, mainKey.split(',').filter((to) => to && to !== '/'));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [user.id, mainKey],
-  );
+  const offeredKey = items
+    .filter((it) => !it.end && it.to !== '/' && !onBar.has(it.to))
+    .map((it) => it.to)
+    .join(',');
+  // read once as the menu opens: tiles do not swap under the finger. Before there is a habit to go by:
+  // the first screens of the menu - past the home page (the logo is home) and the bar's
+  const top = useMemo(() => {
+    const offered = offeredKey.split(',').filter(Boolean);
+    return frequentScreens(user.id, offered, offered);
+  }, [user.id, offeredKey]);
   const frequent = top.map((to) => items.find((it) => it.to === to)).filter((it): it is MenuSection['items'][number] => !!it);
   const sections = all.map((s) => ({ ...s, items: s.items.filter((it) => matchesSearch(query, it.label, s.title ?? '')) })).filter((s) => s.items.length);
   const count = sections.reduce((sum, s) => sum + s.items.length, 0);
   const here = (to: string, end?: boolean) => (end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`));
-  const searching = !!query.trim();
   const clear = () => {
     setQuery('');
     search.current?.focus();

@@ -18,6 +18,7 @@ import { ShortcutsHelp } from './Shortcuts';
 import { initials, Modal } from './ui';
 import { accountItems, NavMenu } from './NavMenu';
 import { noteScreen, screenOf } from '../lib/frequent';
+import { bottomBarScreens } from '../lib/bottomBar';
 import { switchCourse } from '../lib/courses';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 
@@ -423,7 +424,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const path = location.pathname;
   // the phone's bar, right to left: tasks, cadets, "+", weeks, schedule; on any other screen no tab is marked
   // (everything else is in the menu under the course mark at the top)
-  const tasksHome = isCommander ? '/tasks' : '/';
+  const tasksHome = bottomBarScreens(isCommander)[0];
   const barIdx =
     path.startsWith('/tasks') || path === '/my' || (!isCommander && path === '/')
       ? 0
