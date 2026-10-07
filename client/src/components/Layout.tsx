@@ -16,7 +16,7 @@ import { BackButton } from './BackButton';
 import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials, Modal } from './ui';
-import { accountItems, NavMenu } from './NavMenu';
+import { NavMenu, SETTINGS_ITEM } from './NavMenu';
 import { NotificationsPanel } from './Notifications';
 import { noteScreen, screenOf } from '../lib/frequent';
 import { bottomBarScreens } from '../lib/bottomBar';
@@ -300,7 +300,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // each screen entered counts toward the menu's "בשימוש גבוה" (frequent.ts) - not the home page, which the logo is
   const lastScreen = useRef<string | null>(null);
   useEffect(() => {
-    const to = screenOf(location.pathname, [...sections.flatMap((s) => s.items), ...accountItems(0)]);
+    const to = screenOf(location.pathname, [...sections.flatMap((s) => s.items), SETTINGS_ITEM]);
     if (to === lastScreen.current) return;
     lastScreen.current = to;
     if (to && to !== '/') noteScreen(user.id, to);

@@ -1,9 +1,10 @@
 // Every screen in one place, as tiles: the sheet that rises from the course's name at the top of a phone
 // (Layout), and the "כל המסכים" page. The person on top, a search, the three screens they use most,
 // then the menu's groups - each closed until its title is tapped (a search opens the ones it finds in),
-// the screen on show marked, counts on what waits. The home page (the logo is home) and the schedule
-// are not among the main ones, and where the phone's bar is at the bottom, neither are its screens -
-// not on top either (a search still finds them all).
+// the screen on show marked, counts on what waits - and last, the settings, one row of their own. The
+// home page (the logo is home) and the schedule are not among the main ones, and where the phone's bar
+// is at the bottom, neither are its screens - not on top either (a search still finds them all).
+// Notifications and the search are not here: the bell and the magnifier at the top open them.
 
 import { useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -23,17 +24,13 @@ export interface MenuSection {
 type MenuItem = { to: string; label: string; icon: string; count?: number; end?: boolean };
 
 /** each group's own mark beside its title */
-const SECTION_ICONS: Record<string, string> = { ראשי: 'home', 'תכנון הקורס': 'plan', צוערים: 'cap', בקרה: 'pulse', כלים: 'wrench', 'חשבון והעדפות': 'settings' };
+const SECTION_ICONS: Record<string, string> = { ראשי: 'home', 'תכנון הקורס': 'plan', צוערים: 'cap', בקרה: 'pulse', כלים: 'wrench' };
 
-/** the menu's own last group, beside the course's screens */
-export const accountItems = (unread: number): MenuSection['items'] => [
-  { to: '/notifications', label: 'התראות', icon: 'bell', count: unread },
-  { to: '/search', label: 'חיפוש במערכת', icon: 'search' },
-  { to: '/settings', label: 'הגדרות', icon: 'settings' },
-];
+/** the menu's last row, beside the course's screens */
+export const SETTINGS_ITEM: MenuItem = { to: '/settings', label: 'הגדרות', icon: 'settings' };
 
 export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]; onNavigate?: () => void }) {
-  const { user, logout, isCommander, unread } = useSession();
+  const { user, logout, isCommander } = useSession();
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [opened, setOpened] = useState<Record<string, boolean>>({});
@@ -45,10 +42,9 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
   // the menu's own tiles leave out the home page (the logo is home), the schedule (it has its own place:
   // the bar below on a phone, the side menu on a computer) and whatever else the bar below has
   const kept = (it: MenuItem) => !it.end && it.to !== '/' && it.to !== '/schedule' && !onBar.has(it.to);
-  const account = accountItems(unread);
   // the main screens are a group like the others ("ראשי"); on top instead, the three this person uses most
-  const all: MenuSection[] = [...nav.map((s) => (s.title ? s : { title: 'ראשי', items: s.items.filter((it) => searching || kept(it)) })), { title: 'חשבון והעדפות', items: account }];
-  const everything = [...nav.flatMap((s) => s.items), ...account];
+  const all: MenuSection[] = nav.map((s) => (s.title ? s : { title: 'ראשי', items: s.items.filter((it) => searching || kept(it)) }));
+  const everything = [...nav.flatMap((s) => s.items), SETTINGS_ITEM];
   const offeredKey = everything
     .filter(kept)
     .map((it) => it.to)
@@ -61,7 +57,8 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
   }, [user.id, offeredKey]);
   const frequent = top.map((to) => everything.find((it) => it.to === to)).filter((it): it is MenuItem => !!it);
   const sections = all.map((s) => ({ ...s, items: s.items.filter((it) => matchesSearch(query, it.label, s.title ?? '')) })).filter((s) => s.items.length);
-  const count = sections.reduce((sum, s) => sum + s.items.length, 0);
+  const settingsShown = matchesSearch(query, SETTINGS_ITEM.label);
+  const count = sections.reduce((sum, s) => sum + s.items.length, 0) + (settingsShown ? 1 : 0);
   const here = (to: string, end?: boolean) => (end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`));
   const clear = () => {
     setQuery('');
@@ -124,7 +121,7 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
         </p>
       )}
       <div id="navigation-results" className="nav-menu-sections">
-        {sections.length === 0 && (
+        {count === 0 && (
           <Empty
             icon="search"
             title="לא נמצא מסך מתאים"
@@ -202,6 +199,18 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
             </section>
           );
         })}
+        {settingsShown && (
+          <section className={`nav-menu-section nav-menu-group nav-menu-single${here(SETTINGS_ITEM.to) ? ' is-here' : ''}`} aria-label={SETTINGS_ITEM.label}>
+            <Link to={SETTINGS_ITEM.to} className="nav-menu-toggle" aria-current={here(SETTINGS_ITEM.to) ? 'page' : undefined} onClick={() => onNavigate?.()}>
+              <span className="nav-menu-toggle-icon">
+                <Icon name="settings" size={18} />
+              </span>
+              <span className="grow">{SETTINGS_ITEM.label}</span>
+              {here(SETTINGS_ITEM.to) && <span className="nav-menu-here" aria-hidden="true" />}
+              <Icon name="chevronLeft" size={16} className="nav-menu-chev" />
+            </Link>
+          </section>
+        )}
       </div>
     </div>
   );

@@ -9103,6 +9103,11 @@ html {
 .nav-menu-group.is-open .nav-menu-chev {
   transform: rotate(180deg);
 }
+/* the settings: one row of their own, a link rather than a group */
+.nav-menu-single .nav-menu-toggle {
+  color: var(--ink);
+  text-decoration: none;
+}
 .nav-menu-here {
   flex-shrink: 0;
   width: 8px;
