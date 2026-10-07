@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { Icon } from './Icon';
 import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
+import { useSheetGesture } from './sheetGesture';
 
 // the pickers live in their own module; every screen imports them from here as before
 export { DateInput, Select, SuggestInput, TimeInput } from './pickers';
@@ -130,48 +131,26 @@ export function Modal({
     };
   }, []);
 
-  // on a phone the dialog is a sheet from the bottom: pulled down by its top, it closes
-  const [pull, setPull] = useState(0);
-  const pulling = useRef<{ y: number; id: number; at: number } | null>(null);
-  const onPullStart = (e: ReactPointerEvent) => {
-    if (!closable || e.pointerType === 'mouse' || (e.target as HTMLElement).closest('button, a, input, select, textarea')) return;
-    if (!matchMedia('(max-width: 860px)').matches) return;
-    pulling.current = { y: e.clientY, id: e.pointerId, at: performance.now() };
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      /* followed without capture */
-    }
-  };
-  const onPullMove = (e: ReactPointerEvent) => {
-    const p = pulling.current;
-    if (!p || p.id !== e.pointerId) return;
-    setPull(Math.max(0, e.clientY - p.y));
-  };
-  const onPullEnd = (e: ReactPointerEvent) => {
-    const p = pulling.current;
-    if (!p || p.id !== e.pointerId) return;
-    pulling.current = null;
-    const dy = Math.max(0, e.clientY - p.y);
-    const fast = dy > 40 && dy / Math.max(1, performance.now() - p.at) > 0.6;
-    setPull(0);
-    if (dy > 110 || fast) void tryClose.current();
-  };
-  const pullProps = { onPointerDown: onPullStart, onPointerMove: onPullMove, onPointerUp: onPullEnd, onPointerCancel: onPullEnd };
+  // on a phone the dialog is a sheet from the bottom: pulled down - by its top, or by its content
+  // scrolled to the top - it follows the finger, and let go it closes or comes back (sheetGesture.ts)
+  const backdrop = useRef<HTMLDivElement>(null);
+  useSheetGesture(ref, {
+    enabled: closable,
+    canLeave: () => ![...initial.current].some(([el, was]) => el.isConnected && fieldValue(el) !== was),
+    leave: () => onCloseRef.current(),
+    refused: () => void tryClose.current(),
+    backdrop,
+    handle: '.modal-grab, .modal-head',
+    scroller: '.modal-body',
+  });
 
   // on the page body: a dialog opened inside an animated card or a sticky column would otherwise
   // stay inside that box's layer, under the phone's bottom bar
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && void tryClose.current()}>
-      <div
-        className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${className ? ` ${className}` : ''}${pull ? ' is-pulled' : ''}`}
-        role="dialog"
-        aria-modal="true"
-        ref={ref}
-        style={pull ? { transform: `translateY(${pull}px)` } : undefined}
-      >
-        {closable && <div className="modal-grab" aria-hidden="true" {...pullProps} />}
-        <div className="modal-head" {...(closable ? pullProps : {})}>
+    <div className="modal-backdrop" ref={backdrop} onMouseDown={(e) => e.target === e.currentTarget && void tryClose.current()}>
+      <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" ref={ref}>
+        {closable && <div className="modal-grab" aria-hidden="true" />}
+        <div className="modal-head">
           <h2>{title}</h2>
           {closable && (
             <button className="icon-btn" onClick={() => void tryClose.current()} aria-label="סגירה" type="button">

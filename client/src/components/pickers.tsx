@@ -16,7 +16,6 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type KeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
   type TouchEvent,
@@ -27,6 +26,7 @@ import { addDays, fmtDateIL, parseDateIL, parseTime, shapeDate, shapeTime, weekd
 import { searchKey } from '@shared/search';
 import { todayKey } from '../lib/format';
 import { Icon } from './Icon';
+import { useSheetGesture } from './sheetGesture';
 
 // ---------------- the floating layer ----------------
 
@@ -90,7 +90,15 @@ function usePlacement(anchor: RefObject<HTMLElement | null>, open: boolean, want
       const up = side === 'up';
       const w = Math.min(width ?? Math.max(r.width, 200), vw - 16);
       const right = Math.min(Math.max(8, vw - r.right), vw - w - 8);
-      setStyle({ position: 'fixed', right, width: w, maxHeight: Math.max(140, Math.min(want, up ? above : below)), ...(up ? { bottom: vh - r.top + 4 } : { top: r.bottom + 4 }) });
+      setStyle({
+        position: 'fixed',
+        right,
+        width: w,
+        maxHeight: Math.max(140, Math.min(want, up ? above : below)),
+        // it grows out of the field's edge it opened from
+        transformOrigin: up ? 'bottom right' : 'top right',
+        ...(up ? { bottom: vh - r.top + 4 } : { top: r.bottom + 4 }),
+      });
     };
     place();
     const off = onVisibleAreaChange(place);
@@ -170,8 +178,7 @@ interface SheetBodyProps {
 function SheetBody({ title, onClose, children, back, tall, className = '', head, leaving }: SheetBodyProps & { leaving: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState(visibleArea);
-  const [pull, setPull] = useState(0);
-  const pulling = useRef<{ y: number; id: number; at: number } | null>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
   // glued to the bottom of what is in sight: above the keyboard while the search is typed in
@@ -196,37 +203,16 @@ function SheetBody({ title, onClose, children, back, tall, className = '', head,
     if (back.current && opener.current === back.current) back.current.focus({ preventScroll: true });
     else if (ref.current?.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   }, [leaving, back]);
-  const onPullStart = (e: ReactPointerEvent) => {
-    if (e.pointerType === 'mouse' || (e.target as HTMLElement).closest('button, input')) return;
-    pulling.current = { y: e.clientY, id: e.pointerId, at: performance.now() };
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      /* followed without capture */
-    }
-  };
-  const onPullMove = (e: ReactPointerEvent) => {
-    const p = pulling.current;
-    if (p && p.id === e.pointerId) setPull(Math.max(0, e.clientY - p.y));
-  };
-  const onPullEnd = (e: ReactPointerEvent) => {
-    const p = pulling.current;
-    if (!p || p.id !== e.pointerId) return;
-    pulling.current = null;
-    const dy = Math.max(0, e.clientY - p.y);
-    setPull(0);
-    if (dy > 90 || (dy > 36 && dy / Math.max(1, performance.now() - p.at) > 0.6)) close.current();
-  };
-  const pullProps = { onPointerDown: onPullStart, onPointerMove: onPullMove, onPointerUp: onPullEnd, onPointerCancel: onPullEnd };
+  // pulled down it follows the finger, and let go it closes or comes back (sheetGesture.ts)
+  useSheetGesture(ref, { enabled: true, canLeave: () => true, leave: () => close.current(), backdrop, handle: '.pick-sheet-top', scroller: '.pick-sheet-body' });
   const room = Math.max(220, area.height - 10);
   const style: CSSProperties = {
     bottom: Math.max(0, window.innerHeight - area.bottom),
     maxHeight: room,
     ...(tall ? { height: Math.min(room, Math.round(window.innerHeight * 0.8)) } : {}),
-    ...(pull ? { transform: `translateY(${pull}px)`, transition: 'none' } : {}),
   };
   return createPortal(
-    <div className={`sheet-backdrop${leaving ? ' is-leaving' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && close.current()} onTouchEnd={(e) => e.target === e.currentTarget && (e.preventDefault(), close.current())}>
+    <div ref={backdrop} className={`sheet-backdrop${leaving ? ' is-leaving' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && close.current()} onTouchEnd={(e) => e.target === e.currentTarget && (e.preventDefault(), close.current())}>
       <div
         ref={ref}
         className={`pick-sheet ${className}`}
@@ -245,7 +231,7 @@ function SheetBody({ title, onClose, children, back, tall, className = '', head,
           close.current();
         }}
       >
-        <div className="pick-sheet-top" {...pullProps}>
+        <div className="pick-sheet-top">
           <div className="pick-sheet-grab" aria-hidden="true" />
           <div className="pick-sheet-head">
             <h2>{title}</h2>

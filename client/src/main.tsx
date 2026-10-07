@@ -15,6 +15,8 @@ import { watchForUpdates } from './lib/update';
 import { applyTheme, onThemeChange, syncBrowserBar } from './lib/theme';
 
 applyTheme();
+// with a touch listener on the page, iPhone shows a pressed look the moment a finger lands (not after)
+document.addEventListener('touchstart', () => undefined, { passive: true });
 // the device switched between light and dark while following it: the browser's bar follows too
 onThemeChange(syncBrowserBar);
 

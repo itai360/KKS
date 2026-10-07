@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { domainLabel, isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/constants';
 import type { Task } from '@shared/types';
 import { api } from '../lib/api';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { prefetch } from '../lib/useApi';
@@ -42,12 +43,8 @@ export function useTaskTick(task: Task, readOnly?: boolean) {
     if (!canCheck || busy) return;
     setBusy(true);
     if (!task.requiresApproval || isCommander) setTicked(true);
-    // a short buzz on a phone that has one: it was taken
-    try {
-      navigator.vibrate?.(12);
-    } catch {
-      /* not allowed here */
-    }
+    // a short buzz on a phone that has one, on the same frame as the tick: it was taken
+    haptic('success');
     try {
       const d = await api.post<{ task: Task }>(`/api/tasks/${task.id}/transition`, { action: 'complete' });
       const closed = d.task.status === 'done';

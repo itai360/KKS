@@ -54,6 +54,12 @@
   --rail-w: 248px;
   --top-h: 60px;
 
+  /* motion as springs (lib/spring.ts, from Apple's "Designing Fluid Interfaces"): critically damped
+     (damping 1) for what the interface does by itself; a little bounce (damping 0.8) only for a turn or
+     a gesture that carried momentum. A browser without linear() gets a close curve. */
+  --spring: cubic-bezier(0.2, 0.9, 0.3, 1);
+  --spring-bounce: cubic-bezier(0.3, 1.25, 0.4, 1);
+
   /* surfaces that differ between light and dark */
   --topbar-bg: rgba(242, 239, 230, 0.86);
   --primary-hover: #2b302a;
@@ -67,6 +73,14 @@
   --event-ink: #f2efe6;
   color-scheme: light;
 }
+
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --spring: linear(0, 0.0394, 0.1275, 0.2359, 0.3476, 0.4534, 0.5486, 0.6315, 0.7, 0.7591, 0.8078, 0.8475, 0.8795, 0.9052, 0.9257, 0.942, 0.9548, 0.9648, 0.9727, 0.9789, 0.9837, 0.9874, 0.9902, 0.9925, 0.9942, 0.9956, 0.9966, 0.9974, 1);
+    --spring-bounce: linear(0, 0.0382, 0.1242, 0.2393, 0.3633, 0.4841, 0.5911, 0.6884, 0.7704, 0.8351, 0.8884, 0.9292, 0.9595, 0.9805, 0.9955, 1.0052, 1.0107, 1.0136, 1.0144, 1.014, 1.0128, 1.0111, 1.0094, 1.0077, 1.006, 1.0046, 1.0034, 1.0025, 1);
+  }
+}
+
 
 /* Dark: the device's setting, or the person's choice in settings. Printing stays light. */
 @media screen and (prefers-color-scheme: dark) {
@@ -220,10 +234,14 @@ h4 {
   margin: 0;
   font-weight: 700;
   line-height: 1.2;
+  /* tracking by size: headings a hair tighter, body text as drawn, small text a hair looser */
+  letter-spacing: -0.005em;
+  text-wrap: balance;
 }
 
 p {
   margin: 0;
+  text-wrap: pretty;
 }
 
 .boot {
@@ -289,7 +307,7 @@ p {
 
 .rail-collapsed .rail {
   padding-inline: 12px;
-  transition: width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.26s ease;
+  transition: width 0.26s var(--spring), box-shadow 0.26s ease;
   will-change: width;
 }
 
@@ -643,9 +661,17 @@ p {
   align-items: center;
   gap: 12px;
   padding: 0 28px;
+  /* a frosted layer the page scrolls under, not a solid strip */
   background: var(--topbar-bg);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
+  /* its edge shows only once content passes under it (the page scrolled) */
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+html[data-scrolled] .topbar {
+  border-bottom-color: var(--line);
+  box-shadow: 0 8px 18px -14px rgba(25, 28, 24, 0.35);
 }
 
 .top-brand {
@@ -1333,6 +1359,7 @@ input::-webkit-date-and-time-value {
 
 .tiny {
   font-size: 12px;
+  letter-spacing: 0.01em;
 }
 
 .text-red {
@@ -1872,6 +1899,8 @@ input::-webkit-date-and-time-value {
 .pop {
   /* out of the page's flow from the first moment, before it is placed beside its field */
   position: fixed;
+  /* it grows out of its field (the script sets the edge it opened from) */
+  transform-origin: top right;
   z-index: 500;
   overflow: auto;
   overscroll-behavior: contain;
@@ -1880,12 +1909,12 @@ input::-webkit-date-and-time-value {
   background: var(--card);
   color: var(--ink);
   box-shadow: var(--shadow-lg);
-  animation: pop-in 0.12s ease-out;
+  animation: pop-in 0.3s var(--spring);
 }
 @keyframes pop-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: scale(0.94);
   }
 }
 .combo-list {
@@ -2058,6 +2087,7 @@ input::-webkit-date-and-time-value {
   inset: 0;
   z-index: 520;
   background: rgba(22, 26, 21, 0.45);
+  background: rgba(22, 26, 21, calc(0.45 * var(--scrim, 1)));
   animation: fade 0.15s ease-out;
 }
 .sheet-backdrop.is-leaving {
@@ -2066,6 +2096,7 @@ input::-webkit-date-and-time-value {
 }
 .pick-sheet {
   position: fixed;
+  box-shadow: var(--shadow-lg), 0 48px 0 0 var(--card);
   right: 0;
   bottom: 0;
   left: 0;
@@ -2076,14 +2107,12 @@ input::-webkit-date-and-time-value {
   border-radius: 18px 18px 0 0;
   background: var(--card);
   color: var(--ink);
-  box-shadow: var(--shadow-lg);
   padding-bottom: env(safe-area-inset-bottom);
   outline: none;
-  animation: pick-sheet-up 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
-  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+  animation: pick-sheet-up 0.48s var(--spring);
 }
 .sheet-backdrop.is-leaving .pick-sheet {
-  animation: pick-sheet-down 0.2s ease-in forwards;
+  animation: pick-sheet-down 0.24s cubic-bezier(0.4, 0, 0.8, 0.4) forwards;
 }
 @keyframes pick-sheet-up {
   from {
@@ -2710,7 +2739,7 @@ input::-webkit-date-and-time-value {
   height: 100%;
   border-radius: 4px;
   background: var(--tone, var(--ink));
-  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: width 0.5s var(--spring);
 }
 
 .ring {
@@ -2853,7 +2882,7 @@ input::-webkit-date-and-time-value {
   border-radius: 7px;
   background: var(--card);
   box-shadow: var(--shadow);
-  transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1), width 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1), height 0.2s ease;
+  transition: transform 0.28s var(--spring), width 0.28s var(--spring), height 0.2s ease;
   pointer-events: none;
 }
 .seg.has-pill button {
@@ -2877,6 +2906,8 @@ input::-webkit-date-and-time-value {
   position: fixed;
   inset: 0;
   background: rgba(22, 26, 21, 0.45);
+  /* lightens as the sheet is pulled down (sheetGesture.ts sets --scrim) */
+  background: rgba(22, 26, 21, calc(0.45 * var(--scrim, 1)));
   z-index: 100;
   display: grid;
   /* a dialog is never wider than the screen, whatever its content */
@@ -2897,7 +2928,7 @@ input::-webkit-date-and-time-value {
   background: var(--card);
   border-radius: 14px;
   box-shadow: var(--shadow-lg);
-  animation: pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  animation: pop 0.18s var(--spring);
 }
 
 .modal.wide {
@@ -2993,14 +3024,14 @@ input::-webkit-date-and-time-value {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  animation: slide 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  animation: slide 0.22s var(--spring);
   cursor: pointer;
   border-right: 4px solid var(--tone, var(--paper));
   position: relative;
   overflow: hidden;
   /* swiped sideways on a phone; the page still scrolls up and down under it */
   touch-action: pan-y;
-  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.22s ease;
+  transition: transform 0.22s var(--spring), opacity 0.22s ease;
 }
 /* leaving: it slides away instead of vanishing */
 .toast.is-leaving:not(.is-swiped) {
@@ -3846,7 +3877,7 @@ input::-webkit-date-and-time-value {
 }
 
 .fade-in > * {
-  animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: rise 0.42s var(--spring) both;
 }
 
 .fade-in > *:nth-child(2) {
@@ -4020,7 +4051,8 @@ input::-webkit-date-and-time-value {
     max-width: none;
     max-height: 92vh;
     border-radius: 16px 16px 0 0;
-    animation: sheet 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+    /* it rises from below the screen and leaves the same way (sheet-out) */
+    animation: sheet-in 0.48s var(--spring);
   }
   .modal-foot {
     border-radius: 0;
@@ -4041,7 +4073,7 @@ input::-webkit-date-and-time-value {
     -webkit-backdrop-filter: blur(14px) saturate(1.3);
     backdrop-filter: blur(14px) saturate(1.3);
     box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-    transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s ease;
+    transition: transform 0.3s var(--spring), opacity 0.2s ease;
   }
   /* reading down: it steps aside; scrolling up, the end of the page or a new screen bring it back */
   .bottom-nav.away:not(:focus-within) {
@@ -4058,7 +4090,7 @@ input::-webkit-date-and-time-value {
     border-radius: 18px;
     background: var(--rail-2);
     transform: translateX(calc(var(--idx, 0) * -100%));
-    transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+    transition: transform 0.32s var(--spring);
   }
   .bottom-nav a,
   .bottom-nav button {
@@ -4081,7 +4113,7 @@ input::-webkit-date-and-time-value {
   .bottom-nav svg {
     width: 22px;
     height: 22px;
-    transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+    transition: transform 0.3s var(--spring-bounce);
   }
   .bottom-nav .active {
     color: var(--rail-ink);
@@ -4163,6 +4195,11 @@ input::-webkit-date-and-time-value {
   from {
     transform: translateY(40px);
     opacity: 0;
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
   }
 }
 
@@ -5478,7 +5515,7 @@ button.fab-missing {
   .page-fab {
     bottom: calc(80px + env(safe-area-inset-bottom));
     padding-bottom: 0;
-    transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+    transition: bottom 0.3s var(--spring);
   }
   body:has(.bottom-nav.away) .page-fab {
     bottom: calc(12px + env(safe-area-inset-bottom));
@@ -7915,7 +7952,7 @@ button.weekly-item-title:hover {
   font: inherit;
   cursor: pointer;
   box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-  animation: plus-rise 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  animation: plus-rise 0.26s var(--spring) both;
 }
 /* the nearer one rises first */
 .plus-menu button:last-child {
@@ -7960,7 +7997,7 @@ button.weekly-item-title:hover {
 }
 /* open: the "+" turns to a close mark */
 .bottom-nav .plus svg {
-  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transition: transform 0.36s var(--spring-bounce);
 }
 .bottom-nav button.plus-open .plus svg {
   transform: rotate(45deg);
@@ -8119,8 +8156,8 @@ tr.flash > td {
   initial-value: 0;
 }
 .ring {
-  animation: ring-fill 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
-  transition: --p 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: ring-fill 0.9s var(--spring) backwards;
+  transition: --p 0.6s var(--spring);
 }
 @keyframes ring-fill {
   from {
@@ -8128,7 +8165,7 @@ tr.flash > td {
   }
 }
 .bar-fill {
-  animation: bar-grow 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: bar-grow 0.7s var(--spring) backwards;
 }
 @keyframes bar-grow {
   from {
@@ -8136,15 +8173,37 @@ tr.flash > td {
   }
 }
 
-/* a button pressed gives way a little */
+/* pressed, it gives way at once - on touch-down, not on release - and springs back when let go */
+.btn {
+  transition: background 0.12s, border-color 0.12s, transform 0.34s var(--spring);
+}
 .btn:active:not(:disabled) {
-  transform: translateY(1px) scale(0.985);
+  transform: scale(0.97);
+  transition: background 0.12s, border-color 0.12s, transform 0.1s ease-out;
 }
 .icon-btn {
-  transition: background 0.12s, color 0.12s, transform 0.08s;
+  transition: background 0.12s, color 0.12s, transform 0.34s var(--spring);
 }
 .icon-btn:active {
-  transform: scale(0.92);
+  transform: scale(0.9);
+  transition: background 0.12s, color 0.12s, transform 0.1s ease-out;
+}
+.chip {
+  transition: all 0.12s, transform 0.34s var(--spring);
+}
+.chip:active {
+  transform: scale(0.95);
+  transition: all 0.12s, transform 0.1s ease-out;
+}
+.kind-card,
+.nav-menu-toggle,
+.plus-menu button {
+  transition: background 0.15s, border-color 0.15s, transform 0.34s var(--spring);
+}
+.kind-card:active,
+.nav-menu-toggle:active:not(:disabled) {
+  transform: scale(0.98);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s ease-out;
 }
 
 /* light and dark: the new look spreads out from the button (the browser's own transition) */
@@ -8215,14 +8274,27 @@ tr.flash > td {
   .modal-head {
     touch-action: none;
   }
-  .modal {
-    transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
-  }
-  .modal.is-pulled {
-    transition: none;
-  }
   .modal-backdrop.is-leaving .modal {
-    animation: sheet-out 0.22s ease forwards;
+    animation: sheet-out 0.24s cubic-bezier(0.4, 0, 0.8, 0.4) forwards;
+  }
+  /* pulled up past its place, its colour carries on below it - no gap shows under a sheet */
+  .modal {
+    box-shadow: var(--shadow-lg), 0 48px 0 0 var(--card-2);
+  }
+  .modal:not(:has(.modal-foot)) {
+    box-shadow: var(--shadow-lg), 0 48px 0 0 var(--card);
+  }
+  /* a sheet over a sheet: the one below steps back, as on iOS */
+  .modal-backdrop:has(~ .sheet-backdrop:not(.is-leaving)) .modal,
+  .modal-backdrop:has(~ .modal-backdrop:not(.is-leaving)) .modal {
+    transform: scale(0.94);
+    transform-origin: 50% 0;
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    transition: transform 0.48s var(--spring), border-radius 0.48s var(--spring);
+  }
+  .modal-backdrop .modal {
+    transition: transform 0.48s var(--spring), border-radius 0.48s var(--spring);
   }
   @keyframes sheet-out {
     to {
@@ -8239,7 +8311,7 @@ tr.flash > td {
   details::details-content {
     height: 0;
     overflow: clip;
-    transition: height 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), content-visibility 0.26s allow-discrete;
+    transition: height 0.26s var(--spring), content-visibility 0.26s allow-discrete;
   }
   details[open]::details-content {
     height: auto;
@@ -8258,6 +8330,8 @@ html {
   text-size-adjust: 100%;
   /* a tap shows the app's own pressed look, not the browser's grey box */
   -webkit-tap-highlight-color: transparent;
+  /* a tap is a tap at once - no wait to see whether a second one follows (pinching still zooms) */
+  touch-action: manipulation;
 }
 @media (max-width: 860px) {
   /* Safari on a phone zooms the whole page into a field smaller than 16px when it is tapped;
@@ -8362,7 +8436,7 @@ html {
   opacity: 0;
 }
 .nav-ind {
-  transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.1), opacity 0.2s;
+  transition: transform 0.32s var(--spring), opacity 0.2s;
 }
 
 .nav-menu {
@@ -8438,7 +8512,7 @@ html {
 .nav-menu-chev {
   flex-shrink: 0;
   color: var(--muted);
-  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.24s var(--spring);
 }
 .nav-menu-group.is-open .nav-menu-chev {
   transform: rotate(180deg);
@@ -8456,7 +8530,7 @@ html {
 .nav-menu-body {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: grid-template-rows 0.26s var(--spring);
 }
 .nav-menu-group.is-open .nav-menu-body {
   grid-template-rows: 1fr;
@@ -8490,15 +8564,16 @@ html {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.25;
-  transition: transform 0.12s, border-color 0.15s, background 0.15s;
+  transition: transform 0.34s var(--spring), border-color 0.15s, background 0.15s;
 }
 /* the tiles come in one after another - on opening the menu, and on opening a group */
 .nav-menu-section.is-open .menu-tile {
-  animation: tile-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: tile-in 0.32s var(--spring) backwards;
   animation-delay: calc(var(--i, 0) * 18ms);
 }
 .menu-tile:active {
   transform: scale(0.95);
+  transition: transform 0.1s ease-out, border-color 0.15s, background 0.15s;
 }
 @media (hover: hover) {
   .menu-tile:hover {
@@ -8567,5 +8642,56 @@ html {
   .nav-menu-body,
   .nav-menu-chev {
     transition: none;
+  }
+}
+
+/* ---------------- materials for those who ask for less (system settings) ---------------- */
+/* less transparency: the frosted bars are solid */
+@media (prefers-reduced-transparency: reduce) {
+  .topbar {
+    background: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .bottom-nav {
+    background: var(--rail) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+/* more contrast: solid surfaces with a clear edge, a darker dimming behind dialogs */
+@media (prefers-contrast: more) {
+  .topbar {
+    background: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-bottom-color: var(--ink-2);
+  }
+  .bottom-nav {
+    background: var(--rail) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    outline: 1px solid var(--rail-ink);
+  }
+  .modal-backdrop,
+  .sheet-backdrop {
+    background: rgba(0, 0, 0, calc(0.62 * var(--scrim, 1)));
+  }
+  .modal,
+  .pick-sheet,
+  .pop {
+    outline: 1px solid var(--ink-2);
+  }
+}
+/* less motion: sheets and lists appear without travelling - a short fade instead */
+@media (prefers-reduced-motion: reduce) {
+  .modal,
+  .pick-sheet,
+  .pop {
+    animation: fade 0.18s ease-out !important;
+  }
+  .modal-backdrop.is-leaving .modal,
+  .sheet-backdrop.is-leaving .pick-sheet {
+    animation: modal-fade-out 0.18s ease forwards !important;
   }
 }

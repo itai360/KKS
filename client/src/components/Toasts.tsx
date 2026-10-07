@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { animateSpring, project, velocityOf, type SpringRun } from '../lib/spring';
 import { useNavigate } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { onNotification } from '../lib/realtime';
@@ -81,14 +82,29 @@ export function ToastProvider({ children }: { children: ReactNode }) {
  * smoothly, and on a phone is swiped away sideways.
  */
 function ToastItem({ toast: t, onGone, onOpen }: { toast: Toast; onGone: () => void; onOpen: (link: string) => void }) {
-  const [leaving, setLeaving] = useState<'' | 'out' | 'swipe'>('');
+  const [leaving, setLeaving] = useState<'' | 'out'>('');
   const [paused, setPaused] = useState(false);
-  const [dx, setDx] = useState(0);
   const left = useRef(lifetime(t));
   const startedAt = useRef(Date.now());
-  const drag = useRef<{ x: number; id: number; moved: boolean } | null>(null);
+  const drag = useRef<{ x: number; id: number; moved: boolean; points: { y: number; t: number }[] } | null>(null);
+  // swiped: it follows the finger, and let go it flies off with the finger's speed or springs back
+  const box = useRef<HTMLDivElement>(null);
+  const run = useRef<SpringRun | null>(null);
+  const x = useRef(0);
+  const swiped = useRef(false);
+  const paint = (v: number) => {
+    x.current = v;
+    const el = box.current;
+    if (!el) return;
+    el.style.transform = v ? `translate3d(${v}px, 0, 0)` : '';
+    el.style.opacity = v ? String(Math.max(0.25, 1 - Math.abs(v) / 260)) : '';
+    el.style.transition = v ? 'none' : '';
+  };
+  useEffect(() => {
+    return () => void run.current?.stop();
+  }, []);
 
-  const leave = useCallback((how: 'out' | 'swipe' = 'out') => setLeaving((l) => l || how), []);
+  const leave = useCallback(() => setLeaving((l) => l || 'out'), []);
   // gone from the list once its way out has played
   useEffect(() => {
     if (!leaving) return;
@@ -106,8 +122,13 @@ function ToastItem({ toast: t, onGone, onOpen }: { toast: Toast; onGone: () => v
   }, [paused, leaving, leave]);
 
   const onPointerDown = (e: ReactPointerEvent) => {
-    if (e.pointerType === 'mouse' || (e.target as HTMLElement).closest('button')) return;
-    drag.current = { x: e.clientX, id: e.pointerId, moved: false };
+    if (e.pointerType === 'mouse' || swiped.current || (e.target as HTMLElement).closest('button')) return;
+    // caught while springing back: it is taken from where it is
+    if (run.current) x.current = run.current.stop().value;
+    run.current = null;
+    // its entrance still running: it stops on the frame it is at, and the finger takes it from there
+    for (const a of box.current?.getAnimations() ?? []) a.cancel();
+    drag.current = { x: e.clientX - x.current, id: e.pointerId, moved: false, points: [{ y: e.clientX, t: e.timeStamp }] };
     setPaused(true);
   };
   const onPointerMove = (e: ReactPointerEvent) => {
@@ -115,27 +136,31 @@ function ToastItem({ toast: t, onGone, onOpen }: { toast: Toast; onGone: () => v
     if (!d || d.id !== e.pointerId) return;
     const delta = e.clientX - d.x;
     if (Math.abs(delta) > 6) d.moved = true;
-    setDx(delta);
+    paint(delta);
+    d.points.push({ y: e.clientX, t: e.timeStamp });
+    if (d.points.length > 12) d.points.shift();
   };
   const endDrag = (e: ReactPointerEvent) => {
     const d = drag.current;
     if (!d || d.id !== e.pointerId) return;
     drag.current = null;
-    setPaused(false);
-    if (Math.abs(e.clientX - d.x) > 70) leave('swipe');
-    else setDx(0);
+    const v = velocityOf(d.points);
+    // where the flick is heading (a snappier deceleration than a scroll), not where the finger stopped
+    const heading = x.current + project(v, 0.99);
+    if (Math.abs(heading) > 110) {
+      swiped.current = true;
+      const dir = Math.sign(heading);
+      run.current = animateSpring(x.current, dir * ((box.current?.offsetWidth ?? 320) + 40), { response: 0.26, velocity: v, onUpdate: paint, onDone: onGone });
+    } else {
+      setPaused(false);
+      run.current = animateSpring(x.current, 0, { response: 0.3, velocity: v, onUpdate: paint, onDone: () => (run.current = null) });
+    }
   };
 
   return (
     <div
-      className={`toast t-${t.tone ?? 'gray'}${leaving ? ` is-leaving${leaving === 'swipe' ? ' is-swiped' : ''}` : ''}${t.action ? ' has-action' : ''}`}
-      style={
-        leaving === 'swipe'
-          ? { transform: `translateX(${dx >= 0 ? 110 : -110}%)`, opacity: 0 }
-          : dx
-            ? { transform: `translateX(${dx}px)`, opacity: Math.max(0.35, 1 - Math.abs(dx) / 220), transition: 'none' }
-            : undefined
-      }
+      ref={box}
+      className={`toast t-${t.tone ?? 'gray'}${leaving ? ' is-leaving' : ''}${t.action ? ' has-action' : ''}`}
       role="status"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}

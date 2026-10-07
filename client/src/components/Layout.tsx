@@ -359,6 +359,8 @@ export function Layout({ children }: { children: ReactNode }) {
       frame = requestAnimationFrame(() => {
         frame = 0;
         const y = window.scrollY;
+        // the top bar shows its edge only while content passes under it
+        document.documentElement.toggleAttribute('data-scrolled', y > 2);
         const atEnd = y + window.innerHeight >= document.documentElement.scrollHeight - 8;
         if (atEnd || y < 60) setBarAway(false);
         else if (Math.abs(y - last) > 6) setBarAway(y > last);
