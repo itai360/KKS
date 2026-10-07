@@ -1108,6 +1108,9 @@ export interface Debrief {
   kind: DebriefKind;
   /** the form's answers, by question */
   answers: DebriefAnswers;
+  /** the company debrief: the cadet who brings it (the training officer of the broad experience) */
+  presenterId: number | null;
+  presenterName: string | null;
   title: string;
   occurredOn: string;
   eventId: number | null;
@@ -1132,7 +1135,7 @@ export interface DebriefDetail {
   debrief: Debrief;
   items: DebriefItem[];
   tasks: Task[];
-  /** a weekly debrief: the week it is about */
+  /** a weekly (or company) debrief: the week it is about */
   week: { id: number; number: number; name: string; goals: string } | null;
 }
 

@@ -2046,6 +2046,223 @@ input::-webkit-date-and-time-value {
 }
 }
 
+/* on a phone: a list with a search, a calendar or a time in a sheet from the bottom, as wide as the
+   screen - glued to the top of the keyboard while one is up (the script sets its bottom and height) */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 520;
+  background: rgba(22, 26, 21, 0.45);
+  animation: fade 0.15s ease-out;
+}
+.sheet-backdrop.is-leaving {
+  animation: modal-fade-out 0.2s ease forwards;
+  pointer-events: none;
+}
+.pick-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  margin-inline: auto;
+  border-radius: 18px 18px 0 0;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  padding-bottom: env(safe-area-inset-bottom);
+  outline: none;
+  animation: pick-sheet-up 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.sheet-backdrop.is-leaving .pick-sheet {
+  animation: pick-sheet-down 0.2s ease-in forwards;
+}
+@keyframes pick-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes pick-sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+.pick-sheet-top {
+  flex-shrink: 0;
+  padding: 0 16px 10px;
+  /* pulled down by its top, it closes */
+  touch-action: none;
+}
+.pick-sheet-grab {
+  position: relative;
+  height: 18px;
+}
+.pick-sheet-grab::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 42px;
+  height: 4px;
+  margin-left: -21px;
+  border-radius: 2px;
+  background: var(--line-2);
+}
+.pick-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+.pick-sheet-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-sheet-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+}
+.pick-sheet-search > svg {
+  position: absolute;
+  right: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.pick-sheet-search > .input {
+  width: 100%;
+  min-height: 46px;
+  padding-right: 40px;
+}
+.pick-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 10px 12px;
+}
+.pick-sheet-options .combo-option {
+  min-height: 48px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 16px;
+}
+.pick-sheet-options .combo-option.is-chosen {
+  background: var(--gray-bg);
+}
+.pick-sheet-options .combo-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 12px 6px;
+  background: var(--card);
+  font-size: 13px;
+}
+.pick-sheet-options .combo-empty {
+  padding: 16px 12px;
+  font-size: 15px;
+}
+.pick-sheet-exact {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.pick-sheet-exact > .input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  text-align: center;
+}
+.pick-sheet-exact > .input::placeholder {
+  font-family: var(--font);
+}
+.pick-sheet-exact > .btn {
+  min-height: 44px;
+  white-space: nowrap;
+}
+.time-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px;
+  padding-top: 2px;
+}
+.time-grid .combo-option {
+  justify-content: center;
+  min-height: 46px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 16px;
+  direction: ltr;
+}
+.time-grid .combo-option.is-hour {
+  color: var(--ink);
+  font-weight: 600;
+}
+.time-grid .combo-option.is-active {
+  border-color: var(--ink-2);
+  background: none;
+}
+.time-grid .combo-option.is-chosen {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--card);
+}
+/* the calendar at the size of a finger */
+.pick-sheet-date .dp {
+  max-width: 420px;
+  margin-inline: auto;
+}
+.pick-sheet-date .dp-title {
+  font-size: 18px;
+}
+.pick-sheet-date .dp-nav {
+  width: 44px;
+  height: 44px;
+}
+.pick-sheet-date .dp-grid {
+  gap: 4px;
+}
+.pick-sheet-date .dp-dow {
+  font-size: 13px;
+}
+.pick-sheet-date .dp-day {
+  min-height: 42px;
+  font-size: 17px;
+}
+.pick-sheet-date .dp-foot {
+  gap: 6px;
+}
+.pick-sheet-date .dp-foot .btn {
+  flex: 1;
+  min-height: 42px;
+  font-size: 15px;
+}
+.dp-clear {
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pick-sheet,
+  .sheet-backdrop.is-leaving .pick-sheet {
+    animation: none;
+    transition: none;
+  }
+}
+
 /* ---------- task rows ---------- */
 
 .list {

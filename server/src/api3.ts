@@ -33,6 +33,7 @@ import { badRequest, clock, config, notFound, tz } from './core';
 import { db } from './db';
 import {
   addItem,
+  companyPresenter,
   createDebrief,
   debriefDetail,
   lessonBank,
@@ -365,6 +366,12 @@ export function v3Router(): Router {
 
   r.get('/debriefs', (req, res) => res.json(listDebriefs(me(req), { weekId: num(req.query.week), eventId: num(req.query.event) })));
   r.post('/debriefs', (req, res) => res.json(debriefDetail(me(req), createDebrief(me(req), req.body))));
+  // who brings the company debrief on a day (the cadet in the broad experience of training officer)
+  r.get('/debriefs/presenter', (req, res) => {
+    const date = str(req.query.date);
+    if (!date || !isDateKey(date)) throw badRequest('תאריך לא תקין');
+    res.json(companyPresenter(date));
+  });
   r.get('/debriefs/:id', (req, res) => res.json(debriefDetail(me(req), id(req.params.id))));
   r.patch('/debriefs/:id', (req, res) => {
     updateDebrief(me(req), id(req.params.id), req.body);

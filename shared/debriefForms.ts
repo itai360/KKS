@@ -1,21 +1,34 @@
 // The debrief forms: a weekly debrief (improve this cycle, and the same week in
-// the next one) and a debrief of an intensive event (a march, a final exercise).
+// the next one), a debrief of an intensive event (a march, a final exercise), and
+// the company's weekly debrief (תחק"ש פלוגתי) - the cadets' points, brought by the
+// cadet who holds the broad experience of training officer (הקה"ד הרוחבי).
 // One definition serves the screen and the server's check before summing up.
 
-export const DEBRIEF_KINDS = ['general', 'weekly', 'event'] as const;
+export const DEBRIEF_KINDS = ['general', 'weekly', 'event', 'company'] as const;
 export type DebriefKind = (typeof DEBRIEF_KINDS)[number];
 
 export const DEBRIEF_KIND_LABELS: Record<DebriefKind, string> = {
   general: 'תחקיר פעילות',
   weekly: 'תחקיר שבועי',
   event: 'תחקיר מופע עצים',
+  company: 'תחק"ש פלוגתי',
 };
 
 export const DEBRIEF_KIND_HINTS: Record<DebriefKind, string> = {
   weekly: 'בסוף כל שבוע: מה הושג, מה לשמר ומה לשפר - ולקחים עם אחראי לשבוע הבא ולאותו שבוע במחזור הבא.',
   event: 'אחרי מופע עצים (מארס, תרגיל מסכם, ניווט לילה): מטרות, ציר זמן, בטיחות, לוגיסטיקה - ולקחים למופע הבא.',
   general: 'עובדות, ממצאים, מסקנות ולקחים - לכל פעילות אחרת.',
+  company: 'הקה"ד הרוחבי מעביר את התחקיר מול הצוערים: נקודות מול הסגל (על השבוע שעבר, על תרגיל העצים וכללי), מול סגל הרוחב ומול הפלוגה.',
 };
+
+/** the broad experience whose cadet brings the company debrief */
+export const COMPANY_DEBRIEF_ROLE = 'קה"ד';
+
+/** a debrief about a week (the week is chosen, not read from the date) */
+export const isWeekDebrief = (kind: DebriefKind): boolean => kind === 'weekly' || kind === 'company';
+
+/** a form made of points (the company debrief) sums up with lessons or without; the others need one */
+export const LESSON_REQUIRED: Record<DebriefKind, boolean> = { general: false, weekly: true, event: true, company: false };
 
 export type QuestionType = 'text' | 'list' | 'rating' | 'goals' | 'numbers' | 'flag';
 
@@ -159,8 +172,37 @@ export const EVENT_FORM: DebriefSection[] = [
   },
 ];
 
+/** the company debrief, as the training officer brings it: before the staff, the broad staff, the company */
+export const COMPANY_FORM: DebriefSection[] = [
+  {
+    id: 'staff',
+    title: 'מול הסגל',
+    questions: [
+      { id: 'staffWeek', label: 'על השבוע שעבר', type: 'list' },
+      { id: 'staffWoods', label: 'על תרגיל העצים', hint: 'אם היה תרגיל עצים', type: 'list' },
+      { id: 'staffGeneral', label: 'כללי', type: 'list' },
+    ],
+  },
+  {
+    id: 'broadStaff',
+    title: 'מול סגל רוחב',
+    questions: [{ id: 'broadStaff', label: 'נקודות מול סגל הרוחב', type: 'list' }],
+  },
+  {
+    id: 'company',
+    title: 'מול הפלוגה',
+    questions: [{ id: 'company', label: 'נקודות מול הפלוגה', type: 'list' }],
+  },
+];
+
 export function formFor(kind: DebriefKind): DebriefSection[] {
-  return kind === 'weekly' ? WEEKLY_FORM : kind === 'event' ? EVENT_FORM : [];
+  return kind === 'weekly' ? WEEKLY_FORM : kind === 'event' ? EVENT_FORM : kind === 'company' ? COMPANY_FORM : [];
+}
+
+/** a form of points only (no question must be answered): summing up needs one point at least */
+export function needsAPoint(kind: DebriefKind, a: DebriefAnswers): boolean {
+  const form = formFor(kind);
+  return form.length > 0 && !form.some((s) => s.questions.some((q) => q.required)) && !form.some((s) => s.questions.some((q) => answered(q, a)));
 }
 
 /** the two horizons of a lesson: this cycle (a task now) or the next cycle (kept in the lessons bank) */
@@ -175,6 +217,10 @@ export const LESSON_HORIZON_LABELS: Record<DebriefKind, Record<LessonHorizon, { 
   event: {
     now: { title: 'לקחים לביצוע עכשיו', hint: 'כל לקח עם אחראי ותאריך - בסיכום התחקיר הוא נפתח כמשימה.' },
     next: { title: 'לקחים למופע הבא', hint: 'נשמרים בבנק הלקחים ויוצגו כשמופע בשם הזה יופיע שוב בלו"ז.' },
+  },
+  company: {
+    now: { title: 'נקודות לטיפול', hint: 'נקודה שהסגל לוקח לטיפול - עם אחראי ותאריך; בסיכום התחקיר היא נפתחת כמשימה. לא חובה.' },
+    next: { title: 'לקחים לשבוע הזה במחזור הבא', hint: 'נשמרים בבנק הלקחים ויוצגו כשהשבוע הזה יגיע במחזור הבא.' },
   },
   general: {
     now: { title: 'לקחים', hint: '' },

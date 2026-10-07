@@ -13,7 +13,10 @@ import {
   DEBRIEF_KIND_LABELS,
   formFor,
   GOAL_STATUS_LABELS,
+  isWeekDebrief,
   LESSON_HORIZON_LABELS,
+  LESSON_REQUIRED,
+  needsAPoint,
   type DebriefAnswers,
   type DebriefQuestion,
   type DebriefSection,
@@ -23,7 +26,7 @@ import {
 import type { DebriefDetail, DebriefItem } from '@shared/types';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
-import { PriorLessons } from './DebriefBits';
+import { KIND_TONES, PriorLessons } from './DebriefBits';
 import { TaskList } from './TaskRow';
 import { useToast } from './Toasts';
 import { Bar, DateInput, PageHead, Select } from './ui';
@@ -120,14 +123,16 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
   const unowned = ofHorizon('now').filter((l) => !l.taskId && (!l.ownerId || !l.dueDate));
 
   // the same check the server makes before summing up, shown while filling in
+  const needLesson = LESSON_REQUIRED[d.kind];
   const missing: { label: string; anchor: string }[] = [
     ...sections.filter((s) => s.questions.some((q) => q.required && !answered(q, all))).map((s) => ({ label: s.title, anchor: ANCHOR(s.id) })),
-    ...(lessons.length ? [] : [{ label: 'לקח אחד לפחות', anchor: ANCHOR('now') }]),
+    ...(needsAPoint(d.kind, all) ? [{ label: 'נקודה אחת לפחות', anchor: ANCHOR(sections[0].id) }] : []),
+    ...(lessons.length || !needLesson ? [] : [{ label: 'לקח אחד לפחות', anchor: ANCHOR('now') }]),
     ...(unowned.length ? [{ label: unowned.length === 1 ? 'אחראי ותאריך ללקח' : `אחראי ותאריך ל-${unowned.length} לקחים`, anchor: ANCHOR('now') }] : []),
   ];
   const questions = sections.flatMap((s) => s.questions);
-  const done = questions.filter((q) => answered(q, all)).length + (lessons.length ? 1 : 0);
-  const total = questions.length + 1;
+  const done = questions.filter((q) => answered(q, all)).length + (needLesson && lessons.length ? 1 : 0);
+  const total = questions.length + (needLesson ? 1 : 0);
 
   const run = async (fn: () => Promise<DebriefDetail>, ok?: string) => {
     try {
@@ -169,9 +174,10 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
     setBusy(false);
   };
 
-  const about = d.kind === 'weekly' ? (data.week ? `שבוע ${data.week.number} · ${data.week.name}` : d.weekName) : d.eventTitle;
+  const about = isWeekDebrief(d.kind) ? (data.week ? `שבוע ${data.week.number} · ${data.week.name}` : d.weekName) : d.eventTitle;
   // what earlier cycles kept for this week or event - decided about on the week page, or here by the commander
-  const prior = d.kind === 'weekly' && d.weekId ? { weekId: d.weekId } : d.kind === 'event' && d.eventId ? { eventId: d.eventId } : null;
+  const prior = isWeekDebrief(d.kind) && d.weekId ? { weekId: d.weekId } : d.kind === 'event' && d.eventId ? { eventId: d.eventId } : null;
+  const tone = KIND_TONES[d.kind];
 
   return (
     <div className="page dform-page">
@@ -182,7 +188,16 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
           </Link>
         }
         title={d.title}
-        sub={[DEBRIEF_KIND_LABELS[d.kind], about, shortDate(d.occurredOn), d.facilitatorName && `מנחה: ${d.facilitatorName}`, d.status === 'final' ? 'סוכם' : 'טיוטה'].filter(Boolean).join(' · ')}
+        sub={[
+          DEBRIEF_KIND_LABELS[d.kind],
+          about,
+          shortDate(d.occurredOn),
+          d.presenterName && `מעביר: ${d.presenterName}`,
+          d.facilitatorName && `${d.kind === 'company' ? 'אחראי מהסגל' : 'מנחה'}: ${d.facilitatorName}`,
+          d.status === 'final' ? 'סוכם' : 'טיוטה',
+        ]
+          .filter(Boolean)
+          .join(' · ')}
         actions={
           <>
             <button className="btn" onClick={() => window.print()} aria-label="הדפסה">
@@ -220,9 +235,9 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
 
       <div className="dform">
         <div className="col gap-16 dform-main">
-          <div className={`card card-pad dform-intro ${d.kind === 'event' ? 't-purple' : 't-blue'}`}>
+          <div className={`card card-pad dform-intro ${tone}`}>
             <div className="row wrap gap-6">
-              <span className={`badge ${d.kind === 'event' ? 't-purple' : 't-blue'}`}>{DEBRIEF_KIND_LABELS[d.kind]}</span>
+              <span className={`badge ${tone}`}>{DEBRIEF_KIND_LABELS[d.kind]}</span>
               {d.status === 'final' ? <span className="badge t-green">סוכם</span> : <span className="badge t-yellow">טיוטה</span>}
               <span className="grow" />
               <span className="tiny muted mono">
@@ -231,6 +246,25 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
             </div>
             <Bar value={(done / total) * 100} tone={done === total ? 'green' : 'blue'} label="התקדמות מילוי הטופס" />
             <p className="small muted">{d.status === 'final' ? 'התחקיר סוכם: הלקחים להמשך המחזור נפתחו כמשימות, והלקחים למחזור הבא שמורים בבנק הלקחים.' : DEBRIEF_KIND_HINTS[d.kind]}</p>
+            {d.kind === 'company' && (
+              <div className="small">
+                {d.presenterName ? (
+                  <>
+                    <span className="muted">מעביר התחקיר (קה"ד רוחבי): </span>
+                    <span className="strong">{d.presenterName}</span>
+                  </>
+                ) : (
+                  <span className="muted">
+                    לא נקבע מי מעביר את התחקיר.{' '}
+                    {d.canEdit && (
+                      <button type="button" className="link-btn" onClick={onEdit}>
+                        בחירת הקה"ד הרוחבי
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
             {(d.participants || d.summary) && (
               <div className="small">
                 {d.participants && <div className="muted">משתתפים: {d.participants}</div>}
@@ -241,7 +275,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
 
           {prior && (
             <PriorLessons
-              title={d.kind === 'weekly' ? 'מה המחזור הקודם למד על השבוע הזה' : 'מה למדנו במופעים קודמים'}
+              title={isWeekDebrief(d.kind) ? 'מה המחזור הקודם למד על השבוע הזה' : 'מה למדנו במופעים קודמים'}
               context={{ ...prior, canDecide: isCommander && editable, owner: null, due: addDays(d.occurredOn, 3) }}
             />
           )}
@@ -280,7 +314,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
           })}
           {(['now', 'next'] as const).map((h, i) => {
             const n = ofHorizon(h).length;
-            const need = h === 'now' ? (!lessons.length || unowned.length > 0) : false;
+            const need = h === 'now' ? (needLesson && !lessons.length) || unowned.length > 0 : false;
             return (
               <a key={h} href={`#${ANCHOR(h)}`} onClick={(e) => (e.preventDefault(), goTo(ANCHOR(h)))} className={n && !need ? 'ok' : need ? 'need' : ''}>
                 <span className="dsec-num">{n && !need ? <Icon name="check" size={12} /> : sections.length + i + 1}</span>

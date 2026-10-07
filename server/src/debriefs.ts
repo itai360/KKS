@@ -5,7 +5,23 @@
 import { z } from 'zod';
 import { DEBRIEF_ITEM_KINDS, PRIORITIES, isOpenStatus, type DebriefItemKind, type TaskStatus } from '../../shared/constants';
 import { addDays, isDateKey, localDateKey, localTime, zonedIso } from '../../shared/dates';
-import { answered, DEBRIEF_KINDS, DEBRIEF_KIND_LABELS, formFor, goalsFromText, LESSON_DECISIONS, LESSON_HORIZONS, type DebriefAnswers, type DebriefKind, type LessonDecision, type LessonHorizon } from '../../shared/debriefForms';
+import {
+  answered,
+  COMPANY_DEBRIEF_ROLE,
+  DEBRIEF_KINDS,
+  DEBRIEF_KIND_LABELS,
+  formFor,
+  goalsFromText,
+  isWeekDebrief,
+  LESSON_DECISIONS,
+  LESSON_HORIZONS,
+  LESSON_REQUIRED,
+  needsAPoint,
+  type DebriefAnswers,
+  type DebriefKind,
+  type LessonDecision,
+  type LessonHorizon,
+} from '../../shared/debriefForms';
 import { searchKey } from '../../shared/search';
 import type { BankLesson, Debrief, DebriefDetail, DebriefItem, LessonReview } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
@@ -71,11 +87,43 @@ function parseAnswers(raw: string): DebriefAnswers {
   }
 }
 
+const cadetName = (id: number) => db().get<{ n: string }>("SELECT trim(first_name || ' ' || last_name) AS n FROM cadets WHERE id = ?", id)?.n ?? null;
+
+/**
+ * The cadet who brings the company debrief on a day: the one in the broad experience of training
+ * officer (קה"ד רוחבי) then - and the staff member who mentors that experience.
+ */
+export function companyPresenter(date: string): { cadetId: number; cadetName: string; mentorId: number | null } | null {
+  const rows = db().all<{ cadet_id: number; role: string; mentor_id: number | null; name: string }>(
+    `SELECT x.cadet_id, x.role, x.mentor_id, trim(c.first_name || ' ' || c.last_name) AS name FROM experiences x JOIN cadets c ON c.id = x.cadet_id
+     WHERE x.kind = 'broad' AND x.start_date <= ? AND x.end_date >= ? AND c.status = 'active' ORDER BY x.start_date DESC, x.id DESC`,
+    date,
+    date,
+  );
+  const r = rows.find((x) => searchKey(x.role) === searchKey(COMPANY_DEBRIEF_ROLE));
+  return r ? { cadetId: r.cadet_id, cadetName: r.name, mentorId: r.mentor_id } : null;
+}
+
+function presenterOf(kind: DebriefKind, a: DebriefAnswers): number | null {
+  return kind === 'company' && typeof a.presenterId === 'number' ? a.presenterId : null;
+}
+
+function checkPresenter(a: Partial<DebriefAnswers>): void {
+  const p = a.presenterId;
+  if (p === undefined || p === null) return;
+  if (typeof p !== 'number' || !db().get('SELECT 1 FROM cadets WHERE id = ?', p)) throw badRequest('הצוער שמעביר את התחקיר לא נמצא');
+}
+
 function toDebrief(actor: UserRow, d: DebriefRow): Debrief {
+  const kind = DEBRIEF_KINDS.includes(d.kind) ? d.kind : 'general';
+  const answers = parseAnswers(d.answers);
+  const presenterId = presenterOf(kind, answers);
   return {
     id: d.id,
-    kind: DEBRIEF_KINDS.includes(d.kind) ? d.kind : 'general',
-    answers: parseAnswers(d.answers),
+    kind,
+    answers,
+    presenterId,
+    presenterName: presenterId ? cadetName(presenterId) : null,
     title: d.title,
     occurredOn: d.occurred_on,
     eventId: d.event_id,
@@ -142,10 +190,14 @@ export function createDebrief(actor: UserRow, raw: z.input<typeof debriefSchema>
   const d = debriefSchema.parse(raw);
   if (d.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', d.eventId)) throw badRequest('הפעילות לא נמצאה');
   if (d.facilitatorId && !getUserRow(d.facilitatorId)?.active) throw badRequest('מנחה התחקיר אינו פעיל');
-  const week = d.kind === 'weekly' && d.weekId ? weekRow(d.weekId) : null;
-  if (d.kind === 'weekly' && !week) throw badRequest('בחרו את השבוע שהתחקיר עוסק בו');
+  const week = isWeekDebrief(d.kind) && d.weekId ? weekRow(d.weekId) : null;
+  if (isWeekDebrief(d.kind) && !week) throw badRequest('בחרו את השבוע שהתחקיר עוסק בו');
+  checkPresenter(d.answers);
+  let answers = d.answers;
   // a weekly debrief starts from the goals its week set
-  const answers = week && !d.answers.goals ? { ...d.answers, goals: goalsFromText(week.goals) } : d.answers;
+  if (d.kind === 'weekly' && week && !answers.goals) answers = { ...answers, goals: goalsFromText(week.goals) };
+  // the company debrief: brought by the training officer of that day, unless another cadet was chosen
+  if (d.kind === 'company' && answers.presenterId === undefined) answers = { ...answers, presenterId: companyPresenter(d.occurredOn)?.cadetId ?? null };
   const at = nowIso();
   const id = db().run(
     `INSERT INTO debriefs(kind, answers, title, occurred_on, event_id, activity, week_id, facilitator_id, participants, summary, created_by, created_at, updated_at)
@@ -177,9 +229,10 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
   const eventId = p.eventId !== undefined ? p.eventId : cur.event_id;
   if (p.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', p.eventId)) throw badRequest('הפעילות לא נמצאה');
   // answers come per question: two people filling different parts of the form both keep theirs
+  if (p.answers) checkPresenter(p.answers);
   const answers = p.answers ? { ...parseAnswers(cur.answers), ...p.answers } : parseAnswers(cur.answers);
   if (JSON.stringify(answers).length > 40000) throw badRequest('התחקיר ארוך מדי');
-  const weekId = cur.kind === 'weekly' ? (p.weekId ? weekRow(p.weekId).id : cur.week_id) : weekForDate(occurredOn);
+  const weekId = isWeekDebrief(cur.kind) ? (p.weekId ? weekRow(p.weekId).id : cur.week_id) : weekForDate(occurredOn);
   const summingUp = p.status === 'final' && cur.status !== 'final';
   if (summingUp && cur.kind !== 'general') checkReady(cur, answers);
   db().tx(() => {
@@ -226,11 +279,12 @@ function checkReady(d: DebriefRow, answers: DebriefAnswers): void {
     .filter((s) => s.questions.some((q) => q.required && !answered(q, answers)))
     .map((s) => s.title);
   if (missing.length) throw badRequest(`כדי לסכם חסר: ${missing.join(', ')}`);
+  if (needsAPoint(d.kind, answers)) throw badRequest(`כדי לסכם צריך לפחות נקודה אחת - ${formFor(d.kind).map((s) => s.title).join(', ')}`);
   const lessons = db().all<{ horizon: LessonHorizon | null; owner_id: number | null; due_date: string | null; task_id: number | null }>(
     "SELECT horizon, owner_id, due_date, task_id FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson'",
     d.id,
   );
-  if (!lessons.length) throw badRequest('תחקיר בלי לקחים לא משנה דבר - הוסיפו לפחות לקח אחד');
+  if (!lessons.length && LESSON_REQUIRED[d.kind]) throw badRequest('תחקיר בלי לקחים לא משנה דבר - הוסיפו לפחות לקח אחד');
   if (lessons.some((l) => l.horizon === 'now' && !l.task_id && (!l.owner_id || !l.due_date))) throw badRequest('לכל לקח להמשך המחזור צריך אחראי ותאריך - כך הוא הופך למשימה');
 }
 
@@ -330,7 +384,7 @@ export const itemSchema = z.object({
 
 /** what a lesson for the next cycle is for: the week (by number and name) or the event (by name) */
 function lessonTarget(d: DebriefRow): { target: string; key: string; week: number | null } {
-  if (d.kind === 'weekly' && d.week_id) {
+  if (isWeekDebrief(d.kind) && d.week_id) {
     const w = weekRow(d.week_id);
     return { target: `שבוע ${w.number} · ${w.name}`, key: searchKey(w.name), week: w.number };
   }
@@ -732,7 +786,7 @@ export function learningReminders(now: Date): number {
 export function debriefDetail(actor: UserRow, id: number): DebriefDetail {
   const d = debriefRow(id);
   return {
-    week: d.kind === 'weekly' && d.week_id ? weekRow(d.week_id) : null,
+    week: isWeekDebrief(d.kind) && d.week_id ? weekRow(d.week_id) : null,
     debrief: toDebrief(actor, d),
     items: db()
       .all<ItemRow>(`${ITEM_BASE} WHERE i.debrief_id = ? ORDER BY i.sort, i.id`, id)

@@ -374,6 +374,23 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     setBarAway(false);
   }, [location.pathname]);
+  // and while a field is typed in: the keyboard takes the bottom of the screen, and a bar riding on top
+  // of it would cover the very field being typed
+  const [typingField, setTypingField] = useState(false);
+  useEffect(() => {
+    const typed = (el: EventTarget | null) =>
+      el instanceof HTMLTextAreaElement ||
+      (el instanceof HTMLElement && el.isContentEditable) ||
+      (el instanceof HTMLInputElement && el.inputMode !== 'none' && !['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color'].includes(el.type));
+    const onIn = (e: FocusEvent) => setTypingField(typed(e.target));
+    const onOut = (e: FocusEvent) => setTypingField(typed(e.relatedTarget));
+    document.addEventListener('focusin', onIn);
+    document.addEventListener('focusout', onOut);
+    return () => {
+      document.removeEventListener('focusin', onIn);
+      document.removeEventListener('focusout', onOut);
+    };
+  }, []);
   // the bar's "+": a new task or something for the weekly
   const [plusOpen, setPlusOpen] = useState(false);
   useEffect(() => {
@@ -594,7 +611,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      <nav className={`bottom-nav${barAway ? ' away' : ''}${barIdx < 0 ? ' no-tab' : ''}`} aria-label="ניווט" style={{ ['--idx' as string]: Math.max(0, barIdx) }}>
+      <nav className={`bottom-nav${barAway || typingField ? ' away' : ''}${barIdx < 0 ? ' no-tab' : ''}`} aria-label="ניווט" style={{ ['--idx' as string]: Math.max(0, barIdx) }}>
         {/* slides to the current tab */}
         <span className="nav-ind" aria-hidden />
         <NavLink to={tasksHome} end={tasksHome === '/'} className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>

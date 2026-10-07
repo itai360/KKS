@@ -184,7 +184,10 @@ function LessonToTask({ lesson, context, onClose, onSave }: { lesson: BankLesson
   );
 }
 
+/** each kind of debrief in its own colour, everywhere it shows */
+export const KIND_TONES: Record<DebriefKind, string> = { weekly: 't-blue', company: 't-green', event: 't-purple', general: 't-gray' };
+
 export function KindBadge({ kind }: { kind: DebriefKind }) {
   if (kind === 'general') return null;
-  return <span className={`badge ${kind === 'event' ? 't-purple' : 't-blue'}`}>{kind === 'event' ? 'מופע עצים' : 'שבועי'}</span>;
+  return <span className={`badge ${KIND_TONES[kind]}`}>{kind === 'event' ? 'מופע עצים' : kind === 'company' ? 'פלוגתי' : 'שבועי'}</span>;
 }

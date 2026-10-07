@@ -6,11 +6,11 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
 import { sortHe } from '@shared/sort';
 import { addDays, shortDate } from '@shared/dates';
-import { DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, type DebriefKind } from '@shared/debriefForms';
+import { DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, DEBRIEF_KINDS, isWeekDebrief, type DebriefKind } from '@shared/debriefForms';
 import { matchesSearch } from '@shared/search';
-import type { BankLesson, Debrief, DebriefDetail, DebriefItem, EventDetail, ExternalEvent, ScheduleEvent, Template, Week } from '@shared/types';
+import type { BankLesson, Cadet, Debrief, DebriefDetail, DebriefItem, EventDetail, ExternalEvent, ScheduleEvent, Template, Week } from '@shared/types';
 import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
-import { KindBadge } from '../components/DebriefBits';
+import { KIND_TONES, KindBadge } from '../components/DebriefBits';
 import { DebriefFormView } from '../components/DebriefFormView';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
@@ -39,8 +39,8 @@ const KIND_HINT: Record<DebriefItemKind, string> = {
   lesson: 'מה עושים אחרת מעכשיו',
 };
 
-const KIND_ICONS: Record<DebriefKind, string> = { weekly: 'calendar', event: 'zap', general: 'lightbulb' };
-const isKind = (v: string | null): v is DebriefKind => v === 'weekly' || v === 'event' || v === 'general';
+const KIND_ICONS: Record<DebriefKind, string> = { weekly: 'calendar', company: 'cap', event: 'zap', general: 'lightbulb' };
+const isKind = (v: string | null): v is DebriefKind => DEBRIEF_KINDS.includes(v as DebriefKind);
 
 export function DebriefsPage() {
   const [params, setParams] = useSearchParams();
@@ -95,6 +95,7 @@ export function DebriefsPage() {
                 options={[
                   { value: 'all', label: 'הכל' },
                   { value: 'weekly', label: 'שבועיים' },
+                  { value: 'company', label: 'פלוגתיים' },
                   { value: 'event', label: 'מופעים עצימים' },
                   { value: 'general', label: 'פעילויות' },
                 ]}
@@ -114,19 +115,24 @@ export function DebriefsPage() {
                     <div className="task-title">{d.title}</div>
                     <div className="task-meta">
                       <span className="mono">{shortDate(d.occurredOn)}</span>
-                      {d.kind !== 'weekly' && d.eventTitle && <span className="sep">{d.eventTitle}</span>}
+                      {!isWeekDebrief(d.kind) && d.eventTitle && <span className="sep">{d.eventTitle}</span>}
                       {d.weekName && <span className="sep">{d.weekName}</span>}
-                      {d.facilitatorName && <span className="sep">מנחה: {d.facilitatorName}</span>}
+                      {d.presenterName && <span className="sep">מעביר: {d.presenterName}</span>}
+                      {d.facilitatorName && <span className="sep">{d.kind === 'company' ? 'אחראי' : 'מנחה'}: {d.facilitatorName}</span>}
                     </div>
                   </div>
                   <div className="task-side">
                     <KindBadge kind={d.kind} />
-                    {d.kind === 'general' ? (
+                    {d.kind === 'general' || d.kind === 'company' ? (
+                      d.kind === 'company' ? (
+                        <span className="badge">{companyPoints(d) === 1 ? 'נקודה אחת' : `${companyPoints(d)} נקודות`}</span>
+                      ) : (
                       DEBRIEF_ITEM_KINDS.map((k) => (
                         <span key={k} className="badge" title={DEBRIEF_ITEM_LABELS[k]}>
                           {DEBRIEF_ITEM_LABELS[k]} {d.itemCounts[k]}
                         </span>
                       ))
+                      )
                     ) : (
                       <span className="badge">{d.itemCounts.lesson === 1 ? 'לקח אחד' : `${d.itemCounts.lesson} לקחים`}</span>
                     )}
@@ -146,12 +152,16 @@ export function DebriefsPage() {
   );
 }
 
+/** the points a company debrief holds, before the staff, the broad staff and the company */
+const companyPoints = (d: Debrief) =>
+  Object.entries(d.answers).reduce((n, [k, v]) => (k !== 'presenterId' && Array.isArray(v) ? n + v.filter((x) => typeof x === 'string' && x.trim()).length : n), 0);
+
 function KindPicker({ onPick, onClose }: { onPick: (k: DebriefKind) => void; onClose: () => void }) {
   return (
     <Modal title="איזה תחקיר?" onClose={onClose}>
       <div className="kind-cards">
-        {(['weekly', 'event', 'general'] as const).map((k, i) => (
-          <button key={k} type="button" className={`kind-card ${k === 'weekly' ? 't-blue' : k === 'event' ? 't-purple' : 't-gray'}`} onClick={() => onPick(k)} data-autofocus={i === 0 || undefined}>
+        {(['weekly', 'company', 'event', 'general'] as const).map((k, i) => (
+          <button key={k} type="button" className={`kind-card ${KIND_TONES[k]}`} onClick={() => onPick(k)} data-autofocus={i === 0 || undefined}>
             <span className="kind-icon">
               <Icon name={KIND_ICONS[k]} />
             </span>
@@ -171,7 +181,8 @@ function LessonsBank() {
   const { data, error, loading } = useApi<BankLesson[]>('/api/lessons', ['debriefs']);
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<'all' | 'weekly' | 'event'>('all');
-  const list = (data ?? []).filter((l) => (kind === 'all' || l.debriefKind === kind) && matchesSearch(q, l.body, l.target, l.debriefTitle, l.ownerName));
+  // the weeks: the weekly debriefs' lessons and the company debriefs'
+  const list = (data ?? []).filter((l) => (kind === 'all' || (kind === 'weekly' ? isWeekDebrief(l.debriefKind) : l.debriefKind === kind)) && matchesSearch(q, l.body, l.target, l.debriefTitle, l.ownerName));
   const groups = new Map<string, BankLesson[]>();
   for (const l of [...list].sort((a, b) => (a.targetWeek ?? 999) - (b.targetWeek ?? 999) || a.target.localeCompare(b.target, 'he'))) groups.set(l.target, [...(groups.get(l.target) ?? []), l]);
   if (loading && !data) return <Loading rows={3} />;
@@ -212,7 +223,7 @@ function LessonsBank() {
             {[...groups].map(([target, items]) => (
               <div key={target} className="card">
                 <div className="card-head">
-                  <Icon name={items[0].debriefKind === 'weekly' ? 'calendar' : 'zap'} />
+                  <Icon name={isWeekDebrief(items[0].debriefKind) ? 'calendar' : 'zap'} />
                   <h3 className="grow">{target}</h3>
                   <span className="mono tiny muted">{items.length}</span>
                 </div>
@@ -259,19 +270,27 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
   const navigate = useNavigate();
   const { users, user } = useSession();
   const kind = debrief?.kind ?? newKind;
-  const weekly = kind === 'weekly';
-  // a weekly debrief is about a week - often held on the next week's first day
+  // a weekly debrief (and the company's) is about a week - often held on the next week's first day
+  const weekly = isWeekDebrief(kind);
+  const company = kind === 'company';
   const weeks = useApi<Week[]>(weekly ? '/api/weeks' : null, ['weeks']).data;
   const [weekSet, setWeekSet] = useState<number | null>(debrief?.weekId ?? weekId ?? null);
   const week = weeks?.find((w) => w.id === weekSet) ?? (weekSet ? undefined : weeks && defaultWeek(weeks, todayKey()));
-  const sameWeek = useApi<Debrief[]>(weekly && !debrief && week ? `/api/debriefs?week=${week.id}` : null, ['debriefs']).data?.find((x) => x.kind === 'weekly');
+  const sameWeek = useApi<Debrief[]>(weekly && !debrief && week ? `/api/debriefs?week=${week.id}` : null, ['debriefs']).data?.find((x) => x.kind === kind);
   // opened from a schedule event: its day, until the date is changed here
   const preset = useApi<EventDetail>(!debrief && eventId ? `/api/events/${eventId}` : null, ['events']).data?.event;
   const [title, setTitle] = useState(debrief?.title ?? '');
   const [dateSet, setDateSet] = useState<string | null>(debrief?.occurredOn ?? null);
   const date = dateSet ?? preset?.date ?? todayKey();
   const [pick, setPick] = useState<string>(debrief?.eventId ? `e:${debrief.eventId}` : debrief?.eventTitle ? `a:${debrief.eventTitle}` : eventId ? `e:${eventId}` : '');
-  const [facilitator, setFacilitator] = useState<string>(String(debrief?.facilitatorId ?? user.id));
+  // the company debrief: brought by the cadet in the broad experience of training officer that day
+  const cadets = useApi<Cadet[]>(company ? '/api/cadets' : null, ['cadets']).data;
+  const officer = useApi<{ cadetId: number; cadetName: string; mentorId: number | null } | null>(company && !debrief ? `/api/debriefs/presenter?date=${date}` : null, ['cadets']).data;
+  const [presenterSet, setPresenter] = useState<string | null>(debrief ? String(debrief.presenterId ?? '') : null);
+  const presenter = presenterSet ?? (officer ? String(officer.cadetId) : '');
+  // ...and the staff member who mentors that experience looks after it, unless another is chosen
+  const [facilitatorSet, setFacilitator] = useState<string | null>(debrief ? String(debrief.facilitatorId ?? user.id) : null);
+  const facilitator = facilitatorSet ?? String((company && officer?.mentorId) || user.id);
   const [participants, setParticipants] = useState(debrief?.participants ?? '');
   const [summary, setSummary] = useState(debrief?.summary ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -298,7 +317,7 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
       : null;
   const chosen = known.find((a) => a.key === current) ?? kept;
   const loadingDay = (dayEvents.loading && !dayEvents.data) || (dayExternal.loading && !dayExternal.data);
-  const effectiveTitle = title || (weekly ? (week ? `תחקיר שבועי - ${week.name}` : '') : chosen ? `תחקיר ${chosen.title}` : '');
+  const effectiveTitle = title || (weekly ? (week ? `${company ? 'תחק"ש פלוגתי' : 'תחקיר שבועי'} - ${week.name}` : '') : chosen ? `תחקיר ${chosen.title}` : '');
   const label = (a: Activity) => (a.time ? `${a.time} · ${a.title}` : a.key.startsWith('x:') ? `כל היום · ${a.title}` : a.title);
 
   const save = async () => {
@@ -313,10 +332,14 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
       summary,
     };
     try {
-      const created = debrief ? null : await api.post<DebriefDetail>('/api/debriefs', { ...body, kind, weekId: weekly ? (week?.id ?? null) : null });
+      const presenterId = presenter ? Number(presenter) : null;
+      const created = debrief
+        ? null
+        : await api.post<DebriefDetail>('/api/debriefs', { ...body, kind, weekId: weekly ? (week?.id ?? null) : null, ...(company ? { answers: { presenterId } } : {}) });
       if (debrief) {
         const { eventId, activity, ...rest } = body;
-        const patch: Partial<typeof body> & { weekId?: number } = changedFields<typeof rest>(debrief, rest);
+        const patch: Partial<typeof body> & { weekId?: number; answers?: { presenterId: number | null } } = changedFields<typeof rest>(debrief, rest);
+        if (company && presenterId !== debrief.presenterId) patch.answers = { presenterId };
         // the activity is one choice - a schedule event or a calendar entry by name
         if (!weekly && (eventId !== debrief.eventId || activity !== (debrief.eventId ? '' : (debrief.eventTitle ?? '')))) Object.assign(patch, { eventId, activity });
         if (weekly && week && week.id !== debrief.weekId) patch.weekId = week.id;
@@ -358,7 +381,7 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
             hint={
               sameWeek ? (
                 <>
-                  כבר נפתח תחקיר שבועי לשבוע הזה -{' '}
+                  כבר נפתח {DEBRIEF_KIND_LABELS[kind]} לשבוע הזה -{' '}
                   <Link to={`/debriefs/${sameWeek.id}`} onClick={onClose}>
                     {sameWeek.title}
                   </Link>
@@ -418,7 +441,33 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
           </Select>
         </Field>
         )}
-        <Field label="מנחה">
+        {company && (
+          <Field
+            label='מעביר התחקיר (קה"ד רוחבי)'
+            className="span-2"
+            hint={
+              !debrief && officer === null ? (
+                <>
+                  אין צוער בהתנסות רוחב קה"ד ב-{shortDate(date)}. <Link to="/experiences" onClick={onClose}>לשיבוץ בהתנסויות</Link>, או בחירת צוער כאן.
+                </>
+              ) : !debrief && officer && presenter === String(officer.cadetId) ? (
+                'הקה"ד הרוחבי לפי ההתנסויות בתאריך התחקיר'
+              ) : undefined
+            }
+          >
+            <Select className="select" value={presenter} onChange={(e) => setPresenter(e.target.value)}>
+              <option value="">{cadets ? 'ללא' : 'טוען צוערים...'}</option>
+              {debrief?.presenterId && !cadets?.some((c) => c.id === debrief.presenterId) && <option value={debrief.presenterId}>{debrief.presenterName}</option>}
+              {sortHe(cadets ?? [], (c) => c.fullName).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.fullName}
+                  {c.teamName ? ` · ${c.teamName}` : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        <Field label={company ? 'אחראי מהסגל' : 'מנחה'} hint={company ? 'מלווה את הקה"ד, ויכול לערוך ולסכם את התחקיר' : undefined}>
           <Select className="select" value={facilitator} onChange={(e) => setFacilitator(e.target.value)}>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
@@ -428,7 +477,7 @@ function DebriefForm({ debrief, kind: newKind = 'general', eventId, weekId, onCl
           </Select>
         </Field>
         <Field label="משתתפים">
-          <input className="input" value={participants} onChange={(e) => setParticipants(e.target.value)} placeholder="לדוגמה: סגל הצוות, מדריכי ירי" />
+          <input className="input" value={participants} onChange={(e) => setParticipants(e.target.value)} placeholder={company ? 'לדוגמה: הפלוגה וסגל הקורס' : 'לדוגמה: סגל הצוות, מדריכי ירי'} />
         </Field>
         <Field label={kind === 'general' ? 'תיאור האירוע' : 'רקע קצר (לא חובה)'} className="span-2">
           <textarea className="textarea" value={summary} onChange={(e) => setSummary(e.target.value)} />
