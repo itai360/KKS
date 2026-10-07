@@ -27,6 +27,7 @@ import { searchKey } from '@shared/search';
 import { todayKey } from '../lib/format';
 import { Icon } from './Icon';
 import { useSheetGesture } from './sheetGesture';
+import { usePresence } from '../lib/presence';
 import { lockScroll } from '../lib/scrollLock';
 
 // ---------------- the floating layer ----------------
@@ -195,6 +196,15 @@ function SheetBody({ title, onClose, children, back, tall, className = '', head,
     if (!ref.current?.contains(document.activeElement)) ref.current?.focus({ preventScroll: true });
     return lockScroll();
   }, []);
+  // the top's edge shows only once the list or calendar under it is scrolled
+  useEffect(() => {
+    const box = ref.current;
+    const body = box?.querySelector<HTMLElement>('.pick-sheet-body');
+    if (!box || !body) return;
+    const edge = () => box.toggleAttribute('data-under-head', body.scrollTop > 1);
+    body.addEventListener('scroll', edge, { passive: true });
+    return () => body.removeEventListener('scroll', edge);
+  }, []);
   useEffect(() => {
     if (!leaving) return;
     if (back.current && opener.current === back.current) back.current.focus({ preventScroll: true });
@@ -265,7 +275,11 @@ function Layer({
   /** a click inside leaves the focus where it is (in the field) */
   keepFocus?: boolean;
 }) {
-  const style = usePlacement(anchor, open, want, width);
+  // closed, it shrinks back into its field before it goes - showing what it showed until then
+  const presence = usePresence(open, 130);
+  const shown = useRef(children);
+  if (open) shown.current = children;
+  const style = usePlacement(anchor, presence.mounted, want, width);
   const ref = useRef<HTMLDivElement>(null);
   const dismiss = useRef(onDismiss);
   dismiss.current = onDismiss;
@@ -283,10 +297,18 @@ function Layer({
       document.removeEventListener('touchstart', down, true);
     };
   }, [open, anchor]);
-  if (!open) return null;
+  if (!presence.mounted) return null;
   return createPortal(
-    <div ref={ref} className={`pop ${className}`} style={style} dir="rtl" tabIndex={0} onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}>
-      {children}
+    <div
+      ref={ref}
+      className={`pop ${className}${presence.leaving ? ' is-leaving' : ''}`}
+      style={style}
+      dir="rtl"
+      tabIndex={presence.leaving ? -1 : 0}
+      aria-hidden={presence.leaving || undefined}
+      onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
+    >
+      {open ? children : shown.current}
     </div>,
     document.body,
   );

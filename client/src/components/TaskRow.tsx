@@ -10,6 +10,8 @@ import { prefetch } from '../lib/useApi';
 import { DeadlineText, PriorityBadge, StatusBadge } from './Badges';
 import { BulkCheck, bulkClick, BulkScope, useBulk } from './Bulk';
 import { Icon } from './Icon';
+import { usePhonePicker } from './pickers';
+import { useSwipeAction } from './swipeAction';
 import { useToast } from './Toasts';
 import { useIncremental } from '../lib/incremental';
 import { Empty, openable } from './ui';
@@ -38,8 +40,8 @@ export function useTaskTick(task: Task, readOnly?: boolean) {
   const open = isOpenStatus(task.status);
   const canCheck = !readOnly && canQuickUpdate(task, user.id, isCommander) && open && task.status !== 'pending_approval';
   const done = task.status === 'done' || ticked;
-  const complete = async (e: React.MouseEvent | React.KeyboardEvent) => {
-    e.stopPropagation();
+  const complete = async (e?: React.MouseEvent | React.KeyboardEvent) => {
+    e?.stopPropagation();
     if (!canCheck || busy) return;
     setBusy(true);
     if (!task.requiresApproval || isCommander) setTicked(true);
@@ -117,9 +119,21 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
   const tick = useTaskTick(task, readOnly);
   const { done, open } = tick;
   const flash = useLiveFlash(`${task.status}|${task.deadline}|${task.ownerId}|${task.title}|${task.priority}|${task.overdue}`);
+  // on a phone, swiped toward its leading side it is done - the round button stays for everyone else
+  const row = useRef<HTMLDivElement>(null);
+  const swipe = usePhonePicker() && tick.canCheck && !done && !tick.busy && !bulk?.active;
+  useSwipeAction(row, { enabled: swipe, onCommit: () => void tick.complete() });
 
   return (
+    <div className="swipe-wrap">
+      {swipe && (
+        <div className="swipe-pad" aria-hidden="true">
+          <Icon name="check" size={20} />
+          <span>{task.requiresApproval ? 'לאישור' : 'בוצע'}</span>
+        </div>
+      )}
     <div
+      ref={row}
       className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}`}
       {...openable(bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`)))}
       onPointerEnter={() => prefetchTask(task.id)}
@@ -156,6 +170,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly }: { task: Tas
         <PriorityBadge priority={task.priority} />
         <StatusBadge status={task.status} overdue={task.overdue} />
       </div>
+    </div>
     </div>
   );
 }

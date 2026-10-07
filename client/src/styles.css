@@ -1917,6 +1917,17 @@ input::-webkit-date-and-time-value {
     transform: scale(0.94);
   }
 }
+/* closed: it shrinks back into its field, the way it came out */
+.pop.is-leaving {
+  animation: pop-out 0.13s cubic-bezier(0.4, 0, 0.8, 0.4) forwards;
+  pointer-events: none;
+}
+@keyframes pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
 .combo-list {
   padding: 4px;
 }
@@ -2124,8 +2135,14 @@ input::-webkit-date-and-time-value {
     transform: translateY(100%);
   }
 }
+.pick-sheet[data-under-head] .pick-sheet-top {
+  box-shadow: 0 1px 0 var(--line), 0 8px 16px -14px rgba(25, 28, 24, 0.35);
+}
 .pick-sheet-top {
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  transition: box-shadow 0.2s;
   padding: 0 16px 10px;
   /* pulled down by its top, it closes */
   touch-action: none;
@@ -2326,6 +2343,54 @@ input::-webkit-date-and-time-value {
   border-right-color: var(--tone, var(--gray));
   box-shadow: 0 4px 14px -6px rgba(25, 28, 24, 0.25);
 }
+}
+
+/* a row swiped toward its leading side on a phone (swipeAction.ts): what is behind it - done - grows as it goes */
+.swipe-wrap {
+  position: relative;
+  border-radius: var(--radius-sm);
+}
+.swipe-pad {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 18px;
+  border-radius: var(--radius-sm);
+  /* the same deep green in light and dark: white on it reads in both */
+  background: #287740;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+}
+.swipe-wrap.is-swiping .swipe-pad {
+  opacity: 1;
+}
+/* moved past the screen's edge, the row stays inside its place - the page never grows wider (and a
+   phone never zooms out) */
+.swipe-wrap.is-swiping {
+  overflow: hidden;
+}
+/* the mark grows toward its full size as the swipe nears the point where letting go marks it */
+.swipe-pad svg {
+  transform: scale(calc(0.55 + 0.45 * var(--swipe, 0)));
+  transition: transform 0.12s;
+}
+.swipe-pad span {
+  opacity: var(--swipe, 0);
+}
+.swipe-wrap.is-armed .swipe-pad svg {
+  transform: scale(1.15);
+  transition: transform 0.36s var(--spring-bounce);
+}
+@media (pointer: coarse) {
+  /* sideways is the row's own gesture; up and down stays the page's scroll */
+  .swipe-wrap > .task-row {
+    touch-action: pan-y;
+  }
 }
 
 /* done: grey and struck through - not faded, so its badges and times stay readable */
@@ -2800,6 +2865,34 @@ input::-webkit-date-and-time-value {
   color: var(--ink);
   border-bottom-color: var(--ink);
 }
+/* the line under the chosen tab is one line that slides between them (lib/tabIndicator.ts) */
+.tabs.has-ind {
+  position: relative;
+}
+.tabs.has-ind .tab.on {
+  border-bottom-color: transparent;
+}
+.tabs.has-ind::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--tab-w);
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ink);
+  transform: translateX(var(--tab-x));
+  transition: transform 0.42s var(--spring), width 0.42s var(--spring);
+  pointer-events: none;
+}
+.tabs.ind-still::after {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabs.has-ind::after {
+    transition: none;
+  }
+}
 
 .tab .n {
   font-family: var(--mono);
@@ -2963,7 +3056,17 @@ input::-webkit-date-and-time-value {
   align-items: center;
   gap: 10px;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--line);
+  /* the edge under the title shows once the content scrolls under it (ui.tsx sets data-under-head) */
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.modal[data-more-below] .modal-foot {
+  border-top-color: var(--line);
+  box-shadow: 0 -8px 16px -14px rgba(25, 28, 24, 0.3);
+}
+.modal[data-under-head] .modal-head {
+  border-bottom-color: var(--line);
+  box-shadow: 0 8px 16px -14px rgba(25, 28, 24, 0.35);
 }
 
 .modal-head h2 {
@@ -2983,7 +3086,9 @@ input::-webkit-date-and-time-value {
   gap: 8px;
   justify-content: flex-start;
   padding: 14px 20px;
-  border-top: 1px solid var(--line);
+  /* and the buttons' edge while more of the content is below them */
+  border-top: 1px solid transparent;
+  transition: border-color 0.2s, box-shadow 0.2s;
   background: var(--card-2);
   border-radius: 0 0 14px 14px;
   flex-wrap: wrap;
@@ -7197,6 +7302,10 @@ button.fab-missing {
   border-radius: 50%;
   border: 1px solid var(--line-2);
   background: var(--card);
+  /* a small frosted layer floating over what is under it */
+  background: color-mix(in srgb, var(--card) 74%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  backdrop-filter: blur(16px) saturate(1.6);
   color: var(--ink);
   box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.45);
   cursor: pointer;
@@ -8021,6 +8130,28 @@ button.weekly-item-title:hover {
 .plus-menu button:active {
   transform: scale(0.98);
 }
+/* it grows out of the "+" and sinks back into it - the farther one goes first, as it came last */
+.plus-menu button {
+  transform-origin: 50% 100%;
+}
+.plus-menu.is-leaving button {
+  animation: plus-sink 0.18s cubic-bezier(0.4, 0, 0.8, 0.4) both;
+}
+.plus-menu.is-leaving button:first-child {
+  animation-delay: 0s;
+}
+.plus-menu.is-leaving button:last-child {
+  animation-delay: 0.03s;
+}
+.plus-scrim.is-leaving {
+  animation: modal-fade-out 0.2s ease forwards;
+}
+@keyframes plus-sink {
+  to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+}
 .plus-menu .grow {
   display: flex;
   flex-direction: column;
@@ -8433,6 +8564,24 @@ html {
   .table tr.click:active td {
     background: var(--hover);
   }
+  /* and gives way under the finger at once, springing back when let go (not while a button in it is pressed) */
+  .task-row,
+  .board-card,
+  .week-card,
+  .health,
+  .stat,
+  .attn-item,
+  .staff-card,
+  .event-row,
+  .weekly-step,
+  .week-summary,
+  .dashboard-event {
+    transition: transform 0.34s var(--spring), background 0.15s, box-shadow 0.12s, border-color 0.12s;
+  }
+  :is(.task-row, .board-card, .week-card, .health, .stat, .attn-item, .staff-card, .event-row, .weekly-step, .week-summary, .dashboard-event):active:not(:has(button:active, a:active, input:active)) {
+    transform: scale(0.985);
+    transition-duration: 0.1s;
+  }
 }
 
 /* ---------------- every screen in one place: the menu under the course mark (NavMenu) ---------------- */
@@ -8701,6 +8850,12 @@ html {
 /* ---------------- materials for those who ask for less (system settings) ---------------- */
 /* less transparency: the frosted bars are solid */
 @media (prefers-reduced-transparency: reduce) {
+  .back-top,
+  .modal-back {
+    background: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
   .topbar {
     background: var(--paper);
     -webkit-backdrop-filter: none;

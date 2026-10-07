@@ -100,6 +100,33 @@ export function Modal({
     };
     // once per opening: re-running on every parent render would steal focus mid-typing
   }, []);
+  // its edges show only where content runs under them: the title's once the body is scrolled, the
+  // buttons' while more of it is below - not hard lines drawn whether or not anything is there
+  useEffect(() => {
+    const box = ref.current;
+    const body = box?.querySelector<HTMLElement>('.modal-body');
+    if (!box || !body) return;
+    let frame = 0;
+    const edges = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        box.toggleAttribute('data-under-head', body.scrollTop > 1);
+        box.toggleAttribute('data-more-below', body.scrollTop + body.clientHeight < body.scrollHeight - 1);
+      });
+    };
+    edges();
+    body.addEventListener('scroll', edges, { passive: true });
+    const sized = new ResizeObserver(edges);
+    sized.observe(body);
+    const changed = new MutationObserver(edges);
+    changed.observe(body, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      body.removeEventListener('scroll', edges);
+      sized.disconnect();
+      changed.disconnect();
+    };
+  }, []);
   // closing - however it closes - does not cut it off: a still copy of it, as it was, fades out in its place
   const bodyScroll = useRef(0);
   useLayoutEffect(() => {

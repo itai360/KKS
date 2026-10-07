@@ -6,6 +6,8 @@ import { onStatus } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { checkForUpdate, onUpdate, updateReady } from '../lib/update';
 import { onWaiting, useApi } from '../lib/useApi';
+import { usePresence } from '../lib/presence';
+import { slideTabIndicators } from '../lib/tabIndicator';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { addToWeekly } from './WeeklyAdd';
@@ -376,6 +378,12 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     setBarAway(false);
   }, [location.pathname]);
+  // the line under a chosen tab slides to the next one, on every screen
+  useEffect(() => {
+    const main = document.getElementById('main');
+    if (!main) return;
+    return slideTabIndicators(main);
+  }, []);
   // and while a field is typed in: the keyboard takes the bottom of the screen, and a bar riding on top
   // of it would cover the very field being typed
   const [typingField, setTypingField] = useState(false);
@@ -395,6 +403,7 @@ export function Layout({ children }: { children: ReactNode }) {
   }, []);
   // the bar's "+": a new task or something for the weekly
   const [plusOpen, setPlusOpen] = useState(false);
+  const plus = usePresence(plusOpen, 200);
   useEffect(() => {
     setPlusOpen(false);
   }, [location.pathname]);
@@ -657,8 +666,9 @@ export function Layout({ children }: { children: ReactNode }) {
           <NavMenu sections={sections} onNavigate={() => setMenuOpen(false)} />
         </Modal>
       )}
-      {plusOpen && (
+      {plus.mounted && (
         <PlusMenu
+          leaving={plus.leaving}
           onClose={() => setPlusOpen(false)}
           onTask={() => {
             setPlusOpen(false);
@@ -675,7 +685,7 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 /** the phone bar's "+": the two things one adds on the move, rising above it */
-function PlusMenu({ onClose, onTask, onWeekly }: { onClose: () => void; onTask: () => void; onWeekly: () => void }) {
+function PlusMenu({ onClose, onTask, onWeekly, leaving }: { onClose: () => void; onTask: () => void; onWeekly: () => void; leaving: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus();
@@ -704,8 +714,9 @@ function PlusMenu({ onClose, onTask, onWeekly }: { onClose: () => void; onTask: 
   }, [onClose]);
   return (
     <>
-      <div className="plus-scrim" aria-hidden="true" />
-      <div className="plus-menu" id="plus-menu" role="menu" aria-label="הוספה" ref={ref}>
+      <div className={`plus-scrim${leaving ? ' is-leaving' : ''}`} aria-hidden="true" />
+      {/* closed, it sinks back into the "+" it rose from */}
+      <div className={`plus-menu${leaving ? ' is-leaving' : ''}`} id="plus-menu" role="menu" aria-label="הוספה" ref={ref} inert={leaving || undefined}>
         <button type="button" role="menuitem" onClick={onTask}>
           <span className="plus-menu-icon">
             <Icon name="tasks" />
