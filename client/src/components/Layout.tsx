@@ -16,7 +16,8 @@ import { BackButton } from './BackButton';
 import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials, Modal } from './ui';
-import { NavMenu } from './NavMenu';
+import { accountItems, NavMenu } from './NavMenu';
+import { noteScreen, screenOf } from '../lib/frequent';
 import { switchCourse } from '../lib/courses';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 
@@ -252,6 +253,15 @@ export function Layout({ children }: { children: ReactNode }) {
     if (updateReady()) window.location.reload();
     else void checkForUpdate();
   }, [location.pathname]);
+  // each screen entered counts toward the menu's "בשימוש גבוה" (frequent.ts) - not the home page, which the logo is
+  const lastScreen = useRef<string | null>(null);
+  useEffect(() => {
+    const to = screenOf(location.pathname, [...sections.flatMap((s) => s.items), ...accountItems(0)]);
+    if (to === lastScreen.current) return;
+    lastScreen.current = to;
+    if (to && to !== '/') noteScreen(user.id, to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, user.id]);
   // Back (and Forward) return to where the screen was scrolled; a new screen starts at the top.
   // An address with "#section" is left to the screen, which scrolls to that section.
   const navType = useNavigationType();

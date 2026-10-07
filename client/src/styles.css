@@ -8864,6 +8864,13 @@ html {
 .nav-menu-group .menu-tiles {
   padding: 2px 10px 12px;
 }
+/* the three screens this person uses most (frequent.ts), one row on top */
+.nav-menu-caption {
+  margin: 0 4px 8px;
+}
+.menu-tiles.is-frequent {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .menu-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
