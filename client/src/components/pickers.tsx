@@ -28,6 +28,19 @@ import { Icon } from './Icon';
 // ---------------- the floating layer ----------------
 
 /** under its field - above it when there is no room below - with the right edges aligned, as the page reads */
+/**
+ * The highlighted option is brought into view inside its list only - never by moving the page (the
+ * browser's own scrollIntoView would scroll the page too, to wherever the list stands at that moment)
+ */
+function revealOption(el: HTMLElement | null): void {
+  const box = el?.closest<HTMLElement>('.pop');
+  if (!el || !box) return;
+  const top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+  const bottom = top + el.offsetHeight;
+  if (top < box.scrollTop) box.scrollTop = top;
+  else if (bottom > box.scrollTop + box.clientHeight) box.scrollTop = bottom - box.clientHeight;
+}
+
 function usePlacement(anchor: RefObject<HTMLElement | null>, open: boolean, want: number, width?: number): CSSProperties {
   const [style, setStyle] = useState<CSSProperties>({ visibility: 'hidden' });
   useLayoutEffect(() => {
@@ -149,20 +162,26 @@ export interface SelectProps {
   'data-autofocus'?: boolean;
   /** as wide as the choice shown (a pill), not the whole row */
   fit?: boolean;
+  /**
+   * typing narrows the list (the default for a long list); a short one (up to six choices, like a
+   * status) is only tapped - no keyboard comes up on a phone
+   */
+  searchable?: boolean;
 }
 
 /**
  * Instead of a <select>, with the same <option>s inside: a click opens the whole list, typing narrows it
  * (מפק"צ, מפק״צ and מפקצ find the same), arrows and Enter pick, Escape closes - even inside a dialog.
  */
-export function Select({ value, onChange, children, className = 'select', style, disabled, required, id, title, 'aria-label': ariaLabel, 'aria-invalid': ariaInvalid, 'data-autofocus': autofocus, fit }: SelectProps) {
+export function Select({ value, onChange, children, className = 'select', style, disabled, required, id, title, 'aria-label': ariaLabel, 'aria-invalid': ariaInvalid, 'data-autofocus': autofocus, fit, searchable }: SelectProps) {
   const opts = useMemo(() => optionsOf(children), [children]);
+  const typing = searchable ?? opts.length > 6;
   const current = value === null || value === undefined ? '' : String(value);
   const chosen = opts.find((o) => o.value === current);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState<string | null>(null);
   const [active, setActive] = useState(-1);
-  const field = useRef<HTMLInputElement>(null);
+  const field = useRef<HTMLElement>(null);
   const listId = useId();
   const shown = useMemo(() => {
     const words = query ? searchKey(query).split(/\s+/).filter(Boolean) : [];
@@ -180,7 +199,7 @@ export function Select({ value, onChange, children, className = 'select', style,
     if (open && query !== null) setActive(firstEnabled(shown));
   }, [query, open, shown]);
   useEffect(() => {
-    if (open && active >= 0) document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' });
+    if (open && active >= 0) revealOption(document.getElementById(`${listId}-${active}`));
   }, [open, active, listId]);
 
   const openAll = () => {
@@ -198,7 +217,7 @@ export function Select({ value, onChange, children, className = 'select', style,
     if (o.value !== current) onChange?.({ target: { value: o.value } });
     close();
   };
-  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+  const onKey = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (!open) return openAll();
@@ -225,10 +244,38 @@ export function Select({ value, onChange, children, className = 'select', style,
   };
 
   let lastGroup: string | undefined;
+  const common = {
+    id,
+    style,
+    role: 'combobox' as const,
+    'aria-expanded': open,
+    'aria-controls': listId,
+    'aria-activedescendant': open && active >= 0 && shown[active] ? `${listId}-${active}` : undefined,
+    'aria-label': ariaLabel,
+    'aria-invalid': ariaInvalid || undefined,
+    'data-autofocus': autofocus || undefined,
+    title: title ?? (chosen && chosen.label.length > 28 ? chosen.label : undefined),
+    disabled,
+    onKeyDown: onKey,
+    onBlur: close,
+  };
   return (
     <>
+      {!typing ? (
+        // a short list: a button that opens it - nothing to type, so no keyboard on a phone
+        <button
+          {...common}
+          ref={field as RefObject<HTMLButtonElement>}
+          type="button"
+          className={`${className} ${CHEVRON} select-button`}
+          aria-haspopup="listbox"
+          onClick={() => (open ? close() : openAll())}
+        >
+          <span className="select-button-label">{chosen?.label ?? ''}</span>
+        </button>
+      ) : (
       <input
-        ref={field}
+        ref={field as RefObject<HTMLInputElement>}
         id={id}
         className={`${className} ${CHEVRON}`}
         style={style}
@@ -253,7 +300,7 @@ export function Select({ value, onChange, children, className = 'select', style,
           if (open) return;
           openAll();
           // what is typed now replaces the choice shown
-          requestAnimationFrame(() => field.current?.select());
+          requestAnimationFrame(() => (field.current as HTMLInputElement | null)?.select());
         }}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -262,6 +309,7 @@ export function Select({ value, onChange, children, className = 'select', style,
         onKeyDown={onKey}
         onBlur={close}
       />
+      )}
       <Layer anchor={field} open={open} onDismiss={close} className="combo-list" want={320}>
         <div id={listId} role="listbox" aria-label={ariaLabel ?? 'אפשרויות'}>
           {shown.length === 0 && <div className="combo-empty">אין תוצאות ל"{query}"</div>}
@@ -328,7 +376,7 @@ export function SuggestInput({
     return words.length ? options.filter((o) => words.every((w) => searchKey(o).includes(w))) : [...options];
   }, [options, value, typed]);
   useEffect(() => {
-    if (open && active >= 0) document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' });
+    if (open && active >= 0) revealOption(document.getElementById(`${listId}-${active}`));
   }, [open, active, listId]);
   const close = () => {
     setOpen(false);
@@ -449,7 +497,7 @@ export function TimeInput({
     [typing, digits],
   );
   useEffect(() => {
-    if (open && active >= 0) document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' });
+    if (open && active >= 0) revealOption(document.getElementById(`${listId}-${active}`));
   }, [open, active, listId]);
   useEffect(() => {
     if (open && typing) setActive(shown.length ? 0 : -1);

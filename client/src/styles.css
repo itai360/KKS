@@ -1840,10 +1840,33 @@ input::-webkit-date-and-time-value {
 .combo-input:focus {
   cursor: text;
 }
+/* a short list is only tapped: the field is a button showing the choice (pickers.tsx) */
+.select-button {
+  display: inline-flex;
+  align-items: center;
+  text-align: start;
+  overflow: hidden;
+}
+.select.select-button {
+  display: flex;
+}
+.select-button,
+.select-button:focus {
+  cursor: pointer;
+}
+.select-button-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .combo-input[aria-expanded='true'] {
   border-color: var(--ink-2);
 }
 .pop {
+  /* out of the page's flow from the first moment, before it is placed beside its field */
+  position: fixed;
   z-index: 500;
   overflow: auto;
   overscroll-behavior: contain;
@@ -4662,7 +4685,8 @@ tr.selected td {
   white-space: nowrap;
 }
 select.status-pill,
-input.status-pill {
+input.status-pill,
+button.status-pill {
   appearance: none;
   cursor: pointer;
   padding-left: 28px;
@@ -4678,12 +4702,14 @@ input.status-pill {
   vertical-align: middle;
 }
 select.status-pill:focus-visible,
-input.status-pill:focus-visible {
+input.status-pill:focus-visible,
+button.status-pill:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 select.status-pill:disabled,
-input.status-pill:disabled {
+input.status-pill:disabled,
+button.status-pill:disabled {
   opacity: 0.7;
 }
 
@@ -8019,7 +8045,8 @@ html {
   textarea:not([data-a]):not([data-b]) {
     font-size: 16px;
   }
-  input.status-pill {
+  input.status-pill,
+  button.status-pill {
     height: 32px;
   }
   /* the notch and the rounded corners: the bars and the page keep clear of them (also sideways) */
