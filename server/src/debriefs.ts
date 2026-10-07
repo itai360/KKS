@@ -279,7 +279,7 @@ function checkReady(d: DebriefRow, answers: DebriefAnswers): void {
     .filter((s) => s.questions.some((q) => q.required && !answered(q, answers)))
     .map((s) => s.title);
   if (missing.length) throw badRequest(`כדי לסכם חסר: ${missing.join(', ')}`);
-  if (needsAPoint(d.kind, answers)) throw badRequest(`כדי לסכם צריך לפחות נקודה אחת - ${formFor(d.kind).map((s) => s.title).join(', ')}`);
+  if (needsAPoint(d.kind, answers)) throw badRequest(`כדי לסכם צריך לפחות נושא אחד - ${formFor(d.kind).map((s) => s.title).join(', ')}`);
   const lessons = db().all<{ horizon: LessonHorizon | null; owner_id: number | null; due_date: string | null; task_id: number | null }>(
     "SELECT horizon, owner_id, due_date, task_id FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson'",
     d.id,

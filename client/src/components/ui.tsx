@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
 import { useSheetGesture } from './sheetGesture';
+import { lockScroll } from '../lib/scrollLock';
 
 // the pickers live in their own module; every screen imports them from here as before
 export { DateInput, Select, SuggestInput, TimeInput } from './pickers';
@@ -89,12 +90,12 @@ export function Modal({
       body?.querySelector<HTMLElement>('input:not([type=hidden]):not([type=checkbox]), textarea, select') ??
       body?.querySelector<HTMLElement>('button');
     first?.focus();
-    document.body.style.overflow = 'hidden';
+    const unlock = lockScroll();
     const box = ref.current;
     return () => {
       document.removeEventListener('keydown', onKey);
       box?.removeEventListener('focusin', touched);
-      if (document.querySelectorAll('.modal').length === 0) document.body.style.overflow = '';
+      unlock();
       prev?.focus?.();
     };
     // once per opening: re-running on every parent render would steal focus mid-typing

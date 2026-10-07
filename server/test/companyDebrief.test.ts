@@ -53,9 +53,15 @@ describe('company debrief (תחק"ש פלוגתי)', () => {
     const { weekId } = await course();
     const id = (await c.s2.post('/api/debriefs', { kind: 'company', weekId, title: 'תחק"ש פלוגתי', occurredOn: '2026-10-08' })).body.debrief.id;
     const sumUp = () => c.s2.patch(`/api/debriefs/${id}`, { status: 'final' });
-    expect((await sumUp()).body.error).toBe('כדי לסכם צריך לפחות נקודה אחת - מול הסגל, מול סגל רוחב, מול הפלוגה');
+    expect((await sumUp()).body.error).toBe('כדי לסכם צריך לפחות נושא אחד - מול הסגל, מול סגל רוחב, מול הפלוגה');
+    // a proposal without a topic is not a topic yet
+    await c.s2.patch(`/api/debriefs/${id}`, { answers: { broadStaff: [{ topic: '  ', proposal: 'להחליף תורנויות' }] } });
+    expect((await sumUp()).status).toBe(400);
 
-    await c.s2.patch(`/api/debriefs/${id}`, { answers: { staffWeek: ['הלו"ז השתנה בלי הודעה מראש'], staffWoods: [], company: ['  '] } });
+    // each topic with what is proposed for it (one written before proposals existed counts too)
+    await c.s2.patch(`/api/debriefs/${id}`, {
+      answers: { staffWeek: [{ topic: 'הלו"ז השתנה בלי הודעה מראש', proposal: 'שינויים עד 20:00 ביום הקודם' }], staffWoods: [], company: ['  '] },
+    });
     const done = await sumUp();
     expect(done.status).toBe(200);
     expect(done.body.debrief.status).toBe('final');

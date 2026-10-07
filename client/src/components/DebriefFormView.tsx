@@ -17,6 +17,8 @@ import {
   LESSON_HORIZON_LABELS,
   LESSON_REQUIRED,
   needsAPoint,
+  proposalRows,
+  type ProposalAnswer,
   type DebriefAnswers,
   type DebriefQuestion,
   type DebriefSection,
@@ -126,7 +128,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
   const needLesson = LESSON_REQUIRED[d.kind];
   const missing: { label: string; anchor: string }[] = [
     ...sections.filter((s) => s.questions.some((q) => q.required && !answered(q, all))).map((s) => ({ label: s.title, anchor: ANCHOR(s.id) })),
-    ...(needsAPoint(d.kind, all) ? [{ label: 'נקודה אחת לפחות', anchor: ANCHOR(sections[0].id) }] : []),
+    ...(needsAPoint(d.kind, all) ? [{ label: 'נושא אחד לפחות', anchor: ANCHOR(sections[0].id) }] : []),
     ...(lessons.length || !needLesson ? [] : [{ label: 'לקח אחד לפחות', anchor: ANCHOR('now') }]),
     ...(unowned.length ? [{ label: unowned.length === 1 ? 'אחראי ותאריך ללקח' : `אחראי ותאריך ל-${unowned.length} לקחים`, anchor: ANCHOR('now') }] : []),
   ];
@@ -428,6 +430,7 @@ function Question({ q, value, editable, onChange, onDone, alert }: { q: DebriefQ
     <div className="dq" role="group" aria-labelledby={`${id}-l`}>
       {head}
       {q.type === 'list' && <ListInput value={Array.isArray(value) ? (value as string[]) : []} editable={editable} onChange={onChange} onDone={onDone} label={q.label} />}
+      {q.type === 'proposals' && <ProposalsInput value={proposalRows(value)} editable={editable} onChange={onChange} onDone={onDone} label={q.label} />}
       {q.type === 'rating' && <Rating value={typeof value === 'number' ? value : 0} editable={editable} onChange={(v) => (onChange(v), onDone())} />}
       {q.type === 'goals' && <Goals value={Array.isArray(value) ? (value as GoalAnswer[]) : []} editable={editable} onChange={onChange} onDone={onDone} />}
       {q.type === 'numbers' && <Numbers fields={q.fields ?? []} value={value && typeof value === 'object' ? (value as Record<string, number>) : {}} editable={editable} onChange={onChange} onDone={onDone} />}
@@ -538,6 +541,106 @@ function ListInput({ value, editable, onChange, onDone, label }: { value: string
           />
           {i < value.length && (
             <button type="button" className="icon-btn" aria-label="הסרה" onClick={() => (onChange(value.filter((_, j) => j !== i)), onDone())}>
+              <Icon name="x" size={14} />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** topics raised, each with what is proposed for it (the company debrief) */
+function ProposalsInput({ value, editable, onChange, onDone, label }: { value: ProposalAnswer[]; editable: boolean; onChange: (v: ProposalAnswer[]) => void; onDone: () => void; label: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  if (!editable) {
+    const items = value.filter((r) => r.topic.trim() || r.proposal.trim());
+    return items.length ? (
+      <ol className="dq-proposals-read">
+        {items.map((r, i) => (
+          <li key={i}>
+            <div>{r.topic || '-'}</div>
+            {r.proposal.trim() && (
+              <div className="small dq-proposal-read">
+                <span className="strong">הצעה: </span>
+                {r.proposal}
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+    ) : (
+      <p className="muted">-</p>
+    );
+  }
+  const rows = [...value, { topic: '', proposal: '' }];
+  const focus = (i: number, part: 'topic' | 'proposal') =>
+    requestAnimationFrame(() => box.current?.querySelector<HTMLInputElement>(`[data-row="${i}"][data-part="${part}"]`)?.focus());
+  const set = (i: number, patch: Partial<ProposalAnswer>) => {
+    const next = [...value];
+    next[i] = { ...rows[i], ...patch };
+    onChange(next);
+  };
+  const empty = (r: ProposalAnswer) => !r.topic.trim() && !r.proposal.trim();
+  const tidy = () => {
+    if (value.some(empty)) onChange(value.filter((r) => !empty(r)));
+    onDone();
+  };
+  return (
+    <div className="dq-list" ref={box}>
+      {rows.map((r, i) => (
+        <div key={i} className="dq-proposal-row">
+          <span className="dq-bullet" aria-hidden="true">
+            {i + 1}
+          </span>
+          <div className="dq-proposal-fields">
+            <input
+              className="input"
+              value={r.topic}
+              data-row={i}
+              data-part="topic"
+              aria-label={`${label} - נושא ${i + 1}`}
+              enterKeyHint="next"
+              placeholder={i === value.length ? (i ? 'נושא נוסף...' : 'נושא - כתבו ולחצו Enter') : undefined}
+              onChange={(e) => set(i, { topic: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  // the topic written: on to its proposal
+                  if (r.topic.trim()) focus(i, 'proposal');
+                } else if (e.key === 'Backspace' && empty(r) && i > 0) {
+                  e.preventDefault();
+                  if (i < value.length) onChange(value.filter((_, j) => j !== i));
+                  focus(i - 1, 'proposal');
+                }
+              }}
+              onBlur={tidy}
+            />
+            {i < value.length && (
+              <label className="dq-proposal">
+                <span className="dq-proposal-tag">הצעה</span>
+                <input
+                  className="input"
+                  value={r.proposal}
+                  data-row={i}
+                  data-part="proposal"
+                  aria-label={`${label} - הצעה לנושא ${i + 1}`}
+                  enterKeyHint="next"
+                  placeholder="מה מציעים?"
+                  onChange={(e) => set(i, { proposal: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      focus(i + 1, 'topic');
+                    }
+                  }}
+                  onBlur={tidy}
+                />
+              </label>
+            )}
+          </div>
+          {i < value.length && (
+            <button type="button" className="icon-btn" aria-label={`הסרת נושא ${i + 1}`} onClick={() => (onChange(value.filter((_, j) => j !== i)), onDone())}>
               <Icon name="x" size={14} />
             </button>
           )}

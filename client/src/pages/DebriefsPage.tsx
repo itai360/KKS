@@ -6,7 +6,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
 import { sortHe } from '@shared/sort';
 import { addDays, shortDate } from '@shared/dates';
-import { DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, DEBRIEF_KINDS, isWeekDebrief, type DebriefKind } from '@shared/debriefForms';
+import { DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, DEBRIEF_KINDS, formFor, isWeekDebrief, proposalRows, type DebriefKind } from '@shared/debriefForms';
 import { matchesSearch } from '@shared/search';
 import type { BankLesson, Cadet, Debrief, DebriefDetail, DebriefItem, EventDetail, ExternalEvent, ScheduleEvent, Template, Week } from '@shared/types';
 import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
@@ -125,7 +125,7 @@ export function DebriefsPage() {
                     <KindBadge kind={d.kind} />
                     {d.kind === 'general' || d.kind === 'company' ? (
                       d.kind === 'company' ? (
-                        <span className="badge">{companyPoints(d) === 1 ? 'נקודה אחת' : `${companyPoints(d)} נקודות`}</span>
+                        <span className="badge">{companyPoints(d) === 1 ? 'נושא אחד' : `${companyPoints(d)} נושאים`}</span>
                       ) : (
                       DEBRIEF_ITEM_KINDS.map((k) => (
                         <span key={k} className="badge" title={DEBRIEF_ITEM_LABELS[k]}>
@@ -152,9 +152,11 @@ export function DebriefsPage() {
   );
 }
 
-/** the points a company debrief holds, before the staff, the broad staff and the company */
+/** the topics a company debrief raised, before the staff, the broad staff and the company */
 const companyPoints = (d: Debrief) =>
-  Object.entries(d.answers).reduce((n, [k, v]) => (k !== 'presenterId' && Array.isArray(v) ? n + v.filter((x) => typeof x === 'string' && x.trim()).length : n), 0);
+  formFor('company')
+    .flatMap((s) => s.questions)
+    .reduce((n, q) => n + proposalRows(d.answers[q.id]).filter((r) => r.topic.trim()).length, 0);
 
 function KindPicker({ onPick, onClose }: { onPick: (k: DebriefKind) => void; onClose: () => void }) {
   return (

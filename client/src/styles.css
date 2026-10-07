@@ -5379,6 +5379,59 @@ button.stat:disabled {
   text-align: center;
 }
 
+/* a topic and, under it, what is proposed for it (the company debrief) */
+.dq-proposal-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 32px;
+  gap: 6px;
+  align-items: start;
+}
+.dq-proposal-row > .dq-bullet {
+  padding-top: 11px;
+}
+.dq-proposal-row > .icon-btn {
+  width: 32px;
+  height: 32px;
+  margin-top: 4px;
+}
+.dq-proposal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.dq-proposal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--line-2);
+}
+.dq-proposal > .input {
+  flex: 1;
+  min-width: 0;
+}
+.dq-proposal-tag {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.dq-proposals-read {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 20px;
+}
+.dq-proposal-read {
+  margin-top: 3px;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--line-2);
+  color: var(--ink-2);
+}
+
 .dq-list-read {
   display: flex;
   flex-direction: column;

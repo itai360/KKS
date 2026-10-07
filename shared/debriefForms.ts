@@ -18,7 +18,7 @@ export const DEBRIEF_KIND_HINTS: Record<DebriefKind, string> = {
   weekly: 'בסוף כל שבוע: מה הושג, מה לשמר ומה לשפר - ולקחים עם אחראי לשבוע הבא ולאותו שבוע במחזור הבא.',
   event: 'אחרי מופע עצים (מארס, תרגיל מסכם, ניווט לילה): מטרות, ציר זמן, בטיחות, לוגיסטיקה - ולקחים למופע הבא.',
   general: 'עובדות, ממצאים, מסקנות ולקחים - לכל פעילות אחרת.',
-  company: 'הקה"ד הרוחבי מעביר את התחקיר מול הצוערים: נקודות מול הסגל (על השבוע שעבר, על תרגיל העצים וכללי), מול סגל הרוחב ומול הפלוגה.',
+  company: 'הקה"ד הרוחבי מעביר את התחקיר מול הצוערים: נושאים מול הסגל (על השבוע שעבר, על תרגיל העצים וכללי), מול סגל הרוחב ומול הפלוגה - ולכל נושא הצעה.',
 };
 
 /** the broad experience whose cadet brings the company debrief */
@@ -30,7 +30,7 @@ export const isWeekDebrief = (kind: DebriefKind): boolean => kind === 'weekly' |
 /** a form made of points (the company debrief) sums up with lessons or without; the others need one */
 export const LESSON_REQUIRED: Record<DebriefKind, boolean> = { general: false, weekly: true, event: true, company: false };
 
-export type QuestionType = 'text' | 'list' | 'rating' | 'goals' | 'numbers' | 'flag';
+export type QuestionType = 'text' | 'list' | 'proposals' | 'rating' | 'goals' | 'numbers' | 'flag';
 
 export interface DebriefQuestion {
   id: string;
@@ -57,6 +57,22 @@ export interface GoalAnswer {
   goal: string;
   status: '' | 'met' | 'partial' | 'missed';
   note: string;
+}
+
+/** a topic raised, and what is proposed for it (the company debrief) */
+export interface ProposalAnswer {
+  topic: string;
+  proposal: string;
+}
+
+/** a proposals answer as rows - also one written before proposals existed, as topics alone */
+export function proposalRows(v: unknown): ProposalAnswer[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) =>
+    typeof x === 'string'
+      ? { topic: x, proposal: '' }
+      : { topic: typeof x?.topic === 'string' ? x.topic : '', proposal: typeof x?.proposal === 'string' ? x.proposal : '' },
+  );
 }
 
 export const GOAL_STATUS_LABELS: Record<Exclude<GoalAnswer['status'], ''>, string> = {
@@ -178,20 +194,20 @@ export const COMPANY_FORM: DebriefSection[] = [
     id: 'staff',
     title: 'מול הסגל',
     questions: [
-      { id: 'staffWeek', label: 'על השבוע שעבר', type: 'list' },
-      { id: 'staffWoods', label: 'על תרגיל העצים', hint: 'אם היה תרגיל עצים', type: 'list' },
-      { id: 'staffGeneral', label: 'כללי', type: 'list' },
+      { id: 'staffWeek', label: 'על השבוע שעבר', type: 'proposals' },
+      { id: 'staffWoods', label: 'על תרגיל העצים', hint: 'אם היה תרגיל עצים', type: 'proposals' },
+      { id: 'staffGeneral', label: 'כללי', type: 'proposals' },
     ],
   },
   {
     id: 'broadStaff',
     title: 'מול סגל רוחב',
-    questions: [{ id: 'broadStaff', label: 'נקודות מול סגל הרוחב', type: 'list' }],
+    questions: [{ id: 'broadStaff', label: 'נושאים מול סגל הרוחב', type: 'proposals' }],
   },
   {
     id: 'company',
     title: 'מול הפלוגה',
-    questions: [{ id: 'company', label: 'נקודות מול הפלוגה', type: 'list' }],
+    questions: [{ id: 'company', label: 'נושאים מול הפלוגה', type: 'proposals' }],
   },
 ];
 
@@ -234,6 +250,7 @@ export function answered(q: DebriefQuestion, a: DebriefAnswers): boolean {
   if (q.type === 'rating') return typeof v === 'number' && v >= 1;
   if (q.type === 'flag') return v === true || v === false;
   if (q.type === 'list') return Array.isArray(v) && v.some((x) => typeof x === 'string' && x.trim());
+  if (q.type === 'proposals') return proposalRows(v).some((r) => r.topic.trim());
   if (q.type === 'goals') return Array.isArray(v) && v.some((g) => (g as GoalAnswer)?.goal?.trim() && (g as GoalAnswer).status);
   if (q.type === 'numbers') return !!v && typeof v === 'object' && Object.values(v as object).some((n) => typeof n === 'number');
   return typeof v === 'string' && !!v.trim();

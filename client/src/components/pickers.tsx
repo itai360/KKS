@@ -27,6 +27,7 @@ import { searchKey } from '@shared/search';
 import { todayKey } from '../lib/format';
 import { Icon } from './Icon';
 import { useSheetGesture } from './sheetGesture';
+import { lockScroll } from '../lib/scrollLock';
 
 // ---------------- the floating layer ----------------
 
@@ -192,11 +193,7 @@ function SheetBody({ title, onClose, children, back, tall, className = '', head,
   useEffect(() => {
     // the focus comes inside (the day chosen, or the sheet itself) - not to a field, which would bring the keyboard up
     if (!ref.current?.contains(document.activeElement)) ref.current?.focus({ preventScroll: true });
-    const was = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = was;
-    };
+    return lockScroll();
   }, []);
   useEffect(() => {
     if (!leaving) return;
