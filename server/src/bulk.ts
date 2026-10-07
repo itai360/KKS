@@ -13,7 +13,7 @@ import { badRequest, forbidden, HttpError, nowIso } from './core';
 import { db } from './db';
 import { deleteDebrief } from './debriefs';
 import { deleteDocument, updateDocument } from './documents';
-import { changed } from './journal';
+import { changed, notificationsChanged } from './journal';
 import { deleteRule } from './recurring';
 import { cancelEvent, deleteEvent, restoreEvent, updateEvent } from './schedule';
 import { isCommander, mustTaskRow } from './taskRepo';
@@ -108,8 +108,18 @@ const OPS: Record<string, Record<string, Op>> = {
     reject: { run: (a, id, v) => decideRequest(a, id, { approve: false, note: v ? String(v) : undefined }) },
   },
   notifications: {
-    read: { run: (a, id) => void db().run('UPDATE notifications SET read_at = coalesce(read_at, ?) WHERE id = ? AND user_id = ?', nowIso(), id, a.id) },
-    delete: { run: (a, id) => void db().run('DELETE FROM notifications WHERE id = ? AND user_id = ?', id, a.id) },
+    read: {
+      run: (a, id) => {
+        db().run('UPDATE notifications SET read_at = coalesce(read_at, ?) WHERE id = ? AND user_id = ?', nowIso(), id, a.id);
+        notificationsChanged(a.id);
+      },
+    },
+    delete: {
+      run: (a, id) => {
+        db().run('DELETE FROM notifications WHERE id = ? AND user_id = ?', id, a.id);
+        notificationsChanged(a.id);
+      },
+    },
   },
   users: {
     active: {

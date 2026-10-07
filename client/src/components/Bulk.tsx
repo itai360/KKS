@@ -222,7 +222,22 @@ export function bulkClick(b: BulkState | null, id: number, otherwise: () => void
  * trash shows on the row under the pointer, and the Delete key deletes the row in focus. Deleting asks
  * nothing: the row folds away, and a message offers to bring it back until the deletion is sent.
  */
-export function SwipeRow({ itemId, label, done, children, className = '' }: { itemId: number; label: string; done?: { label: string; run: () => void } | null; children: ReactNode; className?: string }) {
+export function SwipeRow({
+  itemId,
+  label,
+  done,
+  children,
+  className = '',
+  trash = true,
+}: {
+  itemId: number;
+  label: string;
+  done?: { label: string; run: () => void } | null;
+  children: ReactNode;
+  className?: string;
+  /** false: the row shows its own delete among its actions (the swipe and the Delete key stay) */
+  trash?: boolean;
+}) {
   const b = useBulk();
   const toast = useToast();
   const q = b?.quick && b.quick.allowed(itemId) ? b.quick : null;
@@ -262,7 +277,7 @@ export function SwipeRow({ itemId, label, done, children, className = '' }: { it
       )}
       <div className="swipe-row" ref={row}>
         {children}
-        {q && !b?.active && (
+        {q && trash && !b?.active && (
           <button
             type="button"
             className="quick-del no-print"

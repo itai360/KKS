@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { clock } from '../src/core';
 import { runAutomation } from '../src/automation';
 import { morningBrief, resetMorningBrief } from '../src/digest';
+import { streamHandler } from '../src/realtime';
 import { at, notificationsOf, setup, type Ctx } from './helpers';
 
 let c: Ctx;
@@ -64,5 +65,46 @@ describe('snoozed notifications', () => {
     await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-09', '08:00') });
     await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: null });
     expect((await list())[0]).toMatchObject({ id: n.id, read: false });
+  });
+});
+
+describe('notifications, live', () => {
+  it('can be new again, and every open screen of the person hears how many are unread after each change', async () => {
+    await c.cmd.post('/api/tasks', { title: 'להחזיר ציוד', ownerIds: [c.ids.s1], deadline: at('2026-10-05') });
+    await c.cmd.post('/api/tasks', { title: 'לתאם הסעה', ownerIds: [c.ids.s1], deadline: at('2026-10-06') });
+    // one of the person's screens, listening
+    const heard: unknown[] = [];
+    const res = { writeHead: () => undefined, write: (chunk: string) => void (chunk.startsWith('data: ') && heard.push(JSON.parse(chunk.slice(6)))) };
+    let hangUp = () => undefined as void;
+    streamHandler({ user: { id: c.ids.s1 }, on: (_: string, fn: () => void) => void (hangUp = fn) } as never, res as never);
+    const states = () => heard.filter((m) => (m as { type: string }).type === 'notifications');
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+
+    const [a, b] = (await c.s1.get('/api/notifications')).body as { id: number }[];
+    expect((await c.s1.get('/api/notifications/unread')).body).toEqual({ unread: 2 });
+    expect((await c.s1.post('/api/notifications/read', { ids: [a.id] })).body).toEqual({ unread: 1 });
+    await tick();
+    expect(states().at(-1)).toEqual({ type: 'notifications', unread: 1 });
+
+    // new again
+    expect((await c.s1.post('/api/notifications/unread', { ids: [a.id] })).body).toEqual({ unread: 2 });
+    await tick();
+    expect(states().at(-1)).toEqual({ type: 'notifications', unread: 2 });
+    // someone else's stays as it is
+    await c.s2.post('/api/notifications/read', { ids: [b.id] });
+    expect((await c.s1.get('/api/notifications/unread')).body.unread).toBe(2);
+    expect((await c.s2.post('/api/notifications/unread', { ids: [] })).status).toBe(400);
+
+    // deleted in place (a swipe): heard too
+    await c.s1.post('/api/bulk', { entity: 'notifications', action: 'delete', ids: [b.id] });
+    await tick();
+    expect(states().at(-1)).toEqual({ type: 'notifications', unread: 1 });
+
+    // one put off is not made new by "unread" - it stays put off
+    await c.s1.post(`/api/notifications/${a.id}/snooze`, { until: at('2026-10-03', '08:00') });
+    await c.s1.post('/api/notifications/unread', { ids: [a.id] });
+    expect((await c.s1.get('/api/notifications?snoozed=1')).body[0]).toMatchObject({ id: a.id, read: true });
+    expect((await c.s1.get('/api/notifications/unread')).body.unread).toBe(0);
+    hangUp();
   });
 });

@@ -7390,24 +7390,288 @@ button.fab-missing {
   height: 38px;
 }
 
-/* ---------- putting a notification off (pages/NotificationsPage.tsx) ---------- */
+/* ---------- notifications, live (components/Notifications.tsx) ---------- */
 
-.notif-side {
-  align-items: flex-end;
-  gap: 4px;
+/* the bell: open while its panel is; a short ring as one arrives */
+.bell.is-open {
+  background: var(--gray-bg);
+  color: var(--ink);
+}
+.bell-icon {
+  display: grid;
+  place-items: center;
+  transform-origin: 50% 2px;
+}
+.bell.is-ringing .bell-icon {
+  animation: bell-ring 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0); }
+  12% { transform: rotate(16deg); }
+  26% { transform: rotate(-14deg); }
+  40% { transform: rotate(10deg); }
+  54% { transform: rotate(-7deg); }
+  68% { transform: rotate(4deg); }
+  82% { transform: rotate(-2deg); }
 }
 
-.notif-later {
+/* the panel under the bell (a computer): grows out of the bell, goes back into it */
+.notif-panel {
+  z-index: 520;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  outline: none;
+  animation: pop-in 0.32s var(--spring);
+}
+.notif-panel.is-leaving {
+  animation: pop-out 0.15s cubic-bezier(0.4, 0, 0.8, 0.4) forwards;
+  pointer-events: none;
+}
+.notif-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 4px 10px;
+}
+.notif-panel-head h2 {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.notif-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 8px;
+}
+.pick-sheet-top .notif-tools {
+  padding: 6px 0 4px;
+}
+.notif-panel-body {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 6px 6px;
+  border-top: 1px solid var(--line);
+}
+.notif-sheet-body {
+  padding: 0 4px 8px;
+}
+.notif-foot {
+  display: flex;
+  justify-content: center;
+  padding: 6px;
+  border-top: 1px solid var(--line);
+}
+.notif-pad {
+  padding: 12px;
+}
+.notif-card {
+  padding: 4px 6px;
+}
+
+/* the list: under day headings, newest first */
+.notif-day {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0;
+  padding: 10px 10px 4px;
+  background: var(--card);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.notif-wrap {
+  border-radius: 12px;
+}
+.notif-wrap + .notif-wrap {
+  margin-top: 2px;
+}
+.notif-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 10px 10px 8px;
+  border-radius: 12px;
+  background: var(--card);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.notif-item.is-unread {
+  background: color-mix(in srgb, var(--tone-bg) 22%, var(--card));
+}
+.notif-item.selected {
+  background: var(--gray-bg);
+}
+@media (hover: hover) {
+  .notif-item:hover {
+    background: var(--card-2);
+  }
+  .notif-item.is-unread:hover {
+    background: color-mix(in srgb, var(--tone-bg) 38%, var(--card));
+  }
+}
+.notif-item:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+.notif-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+}
+.notif-item .bulk-check {
+  justify-self: center;
+  margin-top: 8px;
+}
+.notif-main {
+  min-width: 0;
+}
+.notif-title {
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.notif-item.is-unread .notif-title {
+  font-weight: 700;
+}
+.notif-body {
+  display: -webkit-box;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+.notif-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.notif-meta .sep::before {
+  content: '·';
+  margin-inline-end: 8px;
+  color: var(--faint);
+}
+.notif-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-height: 34px;
+}
+/* new: a dot in the notification's own colour */
+.notif-dot {
+  width: 9px;
+  height: 9px;
+  margin: 4px 2px 0;
+  border-radius: 50%;
+  background: var(--tone);
+  animation: dot-in 0.4s var(--spring-bounce, var(--spring));
+}
+@keyframes dot-in {
+  from {
+    transform: scale(0);
+  }
+}
+.notif-acts {
+  display: flex;
+  gap: 2px;
+}
+.notif-act {
   width: 30px;
   height: 30px;
+  color: var(--muted);
 }
-
+.notif-act:hover {
+  color: var(--ink);
+}
+.notif-del:hover {
+  color: var(--red-ink);
+}
+/* on a computer the actions show on the row under the pointer (or in focus); a finger swipes instead */
+@media (hover: hover) {
+  .notif-acts {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .notif-item:hover .notif-acts,
+  .notif-item:focus-within .notif-acts {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .notif-acts {
+    display: none;
+  }
+}
 .notif-later-menu {
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 2px 0 4px;
+  padding: 2px 0 2px;
+  animation: pop-in 0.26s var(--spring);
+  transform-origin: top left;
+}
+/* just arrived: it slides in at the top, with a moment of light */
+.notif-wrap.is-fresh {
+  animation: notif-in 0.5s var(--spring);
+}
+.notif-wrap.is-fresh .notif-item {
+  animation: notif-glow 2.4s ease-out;
+}
+@keyframes notif-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.98);
+  }
+}
+@keyframes notif-glow {
+  0%,
+  30% {
+    box-shadow: inset 0 0 0 1.5px var(--tone), 0 6px 18px -8px var(--tone);
+  }
+  100% {
+    box-shadow: inset 0 0 0 1.5px transparent, 0 6px 18px -8px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bell.is-ringing .bell-icon,
+  .notif-wrap.is-fresh,
+  .notif-dot,
+  .notif-later-menu {
+    animation: none;
+  }
+  .notif-wrap.is-fresh .notif-item {
+    animation-duration: 0.01s;
+  }
 }
 
 /* ---------- back, at the start of the top bar (components/BackButton.tsx) ---------- */

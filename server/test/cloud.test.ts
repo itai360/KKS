@@ -134,7 +134,9 @@ describe('serverless storage', () => {
   it('answers the live-update poll with the shared version', async () => {
     const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
     const r = await call('GET', '/api/sync', undefined, cookie);
-    expect(r.json()).toMatchObject({ v: store.state!.version, notifications: [] });
+    // with how many are unread now, and the time to ask from next (a notification put off may come back)
+    expect(r.json()).toMatchObject({ v: store.state!.version, notifications: [], unread: 0 });
+    expect(Date.parse(r.json().t)).toBeGreaterThan(0);
     expect((await call('GET', '/api/sync')).statusCode).toBe(401);
   });
 

@@ -29,7 +29,7 @@ import {
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { db } from './db';
 import { getFile, putFile, removeFile, sendStoredFile, uploadName } from './files';
-import { changed, logActivity, notify, snoozeNotification, toNotification } from './journal';
+import { changed, logActivity, notificationsChanged, notify, snoozeNotification, toNotification, unreadCount } from './journal';
 import { activeMeeting, endMeeting, getMeeting, listMeetings, startMeeting, updateMeeting } from './meetings';
 import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
@@ -946,21 +946,33 @@ export function apiRouter(): Router {
     res.json(rows.map(toNotification));
   });
 
+  // how many are unread - the bell, after the connection came back
+  r.get('/notifications/unread', (req, res) => res.json({ unread: unreadCount(me(req).id) }));
+
   r.post('/notifications/:id/snooze', (req, res) => {
     const { until } = z.object({ until: isoDateTime.nullable() }).parse(req.body);
     if (until && Date.parse(until) <= clock.now().getTime()) throw badRequest('הזמן שנבחר כבר עבר');
     if (!snoozeNotification(me(req).id, id(req.params.id), until)) throw notFound('ההתראה לא נמצאה');
-    const unread = db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', me(req).id)!.n;
-    res.json({ unread });
+    notificationsChanged(me(req).id);
+    res.json({ unread: unreadCount(me(req).id) });
   });
 
   r.post('/notifications/read', (req, res) => {
-    const { ids, all } = z.object({ ids: z.array(z.number().int()).optional(), all: z.boolean().optional() }).parse(req.body);
+    const { ids, all } = z.object({ ids: z.array(z.number().int()).max(500).optional(), all: z.boolean().optional() }).parse(req.body);
     const u = me(req);
     if (all) db().run('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL', nowIso(), u.id);
     else for (const n of ids ?? []) db().run('UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ? AND read_at IS NULL', nowIso(), n, u.id);
-    const unread = db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', u.id)!.n;
-    res.json({ unread });
+    notificationsChanged(u.id);
+    res.json({ unread: unreadCount(u.id) });
+  });
+
+  // read by mistake, or to come back to: new again (one that is put off stays put off)
+  r.post('/notifications/unread', (req, res) => {
+    const { ids } = z.object({ ids: z.array(z.number().int()).min(1).max(500) }).parse(req.body);
+    const u = me(req);
+    for (const n of ids) db().run('UPDATE notifications SET read_at = NULL WHERE id = ? AND user_id = ? AND snoozed_until IS NULL', n, u.id);
+    notificationsChanged(u.id);
+    res.json({ unread: unreadCount(u.id) });
   });
 
   r.use(v3Router());

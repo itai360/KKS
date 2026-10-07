@@ -19,10 +19,10 @@ import type { Notification } from '../../shared/types';
 import { createApp } from './app';
 import { createUser, sessionToken, userForToken } from './auth';
 import { runAutomation } from './automation';
-import { clock, config } from './core';
+import { clock, config, nowIso } from './core';
 import { db, openDb } from './db';
 import { setFileStore } from './files';
-import { toNotification } from './journal';
+import { toNotification, unreadCount } from './journal';
 import { pushesSettled } from './push';
 import { setSnapshotProvider, storedSnapshots } from './snapshots';
 import { decodeDb, encodeDb } from './storedDb';
@@ -237,14 +237,24 @@ function sync(req: IncomingMessage, res: ServerResponse): void {
   if (!user) return json(res, 401, { error: 'נדרשת התחברות' });
   const url = new URL(req.url ?? '/', 'http://x');
   const since = Number(url.searchParams.get('n'));
+  // the time of the last ask: a notification put off that came back since is news again, under its old id
+  const after = url.searchParams.get('t') ?? '';
   const latest = db().get<{ n: number | null }>('SELECT max(id) AS n FROM notifications WHERE user_id = ?', user.id)!.n ?? 0;
   const notifications: Notification[] =
     Number.isFinite(since) && url.searchParams.has('n')
       ? db()
-          .all<Parameters<typeof toNotification>[0]>('SELECT * FROM notifications WHERE user_id = ? AND id > ? ORDER BY id LIMIT 20', user.id, since)
+          .all<Parameters<typeof toNotification>[0]>(
+            `SELECT * FROM notifications WHERE user_id = ? AND (id > ? OR (? <> '' AND created_at > ? AND read_at IS NULL AND snoozed_until IS NULL))
+             ORDER BY created_at, id LIMIT 20`,
+            user.id,
+            since,
+            after,
+            after,
+          )
           .map(toNotification)
       : [];
-  json(res, 200, { v: version, n: latest, notifications });
+  // how many are unread now - read on another device, the bell here follows
+  json(res, 200, { v: version, n: latest, t: nowIso(), unread: unreadCount(user.id), notifications });
 }
 
 /** The request's own URL, whether the platform passes it as is or as the rewrite's __path. */

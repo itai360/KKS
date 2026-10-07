@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
 import type { Task, TaskRequest } from '@shared/types';
 import { pendingRequests, reportIssue } from '../lib/api';
-import { onStatus } from '../lib/realtime';
+import { onNotification, onStatus } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { checkForUpdate, onUpdate, updateReady } from '../lib/update';
 import { onWaiting, useApi } from '../lib/useApi';
@@ -17,6 +17,7 @@ import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials, Modal } from './ui';
 import { accountItems, NavMenu } from './NavMenu';
+import { NotificationsPanel } from './Notifications';
 import { noteScreen, screenOf } from '../lib/frequent';
 import { bottomBarScreens } from '../lib/bottomBar';
 import { switchCourse } from '../lib/courses';
@@ -47,6 +48,48 @@ function saveGroups(g: Record<string, boolean>): Record<string, boolean> {
     /* this visit only */
   }
   return g;
+}
+
+/** the bell: how many are new, a short ring as one arrives, and a tap opens them over the screen (Notifications.tsx) */
+function Bell({ unread }: { unread: number }) {
+  const [open, setOpen] = useState(false);
+  const [ring, setRing] = useState(0);
+  const ref = useRef<HTMLButtonElement>(null);
+  const location = useLocation();
+  useEffect(() => onNotification(() => setRing((r) => r + 1)), []);
+  useEffect(() => {
+    if (!ring) return;
+    const t = setTimeout(() => setRing(0), 1100);
+    return () => clearTimeout(t);
+  }, [ring]);
+  // another screen opened: the panel is done
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        className={`icon-btn bell${ring ? ' is-ringing' : ''}${open ? ' is-open' : ''}`}
+        aria-label={`התראות${unread ? ` (${unread} חדשות)` : ''}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {/* a fresh ring each time one arrives, even mid-ring */}
+        <span className="bell-icon" key={ring} aria-hidden="true">
+          <Icon name="bell" />
+        </span>
+        {unread > 0 && (
+          <span className="count" key={unread}>
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
+      </button>
+      <NotificationsPanel open={open} onClose={() => setOpen(false)} anchor={ref} />
+    </>
+  );
 }
 
 /** light or dark in one tap, beside the bell; "as the device" stays in the settings */
@@ -588,14 +631,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <NavLink to="/search" className="icon-btn only-mobile" aria-label="חיפוש">
               <Icon name="search" />
             </NavLink>
-            <NavLink to="/notifications" className="icon-btn bell" aria-label={`התראות${unread ? ` (${unread} חדשות)` : ''}`}>
-              <Icon name="bell" />
-              {unread > 0 && (
-                <span className="count" key={unread}>
-                  {unread > 99 ? '99+' : unread}
-                </span>
-              )}
-            </NavLink>
+            <Bell unread={unread} />
             <ThemeButton />
             {!viewing && (
               <button className="btn btn-primary hide-mobile" onClick={() => newTask()} title="קיצור מקלדת: N">

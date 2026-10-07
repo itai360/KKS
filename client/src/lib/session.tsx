@@ -4,7 +4,8 @@ import type { CourseSettings, Track, User, Week } from '@shared/types';
 import { api, setReauthHandler, setUnauthorizedHandler } from './api';
 import { setTimezone } from './format';
 import { setTitleCount, setTitleSuffix } from './title';
-import { connectRealtime, disconnectRealtime, onNotification } from './realtime';
+import { connectRealtime, disconnectRealtime } from './realtime';
+import { setUnread as setUnreadCount, startNotifications, useUnread } from './notifications';
 import { clearApiCache, setApiCacheOwner, useApi } from './useApi';
 import { ReauthDialog } from '../components/Reauth';
 import { FirstPasswordDialog } from '../components/FirstPassword';
@@ -84,6 +85,7 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
       refresh={refresh}
       onLogout={() => {
         disconnectRealtime();
+        startNotifications(0);
         clearDrafts();
         clearApiCache();
         setState({ status: 'anon' });
@@ -95,7 +97,10 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
 }
 
 function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; refresh: () => Promise<void>; onLogout: () => void; children: ReactNode }) {
-  const [unread, setUnread] = useState(me.unread);
+  // the bell's count lives with the notifications themselves (notifications.ts), live
+  useState(() => startNotifications(me.unread));
+  const unread = useUnread();
+  const setUnread = setUnreadCount;
   const [reauth, setReauth] = useState<((ok: boolean) => void) | null>(null);
 
   useEffect(() => {
@@ -114,7 +119,6 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
 
   useEffect(() => {
     connectRealtime();
-    return onNotification(() => setUnread((n) => n + 1));
   }, []);
 
   useEffect(() => {

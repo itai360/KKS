@@ -156,7 +156,7 @@ function useTapToOpen(on: boolean, open: () => void) {
 }
 
 /** Mounted while open and for its slide down after: the sheet itself */
-function Sheet({ open, ...rest }: { open: boolean } & SheetBodyProps) {
+export function Sheet({ open, ...rest }: { open: boolean } & SheetBodyProps) {
   const [shown, setShown] = useState(open);
   useEffect(() => {
     if (open) return setShown(true);

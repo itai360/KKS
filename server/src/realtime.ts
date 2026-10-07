@@ -71,6 +71,13 @@ export function pushNotification(userId: number, notification: Notification): vo
   for (const res of set) write(res, { type: 'notification', notification });
 }
 
+/** a person's notifications changed (read, put off, deleted - on any of their devices): how many are unread now */
+export function pushNotificationState(userId: number, unread: number): void {
+  const set = clients.get(userId);
+  if (!set) return;
+  for (const res of set) write(res, { type: 'notifications', unread });
+}
+
 export function connectedUserIds(): number[] {
   return [...clients.keys()];
 }

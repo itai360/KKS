@@ -6,9 +6,12 @@ import { noteVersion, sessionLost, versionHeaders } from './api';
 type ChangeListener = (topics: string[]) => void;
 type NotificationListener = (n: Notification) => void;
 type StatusListener = (online: boolean) => void;
+/** how many of this person's notifications are unread now (read on another device, put off, back) */
+type NotificationStateListener = (state: { unread: number }) => void;
 
 const changeListeners = new Set<ChangeListener>();
 const notificationListeners = new Set<NotificationListener>();
+const stateListeners = new Set<NotificationStateListener>();
 const statusListeners = new Set<StatusListener>();
 let source: EventSource | null = null;
 let online = false;
@@ -23,6 +26,7 @@ let wanted = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastVersion: number | null = null;
 let lastNotification: number | null = null;
+let lastAsked: string | null = null;
 
 function startStream(): void {
   source = new EventSource('/api/stream');
@@ -37,6 +41,7 @@ function startStream(): void {
       const msg = JSON.parse(e.data);
       if (msg.type === 'change') changeListeners.forEach((l) => l(msg.topics));
       else if (msg.type === 'notification') notificationListeners.forEach((l) => l(msg.notification));
+      else if (msg.type === 'notifications') stateListeners.forEach((l) => l({ unread: msg.unread }));
     } catch {
       /* ignore malformed */
     }
@@ -48,16 +53,19 @@ function startStream(): void {
 async function poll(): Promise<void> {
   if (document.hidden || !wanted) return;
   try {
-    const res = await fetch(`/api/sync${lastNotification === null ? '' : `?n=${lastNotification}`}`, { credentials: 'same-origin', cache: 'no-store', headers: versionHeaders() });
+    const q = lastNotification === null ? '' : `?n=${lastNotification}${lastAsked ? `&t=${encodeURIComponent(lastAsked)}` : ''}`;
+    const res = await fetch(`/api/sync${q}`, { credentials: 'same-origin', cache: 'no-store', headers: versionHeaders() });
     // the session ended (expired, or signed out elsewhere): not a network problem
     if (res.status === 401) return void sessionLost();
     if (!res.ok) throw new Error(String(res.status));
-    const d: { v: number; n: number; notifications: Notification[] } = await res.json();
+    const d: { v: number; n: number; t?: string; unread?: number; notifications: Notification[] } = await res.json();
     noteVersion(d.v);
     if (lastVersion !== null && (d.v !== lastVersion || !online)) changeListeners.forEach((l) => l(['*']));
     lastVersion = d.v;
     lastNotification = d.n;
+    if (d.t) lastAsked = d.t;
     for (const n of d.notifications) notificationListeners.forEach((l) => l(n));
+    if (typeof d.unread === 'number') stateListeners.forEach((l) => l({ unread: d.unread! }));
     setOnline(true);
   } catch {
     setOnline(false);
@@ -114,6 +122,7 @@ export function disconnectRealtime(): void {
   window.removeEventListener('online', onNetworkBack);
   lastVersion = null;
   lastNotification = null;
+  lastAsked = null;
   setOnline(false);
 }
 
@@ -125,6 +134,11 @@ export function onChange(fn: ChangeListener): () => void {
 export function onNotification(fn: NotificationListener): () => void {
   notificationListeners.add(fn);
   return () => notificationListeners.delete(fn);
+}
+
+export function onNotificationState(fn: NotificationStateListener): () => void {
+  stateListeners.add(fn);
+  return () => stateListeners.delete(fn);
 }
 
 export function onStatus(fn: StatusListener): () => void {

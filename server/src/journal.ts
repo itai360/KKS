@@ -5,7 +5,7 @@ import type { Notification } from '../../shared/types';
 import { nowIso } from './core';
 import { db } from './db';
 import { sendPush } from './push';
-import { broadcast, pushNotification, type Topic } from './realtime';
+import { broadcast, pushNotification, pushNotificationState, type Topic } from './realtime';
 import { forgetStaffGroups } from './staffGroups';
 
 /** something automation does once (a reminder, a daily brief): true the first time for a key */
@@ -93,6 +93,29 @@ export function toNotification(r: NotificationRow): Notification {
   };
 }
 
+export function unreadCount(userId: number): number {
+  return db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', userId)!.n;
+}
+
+// people whose notifications changed in this write: each of their open screens hears once, after it is saved
+const changedFor = new Set<number>();
+let flushing = false;
+
+/** someone's notifications changed (read, unread, put off, deleted, back): their other devices follow at once */
+export function notificationsChanged(userId: number): void {
+  changedFor.add(userId);
+  db().onCommit(() => {
+    if (flushing) return;
+    flushing = true;
+    queueMicrotask(() => {
+      flushing = false;
+      const ids = [...changedFor];
+      changedFor.clear();
+      for (const id of ids) pushNotificationState(id, unreadCount(id));
+    });
+  });
+}
+
 /** put off until a time: out of the list and the count until then */
 export function snoozeNotification(userId: number, id: number, until: string | null): boolean {
   if (until === null) return resurface(db().all<NotificationRow>('SELECT * FROM notifications WHERE id = ? AND user_id = ? AND snoozed_until IS NOT NULL', id, userId)) > 0;
@@ -108,6 +131,7 @@ function resurface(rows: NotificationRow[]): number {
   const at = nowIso();
   for (const r of rows) {
     db().run('UPDATE notifications SET snoozed_until = NULL, read_at = NULL, created_at = ? WHERE id = ?', at, r.id);
+    notificationsChanged(r.user_id);
     const n = toNotification({ ...r, read_at: null, created_at: at, snoozed_until: null });
     db().onCommit(() => {
       pushNotification(r.user_id, n);
@@ -136,6 +160,7 @@ export function notify(userIds: Iterable<number | null | undefined>, n: NotifyIn
       created,
     ).id;
     const row = db().get<NotificationRow>('SELECT * FROM notifications WHERE id = ?', id)!;
+    notificationsChanged(uid);
     db().onCommit(() => {
       const n = toNotification(row);
       pushNotification(uid, n);

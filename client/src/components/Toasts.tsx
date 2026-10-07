@@ -3,6 +3,7 @@ import { animateSpring, project, velocityOf, type SpringRun } from '../lib/sprin
 import { useNavigate } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { onNotification } from '../lib/realtime';
+import { isPanelOpen } from '../lib/notifications';
 import { Icon } from './Icon';
 
 interface Toast {
@@ -66,12 +67,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       onNotification((n) => {
-        push({
-          title: n.title,
-          body: n.body,
-          link: n.link,
-          tone: n.category === 'exception' ? 'red' : n.category === 'action' ? 'blue' : 'green',
-        });
+        // the panel or the page is open: it comes in there, with no message on top
+        const inSight = isPanelOpen() || window.location.pathname === '/notifications';
+        if (!inSight)
+          push({
+            title: n.title,
+            body: n.body,
+            link: n.link,
+            tone: n.category === 'exception' ? 'red' : n.category === 'action' ? 'blue' : 'green',
+          });
         // when the tab is in the background, surface it as a system notification (if allowed)
         if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
           const sys = new Notification(n.title, { body: n.body, lang: 'he', dir: 'rtl', tag: `kks-${n.id}`, icon: '/icon-192.png' });
