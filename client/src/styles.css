@@ -5434,7 +5434,7 @@ button.stat:disabled {
 }
 
 .dsec {
-  scroll-margin-top: calc(var(--top-h) + 16px);
+  scroll-margin-top: calc(var(--top-h) + 60px);
 }
 
 .dsec .card-head h2 {
@@ -8250,7 +8250,8 @@ label.prev-task {
   color: var(--rail-ink);
 }
 .weekly-section {
-  scroll-margin-top: calc(var(--top-h) + 12px);
+  /* under the bar, and the floating strip of steps (SectionRail) */
+  scroll-margin-top: calc(var(--top-h) + 60px);
 }
 .weekly-page .count-pill,
 .weekly-tasks .count-pill {
@@ -8299,10 +8300,12 @@ label.prev-task {
   align-items: flex-start;
   gap: 10px;
   padding: 10px 0;
+}
+/* the line between items is the list item's: an item that swipes (a swipe-wrap) keeps it */
+.weekly-items > li + li {
   border-top: 1px solid var(--line);
 }
-.weekly-item:first-child {
-  border-top: none;
+.weekly-items > li:first-child > .weekly-item {
   padding-top: 2px;
 }
 .weekly-items.numbered .weekly-item::before {
@@ -10697,4 +10700,243 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   border-radius: inherit;
   background: var(--green);
   transition: width 0.6s var(--spring);
+}
+
+/* ---------------- a long page's parts, floating under the top bar once scrolled (components/SectionRail.tsx) ---------------- */
+.section-rail-dock {
+  position: sticky;
+  top: var(--top-h);
+  z-index: 20;
+  height: 0;
+}
+.section-rail {
+  position: absolute;
+  top: 8px;
+  inset-inline: 0;
+  display: flex;
+  gap: 2px;
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 86%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  translate: 0 -8px;
+  pointer-events: none;
+  transition: opacity 0.2s ease, translate 0.32s var(--spring);
+}
+.section-rail::-webkit-scrollbar {
+  display: none;
+}
+.section-rail.is-shown {
+  opacity: 1;
+  translate: 0 0;
+  pointer-events: auto;
+}
+.rail-step {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0;
+  height: 32px;
+  padding-inline: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s, gap 0.32s var(--spring), padding 0.32s var(--spring), scale 0.32s var(--spring);
+}
+.rail-step:active {
+  scale: 0.93;
+  transition-duration: 0.08s;
+}
+.rail-n {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  background: var(--card-2);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.rail-step.is-ok .rail-n {
+  background: var(--green-bg);
+  color: var(--green-ink);
+}
+.rail-step.is-need .rail-n {
+  border-color: var(--red);
+  color: var(--red-ink);
+}
+.rail-label {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: max-width 0.32s var(--spring), opacity 0.2s;
+}
+/* the part on the screen now: lit, with its name */
+.rail-step.is-current {
+  gap: 6px;
+  padding-inline: 4px 12px;
+  background: var(--ink);
+  color: var(--paper);
+}
+.rail-step.is-current .rail-n {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--paper) 20%, transparent);
+  color: var(--paper);
+}
+.rail-step.is-current .rail-label {
+  max-width: 170px;
+  opacity: 1;
+}
+@media (hover: hover) {
+  .rail-step:not(.is-current):hover {
+    background: var(--hover);
+  }
+}
+/* wide enough: every part with its name */
+@media (min-width: 760px) {
+  .section-rail.is-wide .rail-step {
+    gap: 6px;
+    padding-inline: 4px 12px;
+  }
+  .section-rail.is-wide .rail-label {
+    max-width: 170px;
+    opacity: 1;
+  }
+}
+/* a debrief's form has its side list on a wide screen: the strip is for narrower ones */
+@media (min-width: 1100px) {
+  .dform-page .section-rail-dock {
+    display: none;
+  }
+}
+.dform-toc a[aria-current] {
+  background: var(--gray-bg);
+  color: var(--ink);
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .section-rail {
+    translate: none;
+  }
+  .rail-step:active {
+    scale: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .section-rail {
+    background: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---------------- the weekly: items that swipe, items that arrive, a part's progress (pages/WeeklyPage.tsx) ---------------- */
+.weekly-swipe {
+  border-radius: 0;
+}
+.weekly-swipe > .swipe-row {
+  background: var(--card);
+}
+.weekly-swipe > .swipe-pad {
+  border-radius: 8px;
+}
+/* added while the page is open - here, or by someone else in the meeting: it comes in */
+.weekly-items > li.is-new {
+  animation: item-in 0.45s var(--spring);
+}
+@keyframes item-in {
+  from {
+    opacity: 0;
+    translate: 0 -6px;
+    scale: 0.98;
+  }
+}
+.weekly-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--muted);
+}
+.weekly-progress.is-all {
+  color: var(--green-ink);
+}
+.weekly-progress.is-all .mini-bar i {
+  background: var(--green);
+}
+.weekly-progress .mini-bar i {
+  background: var(--blue);
+}
+@media (prefers-reduced-motion: reduce) {
+  .weekly-items > li.is-new {
+    animation: fade 0.2s ease-out;
+  }
+}
+/* in a column spaced by gaps, the dock (no height of its own) takes no gap */
+.dform-main > .section-rail-dock {
+  margin-top: -16px;
+}
+.dsec-ok-in {
+  animation: done-pop 0.5s var(--spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dsec-ok-in {
+    animation: fade 0.2s ease-out;
+  }
+}
+.debrief-filled {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.debrief-filled .mini-bar i {
+  background: var(--yellow);
+}
+
+/* ---------------- requests: a decision answers at once, then the row folds away (pages/RequestsPage.tsx) ---------------- */
+.decision {
+  border-radius: 0;
+}
+.decision > .swipe-row > .attn-item {
+  border-bottom: 1px solid var(--line);
+}
+.decision:last-child > .swipe-row > .attn-item {
+  border-bottom: none;
+}
+.decided {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--tone-bg, var(--gray-bg));
+  color: var(--tone-ink, var(--ink));
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: done-pop 0.4s var(--spring);
+}
+.request-shift {
+  margin-inline-start: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .decided {
+    animation: fade 0.2s ease-out;
+  }
 }

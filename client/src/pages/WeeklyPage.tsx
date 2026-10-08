@@ -3,7 +3,7 @@
 // What comes up during the week is added here or from the bottom bar's "+"; holding it sends the summary
 // to the staff and moves what was left open to the next week's weekly (server/src/weekly.ts).
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { addDays, diffDays, shortDate, weekdayName } from '@shared/dates';
 import type { ExternalEvent } from '@shared/types';
@@ -11,11 +11,15 @@ import { WEEKLY_DONE_LABELS, WEEKLY_KIND_LABELS, weeklySummaryText, type WeeklyH
 import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
+import { usePhonePicker } from '../components/pickers';
+import { SectionRail } from '../components/SectionRail';
+import { useSwipeAction } from '../components/swipeAction';
 import { TaskRow, useLiveFlash } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Select } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -61,6 +65,20 @@ export function WeeklyPage() {
   const toast = useToast();
   const [editing, setEditing] = useState<WeeklyItem | null>(null);
   const [holding, setHolding] = useState(false);
+  // summed up while the page is open: the banner that says so arrives with a moment's glow
+  // (the same week's weekly, not yet held a moment ago: not a page opened on one already held, nor another week)
+  const heldWeek = data?.week.id;
+  const heldAt = data ? (data.heldAt ?? null) : undefined;
+  const wasHeld = useRef<{ week: number; at: string | null } | null>(null);
+  const [justHeld, setJustHeld] = useState(false);
+  useEffect(() => {
+    if (heldWeek === undefined || heldAt === undefined) return;
+    const before = wasHeld.current;
+    wasHeld.current = { week: heldWeek, at: heldAt };
+    const now = !!before && before.week === heldWeek && !before.at && !!heldAt;
+    setJustHeld(now);
+    if (now) haptic('success');
+  }, [heldWeek, heldAt]);
 
   if (loading && !data)
     return (
@@ -101,7 +119,8 @@ export function WeeklyPage() {
   };
 
   return (
-    <div className="page weekly-page">
+    // another week's weekly: its own page (what was there when it opened, what came in since)
+    <div className="page weekly-page" key={w.id}>
       <PageHead
         eyebrow={
           <Link to={`/weeks/${w.id}`} className="muted">
@@ -146,7 +165,7 @@ export function WeeklyPage() {
       />
 
       {held && (
-        <div className="weekly-held card card-pad row wrap" role="status">
+        <div className={`weekly-held card card-pad row wrap${justHeld ? ' just-cleared' : ''}`} role="status">
           <Icon name="check" className="text-green" />
           <span className="grow small">
             <b>השבועי התקיים והסיכום נשלח לסגל.</b> {data.next && 'מה שעולה מעכשיו נכנס לשבועי הבא.'}
@@ -196,13 +215,23 @@ export function WeeklyPage() {
           );
         })}
       </nav>
+      <SectionRail
+        label="השלב בשבועי"
+        wide
+        items={SECTIONS.map((s, i) => {
+          const items = of(s.kind);
+          const open = items.filter((x) => !x.done).length;
+          const settles = s.kind === 'closure' || s.kind === 'topic';
+          return { id: s.id, n: i + 1, label: s.title, state: settles && items.length && !open ? 'ok' : null, count: settles && open ? `${open} פתוחים` : undefined };
+        })}
+      />
 
       <div className="col gap-16">
         <Section n={1} {...SECTIONS[0]} hint="עוברים על הלו״ז יום אחרי יום. הערה על אירוע - בכפתור שליד האירוע.">
           <ScheduleDays view={data} external={external.data ?? []} canAdd={canAdd} onEdit={setEditing} />
         </Section>
 
-        <Section n={2} {...SECTIONS[1]} hint="תיאומים מקצועיים שצריך לסגור, ומי סוגר כל אחד.">
+        <Section n={2} {...SECTIONS[1]} hint="תיאומים מקצועיים שצריך לסגור, ומי סוגר כל אחד." progress={settled(of('closure'))}>
           <Items items={of('closure')} onEdit={setEditing} empty="אין עדיין סגירות מקצועיות לשבוע הזה." />
           {canAdd && <QuickAdd weekId={w.id} kind="closure" placeholder="סגירה מקצועית חדשה - למשל: אישור שטח אש" />}
           {data.openTasks.length > 0 && (
@@ -228,7 +257,7 @@ export function WeeklyPage() {
           )}
         </Section>
 
-        <Section n={3} {...SECTIONS[2]} hint="מה שעלה במהלך השבוע והמפק״צים רוצים להעלות לשיח. בשבועי מסמנים ״נדון״ וכותבים מה הוחלט.">
+        <Section n={3} {...SECTIONS[2]} hint="מה שעלה במהלך השבוע והמפק״צים רוצים להעלות לשיח. בשבועי מסמנים ״נדון״ וכותבים מה הוחלט." progress={settled(of('topic'))}>
           <Items items={of('topic')} onEdit={setEditing} empty="אין עדיין נושאים. כל אחד בסגל יכול להוסיף - כאן, או מה-+ בסרגל התחתון בטלפון." />
           {canAdd && <QuickAdd weekId={w.id} kind="topic" placeholder="נושא לשיח - למשל: עומס השמירות על הצוערים" />}
         </Section>
@@ -255,7 +284,11 @@ export function WeeklyPage() {
   );
 }
 
-function Section({ n, id, title, icon, hint, children }: { n: number; id: string; title: string; icon: string; hint?: string; children: ReactNode }) {
+/** of a part's items, how many are settled (closed, discussed) - none to show while it has none */
+const settled = (items: WeeklyItem[]) => (items.length ? { done: items.filter((i) => i.done).length, total: items.length } : undefined);
+
+function Section({ n, id, title, icon, hint, progress, children }: { n: number; id: string; title: string; icon: string; hint?: string; progress?: { done: number; total: number }; children: ReactNode }) {
+  const all = !!progress && progress.done === progress.total;
   return (
     <section className="card weekly-section" id={id} aria-labelledby={`${id}-h`}>
       <div className="card-head">
@@ -266,6 +299,16 @@ function Section({ n, id, title, icon, hint, children }: { n: number; id: string
         <h2 className="grow" id={`${id}-h`}>
           {title}
         </h2>
+        {progress && (
+          <span className={`weekly-progress${all ? ' is-all' : ''}`} title={`${progress.done} מתוך ${progress.total}`}>
+            <span className="mono tiny">
+              {progress.done}/{progress.total}
+            </span>
+            <span className="mini-bar" aria-hidden="true">
+              <i style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+            </span>
+          </span>
+        )}
       </div>
       <div className="card-body col gap-12">
         {hint && <p className="tiny muted weekly-hint">{hint}</p>}
@@ -317,19 +360,27 @@ function QuickAdd({ weekId, kind, placeholder, eventRef, eventDate, onDone }: { 
   );
 }
 
+/** which items were already there when the page opened: the ones added since (here, or by someone else in the meeting) come in */
+function useFresh(items: WeeklyItem[]): (id: number) => boolean {
+  const seen = useRef<Set<number> | null>(null);
+  if (!seen.current) seen.current = new Set(items.map((i) => i.id));
+  return (id) => !seen.current!.has(id);
+}
+
 function Items({ items, onEdit, empty, numbered }: { items: WeeklyItem[]; onEdit: (i: WeeklyItem) => void; empty: string; numbered?: boolean }) {
+  const fresh = useFresh(items);
   if (!items.length) return <p className="small muted">{empty}</p>;
   const Tag = numbered ? 'ol' : 'ul';
   return (
     <Tag className={`weekly-items${numbered ? ' numbered' : ''}`}>
       {items.map((i) => (
-        <ItemRow key={i.id} item={i} onEdit={onEdit} />
+        <ItemRow key={i.id} item={i} onEdit={onEdit} fresh={fresh(i.id)} />
       ))}
     </Tag>
   );
 }
 
-function ItemRow({ item: i, onEdit }: { item: WeeklyItem; onEdit: (i: WeeklyItem) => void }) {
+function ItemRow({ item: i, onEdit, fresh }: { item: WeeklyItem; onEdit: (i: WeeklyItem) => void; fresh?: boolean }) {
   const toast = useToast();
   // marked at once; the answer from the server takes over when it comes
   const [mine, setMine] = useState<boolean | null>(null);
@@ -350,56 +401,68 @@ function ItemRow({ item: i, onEdit }: { item: WeeklyItem; onEdit: (i: WeeklyItem
   };
   const open = i.canEdit || i.canSettle;
   const flash = useLiveFlash(`${i.done}|${i.title}|${i.outcome}|${i.ownerId}`);
+  // on a phone, swiped toward its leading side it is closed / discussed (or open again)
+  const row = useRef<HTMLDivElement>(null);
+  const swipes = i.kind !== 'point' && i.canSettle;
+  useSwipeAction(row, { enabled: usePhonePicker() && swipes, lead: () => void toggle() });
   return (
-    <li className={`weekly-item${done ? ' done' : ''}${flash ? ' flash' : ''}`}>
-      {i.kind !== 'point' && (
-        <button
-          type="button"
-          className={`task-check small${done ? ' checked' : ''}${mine ? ' just-checked' : ''}`}
-          role="checkbox"
-          aria-checked={done}
-          aria-label={`${WEEKLY_DONE_LABELS[i.kind]}: ${i.title}`}
-          title={i.canSettle ? (done ? `סומן ${WEEKLY_DONE_LABELS[i.kind]} - לחיצה מבטלת` : `סימון ${WEEKLY_DONE_LABELS[i.kind]}`) : WEEKLY_DONE_LABELS[i.kind]}
-          disabled={!i.canSettle}
-          onClick={() => void toggle()}
-        >
-          <Icon name="check" />
-        </button>
-      )}
-      <div className="grow weekly-item-main">
-        {open ? (
-          <button type="button" className="weekly-item-title" onClick={() => onEdit(i)}>
-            {i.title}
-          </button>
-        ) : (
-          <span className="weekly-item-title">{i.title}</span>
-        )}
-        {i.details && <div className="small weekly-item-details">{i.details}</div>}
-        {i.outcome && (
-          <div className="small weekly-outcome">
-            <b>הוחלט:</b> {i.outcome}
-          </div>
-        )}
-        <div className="weekly-item-meta tiny muted">
-          {i.kind === 'closure' && <span className={`badge${i.ownerName ? ' t-blue' : ''}`}>{i.ownerName ? `סוגר: ${i.ownerName}` : 'עוד לא נקבע מי סוגר'}</span>}
-          {i.carriedFrom && <span className="badge t-yellow">עבר מ{i.carriedFrom.name}</span>}
-          {i.taskId && (
-            <Link to={`/tasks/${i.taskId}`} className="badge t-green">
-              <Icon name="tasks" size={12} /> {i.taskTitle ?? 'משימה'}
-            </Link>
-          )}
-          {i.kind !== 'point' && i.createdByName && (
-            <span>
-              {i.createdByName} · {fmtAgo(i.createdAt)}
-            </span>
-          )}
+    <li className={`${swipes ? 'swipe-wrap weekly-swipe' : ''}${fresh ? ' is-new' : ''}`}>
+      {swipes && (
+        <div className="swipe-pad is-lead" aria-hidden="true">
+          <Icon name={done ? 'repeat' : 'check'} size={20} />
+          <span>{done ? 'פתוח שוב' : WEEKLY_DONE_LABELS[i.kind]}</span>
         </div>
-      </div>
-      {open && (
-        <button type="button" className="icon-btn" onClick={() => onEdit(i)} aria-label={`פרטים והחלטה: ${i.title}`} title="פרטים, החלטה ומשימה">
-          <Icon name="edit" size={16} />
-        </button>
       )}
+      <div ref={row} className={`${swipes ? 'swipe-row ' : ''}weekly-item${done ? ' done' : ''}${flash ? ' flash' : ''}`}>
+        {i.kind !== 'point' && (
+          <button
+            type="button"
+            className={`task-check small${done ? ' checked' : ''}${mine ? ' just-checked' : ''}`}
+            role="checkbox"
+            aria-checked={done}
+            aria-label={`${WEEKLY_DONE_LABELS[i.kind]}: ${i.title}`}
+            title={i.canSettle ? (done ? `סומן ${WEEKLY_DONE_LABELS[i.kind]} - לחיצה מבטלת` : `סימון ${WEEKLY_DONE_LABELS[i.kind]}`) : WEEKLY_DONE_LABELS[i.kind]}
+            disabled={!i.canSettle}
+            onClick={() => void toggle()}
+          >
+            <Icon name="check" />
+          </button>
+        )}
+        <div className="grow weekly-item-main">
+          {open ? (
+            <button type="button" className="weekly-item-title" onClick={() => onEdit(i)}>
+              {i.title}
+            </button>
+          ) : (
+            <span className="weekly-item-title">{i.title}</span>
+          )}
+          {i.details && <div className="small weekly-item-details">{i.details}</div>}
+          {i.outcome && (
+            <div className="small weekly-outcome">
+              <b>הוחלט:</b> {i.outcome}
+            </div>
+          )}
+          <div className="weekly-item-meta tiny muted">
+            {i.kind === 'closure' && <span className={`badge${i.ownerName ? ' t-blue' : ''}`}>{i.ownerName ? `סוגר: ${i.ownerName}` : 'עוד לא נקבע מי סוגר'}</span>}
+            {i.carriedFrom && <span className="badge t-yellow">עבר מ{i.carriedFrom.name}</span>}
+            {i.taskId && (
+              <Link to={`/tasks/${i.taskId}`} className="badge t-green">
+                <Icon name="tasks" size={12} /> {i.taskTitle ?? 'משימה'}
+              </Link>
+            )}
+            {i.kind !== 'point' && i.createdByName && (
+              <span>
+                {i.createdByName} · {fmtAgo(i.createdAt)}
+              </span>
+            )}
+          </div>
+        </div>
+        {open && (
+          <button type="button" className="icon-btn" onClick={() => onEdit(i)} aria-label={`פרטים והחלטה: ${i.title}`} title="פרטים, החלטה ומשימה">
+            <Icon name="edit" size={16} />
+          </button>
+        )}
+      </div>
     </li>
   );
 }
@@ -504,11 +567,12 @@ function ScheduleDays({ view, external, canAdd, onEdit }: { view: WeeklyView; ex
 }
 
 function NoteList({ notes, onEdit }: { notes: WeeklyItem[]; onEdit: (i: WeeklyItem) => void }) {
+  const fresh = useFresh(notes);
   if (!notes.length) return null;
   return (
     <ul className="weekly-items weekly-notes">
       {notes.map((n) => (
-        <ItemRow key={n.id} item={n} onEdit={onEdit} />
+        <ItemRow key={n.id} item={n} onEdit={onEdit} fresh={fresh(n.id)} />
       ))}
     </ul>
   );

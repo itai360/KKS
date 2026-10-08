@@ -28,12 +28,14 @@ import {
 import type { DebriefDetail, DebriefItem } from '@shared/types';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
+import { SectionRail, useCurrentSection, type RailItem } from './SectionRail';
 import { KIND_TONES, PriorLessons } from './DebriefBits';
 import { TaskList } from './TaskRow';
 import { useToast } from './Toasts';
 import { Bar, DateInput, PageHead, Select } from './ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 
@@ -135,6 +137,30 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
   const questions = sections.flatMap((s) => s.questions);
   const done = questions.filter((q) => answered(q, all)).length + (needLesson && lessons.length ? 1 : 0);
   const total = questions.length + (needLesson ? 1 : 0);
+  // the form's parts, each with its state - for the side list on a wide screen and the floating strip on others
+  const parts: RailItem[] = [
+    ...sections.map((s, i) => {
+      const ok = s.questions.some((q) => answered(q, all));
+      const need = s.questions.some((q) => q.required && !answered(q, all));
+      return { id: ANCHOR(s.id), n: i + 1, label: s.title, state: ok && !need ? ('ok' as const) : need ? ('need' as const) : null };
+    }),
+    ...(['now', 'next'] as const).map((h, i) => {
+      const n = ofHorizon(h).length;
+      const need = h === 'now' ? (needLesson && !lessons.length) || unowned.length > 0 : false;
+      return { id: ANCHOR(h), n: sections.length + i + 1, label: LESSON_HORIZON_LABELS[d.kind][h].title, state: n && !need ? ('ok' as const) : need ? ('need' as const) : null, count: n ? String(n) : undefined };
+    }),
+  ];
+  const here = useCurrentSection(parts.map((p) => p.id));
+  // summed up while the page is open: the form says so for a moment
+  const wasFinal = useRef(d.status);
+  const [justFinal, setJustFinal] = useState(false);
+  useEffect(() => {
+    const before = wasFinal.current;
+    wasFinal.current = d.status;
+    const now = before === 'draft' && d.status === 'final';
+    setJustFinal(now);
+    if (now) haptic('success');
+  }, [d.status]);
 
   const run = async (fn: () => Promise<DebriefDetail>, ok?: string) => {
     try {
@@ -237,7 +263,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
 
       <div className="dform">
         <div className="col gap-16 dform-main">
-          <div className={`card card-pad dform-intro ${tone}`}>
+          <div className={`card card-pad dform-intro ${tone}${justFinal ? ' just-cleared' : ''}`}>
             <div className="row wrap gap-6">
               <span className={`badge ${tone}`}>{DEBRIEF_KIND_LABELS[d.kind]}</span>
               {d.status === 'final' ? <span className="badge t-green">סוכם</span> : <span className="badge t-yellow">טיוטה</span>}
@@ -275,6 +301,8 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
             )}
           </div>
 
+          <SectionRail label="סעיפי הטופס" items={parts} />
+
           {prior && (
             <PriorLessons
               title={isWeekDebrief(d.kind) ? 'מה המחזור הקודם למד על השבוע הזה' : 'מה למדנו במופעים קודמים'}
@@ -304,27 +332,14 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
 
         <nav className="dform-toc no-print" aria-label="סעיפי הטופס">
           <div className="label-caps">סעיפים</div>
-          {sections.map((s, i) => {
-            const ok = s.questions.some((q) => answered(q, all));
-            const need = s.questions.some((q) => q.required && !answered(q, all));
-            return (
-              <a key={s.id} href={`#${ANCHOR(s.id)}`} onClick={(e) => (e.preventDefault(), goTo(ANCHOR(s.id)))} className={ok && !need ? 'ok' : need ? 'need' : ''}>
-                <span className="dsec-num">{ok && !need ? <Icon name="check" size={12} /> : i + 1}</span>
-                {s.title}
-              </a>
-            );
-          })}
-          {(['now', 'next'] as const).map((h, i) => {
-            const n = ofHorizon(h).length;
-            const need = h === 'now' ? (needLesson && !lessons.length) || unowned.length > 0 : false;
-            return (
-              <a key={h} href={`#${ANCHOR(h)}`} onClick={(e) => (e.preventDefault(), goTo(ANCHOR(h)))} className={n && !need ? 'ok' : need ? 'need' : ''}>
-                <span className="dsec-num">{n && !need ? <Icon name="check" size={12} /> : sections.length + i + 1}</span>
-                {LESSON_HORIZON_LABELS[d.kind][h].title}
-                {n > 0 && <span className="mono tiny muted"> {n}</span>}
-              </a>
-            );
-          })}
+          {/* the part on the screen now is marked as the page scrolls */}
+          {parts.map((p) => (
+            <a key={p.id} href={`#${p.id}`} onClick={(e) => (e.preventDefault(), goTo(p.id))} className={p.state ?? ''} aria-current={here === p.id ? 'location' : undefined}>
+              <span className="dsec-num">{p.state === 'ok' ? <Icon name="check" size={12} /> : p.n}</span>
+              {p.label}
+              {p.count && <span className="mono tiny muted"> {p.count}</span>}
+            </a>
+          ))}
         </nav>
       </div>
 
@@ -386,6 +401,14 @@ function Section({
 }) {
   const alert = section.alert && answers.safetyEvent === true;
   const ok = section.questions.some((q) => answered(q, answers)) && !section.questions.some((q) => q.required && !answered(q, answers));
+  // complete just now (not on opening the form): its check comes in
+  const wasOk = useRef(ok);
+  const [justOk, setJustOk] = useState(false);
+  useEffect(() => {
+    const before = wasOk.current;
+    wasOk.current = ok;
+    if (ok !== before) setJustOk(ok);
+  }, [ok]);
   return (
     <section id={ANCHOR(section.id)} className={`card dsec${alert ? ' alert' : ''}`} aria-labelledby={`${ANCHOR(section.id)}-h`}>
       <div className="card-head">
@@ -393,7 +416,7 @@ function Section({
         <h2 className="grow" id={`${ANCHOR(section.id)}-h`}>
           {section.title}
         </h2>
-        {ok && <Icon name="check" size={16} />}
+        {ok && <Icon name="check" size={16} className={justOk ? 'dsec-ok-in' : undefined} />}
       </div>
       <div className="card-body col gap-16">
         {section.hint && <p className="small muted">{section.hint}</p>}

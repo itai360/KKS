@@ -3,14 +3,16 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { REQUEST_TYPE_LABELS } from '@shared/constants';
+import { diffDays } from '@shared/dates';
 import type { Task, TaskRequest } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Icon } from '../components/Icon';
 import { NoteDialog } from '../components/TaskActions';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Loading, PageHead } from '../components/ui';
+import { Empty, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
-import { fmtAgo, fmtDateTime, fmtDeadline } from '../lib/format';
+import { dateKeyOf, fmtAgo, fmtDateTime, fmtDeadline } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -20,36 +22,18 @@ export function RequestsPage() {
   const pending = useApi<TaskRequest[]>('/api/requests', ['requests', 'tasks']);
   const history = useApi<TaskRequest[]>('/api/requests?status=all', ['requests', 'tasks']);
   const approvals = useApi<Task[]>('/api/tasks?status=pending_approval', ['tasks']);
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const [returning, setReturning] = useState<Task | null>(null);
-  const [rejecting, setRejecting] = useState<TaskRequest | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  // decided while the page is open: each emptied list says how many of its own were handled
+  const [handled, setHandled] = useState({ approvals: 0, requests: 0 });
+  const decided = (k: keyof typeof handled) => () => setHandled((h) => ({ ...h, [k]: h[k] + 1 }));
 
   const toDecide = (pending.data ?? []).filter((r) => r.requestedBy !== user.id);
   const mine = (history.data ?? []).filter((r) => r.requestedBy === user.id);
   const myApprovals = (approvals.data ?? []).filter((t) => isCommander || (t.createdBy === user.id && t.ownerId !== user.id));
-
-  const run = async (fn: () => Promise<unknown>, title: string) => {
-    setBusy(true);
-    setErr(null);
-    try {
-      await fn();
-      toast({ title, tone: 'green' });
-      emitLocalChange('tasks', 'requests');
-      return true;
-    } catch (e) {
-      setErr((e as Error).message);
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  };
+  const allClear = (n: number) => (n > 0 ? `טיפלת ב${n === 1 ? 'בקשה אחת' : `-${n} בקשות`} - אין עוד` : undefined);
 
   return (
     <div className="page narrow">
       <PageHead title={isCommander ? 'אישורים ובקשות' : 'הבקשות שלי'} sub="בקשות סגירה, הארכת דד-ליין והעברת אחריות." />
-      <ErrorBox error={err} />
       {(pending.loading && !pending.data) || (approvals.loading && !approvals.data) ? (
         <Loading rows={3} />
       ) : (
@@ -64,30 +48,9 @@ export function RequestsPage() {
                 {myApprovals.length > 1 && <BulkToggle />}
               </div>
               {myApprovals.length === 0 ? (
-                <Empty title="אין בקשות סגירה" />
+                <Empty title={allClear(handled.approvals) ?? 'אין בקשות סגירה'} />
               ) : (
-                myApprovals.map((t) => (
-                  <div key={t.id} className="attn-item t-blue" style={{ cursor: 'default' }}>
-                    <span className="attn-bar" />
-                    <BulkCheck id={t.id} />
-                    <div>
-                      <Link to={`/tasks/${t.id}`} className="attn-title">
-                        {t.title}
-                      </Link>
-                      <div className="attn-sub">
-                        {t.ownerName} ביקש לסגור · דד-ליין {fmtDeadline(t.deadline)}
-                      </div>
-                    </div>
-                    <div className="row gap-6">
-                      <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void run(() => api.post(`/api/tasks/${t.id}/transition`, { action: 'approve' }), 'המשימה אושרה ונסגרה')}>
-                        אשר
-                      </button>
-                      <button className="btn btn-sm" disabled={busy} onClick={() => setReturning(t)}>
-                        החזר להשלמה
-                      </button>
-                    </div>
-                  </div>
-                ))
+                myApprovals.map((t) => <ApprovalRow key={t.id} task={t} onDecided={decided('approvals')} />)
               )}
             </section>
             </BulkScope>
@@ -112,41 +75,9 @@ export function RequestsPage() {
                 {toDecide.length > 1 && <BulkToggle />}
               </div>
               {toDecide.length === 0 ? (
-                <Empty title="אין בקשות פתוחות" />
+                <Empty title={allClear(handled.requests) ?? 'אין בקשות פתוחות'} />
               ) : (
-                toDecide.map((r) => (
-                  <div key={r.id} className="attn-item t-blue" style={{ cursor: 'default' }}>
-                    <span className="attn-bar" />
-                    <BulkCheck id={r.id} />
-                    <div>
-                      <div className="attn-kind">{REQUEST_TYPE_LABELS[r.type]}</div>
-                      <Link to={`/tasks/${r.taskId}`} className="attn-title">
-                        {r.taskTitle}
-                      </Link>
-                      <div className="attn-sub">
-                        {r.requestedByName} · {fmtAgo(r.createdAt)} ·{' '}
-                        {r.type === 'deadline' ? (
-                          <span className="mono">
-                            {fmtDateTime(r.currentDeadline)} ← {r.newDeadline && fmtDateTime(r.newDeadline)}
-                          </span>
-                        ) : (
-                          <>
-                            {r.currentOwnerName} ← {r.newOwnerName}
-                          </>
-                        )}
-                      </div>
-                      <div className="small">{r.reason}</div>
-                    </div>
-                    <div className="row gap-6">
-                      <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void run(() => api.post(`/api/requests/${r.id}/decide`, { approve: true }), 'הבקשה אושרה')}>
-                        אשר
-                      </button>
-                      <button className="btn btn-sm" disabled={busy} onClick={() => setRejecting(r)}>
-                        דחה
-                      </button>
-                    </div>
-                  </div>
-                ))
+                toDecide.map((r) => <RequestRow key={r.id} request={r} onDecided={decided('requests')} />)
               )}
             </section>
             </BulkScope>
@@ -178,25 +109,175 @@ export function RequestsPage() {
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+type Verdict = 'approved' | 'rejected' | 'returned';
+const VERDICT_LABELS: Record<Verdict, string> = { approved: 'אושר', rejected: 'נדחה', returned: 'הוחזר להשלמה' };
+
+/**
+ * One decision, at once: the row says what was decided, folds away, and the next one is right there -
+ * the rest of the list stays to hand meanwhile (one row's answer does not hold up the others). If the
+ * server says no, the row comes back with the reason.
+ */
+function useDecision(onDecided: () => void) {
+  const toast = useToast();
+  const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [fold, setFold] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const decide = async (as: Verdict, fn: () => Promise<unknown>, title: string) => {
+    setVerdict(as);
+    setError(null);
+    if (as === 'approved') haptic('success');
+    const folding = setTimeout(() => setFold(true), 650);
+    try {
+      await fn();
+      toast({ title, tone: 'green' });
+      onDecided();
+      // the lists catch up once the row has folded away
+      setTimeout(() => emitLocalChange('tasks', 'requests'), 1000);
+      return true;
+    } catch (e) {
+      clearTimeout(folding);
+      setVerdict(null);
+      setFold(false);
+      setError((e as Error).message);
+      return false;
+    }
+  };
+  return { verdict, fold, error, decide };
+}
+
+function Decided({ verdict }: { verdict: Verdict }) {
+  return (
+    <span className={`decided t-${verdict === 'approved' ? 'green' : 'gray'}`} role="status">
+      <Icon name={verdict === 'approved' ? 'check' : verdict === 'returned' ? 'repeat' : 'x'} size={15} />
+      {VERDICT_LABELS[verdict]}
+    </span>
+  );
+}
+
+function ApprovalRow({ task: t, onDecided }: { task: Task; onDecided: () => void }) {
+  const d = useDecision(onDecided);
+  const [returning, setReturning] = useState(false);
+  return (
+    <div className={`swipe-wrap decision${d.fold ? ' is-removing' : ''}`}>
+      <div className="swipe-row">
+        <div className="attn-item t-blue" style={{ cursor: 'default' }}>
+          <span className="attn-bar" />
+          <BulkCheck id={t.id} />
+          <div>
+            <Link to={`/tasks/${t.id}`} className="attn-title">
+              {t.title}
+            </Link>
+            <div className="attn-sub">
+              {t.ownerName} ביקש לסגור · דד-ליין {fmtDeadline(t.deadline)}
+            </div>
+            {d.error && <div className="tiny text-red">{d.error}</div>}
+          </div>
+          {d.verdict ? (
+            <Decided verdict={d.verdict} />
+          ) : (
+            <div className="row gap-6">
+              <button className="btn btn-sm btn-primary" onClick={() => void d.decide('approved', () => api.post(`/api/tasks/${t.id}/transition`, { action: 'approve' }), 'המשימה אושרה ונסגרה')}>
+                אשר
+              </button>
+              <button className="btn btn-sm" onClick={() => setReturning(true)}>
+                החזר להשלמה
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       {returning && (
         <NoteDialog
           title="החזרה להשלמה"
           label="מה חסר?"
           required
           submitLabel="החזר"
-          m={{ busy, error: err }}
-          onClose={() => setReturning(null)}
-          onSubmit={(note) => void run(() => api.post(`/api/tasks/${returning.id}/transition`, { action: 'return', note }), 'הוחזר להשלמה').then((ok) => ok && setReturning(null))}
+          m={{ busy: false, error: null }}
+          onClose={() => setReturning(false)}
+          onSubmit={(note) => {
+            setReturning(false);
+            void d.decide('returned', () => api.post(`/api/tasks/${t.id}/transition`, { action: 'return', note }), 'הוחזר להשלמה');
+          }}
         />
       )}
+    </div>
+  );
+}
+
+/** how far a deadline request moves the deadline, in words: "דחייה ב-3 ימים", "דחייה בשבוע", "הקדמה ביום" */
+function shiftOf(from: string, to: string): string {
+  const days = diffDays(dateKeyOf(to), dateKeyOf(from));
+  const way = (n: number) => (n > 0 ? 'דחייה' : 'הקדמה');
+  if (days === 0) {
+    const h = Math.round((Date.parse(to) - Date.parse(from)) / 3_600_000);
+    const n = Math.abs(h);
+    return h === 0 ? 'אותו יום' : `${way(h)} ${n === 1 ? 'בשעה' : n === 2 ? 'בשעתיים' : `ב-${n} שעות`}`;
+  }
+  const n = Math.abs(days);
+  return `${way(days)} ${n === 1 ? 'ביום' : n === 2 ? 'ביומיים' : n === 7 ? 'בשבוע' : n === 14 ? 'בשבועיים' : `ב-${n} ימים`}`;
+}
+
+function RequestRow({ request: r, onDecided }: { request: TaskRequest; onDecided: () => void }) {
+  const d = useDecision(onDecided);
+  const [rejecting, setRejecting] = useState(false);
+  return (
+    <div className={`swipe-wrap decision${d.fold ? ' is-removing' : ''}`}>
+      <div className="swipe-row">
+        <div className="attn-item t-blue" style={{ cursor: 'default' }}>
+          <span className="attn-bar" />
+          <BulkCheck id={r.id} />
+          <div>
+            <div className="attn-kind">{REQUEST_TYPE_LABELS[r.type]}</div>
+            <Link to={`/tasks/${r.taskId}`} className="attn-title">
+              {r.taskTitle}
+            </Link>
+            <div className="attn-sub">
+              {r.requestedByName} · {fmtAgo(r.createdAt)} ·{' '}
+              {r.type === 'deadline' ? (
+                <>
+                  <span className="mono">
+                    {fmtDateTime(r.currentDeadline)} ← {r.newDeadline && fmtDateTime(r.newDeadline)}
+                  </span>
+                  {r.newDeadline && r.currentDeadline && <span className="badge t-blue request-shift">{shiftOf(r.currentDeadline, r.newDeadline)}</span>}
+                </>
+              ) : (
+                <>
+                  {r.currentOwnerName} ← {r.newOwnerName}
+                </>
+              )}
+            </div>
+            <div className="small">{r.reason}</div>
+            {d.error && <div className="tiny text-red">{d.error}</div>}
+          </div>
+          {d.verdict ? (
+            <Decided verdict={d.verdict} />
+          ) : (
+            <div className="row gap-6">
+              <button className="btn btn-sm btn-primary" onClick={() => void d.decide('approved', () => api.post(`/api/requests/${r.id}/decide`, { approve: true }), 'הבקשה אושרה')}>
+                אשר
+              </button>
+              <button className="btn btn-sm" onClick={() => setRejecting(true)}>
+                דחה
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       {rejecting && (
         <NoteDialog
           title="דחיית בקשה"
           label="הסבר (לא חובה)"
           submitLabel="דחה"
-          m={{ busy, error: err }}
-          onClose={() => setRejecting(null)}
-          onSubmit={(note) => void run(() => api.post(`/api/requests/${rejecting.id}/decide`, { approve: false, note: note || undefined }), 'הבקשה נדחתה').then((ok) => ok && setRejecting(null))}
+          m={{ busy: false, error: null }}
+          onClose={() => setRejecting(false)}
+          onSubmit={(note) => {
+            setRejecting(false);
+            void d.decide('rejected', () => api.post(`/api/requests/${r.id}/decide`, { approve: false, note: note || undefined }), 'הבקשה נדחתה');
+          }}
         />
       )}
     </div>

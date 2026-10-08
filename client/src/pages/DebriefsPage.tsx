@@ -6,7 +6,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
 import { sortHe } from '@shared/sort';
 import { addDays, shortDate } from '@shared/dates';
-import { DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, DEBRIEF_KINDS, formFor, isWeekDebrief, proposalRows, type DebriefKind } from '@shared/debriefForms';
+import { answered, DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, DEBRIEF_KINDS, formFor, isWeekDebrief, proposalRows, type DebriefKind } from '@shared/debriefForms';
 import { matchesSearch } from '@shared/search';
 import type { BankLesson, Cadet, Debrief, DebriefDetail, DebriefItem, EventDetail, ExternalEvent, ScheduleEvent, Template, Week } from '@shared/types';
 import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
@@ -141,6 +141,7 @@ export function DebriefsPage() {
                     <KindBadge kind={d.kind} />
                     {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks === 1 ? 'משימה פתוחה' : `${d.openTasks} משימות פתוחות`}</span>}
                     <span className={`badge ${d.status === 'final' ? 't-green' : 't-yellow'}`}>{d.status === 'final' ? 'סוכם' : 'טיוטה'}</span>
+                    <DraftFilled d={d} />
                   </div>
                 </BulkRow>
               ))}
@@ -152,6 +153,24 @@ export function DebriefsPage() {
       {creating && creating !== 'pick' && <DebriefForm kind={creating} eventId={fromEvent} weekId={fromWeek} onClose={close} />}
     </div>
     </BulkScope>
+  );
+}
+
+/** a form's draft: how much of it is filled in (the questions answered, of all of them) - an invitation to finish it */
+function DraftFilled({ d }: { d: Debrief }) {
+  if (d.kind === 'general' || d.status !== 'draft') return null;
+  const questions = formFor(d.kind).flatMap((s) => s.questions);
+  if (!questions.length) return null;
+  const done = questions.filter((q) => answered(q, d.answers)).length;
+  return (
+    <span className="debrief-filled tiny muted" title={`${done} מתוך ${questions.length} שאלות מולאו`}>
+      <span className="mini-bar" aria-hidden="true">
+        <i style={{ width: `${(done / questions.length) * 100}%` }} />
+      </span>
+      <span className="mono">
+        {done}/{questions.length}
+      </span>
+    </span>
   );
 }
 
