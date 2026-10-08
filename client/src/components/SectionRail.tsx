@@ -85,15 +85,15 @@ export function SectionRail({ items, label, wide }: { items: RailItem[]; label: 
             <button
               key={it.id}
               type="button"
-              className={`rail-step${it.id === cur ? ' is-current' : ''}${it.state ? ` is-${it.state}` : ''}`}
+              className={`srail-step${it.id === cur ? ' is-current' : ''}${it.state ? ` is-${it.state}` : ''}`}
               aria-current={it.id === cur ? 'step' : undefined}
               aria-label={`${it.n}. ${it.label}${it.count ? ` - ${it.count}` : ''}${it.state === 'ok' ? ' - הושלם' : it.state === 'need' ? ' - חסר' : ''}`}
               onClick={() => jump(it.id)}
             >
-              <span className="rail-n" aria-hidden="true">
+              <span className="srail-n" aria-hidden="true">
                 {it.state === 'ok' ? <Icon name="check" size={12} /> : it.n}
               </span>
-              <span className="rail-label" aria-hidden="true">
+              <span className="srail-label" aria-hidden="true">
                 {it.label}
               </span>
             </button>

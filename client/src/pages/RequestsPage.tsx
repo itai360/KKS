@@ -151,7 +151,7 @@ function useDecision(onDecided: () => void) {
 
 function Decided({ verdict }: { verdict: Verdict }) {
   return (
-    <span className={`decided t-${verdict === 'approved' ? 'green' : 'gray'}`} role="status">
+    <span className={`verdict-pill t-${verdict === 'approved' ? 'green' : 'gray'}`} role="status">
       <Icon name={verdict === 'approved' ? 'check' : verdict === 'returned' ? 'repeat' : 'x'} size={15} />
       {VERDICT_LABELS[verdict]}
     </span>
