@@ -9943,6 +9943,36 @@ html {
   color: var(--red-ink);
 }
 
+/* only my events: the computer's switch, pressed while on */
+.cal-mine {
+  height: 34px;
+}
+.cal-mine.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+@media (hover: hover) {
+  .cal-mine.on:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+}
+/* the phone's line while only my events show, with the way back */
+.mine-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+  padding-inline-start: 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
 /* the deadlines shown, among the phone's "עוד" */
 .page-more-list .more-field {
   display: flex;

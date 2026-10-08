@@ -387,6 +387,8 @@ export interface AgendaProps {
   onOpenTask: (t: Task) => void;
   /** the day at the top of the list, as it scrolls */
   onFocusDay?: (d: string) => void;
+  /** only the reader's own events are shown: an empty day says so */
+  onlyMine?: boolean;
 }
 
 /** where the list goes under what stays on top (the top bar, the strip of days) */
@@ -408,7 +410,7 @@ export function scrollToDay(list: HTMLElement | null, d: string, unlessSeen = fa
   return true;
 }
 
-export function AgendaList({ rows, today, nowTime, weeks, canAddOn, onAdd, onOpen, onOpenExternal, onOpenTask, onFocusDay }: AgendaProps) {
+export function AgendaList({ rows, today, nowTime, weeks, canAddOn, onAdd, onOpen, onOpenExternal, onOpenTask, onFocusDay, onlyMine }: AgendaProps) {
   const ref = useRef<HTMLDivElement>(null);
   const focusFn = useRef(onFocusDay);
   focusFn.current = onFocusDay;
@@ -459,7 +461,7 @@ export function AgendaList({ rows, today, nowTime, weeks, canAddOn, onAdd, onOpe
             {r.kind === 'gap' ? (
               <div className="agenda-gap" data-from={r.from} data-to={r.to}>
                 <span>{r.from === r.to ? dayLabel(r.from, today) : `${dayLabel(r.from, today)} - ${dayLabel(r.to, today)}`}</span>
-                <span className="muted">· אין אירועים</span>
+                <span className="muted">· {onlyMine ? 'אין אירועים שלך' : 'אין אירועים'}</span>
                 <span className="grow" />
                 {canAddOn(r.from) && (
                   <button type="button" className="icon-btn agenda-add" aria-label={`אירוע חדש ב${dayLabel(r.from, today)}`} title="אירוע חדש" onClick={() => onAdd(r.from)}>
@@ -474,6 +476,7 @@ export function AgendaList({ rows, today, nowTime, weeks, canAddOn, onAdd, onOpe
                 today={today}
                 nowTime={nowTime}
                 canAdd={canAddOn(r.date)}
+                onlyMine={onlyMine}
                 onAdd={() => onAdd(r.date)}
                 onOpen={onOpen}
                 onOpenExternal={onOpenExternal}
@@ -508,6 +511,7 @@ function AgendaDaySection({
   today,
   nowTime,
   canAdd,
+  onlyMine,
   onAdd,
   onOpen,
   onOpenExternal,
@@ -518,6 +522,7 @@ function AgendaDaySection({
   today: string;
   nowTime: string;
   canAdd: boolean;
+  onlyMine?: boolean;
   onAdd: () => void;
   onOpen: (e: ScheduleEvent) => void;
   onOpenExternal: (e: ExternalEvent) => void;
@@ -556,7 +561,7 @@ function AgendaDaySection({
       <div className="card agenda-items">
         {items.length === 0 ? (
           <div className="agenda-empty">
-            {isToday ? 'אין אירועים היום' : 'אין אירועים'}
+            {`אין אירועים${onlyMine ? ' שלך' : ''}${isToday ? ' היום' : ''}`}
             {canAdd && (
               <button type="button" className="btn btn-sm" onClick={onAdd}>
                 <Icon name="plus" size={15} /> אירוע

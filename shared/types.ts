@@ -291,6 +291,8 @@ export interface ScheduleEvent {
   cancelled: boolean;
   taskTotal: number;
   taskDone: number;
+  /** the schedule's list only: how many of its preparation tasks are the reader's (in charge or taking part) */
+  myTasks?: number;
 }
 
 /** An event from a Google (or any iCal) calendar shown in the schedule. Read-only. */

@@ -21,7 +21,7 @@ import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { DateInput, ErrorBox, Field, Loading, Modal, PageHead, Ring, Seg, Select, TimeInput } from '../components/ui';
-import { agendaDays, endMinutes, foldQuiet, type AgendaRow } from '../lib/agenda';
+import { agendaDays, endMinutes, foldQuiet, isMine, type AgendaRow } from '../lib/agenda';
 import { api, changedFields } from '../lib/api';
 import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { dateKeyOf, fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '../lib/format';
@@ -71,6 +71,19 @@ function savedTasksShown(): TasksShown {
     return 'mine';
   }
 }
+/** only the reader's own events: remembered, as the view is */
+const MINE_KEY = 'kks.scheduleMine';
+function savedMine(): boolean {
+  try {
+    return localStorage.getItem(MINE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+const MINE_OPTIONS: { value: 'all' | 'mine'; label: string }[] = [
+  { value: 'all', label: 'הכל' },
+  { value: 'mine', label: 'רק שלי' },
+];
 const TASKS_OPTIONS: { value: TasksShown; label: string }[] = [
   { value: 'mine', label: 'שלי' },
   { value: 'all', label: 'של כולם' },
@@ -137,10 +150,22 @@ export function SchedulePage() {
       /* not remembered */
     }
   };
-  const tasks = useApi<Task[]>(tasksShown !== 'none' ? `/api/tasks?from=${from}&to=${to}&hideClosed=1&recurring=0${tasksShown === 'mine' ? '&owner=me' : ''}` : null, ['tasks']);
-  const events = data ?? NO_EVENTS;
-  const externalEvents = external.data ?? NO_EXTERNAL;
-  const taskList = tasksShown === 'none' ? NO_TASKS : (tasks.data ?? NO_TASKS);
+  // only mine: the events this person runs or prepares for, their own deadlines, and no shared Google calendars
+  const [onlyMine, setOnlyMineRaw] = useState(savedMine);
+  const setOnlyMine = (v: boolean) => {
+    setOnlyMineRaw(v);
+    try {
+      localStorage.setItem(MINE_KEY, v ? '1' : '0');
+    } catch {
+      /* not remembered */
+    }
+  };
+  const deadlines: TasksShown = onlyMine && tasksShown === 'all' ? 'mine' : tasksShown;
+  const tasks = useApi<Task[]>(deadlines !== 'none' ? `/api/tasks?from=${from}&to=${to}&hideClosed=1&recurring=0${deadlines === 'mine' ? '&owner=me' : ''}` : null, ['tasks']);
+  const allEvents = data ?? NO_EVENTS;
+  const events = useMemo(() => (onlyMine ? allEvents.filter((e) => isMine(e, user.id)) : allEvents), [allEvents, onlyMine, user.id]);
+  const externalEvents = onlyMine ? NO_EXTERNAL : (external.data ?? NO_EXTERNAL);
+  const taskList = deadlines === 'none' ? NO_TASKS : (tasks.data ?? NO_TASKS);
 
   const [creating, setCreating] = useState<EventPrefill | null>(null);
   const [editing, setEditing] = useState<ScheduleEvent | null>(null);
@@ -299,6 +324,7 @@ export function SchedulePage() {
       onOpen={openEvent}
       onOpenExternal={setPeek}
       onOpenTask={(t) => navigate(`/tasks/${t.id}`)}
+      onlyMine={onlyMine}
     />
   );
   const list = (
@@ -321,6 +347,7 @@ export function SchedulePage() {
             onOpenExternal={setPeek}
             onOpenTask={(t) => navigate(`/tasks/${t.id}`)}
             onFocusDay={view === 'agenda' ? (d) => Date.now() > steering.current && setFocusFor({ date, day: d }) : undefined}
+            onlyMine={onlyMine}
           />
           {view === 'agenda' && (
             <button type="button" className="btn agenda-more no-print" onClick={() => setMore({ date, days: span + 7 })}>
@@ -382,6 +409,12 @@ export function SchedulePage() {
             </button>
             {phone && (
               <div className="more-field">
+                <span className="small muted">אירועים בלו"ז</span>
+                <Seg value={onlyMine ? 'mine' : 'all'} options={MINE_OPTIONS} onChange={(v) => setOnlyMine(v === 'mine')} />
+              </div>
+            )}
+            {phone && (
+              <div className="more-field">
                 <span className="small muted">דד-ליינים של משימות</span>
                 <Seg value={tasksShown} options={TASKS_OPTIONS} onChange={setTasksShown} />
               </div>
@@ -427,12 +460,30 @@ export function SchedulePage() {
           </button>
           <h2 className="cal-title">{title}</h2>
           <span className="grow" />
+          <button
+            type="button"
+            className={`btn btn-sm cal-mine${onlyMine ? ' on' : ''}`}
+            aria-pressed={onlyMine}
+            title="האירועים שאתה אחראי עליהם או שיש לך בהם משימת הכנה"
+            onClick={() => setOnlyMine(!onlyMine)}
+          >
+            <Icon name="my" size={15} /> רק שלי
+          </button>
           <Select className="select cal-tasks" value={tasksShown} onChange={(e) => setTasksShown(e.target.value as TasksShown)} aria-label="דד-ליינים של משימות ביומן">
             <option value="mine">דד-ליינים: שלי</option>
             <option value="all">דד-ליינים: כל המשימות</option>
             <option value="none">בלי דד-ליינים</option>
           </Select>
           <Seg value={view} options={DESK_VIEWS} onChange={setView} />
+        </div>
+      )}
+      {phone && onlyMine && (
+        <div className="mine-bar" role="status">
+          <Icon name="my" size={15} />
+          <span className="grow">רק האירועים שלך - אחראי או משימת הכנה</span>
+          <button type="button" className="btn btn-sm" onClick={() => setOnlyMine(false)}>
+            הצג הכל
+          </button>
         </div>
       )}
       <ErrorBox error={error} />

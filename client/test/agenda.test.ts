@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ExternalEvent, ScheduleEvent, Task } from '@shared/types';
-import { agendaDays, dayLoad, endMinutes, foldQuiet, inMinutes, leftMinutes, nowAndNext } from '../src/lib/agenda';
+import { agendaDays, dayLoad, endMinutes, foldQuiet, inMinutes, isMine, leftMinutes, nowAndNext } from '../src/lib/agenda';
 
 const ev = (id: number, date: string, startTime: string, endTime: string | null = null, over: Partial<ScheduleEvent> = {}): ScheduleEvent =>
   ({ id, date, startTime, endTime, title: `אירוע ${id}`, location: '', ownerId: null, ownerName: null, weekId: null, notes: '', cancelled: false, taskTotal: 0, taskDone: 0, ...over }) as ScheduleEvent;
@@ -36,6 +36,14 @@ describe('the schedule as one running list', () => {
       '2026-10-13',
       '2026-10-14..2026-10-14',
     ]);
+  });
+
+  it('"only mine": an event one runs, or has a preparation task in', () => {
+    expect(isMine(ev(1, '2026-10-08', '10:00', null, { ownerId: 7 }), 7)).toBe(true);
+    expect(isMine(ev(2, '2026-10-08', '10:00', null, { ownerId: 3, myTasks: 2 }), 7)).toBe(true);
+    expect(isMine(ev(3, '2026-10-08', '10:00', null, { ownerId: 3, myTasks: 0 }), 7)).toBe(false);
+    // a list from before the count was kept: only the owner
+    expect(isMine(ev(4, '2026-10-08', '10:00'), 7)).toBe(false);
   });
 
   it('counts a day without its cancelled events', () => {

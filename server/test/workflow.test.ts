@@ -212,6 +212,21 @@ describe('schedule <-> tasks (sections 22-23, 66-67)', () => {
     expect((await c.cmd.get(`/api/tasks/${t1}`)).body.task.deadline).toBe(at('2026-10-06', '12:00'));
   });
 
+  it("the list tells each person how many of an activity's preparation tasks are theirs", async () => {
+    const eid = (await c.cmd.post('/api/events', { date: '2026-10-07', startTime: '10:00', title: 'מטווח', ownerId: c.ids.s2 })).body.event.id;
+    await newTask(c.cmd, { title: 'תיאום מטווח', ownerIds: [c.ids.s1], eventId: eid });
+    const shared = await newTask(c.cmd, { title: 'הזמנת ציוד', ownerIds: [c.ids.s3], eventId: eid });
+    expect((await c.cmd.patch(`/api/tasks/${shared}`, { participantIds: [c.ids.s1] })).status).toBe(200);
+    const dropped = await newTask(c.cmd, { title: 'הסעה', ownerIds: [c.ids.s1], eventId: eid });
+    await c.cmd.post(`/api/tasks/${dropped}/transition`, { action: 'cancel', reason: 'לא נדרש' });
+    const mine = async (a: typeof c.s1) => (await a.get('/api/events?from=2026-10-07&to=2026-10-07')).body.find((e: { id: number }) => e.id === eid).myTasks;
+    // in charge of one, taking part in another; a cancelled one does not count
+    expect(await mine(c.s1)).toBe(2);
+    expect(await mine(c.s3)).toBe(1);
+    // the activity's own owner, with no preparation task of theirs
+    expect(await mine(c.s2)).toBe(0);
+  });
+
   it('cancelling an activity: cancel tasks or keep them independent', async () => {
     const a = (await c.cmd.post('/api/events', { date: '2026-10-07', startTime: '10:00', title: 'מטווח' })).body.event.id;
     const ta = await newTask(c.cmd, { title: 'תיאום מטווח', ownerIds: [c.ids.s2], eventId: a });

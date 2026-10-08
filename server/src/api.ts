@@ -58,7 +58,7 @@ import {
   createEvent,
   deleteEvent,
   eventDetail,
-  listEvents,
+  listEventsFor,
   restoreEvent,
   shiftEventTasks,
   updateEvent,
@@ -850,7 +850,7 @@ export function apiRouter(): Router {
     const today = localDateKey(clock.now(), tz());
     const from = isDateKey(req.query.from) ? req.query.from : today;
     const to = isDateKey(req.query.to) ? req.query.to : from;
-    res.json(listEvents(from, to));
+    res.json(listEventsFor(me(req), from, to));
   });
   r.post('/events', (req, res) => res.json(eventDetail(me(req), createEvent(me(req), req.body))));
   r.get('/events/:id', (req, res) => res.json(eventDetail(me(req), id(req.params.id))));

@@ -56,6 +56,9 @@ export function foldQuiet(days: AgendaDay[], keep: ReadonlySet<string>): AgendaR
   return rows;
 }
 
+/** "Only mine": an event this person is in charge of, or has a preparation task in (theirs, or taking part). */
+export const isMine = (e: ScheduleEvent, userId: number): boolean => e.ownerId === userId || (e.myTasks ?? 0) > 0;
+
 /** How many things a day holds, for the dots of the strip of days: cancelled events do not count. */
 export function dayLoad(date: string, events: ScheduleEvent[], external: ExternalEvent[]): number {
   return events.filter((e) => e.date === date && !e.cancelled).length + external.filter((x) => x.date === date).length;

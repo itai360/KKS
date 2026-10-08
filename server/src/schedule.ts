@@ -66,6 +66,29 @@ export function listEvents(from: string, to: string, includeCancelled = true): S
     .map(toEvent);
 }
 
+/**
+ * The events of some days as one person reads them: each with how many of its preparation tasks are
+ * theirs (in charge, or taking part) - so "only mine" in the schedule finds an event they prepare for
+ * as well as one they run.
+ */
+export function listEventsFor(actor: UserRow, from: string, to: string): ScheduleEvent[] {
+  const mine = new Map(
+    db()
+      .all<{ id: number; n: number }>(
+        `SELECT t.event_id AS id, count(*) AS n FROM tasks t JOIN events e ON e.id = t.event_id
+         WHERE e.date >= ? AND e.date <= ? AND t.status <> 'cancelled'
+           AND (t.owner_id = ? OR EXISTS (SELECT 1 FROM task_participants p WHERE p.task_id = t.id AND p.user_id = ?))
+         GROUP BY t.event_id`,
+        from,
+        to,
+        actor.id,
+        actor.id,
+      )
+      .map((r) => [r.id, r.n]),
+  );
+  return listEvents(from, to).map((e) => ({ ...e, myTasks: mine.get(e.id) ?? 0 }));
+}
+
 function eventRow(id: number): EventRow {
   const r = db().get<EventRow>(`${EVENT_BASE} WHERE e.id = ?`, id);
   if (!r) throw notFound('הפעילות לא נמצאה');
