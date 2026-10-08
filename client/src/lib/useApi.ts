@@ -27,9 +27,16 @@ const MAX_ENTRIES = 50;
 const MAX_AGE_MS = 30 * 60_000;
 let owner = '';
 
-function remember(url: string, data: unknown): void {
+/**
+ * `asOf`: when the request that brought it was sent. An answer to a request sent before what is kept
+ * was (a save's own answer, a later fetch) is older than it and does not replace it - on a slow
+ * connection, a fetch already on its way when a deadline was changed must not bring the old one back.
+ */
+function remember(url: string, data: unknown, asOf = Date.now()): void {
+  const e = cache.get(url);
+  if (e && e.at > asOf) return;
   cache.delete(url);
-  cache.set(url, { data, at: Date.now() });
+  cache.set(url, { data, at: asOf });
   // the oldest go first
   while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!);
 }
@@ -65,9 +72,10 @@ export function prefetch(url: string): void {
   const e = cache.get(url);
   if ((e && Date.now() - e.at < 15_000) || prefetching.has(url)) return;
   prefetching.add(url);
+  const asOf = Date.now();
   api
     .get(url)
-    .then((d) => remember(url, d))
+    .then((d) => remember(url, d, asOf))
     .catch(() => undefined)
     .finally(() => prefetching.delete(url));
 }
@@ -102,6 +110,8 @@ export function useApi<T>(url: string | null, topics: string[] = ['tasks']): Api
   // the address what is on the screen came from
   const shown = useRef<string | null>(cached<T>(url) === undefined ? null : url);
   const seq = useRef(0);
+  // when the screen last took a save's own answer (setData): a fetch sent before that is older news
+  const savedAt = useRef(0);
 
   const load = useCallback(async () => {
     const u = urlRef.current;
@@ -110,10 +120,11 @@ export function useApi<T>(url: string | null, topics: string[] = ['tasks']): Api
     // nothing for this address on the screen yet: the screen waits for it
     const blocking = shown.current !== u;
     if (blocking) setWaiting(1);
+    const asOf = Date.now();
     try {
       const d = await api.get<T>(u);
-      remember(u, d);
-      if (mine === seq.current && urlRef.current === u) {
+      remember(u, d, asOf);
+      if (mine === seq.current && urlRef.current === u && asOf >= savedAt.current) {
         shown.current = u;
         setDataState(d);
         setError(null);
@@ -173,8 +184,9 @@ export function useApi<T>(url: string | null, topics: string[] = ['tasks']): Api
   // a screen that changes what it shows (after saving) keeps the change for the next time it opens
   const setData = useCallback((d: T) => {
     const u = urlRef.current;
+    savedAt.current = Date.now();
     if (u) {
-      remember(u, d);
+      remember(u, d, savedAt.current);
       shown.current = u;
     }
     setDataState(d);

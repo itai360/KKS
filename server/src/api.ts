@@ -81,6 +81,7 @@ import {
   taskDetail,
   transition,
   updateTask,
+  updateTaskEverywhere,
 } from './taskService';
 import { applyTemplate, deleteTemplate, getTemplate, listTemplates, saveTemplate } from './templates';
 import { matchesSearch } from '../../shared/search';
@@ -540,8 +541,11 @@ export function apiRouter(): Router {
 
   r.get('/tasks/:id', (req, res) => res.json(taskDetail(me(req), id(req.params.id))));
 
+  // allCopies: a task given to several people is edited for all of them (its creator or the commander)
   r.patch('/tasks/:id', (req, res) => {
-    updateTask(me(req), id(req.params.id), req.body);
+    const { allCopies, ...patch } = (req.body ?? {}) as { allCopies?: unknown } & Record<string, unknown>;
+    if (allCopies === true) updateTaskEverywhere(me(req), id(req.params.id), patch);
+    else updateTask(me(req), id(req.params.id), patch);
     res.json(taskDetail(me(req), id(req.params.id)));
   });
 

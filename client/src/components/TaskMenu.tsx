@@ -8,6 +8,7 @@ import type { Task } from '@shared/types';
 import { api } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
+import { isGrouped } from '../lib/taskGroups';
 import { useSession } from '../lib/session';
 import { useRowMenu, type RowMenuItem } from './RowMenu';
 import { useToast } from './Toasts';
@@ -21,11 +22,13 @@ export function useTaskMenu(task: Task, tick: ReturnType<typeof useTaskTick>, di
   const navigate = useNavigate();
   const toast = useToast();
 
+  // a task given to several people moves for all of them - the row stands for the whole task
+  const everyone = isGrouped(task) ? { allCopies: true } : {};
   const shift = async (days: number) => {
     const before = task.deadline;
     const next = isoAt(addDays(dateKeyOf(before), days), fmtTime(before));
     try {
-      await api.patch(`/api/tasks/${task.id}`, { deadline: next });
+      await api.patch(`/api/tasks/${task.id}`, { deadline: next, ...everyone });
       emitLocalChange('tasks');
       toast({
         title: `הדד-ליין זז ל${fmtDeadline(next)}`,
@@ -35,7 +38,7 @@ export function useTaskMenu(task: Task, tick: ReturnType<typeof useTaskTick>, di
           label: 'ביטול',
           run: () =>
             void api
-              .patch(`/api/tasks/${task.id}`, { deadline: before })
+              .patch(`/api/tasks/${task.id}`, { deadline: before, ...everyone })
               .then(() => emitLocalChange('tasks'))
               .catch((e: Error) => toast({ title: e.message, tone: 'red' })),
         },

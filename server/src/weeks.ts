@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { CARRY_ACTIONS, isOpenStatus, LESSON_KINDS } from '../../shared/constants';
-import { addDays, DAY, diffDays, isDateKey, zonedIso } from '../../shared/dates';
+import { addDays, diffDays, isDateKey, localDateKey, localTime, zonedIso } from '../../shared/dates';
 import { readinessPct } from '../../shared/taskLogic';
 import type { CloseCheck, DomainReadiness, Lesson, Week, WeekDetail } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
@@ -363,8 +363,9 @@ export function closeWeek(actor: UserRow, id: number, raw: z.input<typeof closeS
       const t = mustTaskRow(d.taskId);
       if (t.week_id !== id || !isOpenStatus(t.status)) continue;
       if (d.action === 'move') {
-        const base = Math.max(Date.parse(t.deadline), now.getTime());
-        const newDeadline = d.newDeadline ?? new Date(base + 7 * DAY).toISOString();
+        // a week after the deadline (or after today, when already late), at its hour of the day
+        const base = new Date(Math.max(Date.parse(t.deadline), now.getTime()));
+        const newDeadline = d.newDeadline ?? zonedIso(addDays(localDateKey(base, tz()), 7), localTime(t.deadline, tz()), tz());
         db().run(
           'UPDATE tasks SET week_id = ?, deadline = ?, carried_count = carried_count + 1, reminded_24h = 0, reminded_2h = 0, overdue_notified = 0, overdue_response = NULL WHERE id = ?',
           next?.id ?? null,

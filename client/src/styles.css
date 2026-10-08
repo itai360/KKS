@@ -10940,3 +10940,10 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
     animation: fade 0.2s ease-out;
   }
 }
+/* the edit of a task given to several people: for all of them, or just this copy */
+.edit-everyone {
+  flex-basis: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--blue-bg);
+}

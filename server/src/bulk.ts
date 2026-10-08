@@ -6,10 +6,10 @@
 
 import { z } from 'zod';
 import { CADET_STATUSES, PRIORITIES } from '../../shared/constants';
-import { addDays } from '../../shared/dates';
+import { addDays, localDateKey, localTime, zonedIso } from '../../shared/dates';
 import type { UserRow } from './auth';
 import { deleteCadet, deleteExperience, deleteTeam, updateCadet } from './cadets';
-import { badRequest, forbidden, HttpError, nowIso } from './core';
+import { badRequest, forbidden, HttpError, nowIso, tz } from './core';
 import { db } from './db';
 import { deleteDebrief } from './debriefs';
 import { deleteDocument, updateDocument } from './documents';
@@ -48,9 +48,10 @@ const OPS: Record<string, Record<string, Op>> = {
     week: { run: (a, id, v) => updateTask(a, id, { weekId: toId(v) }) },
     domain: { run: (a, id, v) => updateTask(a, id, { domain: String(v ?? '') }) },
     shift: {
+      // days on the course's calendar, at the same hour of the day - also across a change of the clock
       run: (a, id, v) => {
         const t = mustTaskRow(id);
-        updateTask(a, id, { deadline: new Date(Date.parse(t.deadline) + days(v) * 86_400_000).toISOString() });
+        updateTask(a, id, { deadline: zonedIso(addDays(localDateKey(t.deadline, tz()), days(v)), localTime(t.deadline, tz()), tz()) });
       },
     },
   },

@@ -22,13 +22,17 @@ describe('bulk actions', () => {
     });
     expect((await bulk(c.s1, 'tasks', 'shift', mine, 2)).body.done).toBe(2);
     const moved = db().get<{ deadline: string }>('SELECT deadline FROM tasks WHERE id = ?', mine[0])!.deadline;
-    expect(moved).toBe(new Date(Date.parse(at('2026-10-05')) + 2 * 86_400_000).toISOString());
+    expect(moved).toBe(at('2026-10-07'));
+    // across the change of the clock (25.10): two days later is still 18:00, not 17:00
+    const late = await newTask(c.s1, { title: 'ג', ownerIds: [c.ids.s1], deadline: at('2026-10-24') });
+    expect((await bulk(c.s1, 'tasks', 'shift', [late], 2)).body.done).toBe(1);
+    expect(db().get<{ deadline: string }>('SELECT deadline FROM tasks WHERE id = ?', late)!.deadline).toBe(at('2026-10-26'));
 
     // staff cannot delete a task the commander gave them; the others are deleted
     const del = (await bulk(c.s1, 'tasks', 'delete', [...mine, commanders])).body;
     expect(del.done).toBe(2);
     expect(del.failed).toEqual([{ id: commanders, error: 'לא ניתן למחוק משימה שהקצה מפקד הקורס' }]);
-    expect(db().get<{ n: number }>('SELECT count(*) AS n FROM tasks')!.n).toBe(1);
+    expect(db().get<{ n: number }>('SELECT count(*) AS n FROM tasks')!.n).toBe(2);
 
     expect((await bulk(c.s1, 'tasks', 'complete', [commanders])).body.done).toBe(1);
     expect((await bulk(c.s1, 'tasks', 'nonsense', [commanders])).status).toBe(400);

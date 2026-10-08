@@ -428,6 +428,31 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
   if (logs.length) changed('tasks', 'weeks');
 }
 
+/** what the copies of a task given to several people share - who each copy is for, and its participants, are its own */
+const SHARED_KEYS = ['title', 'description', 'priority', 'domain', 'domainNote', 'weekId', 'trackId', 'eventId', 'requiresApproval', 'visibility', 'deadline'] as const;
+
+/**
+ * An edit to a task given to several people (a copy for each), made for all of them - the way its
+ * creator or the commander thinks of it, as one task shown once in the lists. The copy edited gets all
+ * of it; every other copy still in the group gets the shared parts, except that a copy already done
+ * keeps its deadline (it was met or missed against that one). A task not in a group is edited as it is.
+ */
+export function updateTaskEverywhere(actor: UserRow, id: number, raw: UpdateTaskInput): void {
+  const t = mustTaskRow(id);
+  if (!t.group_id) return updateTask(actor, id, raw);
+  const patch = updateTaskSchema.parse(raw);
+  const shared: UpdateTaskInput = Object.fromEntries(SHARED_KEYS.filter((k) => patch[k] !== undefined).map((k) => [k, patch[k]]));
+  db().tx(() => {
+    updateTask(actor, id, patch);
+    const others = db().all<{ id: number; status: string }>("SELECT id, status FROM tasks WHERE group_id = ? AND id <> ? AND status <> 'cancelled'", t.group_id, id);
+    for (const o of others) {
+      const { deadline, ...rest } = shared;
+      const own = o.status === 'done' ? rest : shared;
+      if (Object.keys(own).length) updateTask(actor, o.id, own);
+    }
+  });
+}
+
 // ---------------- status flow ----------------
 
 export const transitionSchema = z.discriminatedUnion('action', [

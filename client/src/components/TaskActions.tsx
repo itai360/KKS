@@ -520,6 +520,9 @@ function EditTaskDialog({ detail, m, onClose, focus }: { detail: TaskDetail; m: 
   const [trackId, setTrackId] = useState(t.trackId ? String(t.trackId) : '');
   const [visibility, setVisibility] = useState<Visibility>(t.visibility);
   const [requiresApproval, setRequiresApproval] = useState(t.requiresApproval);
+  // given to several people, it is one task to its creator: the change goes to every copy (unless asked otherwise)
+  const group = detail.group && detail.group.total > 1 ? detail.group : null;
+  const [everyone, setEveryone] = useState(true);
 
   const save = () => {
     const patch: Record<string, unknown> = {};
@@ -546,7 +549,8 @@ function EditTaskDialog({ detail, m, onClose, focus }: { detail: TaskDetail; m: 
     }
     if (p.canChangeOwner && owner[0] && owner[0] !== t.ownerId) patch.ownerId = owner[0];
     if (!Object.keys(patch).length) return onClose();
-    void m.run(() => api.patch<TaskDetail>(`/api/tasks/${t.id}`, patch), 'השינויים נשמרו').then((ok) => ok && onClose());
+    const all = !!group && everyone;
+    void m.run(() => api.patch<TaskDetail>(`/api/tasks/${t.id}`, all ? { ...patch, allCopies: true } : patch), all ? `השינויים נשמרו לכל ${group.total}` : 'השינויים נשמרו').then((ok) => ok && onClose());
   };
 
   return (
@@ -556,6 +560,15 @@ function EditTaskDialog({ detail, m, onClose, focus }: { detail: TaskDetail; m: 
       wide
       footer={
         <>
+          {group && (
+            <label className="check edit-everyone">
+              <input type="checkbox" checked={everyone} onChange={(e) => setEveryone(e.target.checked)} />
+              <span>
+                <b>השינוי לכל {group.total} האנשים במשימה</b>{' '}
+                <span className="small muted">· מי שכבר השלים - הדד-ליין שלו נשאר. בלי הסימון, רק העותק של {t.ownerName}</span>
+              </span>
+            </label>
+          )}
           <button className="btn btn-primary" onClick={save} disabled={m.busy}>
             שמור
           </button>
