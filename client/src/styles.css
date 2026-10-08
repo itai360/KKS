@@ -10254,9 +10254,9 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   }
 }
 
-/* ---------------- a task held or right-clicked: its quick actions (components/TaskMenu.tsx) ---------------- */
+/* ---------------- a row held or right-clicked: its quick actions (components/RowMenu.tsx) ---------------- */
 /* the row lifts under the finger as its menu comes up */
-:is(.task-row, .board-card, tr.click).is-lifted {
+.is-lifted {
   position: relative;
   z-index: 3;
   scale: 1.02;
@@ -10266,13 +10266,14 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 @media (pointer: coarse) {
   /* a hold is for the menu, not for selecting the text under the finger */
   .task-row,
-  .board-card {
+  .board-card,
+  .holdable {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
   }
 }
-.task-menu-sheet .task-menu-done {
+.row-menu-sheet .row-menu-primary {
   background: var(--green-bg);
   border-color: var(--green);
   color: var(--green-ink);
@@ -10325,14 +10326,14 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 .ctx-item:focus svg {
   color: var(--paper);
 }
-.ctx-item.is-done svg {
+.ctx-item.is-primary svg {
   color: var(--green);
 }
 @media (prefers-reduced-motion: reduce) {
   .ctx-menu {
     animation: fade 0.15s ease-out;
   }
-  :is(.task-row, .board-card, tr.click).is-lifted {
+  .is-lifted {
     scale: none;
   }
 }
@@ -10529,4 +10530,171 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   .domain-line:hover {
     background: var(--hover);
   }
+}
+
+/* ---------------- a task's details: a pencil on what this person may change (pages/TaskPage.tsx) ---------------- */
+.kv-pen {
+  width: 28px;
+  height: 28px;
+  margin-inline-start: 4px;
+  vertical-align: middle;
+  color: var(--muted);
+  opacity: 0.55;
+  transition: opacity 0.15s, scale 0.32s var(--spring);
+}
+.kv dd:hover .kv-pen,
+.kv-pen:focus-visible {
+  opacity: 1;
+}
+/* the edit dialog opened on one field: it is lit for a moment */
+.field.is-asked {
+  border-radius: 10px;
+  animation: field-asked 1.8s ease-out;
+}
+@keyframes field-asked {
+  0%,
+  35% {
+    outline: 3px solid var(--focus);
+    outline-offset: 4px;
+  }
+  100% {
+    outline: 3px solid transparent;
+    outline-offset: 4px;
+  }
+}
+
+/* done right on the task's page: a check pops in beside the title and the card glows green for a moment */
+.done-burst {
+  display: inline-flex;
+  margin-inline-start: 10px;
+  vertical-align: -3px;
+  animation: done-pop 0.5s var(--spring);
+}
+.done-burst circle,
+.day-check circle {
+  fill: var(--green);
+}
+.done-burst path,
+.day-check path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 16;
+}
+.done-burst path,
+.just-cleared .day-check path {
+  animation: check-draw 0.42s 0.12s ease-out both;
+}
+.task-head.just-done {
+  animation: done-glow 1.8s ease-out;
+}
+@keyframes done-pop {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+}
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 16;
+  }
+}
+@keyframes done-glow {
+  0%,
+  30% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 35%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+/* ---------------- my tasks: the day so far, ticked off (pages/MyTasksPage.tsx) ---------------- */
+.day-progress {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+}
+.day-marks {
+  display: flex;
+  gap: 3px;
+  margin-top: 10px;
+}
+.day-marks i,
+.day-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.day-marks i {
+  flex: 1;
+  transition: background-color 0.45s var(--spring);
+}
+.day-marks i.is-done,
+.day-bar i {
+  background: var(--green);
+}
+.day-marks i.is-late {
+  background: color-mix(in srgb, var(--red) 45%, var(--line));
+}
+.day-bar {
+  margin-top: 10px;
+  overflow: hidden;
+}
+.day-bar i {
+  display: block;
+  height: 100%;
+  transition: width 0.6s var(--spring);
+}
+.day-progress.is-clear {
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+  background: var(--green-bg);
+}
+.day-check {
+  display: inline-flex;
+}
+.just-cleared .day-check {
+  animation: done-pop 0.5s var(--spring);
+}
+.just-cleared {
+  animation: done-glow 1.8s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .done-burst,
+  .just-cleared .day-check,
+  .done-burst path,
+  .just-cleared .day-check path {
+    animation: fade 0.2s ease-out;
+  }
+  .task-head.just-done,
+  .just-cleared {
+    animation: none;
+  }
+  .field.is-asked {
+    animation-duration: 2.4s;
+  }
+}
+.field.is-asked:focus {
+  outline: none;
+}
+
+/* ---------------- a small bar beside a count (the grades in an evaluation file) ---------------- */
+.mini-bar {
+  display: inline-block;
+  width: 44px;
+  height: 4px;
+  margin-inline: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+  vertical-align: middle;
+}
+.mini-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 0.6s var(--spring);
 }

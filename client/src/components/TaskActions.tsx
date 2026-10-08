@@ -1,7 +1,7 @@
 // Status flow actions (section 47) with the dialogs each step needs:
 // blockers (43, 80), approval (45-46), overdue response (61), requests (62-63).
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BLOCK_REASONS, isOpenStatus, OTHER_DOMAIN, OVERDUE_RESPONSE_LABELS, OVERDUE_RESPONSES, PRIORITIES, PRIORITY_LABELS, VISIBILITIES, VISIBILITY_LABELS, type OverdueResponse, type Priority, type Visibility } from '@shared/constants';
 import type { TaskDetail } from '@shared/types';
 import { api } from '../lib/api';
@@ -55,10 +55,30 @@ export function useTaskMutation(taskId: number, onDone: (d: TaskDetail) => void)
   return { busy, error, setError, run, taskId };
 }
 
-export function TaskActions({ detail, onChange, onDeleted }: { detail: TaskDetail; onChange: (d: TaskDetail) => void; onDeleted: () => void }) {
+/** a detail the task page offers to change in place: the edit dialog opens on it */
+export type EditField = 'owner' | 'participants' | 'deadline' | 'priority' | 'domain' | 'week' | 'track' | 'visibility';
+
+export function TaskActions({
+  detail,
+  onChange,
+  onDeleted,
+  edit,
+}: {
+  detail: TaskDetail;
+  onChange: (d: TaskDetail) => void;
+  onDeleted: () => void;
+  /** asked from the page's details (`n` counts the asks, so the same one twice opens it twice) */
+  edit?: { field: EditField; n: number } | null;
+}) {
   const { task, permissions: p } = detail;
   const { isCommander, user } = useSession();
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [focus, setFocus] = useState<EditField | undefined>();
+  useEffect(() => {
+    if (!edit) return;
+    setFocus(edit.field);
+    setDialog('edit');
+  }, [edit]);
   const phone = useMedia(BOTTOM_BAR_MEDIA);
   const m = useTaskMutation(task.id, onChange);
   const open = isOpenStatus(task.status);
@@ -114,8 +134,9 @@ export function TaskActions({ detail, onChange, onDeleted }: { detail: TaskDetai
   }
 
   const secondary: ReactNode[] = [];
-  if (p.canEdit) secondary.push(<button key="edit" className="btn btn-sm" onClick={() => setDialog('edit')}><Icon name="edit" /> עריכה</button>);
-  else if (p.canChangeDeadline || p.canChangeOwner) secondary.push(<button key="edit" className="btn btn-sm" onClick={() => setDialog('edit')}><Icon name="edit" /> שינוי</button>);
+  const editAll = () => (setFocus(undefined), setDialog('edit'));
+  if (p.canEdit) secondary.push(<button key="edit" className="btn btn-sm" onClick={editAll}><Icon name="edit" /> עריכה</button>);
+  else if (p.canChangeDeadline || p.canChangeOwner) secondary.push(<button key="edit" className="btn btn-sm" onClick={editAll}><Icon name="edit" /> שינוי</button>);
   if (p.canRequestDeadline) secondary.push(<button key="dl" className="btn btn-sm" onClick={() => setDialog('deadline')}><Icon name="clock" /> בקש שינוי דד-ליין</button>);
   if (p.canRequestTransfer) secondary.push(<button key="tr" className="btn btn-sm" onClick={() => setDialog('transfer')}><Icon name="users" /> בקש העברת אחריות</button>);
   if (open && involved && !task.needsCommander && !isCommander) secondary.push(<button key="esc" className="btn btn-sm" onClick={() => setDialog('escalate')}><Icon name="hand" /> נדרשת החלטת מפקד</button>);
@@ -144,7 +165,7 @@ export function TaskActions({ detail, onChange, onDeleted }: { detail: TaskDetai
                 className={`chip${task.overdueResponse === r ? ' on' : ''}`}
                 onClick={() => {
                   if (r === 'new_deadline' && p.canRequestDeadline) setDialog('deadline');
-                  else if (r === 'new_deadline' && p.canChangeDeadline) setDialog('edit');
+                  else if (r === 'new_deadline' && p.canChangeDeadline) (setFocus('deadline'), setDialog('edit'));
                   else if (r === 'blocked') setDialog('block');
                   else setDialog({ overdue: r });
                 }}
@@ -230,7 +251,17 @@ export function TaskActions({ detail, onChange, onDeleted }: { detail: TaskDetai
       )}
       {dialog === 'deadline' && <DeadlineRequestDialog detail={detail} m={m} onClose={() => setDialog(null)} />}
       {dialog === 'transfer' && <TransferRequestDialog detail={detail} m={m} onClose={() => setDialog(null)} />}
-      {dialog === 'edit' && <EditTaskDialog detail={detail} m={m} onClose={() => setDialog(null)} />}
+      {dialog === 'edit' && (
+        <EditTaskDialog
+          detail={detail}
+          m={m}
+          focus={focus}
+          onClose={() => {
+            setDialog(null);
+            setFocus(undefined);
+          }}
+        />
+      )}
       {dialog === 'delete' && (
         <Modal
           title="מחיקת משימה"
@@ -459,8 +490,22 @@ function TransferRequestDialog({ detail, m, onClose }: { detail: TaskDetail; m: 
   );
 }
 
-function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; onClose: () => void }) {
+function EditTaskDialog({ detail, m, onClose, focus }: { detail: TaskDetail; m: Mut; onClose: () => void; focus?: EditField }) {
   const { task: t, permissions: p } = detail;
+  // opened from one detail: that field comes into view, lit for a moment
+  const grid = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = focus && grid.current?.querySelector<HTMLElement>(`.edit-f-${focus}`);
+    if (!el) return;
+    const frame = requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('is-asked');
+      // there, not in the title the dialog put the cursor in (no keyboard coming up for a field not asked for)
+      el.tabIndex = -1;
+      el.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focus]);
   const { settings, weeks, tracks } = useSession();
   const [title, setTitle] = useState(t.title);
   const [description, setDescription] = useState(t.description);
@@ -520,7 +565,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
         </>
       }
     >
-      <div className="form-grid">
+      <div className="form-grid" ref={grid}>
         {p.canEdit && (
           <>
             <Field label="שם המשימה" required className="span-2">
@@ -532,23 +577,23 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
           </>
         )}
         {p.canChangeOwner && (
-          <Field label="אחראי ראשי" className="span-2" hint="השינוי יירשם: מי היה האחראי, מי החדש, מי שינה ומתי">
+          <Field label="אחראי ראשי" className="span-2 edit-f-owner" hint="השינוי יירשם: מי היה האחראי, מי החדש, מי שינה ומתי">
             <UserPicker value={owner} onChange={setOwner} multiple={false} date={date} />
           </Field>
         )}
         {p.canEdit && (
-          <Field label="משתתפים נוספים" className="span-2">
+          <Field label="משתתפים נוספים" className="span-2 edit-f-participants">
             <UserPicker value={participants.filter((x) => x !== owner[0])} onChange={setParticipants} />
           </Field>
         )}
         {p.canChangeDeadline && (
-          <Field label="דד-ליין" required>
+          <Field label="דד-ליין" required className="edit-f-deadline">
             <DateTimeInputs date={date} time={time} onDate={setDate} onTime={setTime} />
           </Field>
         )}
         {p.canEdit && (
           <>
-            <Field label="עדיפות">
+            <Field label="עדיפות" className="edit-f-priority">
               <Select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
                 {PRIORITIES.map((x) => (
                   <option key={x} value={x}>
@@ -557,7 +602,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
                 ))}
               </Select>
             </Field>
-            <Field label="תחום">
+            <Field label="תחום" className="edit-f-domain">
               <Select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
                 <option value="">ללא</option>
                 {settings.domains.map((d) => (
@@ -570,7 +615,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
                 <input className="input" value={domainNote} onChange={(e) => setDomainNote(e.target.value)} maxLength={120} placeholder="לדוגמה: תקשוב, טקסים, רווחה" />
               </Field>
             )}
-            <Field label="שבוע בקורס">
+            <Field label="שבוע בקורס" className="edit-f-week">
               <Select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
                 <option value="">ללא שבוע</option>
                 {weeks.map((w) => (
@@ -580,7 +625,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
                 ))}
               </Select>
             </Field>
-            <Field label="ציר בקורס">
+            <Field label="ציר בקורס" className="edit-f-track">
               <Select className="select" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
                 <option value="">ללא ציר</option>
                 {tracks.map((tr) => (
@@ -590,7 +635,7 @@ function EditTaskDialog({ detail, m, onClose }: { detail: TaskDetail; m: Mut; on
                 ))}
               </Select>
             </Field>
-            <Field label="נראות">
+            <Field label="נראות" className="edit-f-visibility">
               <Select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
                 {VISIBILITIES.map((v) => (
                   <option key={v} value={v}>

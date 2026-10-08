@@ -159,6 +159,12 @@ export function EvaluationsPage() {
                     <div className="tiny muted">
                       {c.personalNumber && <span className="mono">{c.personalNumber} · </span>}
                       {c.notes} התייחסויות · {c.exams}/{c.examsTotal} ציונים
+                      {/* how far the grades have come in, at a glance */}
+                      {c.examsTotal > 0 && (
+                        <span className="mini-bar" aria-hidden="true">
+                          <i style={{ width: `${Math.round((c.exams / c.examsTotal) * 100)}%` }} />
+                        </span>
+                      )}
                       {c.lastDynamics && ` · דינמיקה ${c.lastDynamics.score}/5, מקום ${c.lastDynamics.rank}`}
                       {c.updatedAt && <span className="hide-mobile"> · עודכן {fmtAgo(c.updatedAt)}</span>}
                     </div>

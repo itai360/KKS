@@ -1,7 +1,7 @@
 // Section 31 - cadets: list by team, profile with notes, personal talks,
 // discipline, evaluations, development tracking and experiences.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   ATTENDANCE_LABELS,
@@ -30,10 +30,12 @@ import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '
 import { ContactButtons } from '../components/ContactButtons';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
+import { unlessHeld, useRowMenu, type RowMenuItem } from '../components/RowMenu';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
 import { api, changedFields, qs } from '../lib/api';
+import { telHref, waHref } from '../lib/contact';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -210,63 +212,97 @@ export function CadetsPage() {
 }
 
 function CadetRows({ list }: { list: Cadet[] }) {
-  const navigate = useNavigate();
-  const bulk = useBulk();
   const [exempting, setExempting] = useState<Cadet | null>(null);
   return (
     <div className="card">
       {exempting && <ExemptionDialog cadet={exempting} onClose={() => setExempting(null)} />}
       {list.map((c) => (
-        <div key={c.id} className={`health${bulk?.selected.has(c.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, c.id, () => navigate(`/cadets/${c.id}`)))}>
-          <BulkCheck id={c.id} />
-          <div className="avatar">{initials(c.fullName)}</div>
-          <div className="grow">
-            <div className="strong">{c.fullName}</div>
-            <div className="tiny muted">
-              {c.personalNumber && <span className="mono">{c.personalNumber} · </span>}
-              {c.recordCount ? (
-                <>
-                  {c.recordCount} רישומים<span className="hide-mobile"> · עודכן {fmtAgo(c.lastRecordAt!)}</span>
-                </>
-              ) : (
-                'אין רישומים עדיין'
-              )}
-            </div>
-          </div>
-          {c.status !== 'active' && <span className={`badge t-${CADET_STATUS_TONES[c.status]}`}>{CADET_STATUS_LABELS[c.status]}</span>}
-          <NotesBadge count={c.disciplineNotes} />
-          {c.exemptions.length > 0 && (
-            <span className="badge t-purple clip" title={`פטור מ: ${c.exemptions.join(', ')}`}>
-              <span className="clip-text">פטור: {c.exemptions.join(', ')}</span>
-            </span>
-          )}
-          {c.disciplineCount > 0 && <span className="badge t-orange hide-mobile">{c.disciplineCount} משמעת</span>}
-          {c.talkCount > 0 && <span className="badge t-blue">{c.talkCount} שיחות</span>}
-          {c.avgScore !== null && (
-            <span className="mono strong" title="ממוצע הערכות (1-5)">
-              {c.avgScore.toFixed(1)}
-            </span>
-          )}
-          {c.canManage && !bulk?.active && (
-            <button
-              type="button"
-              className="icon-btn exemption-add"
-              aria-label={`הוספת פטור ל${c.fullName}`}
-              title="הוספת פטור"
-              onClick={(e) => {
-                e.stopPropagation();
-                setExempting(c);
-              }}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              <Icon name="flag" size={15} />
-            </button>
-          )}
-          <Icon name="chevronLeft" size={16} className="faint" />
-        </div>
+        <CadetRow key={c.id} c={c} onExempt={() => setExempting(c)} />
       ))}
     </div>
   );
+}
+
+function CadetRow({ c, onExempt }: { c: Cadet; onExempt: () => void }) {
+  const navigate = useNavigate();
+  const bulk = useBulk();
+  // held (a phone) or right-clicked (a computer): what is written about a cadet most, without opening the file first
+  const menu = useRowMenu({ title: c.fullName, items: useCadetMenuItems(c, onExempt), disabled: bulk?.active });
+  return (
+    <div
+      className={`health holdable${bulk?.selected.has(c.id) ? ' selected' : ''}${menu.lifted ? ' is-lifted' : ''}`}
+      {...openable(bulkClick(bulk, c.id, unlessHeld(menu, () => navigate(`/cadets/${c.id}`))))}
+      {...menu.bind}
+    >
+      <BulkCheck id={c.id} />
+      <div className="avatar">{initials(c.fullName)}</div>
+      <div className="grow">
+        <div className="strong">{c.fullName}</div>
+        <div className="tiny muted">
+          {c.personalNumber && <span className="mono">{c.personalNumber} · </span>}
+          {c.recordCount ? (
+            <>
+              {c.recordCount} רישומים<span className="hide-mobile"> · עודכן {fmtAgo(c.lastRecordAt!)}</span>
+            </>
+          ) : (
+            'אין רישומים עדיין'
+          )}
+        </div>
+      </div>
+      {c.status !== 'active' && <span className={`badge t-${CADET_STATUS_TONES[c.status]}`}>{CADET_STATUS_LABELS[c.status]}</span>}
+      <NotesBadge count={c.disciplineNotes} />
+      {c.exemptions.length > 0 && (
+        <span className="badge t-purple clip" title={`פטור מ: ${c.exemptions.join(', ')}`}>
+          <span className="clip-text">פטור: {c.exemptions.join(', ')}</span>
+        </span>
+      )}
+      {c.disciplineCount > 0 && <span className="badge t-orange hide-mobile">{c.disciplineCount} משמעת</span>}
+      {c.talkCount > 0 && <span className="badge t-blue">{c.talkCount} שיחות</span>}
+      {c.avgScore !== null && (
+        <span className="mono strong" title="ממוצע הערכות (1-5)">
+          {c.avgScore.toFixed(1)}
+        </span>
+      )}
+      {c.canManage && !bulk?.active && (
+        <button
+          type="button"
+          className="icon-btn exemption-add"
+          aria-label={`הוספת פטור ל${c.fullName}`}
+          title="הוספת פטור"
+          onClick={(e) => {
+            e.stopPropagation();
+            onExempt();
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Icon name="flag" size={15} />
+        </button>
+      )}
+      <Icon name="chevronLeft" size={16} className="faint" />
+      {menu.menu}
+    </div>
+  );
+}
+
+/** A cadet's quick actions: a note, a talk, discipline or an evaluation opens the file ready to write; and a call. */
+function useCadetMenuItems(c: Cadet, onExempt: () => void): RowMenuItem[] {
+  const navigate = useNavigate();
+  const { viewing } = useSession();
+  const write = (kind: RecordKind) => navigate(`/cadets/${c.id}?add=${kind}`);
+  const may = (kind: RecordKind) => !viewing && (c.canManage || !RESTRICTED_RECORD_KINDS.includes(kind));
+  const tel = telHref(c.phone);
+  const wa = waHref(c.phone);
+  return [
+    ...(may('note') ? [{ key: 'note', label: 'רישום הערה', icon: 'edit', primary: true, run: () => write('note') }] : []),
+    ...(may('talk') ? [{ key: 'talk', label: 'שיחה אישית', icon: 'message', run: () => write('talk') }] : []),
+    ...(may('discipline') ? [{ key: 'discipline', label: 'רישום משמעת', icon: 'shield', run: () => write('discipline') }] : []),
+    ...(may('evaluation') ? [{ key: 'evaluation', label: 'הערכה', icon: 'chart', run: () => write('evaluation') }] : []),
+    ...(c.canManage && !viewing ? [{ key: 'exempt', label: 'הוספת פטור', icon: 'flag', run: onExempt }] : []),
+    ...(tel ? [{ key: 'call', label: 'חיוג', icon: 'phone', run: () => void (location.href = tel) }] : []),
+    ...(wa ? [{ key: 'wa', label: 'וואטסאפ', icon: 'message', run: () => void window.open(wa, '_blank', 'noopener') }] : []),
+    ...(c.canManage ? [{ key: 'eval', label: 'תיק הערכה', icon: 'folder', run: () => navigate(`/evaluations/${c.id}`) }] : []),
+    { key: 'open', label: 'פתיחת התיק', icon: 'chevronLeft', run: () => navigate(`/cadets/${c.id}`) },
+  ];
 }
 
 function CadetForm({ cadet, teams, defaultTeam, onClose }: { cadet?: Cadet; teams: Team[]; defaultTeam?: number; onClose: () => void }) {
@@ -543,6 +579,21 @@ export function CadetPage() {
   const [kind, setKind] = useState<RecordKind | 'all'>('all');
   const [dialog, setDialog] = useState<null | 'edit' | 'experience' | 'talk'>(null);
   const navigate = useNavigate();
+  // opened from a cadet's quick menu (?add=note): the file comes up ready to write that, once
+  const [params, setParams] = useSearchParams();
+  const add = params.get('add') as RecordKind | null;
+  const ready = !!data;
+  useEffect(() => {
+    if (!ready || !add) return;
+    if (add === 'talk') setDialog('talk');
+    setParams(
+      (p) => {
+        p.delete('add');
+        return p;
+      },
+      { replace: true },
+    );
+  }, [ready, add, setParams]);
 
   if (loading && !data)
     return (
@@ -607,7 +658,7 @@ export function CadetPage() {
       />
       <div className="split">
         <div className="col gap-16">
-          <RecordForm cadet={c} records={data.records} onFullTalk={() => setDialog('talk')} />
+          <RecordForm cadet={c} records={data.records} onFullTalk={() => setDialog('talk')} start={add && add !== 'talk' ? add : undefined} />
           <div>
             <div className="row wrap mb-12">
               <div className="section-title grow" style={{ margin: 0 }}>
@@ -955,12 +1006,35 @@ export function QuickDiscipline({ onClose }: { onClose: () => void }) {
 }
 
 /** Recording in the cadet file; `only` keeps it to one kind (the quick discipline dialog). */
-function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cadet; records: CadetRecord[]; only?: RecordKind; onSaved?: (d: CadetDetail) => void; onFullTalk?: () => void }) {
+function RecordForm({
+  cadet,
+  records,
+  only,
+  onSaved,
+  onFullTalk,
+  start,
+}: {
+  cadet: Cadet;
+  records: CadetRecord[];
+  only?: RecordKind;
+  onSaved?: (d: CadetDetail) => void;
+  onFullTalk?: () => void;
+  /** opened to write this: that kind is picked and the text field is ready for typing */
+  start?: RecordKind;
+}) {
   const toast = useToast();
   const { user, users, settings, isCommander } = useSession();
   const guide = useGuide(cadet.canManage);
   const kinds = only ? [only] : RECORD_KINDS.filter((k) => cadet.canManage || !RESTRICTED_RECORD_KINDS.includes(k));
-  const [kind, setKind] = useState<RecordKind>(only ?? 'note');
+  const [kind, setKind] = useState<RecordKind>(only ?? (start && kinds.includes(start) ? start : 'note'));
+  const text = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!start || !text.current) return;
+    text.current.scrollIntoView({ block: 'center' });
+    text.current.focus({ preventScroll: true });
+    // only on the first showing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [category, setCategory] = useState('');
   const [body, setBody] = useDraft(`record:${cadet.id}`);
   const [score, setScore] = useState<number | null>(null);
@@ -1160,6 +1234,7 @@ function RecordForm({ cadet, records, only, onSaved, onFullTalk }: { cadet: Cade
         </Field>
       )}
       <textarea
+        ref={text}
         className="textarea"
         value={body}
         onChange={(e) => setBody(e.target.value)}

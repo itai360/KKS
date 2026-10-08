@@ -1,17 +1,18 @@
 // Section 9 (task page), 20 (activity log), 41-46 (receiving, updating, blocking,
 // completing), 59-60 (dependencies, subtasks), 64 (all-staff progress).
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { domainLabel, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
 import type { Task, TaskDetail } from '@shared/types';
 import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
-import { TaskActions, useTaskMutation } from '../components/TaskActions';
+import { TaskActions, useTaskMutation, type EditField } from '../components/TaskActions';
 import { TaskList } from '../components/TaskRow';
 import { Bar, ErrorBox, PageError, Loading, Modal } from '../components/ui';
 import { api } from '../lib/api';
+import { haptic } from '../lib/haptics';
 import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
@@ -45,6 +46,28 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
   const { task: t } = detail;
   const pendingRequests = detail.requests.filter((r) => r.status === 'pending');
   usePageTitle(t.title);
+  // a detail's pencil opens the edit dialog on that field
+  const [edit, setEdit] = useState<{ field: EditField; n: number } | null>(null);
+  const p = detail.permissions;
+  const canChange = (f: EditField) => (f === 'owner' ? p.canChangeOwner : f === 'deadline' ? p.canChangeDeadline : p.canEdit);
+  const onEdit = (field: EditField) => setEdit((e) => ({ field, n: (e?.n ?? 0) + 1 }));
+  // done right here: the card says so for a moment - a check, and a buzz where the phone has one
+  const was = useRef(t.status);
+  const [justDone, setJustDone] = useState(false);
+  useEffect(() => {
+    const before = was.current;
+    was.current = t.status;
+    if (before === t.status) return;
+    const closed = (before === 'todo' || before === 'in_progress' || before === 'waiting') && (t.status === 'done' || t.status === 'pending_approval');
+    // put back (the message's "ביטול"): the moment goes with it
+    setJustDone(closed);
+    if (closed) haptic('success');
+  }, [t.status]);
+  useEffect(() => {
+    if (!justDone) return;
+    const timer = setTimeout(() => setJustDone(false), 1800);
+    return () => clearTimeout(timer);
+  }, [justDone]);
 
   return (
     <div className="page">
@@ -56,7 +79,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
         )}
       </div>
 
-      <div className={`card card-pad t-${t.tone}`} style={{ borderRight: '6px solid var(--tone)', marginBottom: 16 }}>
+      <div className={`card card-pad t-${t.tone} task-head${justDone ? ' just-done' : ''}`} style={{ borderRight: '6px solid var(--tone)', marginBottom: 16 }}>
         <div className="row row-top wrap">
           <div className="grow">
             <div className="row gap-6 wrap mb-12">
@@ -67,7 +90,17 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
               {t.visibility !== 'normal' && <span className="badge">{t.visibility === 'team' ? 'כללית לכל הסגל' : 'מוגבלת'}</span>}
               {t.recurringRuleId && <span className="badge">משימה חוזרת</span>}
             </div>
-            <h1 style={{ fontSize: 28, lineHeight: 1.25 }}>{t.title}</h1>
+            <h1 style={{ fontSize: 28, lineHeight: 1.25 }}>
+              {t.title}
+              {justDone && (
+                <span className="done-burst" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="26" height="26">
+                    <circle cx="12" cy="12" r="10.5" />
+                    <path d="M7 12.5l3.2 3.2L17 9" />
+                  </svg>
+                </span>
+              )}
+            </h1>
             <div className="row wrap mt-8 small" style={{ gap: '4px 18px' }}>
               <span>
                 <span className="muted">אחראי: </span>
@@ -139,7 +172,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
           </div>
         )}
         <div className="mt-16">
-          <TaskActions detail={detail} onChange={onChange} onDeleted={onDeleted} />
+          <TaskActions detail={detail} onChange={onChange} onDeleted={onDeleted} edit={edit} />
         </div>
       </div>
 
@@ -164,7 +197,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
           <Attachments detail={detail} onChange={onChange} />
         </div>
         <div className="col gap-16 sticky-side">
-          <Details task={t} />
+          <Details task={t} onEdit={onEdit} canChange={canChange} />
           <ActivityLog detail={detail} />
         </div>
       </div>
@@ -225,8 +258,16 @@ function GroupCard({ group, name }: { group: NonNullable<TaskDetail['group']>; n
   );
 }
 
-function Details({ task: t }: { task: Task }) {
+function Details({ task: t, onEdit, canChange }: { task: Task; onEdit: (f: EditField) => void; canChange: (f: EditField) => boolean }) {
   const { userName } = useSession();
+  const open = t.status !== 'done' && t.status !== 'cancelled';
+  const pen = (f: EditField, what: string) =>
+    open &&
+    canChange(f) && (
+      <button type="button" className="icon-btn kv-pen" aria-label={`שינוי ${what}`} title={`שינוי ${what}`} onClick={() => onEdit(f)}>
+        <Icon name="edit" size={14} />
+      </button>
+    );
   return (
     <div className="card">
       <div className="card-head">
@@ -237,11 +278,15 @@ function Details({ task: t }: { task: Task }) {
           <dt>אחראי ראשי</dt>
           <dd>
             <Link to={`/team/${t.ownerId}`}>{t.ownerName}</Link>
+            {pen('owner', 'אחראי')}
           </dd>
           {t.participantIds.length > 0 && (
             <>
               <dt>משתתפים</dt>
-              <dd>{t.participantIds.map((p) => userName(p)).join(', ')}</dd>
+              <dd>
+                {t.participantIds.map((p) => userName(p)).join(', ')}
+                {pen('participants', 'משתתפים')}
+              </dd>
             </>
           )}
           <dt>נוצר על ידי</dt>
@@ -249,17 +294,32 @@ function Details({ task: t }: { task: Task }) {
             {t.createdByName} <span className="muted tiny">· {fmtAgo(t.createdAt)}</span>
           </dd>
           <dt>דד-ליין</dt>
-          <dd className="mono">{fmtDateTime(t.deadline)}</dd>
+          <dd>
+            <span className="mono">{fmtDateTime(t.deadline)}</span>
+            {pen('deadline', 'דד-ליין')}
+          </dd>
           <dt>עדיפות</dt>
-          <dd>{PRIORITY_LABELS[t.priority]}</dd>
+          <dd>
+            {PRIORITY_LABELS[t.priority]}
+            {pen('priority', 'עדיפות')}
+          </dd>
           <dt>סטטוס</dt>
           <dd>{STATUS_LABELS[t.status]}</dd>
           <dt>תחום</dt>
-          <dd>{domainLabel(t.domain, t.domainNote) || '-'}</dd>
+          <dd>
+            {domainLabel(t.domain, t.domainNote) || '-'}
+            {pen('domain', 'תחום')}
+          </dd>
           <dt>שבוע</dt>
-          <dd>{t.weekId ? <Link to={`/weeks/${t.weekId}`}>{t.weekName}</Link> : '-'}</dd>
+          <dd>
+            {t.weekId ? <Link to={`/weeks/${t.weekId}`}>{t.weekName}</Link> : '-'}
+            {pen('week', 'שבוע')}
+          </dd>
           <dt>ציר</dt>
-          <dd>{t.trackId ? <Link to={`/tracks/${t.trackId}`}>{t.trackName}</Link> : '-'}</dd>
+          <dd>
+            {t.trackId ? <Link to={`/tracks/${t.trackId}`}>{t.trackName}</Link> : '-'}
+            {pen('track', 'ציר')}
+          </dd>
           {t.cadetId && (
             <>
               <dt>צוער</dt>
@@ -293,7 +353,10 @@ function Details({ task: t }: { task: Task }) {
             </>
           )}
           <dt>נראות</dt>
-          <dd className="small">{VISIBILITY_LABELS[t.visibility].split(' - ')[0]}</dd>
+          <dd className="small">
+            {VISIBILITY_LABELS[t.visibility].split(' - ')[0]}
+            {pen('visibility', 'נראות')}
+          </dd>
           {t.carriedCount > 0 && (
             <>
               <dt>הועברה</dt>

@@ -1,6 +1,6 @@
 // Sections 11-12: the staff and each staff member's page.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { shortDate } from '@shared/dates';
 import type { StaffPageData, StaffStatus } from '@shared/types';
@@ -10,7 +10,7 @@ import { ContactButtons } from '../components/ContactButtons';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
-import { Empty, ErrorBox, PageError, Loading, PageHead, Ring, initials } from '../components/ui';
+import { CountUp, Empty, ErrorBox, PageError, Loading, PageHead, Ring, initials } from '../components/ui';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
@@ -89,6 +89,12 @@ export function StaffPage() {
   const newTask = useNewTask();
   const { data, error, loading, status } = useApi<StaffPageData>(`/api/team/${id}`, ['tasks', 'weeks']);
   const [tab, setTab] = useState<Tab>('open');
+  // a number at the top opens its list below
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const show = (k: Tab) => {
+    setTab(k);
+    tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
 
   if (loading && !data)
     return (
@@ -129,20 +135,26 @@ export function StaffPage() {
         }
       />
       <div className="stats fade-in">
-        <div className="card stat" style={{ cursor: 'default' }}>
+        <button type="button" className="card stat" style={{ textAlign: 'start' }} onClick={() => show('open')} disabled={!s.open} aria-label={`פתוחות: ${s.open}`}>
           <span className="stat-label">פתוחות</span>
-          <span className="stat-num">{s.open}</span>
+          <span className="stat-num">
+            <CountUp value={s.open} />
+          </span>
           <span className="stat-hint">{s.inProgress} בטיפול · {s.waiting} ממתינות</span>
-        </div>
-        <div className={`card stat${s.overdue ? ' alert' : ''}`} style={{ cursor: 'default' }}>
+        </button>
+        <button type="button" className={`card stat${s.overdue ? ' alert' : ''}`} style={{ textAlign: 'start' }} onClick={() => show('overdue')} disabled={!s.overdue} aria-label={`באיחור: ${s.overdue}`}>
           <span className="stat-label">באיחור</span>
-          <span className="stat-num">{s.overdue}</span>
-        </div>
-        <div className="card stat" style={{ cursor: 'default' }}>
+          <span className="stat-num">
+            <CountUp value={s.overdue} />
+          </span>
+        </button>
+        <button type="button" className="card stat" style={{ textAlign: 'start' }} onClick={() => show('done')} disabled={!s.done} aria-label={`הושלמו: ${s.done}`}>
           <span className="stat-label">הושלמו</span>
-          <span className="stat-num">{s.done}</span>
+          <span className="stat-num">
+            <CountUp value={s.done} />
+          </span>
           <span className="stat-hint">{s.doneThisWeek} השבוע</span>
-        </div>
+        </button>
         <div className="card stat" style={{ cursor: 'default' }}>
           <span className="stat-label">עמידה בזמנים</span>
           <span className="stat-num">{s.onTimePct}%</span>
@@ -155,7 +167,7 @@ export function StaffPage() {
 
       <div className="split mt-16">
         <div>
-          <div className="tabs">
+          <div className="tabs" ref={tabsRef} style={{ scrollMarginTop: 'calc(var(--top-h) + 12px)' }}>
             {(Object.keys(lists) as Tab[]).map((k) => (
               <button key={k} className={`tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>
                 {lists[k].label}

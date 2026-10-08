@@ -1,5 +1,6 @@
 // Sections 10 and 48 - what a staff member opens in the morning.
 
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { shortDate } from '@shared/dates';
 import type { MyTasksData, ScheduleEvent } from '@shared/types';
@@ -12,6 +13,7 @@ import { BulkToggle } from '../components/Bulk';
 import { GroupTaskRow, GroupTitle, TaskBulkScope, TaskList, TaskRow } from '../components/TaskRow';
 import { CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { fmtLongDate, fmtTime, greetName, greeting, todayKey } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
 
@@ -53,6 +55,7 @@ export function MyTasksPage() {
         <div className="fade-in">
           <PendingAnnouncements spaced />
           <TodayOnSchedule />
+          <DayProgress done={data.stats.doneToday} late={data.stats.overdue} today={data.stats.today} />
           {/* four zeros say nothing: with nothing open and nothing done today, the empty state says it */}
           {(total > 0 || data.stats.doneToday > 0) && (
             <div className="stats">
@@ -190,6 +193,74 @@ function TodayOnSchedule() {
           </>
         }
       />
+    </div>
+  );
+}
+
+/**
+ * The day so far, ticked off: one mark for each task done today, still late or due today - filling in as
+ * they are done; when nothing is left for today, it says so, with a check (and a buzz, the moment it happens).
+ */
+function DayProgress({ done, late, today }: { done: number; late: number; today: number }) {
+  const navigate = useNavigate();
+  const left = late + today;
+  const all = done + left;
+  // the last one done while the page is open: that is the moment to mark
+  const before = useRef(left);
+  const [cleared, setCleared] = useState(false);
+  useEffect(() => {
+    const was = before.current;
+    before.current = left;
+    if (was > 0 && left === 0 && done > 0) {
+      haptic('success');
+      setCleared(true);
+    }
+  }, [left, done]);
+  if (!all) return null;
+  const marks = all <= 24;
+  return (
+    <div className={`card day-progress${left === 0 ? ' is-clear' : ''}${cleared ? ' just-cleared' : ''}`} role="group" aria-label="היום שלך">
+      <div className="row">
+        {left === 0 ? (
+          <>
+            <span className="day-check" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22">
+                <circle cx="12" cy="12" r="10.5" />
+                <path d="M7 12.5l3.2 3.2L17 9" />
+              </svg>
+            </span>
+            <span className="grow strong">סיימת את כל מה שהיה להיום</span>
+            <button type="button" className="btn btn-sm" onClick={() => navigate('/day-end')}>
+              <Icon name="moon" size={14} /> סיכום יום
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="grow">
+              <b>היום שלך</b>
+              <span className="small muted">
+                {' '}
+                · {done === 1 ? 'אחת בוצעה, ' : done ? `${done} בוצעו, ` : ''}
+                {left === 1 ? 'נשארה אחת' : `נשארו ${left}`}
+              </span>
+            </span>
+            <span className="mono small muted">
+              {done}/{all}
+            </span>
+          </>
+        )}
+      </div>
+      {marks ? (
+        <div className="day-marks" aria-hidden="true">
+          {Array.from({ length: all }, (_, i) => (
+            <i key={i} className={i < done ? 'is-done' : i < done + late ? 'is-late' : ''} />
+          ))}
+        </div>
+      ) : (
+        <div className="day-bar" aria-hidden="true">
+          <i style={{ width: `${(done / all) * 100}%` }} />
+        </div>
+      )}
     </div>
   );
 }
