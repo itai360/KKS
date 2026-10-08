@@ -6,6 +6,7 @@ import { addDays, shortDate, startOfWeek, weekdayName, weekdayOf } from '@shared
 import { DISCIPLINE_NOTE_LIMIT } from '@shared/constants';
 import type { ActivityEntry, DayEndData, DisciplineLogEntry, DisciplineSummary, LookAheadData, WeeklyReport } from '@shared/types';
 import { CheckMark } from '../components/CheckMark';
+import { ShareButton, useDocNav, type DocLink } from '../components/DocNav';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { GroupTitle, TaskList } from '../components/TaskRow';
@@ -115,8 +116,12 @@ export function WeeklyReportPage() {
   const { data, error, loading } = useApi<WeeklyReport>(`/api/reports/weekly?from=${from}`, ['tasks']);
   const isLast = from === addDays(startOfWeek(todayKey()), -7);
   const isCurrent = from === startOfWeek(todayKey());
+  // a week back or on: the arrows, a swipe on a phone (the one after is fetched ahead)
+  const page = useRef<HTMLDivElement>(null);
+  const weekLink = (f: string): DocLink => ({ to: `/reports/weekly?from=${f}`, label: `${shortDate(f)}-${shortDate(addDays(f, 6))}`, api: `/api/reports/weekly?from=${f}` });
+  useDocNav({ prev: weekLink(addDays(from, -7)), next: isCurrent ? null : weekLink(addDays(from, 7)), swipe: page });
   return (
-    <div className="page">
+    <div className="page" ref={page}>
       <PageHead
         eyebrow={isLast ? 'השבוע שהסתיים' : isCurrent ? 'השבוע הנוכחי' : 'תמונת מצב שבועית'}
         title="תמונת מצב שבועית"
@@ -131,6 +136,7 @@ export function WeeklyReportPage() {
                 שבוע הבא <Icon name="chevronLeft" />
               </button>
             )}
+            <ShareButton title={`תמונת מצב שבועית ${shortDate(from)}`} />
             <button className="btn" onClick={() => window.print()}>
               <Icon name="print" /> הדפסה
             </button>
@@ -141,7 +147,7 @@ export function WeeklyReportPage() {
       {loading && !data ? (
         <Loading rows={4} />
       ) : data ? (
-        <div className="fade-in col gap-16">
+        <div className="fade-in col gap-16" key={from}>
           <div className="stats">
             <Num n={data.opened} label="משימות נפתחו" />
             <Num n={data.completed} label="הושלמו" />

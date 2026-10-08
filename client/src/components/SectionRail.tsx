@@ -47,7 +47,9 @@ export function SectionRail({ items, label, wide }: { items: RailItem[]; label: 
     const update = () => {
       frame = 0;
       const s = dock.current;
-      setShown(!!s && s.getBoundingClientRect().top <= topLine() + 1);
+      // stuck where its own style docks it (under the bar, or under a page's own sticky line)
+      const stuckAt = s ? parseFloat(getComputedStyle(s).top) : NaN;
+      setShown(!!s && s.getBoundingClientRect().top <= (Number.isFinite(stuckAt) ? stuckAt : topLine()) + 1);
       const st = steer.current;
       setCur(st && performance.now() < st.until ? st.id : currentOf(list));
     };

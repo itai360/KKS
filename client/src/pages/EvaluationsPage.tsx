@@ -2,7 +2,7 @@
 // version of it a committee receives (see server/src/evaluations.ts). Only the company commander
 // and the cadet's team commander open it.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   CADET_STATUS_LABELS,
@@ -18,9 +18,11 @@ import {
 import { shortDate } from '@shared/dates';
 import type { Committee, CommitteeDetail, EvaluationFile, EvaluationListItem, Team } from '@shared/types';
 import { NoteDots, NotesBadge, noteTone, timeLabel } from '../components/Discipline';
-import { FileDocument, HistoryDialog, LiveFile } from '../components/EvaluationFile';
+import { DocPager, useDocNav, type DocLink } from '../components/DocNav';
+import { FileDocument, fileParts, HistoryDialog, LiveFile } from '../components/EvaluationFile';
 import { GradesImport } from '../components/GradesImport';
 import { Icon } from '../components/Icon';
+import { SectionRail } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, PageError, PageHead, Select } from '../components/ui';
 import { api } from '../lib/api';
@@ -199,6 +201,24 @@ export function EvaluationFilePage() {
   const [printing, setPrinting] = useState(false);
   const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
+  // a file saved after its page moved on to the next cadet's file belongs to its own cadet, not to this one
+  const shown = useRef(cadetId);
+  shown.current = cadetId;
+  const setFile = useCallback((f: EvaluationFile) => {
+    if (String(f.cadet.id) === shown.current) setData(f);
+  }, [setData]);
+  // the files of the same team, one after another: the one before and the one after, by name and the arrows
+  const list = useApi<EvaluationListItem[]>('/api/evaluations', ['cadets']).data ?? [];
+  const me = list.find((x) => String(x.cadetId) === cadetId);
+  const team = me ? list.filter((x) => x.teamId === me.teamId) : [];
+  const at = team.findIndex((x) => String(x.cadetId) === cadetId);
+  const link = (i: number): DocLink | null => {
+    const x = team[i];
+    return x ? { to: `/evaluations/${x.cadetId}`, label: x.fullName, api: `/api/evaluations/${x.cadetId}` } : null;
+  };
+  const prev = at > 0 ? link(at - 1) : null;
+  const next = at >= 0 ? link(at + 1) : null;
+  useDocNav({ prev, next });
 
   // printing shows the file as a document, then goes back to the living one
   useEffect(() => {
@@ -267,6 +287,11 @@ export function EvaluationFilePage() {
           </>
         }
       />
+      {team.length > 1 && (
+        <div className="eval-nav no-print">
+          <DocPager prev={prev} next={next} noun="תיקי הצוות" position={`${at + 1} מתוך ${team.length}${me?.teamName ? ` ב${me.teamName}` : ''}`} />
+        </div>
+      )}
       <ErrorBox error={actionError} />
       {pending && (
         <div className="info-box mb-12 row wrap gap-6 no-print">
@@ -300,7 +325,8 @@ export function EvaluationFilePage() {
         </div>
       )}
       <div className="split eval-split">
-        {printing ? <FileDocument file={data} /> : <LiveFile file={data} setFile={setData} onHistory={(itemId) => setDialog({ history: itemId })} />}
+        {/* a new cadet's file, a new saver: what was typed in one file never shows (or saves) in the next */}
+        {printing ? <FileDocument file={data} /> : <LiveFile key={c.id} file={data} setFile={setFile} onHistory={(itemId) => setDialog({ history: itemId })} />}
         <ContextColumn file={data} />
       </div>
       {dialog === 'refer' && <ReferDialog cadetId={c.id} name={c.fullName} reasonInFile={data.committeeReason} onClose={() => setDialog(null)} onDone={setData} />}
@@ -585,6 +611,7 @@ export function CommitteePage() {
           </p>
         )}
       </div>
+      <SectionRail label="חלקי התיק" items={fileParts(file)} />
       <div className="split eval-split">
         <FileDocument file={file} />
         <ContextColumn file={file} readOnly />

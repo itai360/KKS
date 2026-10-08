@@ -11413,10 +11413,17 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   animation: done-pop 0.4s var(--spring);
 }
 @media (max-width: 600px) {
-  /* a phone: the steps' names, but the one on now */
+  /* a phone: only the step on now says its name on the screen (the others still say it to a screen reader) */
   .plan-steps li:not(.is-now) {
-    font-size: 0;
     gap: 0;
+  }
+  .plan-steps li:not(.is-now) .plan-step-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 .plan-doc > section {
@@ -11636,5 +11643,194 @@ mark.hl {
 @media (prefers-reduced-motion: reduce) {
   .bars-grow .col-fill {
     animation: none;
+  }
+}
+
+/* ---------------- documents: turned like pages, shared, and a way in (components/DocNav.tsx) ---------------- */
+.doc-pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.doc-pager-btn {
+  max-width: 220px;
+  min-width: 0;
+}
+.doc-pager-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-pager-at {
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  /* a phone: the arrows (and the swipe) - the names are on the buttons' labels for the screen reader */
+  .doc-pager-label {
+    display: none;
+  }
+}
+.doc-note {
+  max-width: 860px;
+  margin: -6px auto 10px;
+}
+.eval-nav {
+  margin: -4px 0 12px;
+}
+
+/* a line of the document opens what it stands for - on the screen; on paper it is just the line */
+.doc-row {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+@media (hover: hover) {
+  .doc-row:hover td {
+    background: var(--hover);
+  }
+}
+.doc-row:active td {
+  background: var(--hover);
+}
+.doc-link-inline {
+  color: inherit;
+  text-decoration: none;
+}
+.doc-link-inline:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.doc-row.is-arrived td {
+  animation: doc-row-in 1.6s ease-out;
+}
+@keyframes doc-row-in {
+  0%,
+  35% {
+    background: color-mix(in srgb, var(--focus) 18%, transparent);
+  }
+}
+/* the week order: today, the activity on now, what is behind */
+.doc-day.is-today h3,
+.doc-day-empty.is-today b {
+  color: var(--ink);
+}
+.doc-day.is-today {
+  margin-inline: -10px;
+  padding: 4px 10px 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--orange) 7%, transparent);
+}
+.doc-today,
+.doc-now {
+  margin-inline-start: 8px;
+  vertical-align: 2px;
+}
+.doc-row.is-now td {
+  background: color-mix(in srgb, var(--orange) 12%, transparent);
+  font-weight: 600;
+}
+.doc-row.is-past td {
+  color: var(--muted);
+}
+.doc-row.is-late td:last-child {
+  color: var(--red-ink);
+  font-weight: 600;
+}
+.doc-owner-done {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 8px;
+  vertical-align: 1px;
+}
+.week-order > section {
+  scroll-margin-top: calc(var(--top-h) + 60px);
+}
+.talk-doc > section {
+  scroll-margin-top: calc(var(--top-h) + 60px);
+}
+@media print {
+  .doc-row.is-now td,
+  .doc-row.is-arrived td,
+  .doc-day.is-today {
+    background: none;
+    animation: none;
+  }
+  .doc-day.is-today {
+    margin-inline: 0;
+    padding: 0;
+  }
+  .doc-row.is-past td {
+    color: inherit;
+  }
+  .doc-link-inline {
+    text-decoration: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-row.is-arrived td {
+    animation: none;
+  }
+}
+
+/* ---------------- the evaluation file: what is filled, and what is left (components/EvaluationFile.tsx) ---------------- */
+.eval-file > .section-rail-dock {
+  /* under the save line, which keeps its place at the top */
+  top: calc(var(--top-h) + 58px);
+  margin-top: -16px;
+}
+.eval-section {
+  scroll-margin-top: calc(var(--top-h) + 112px);
+}
+.eval-progress {
+  padding: 12px 16px;
+}
+.eval-progress.is-full {
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+  background: var(--green-bg);
+}
+.eval-marks {
+  display: inline-flex;
+  gap: 3px;
+}
+.eval-marks i {
+  width: 18px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  transition: background-color 0.45s var(--spring);
+}
+.eval-marks i.is-on {
+  background: var(--green);
+}
+.eval-marks i.is-optional {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.eval-num.is-done {
+  background: var(--green);
+  color: #fff;
+}
+.eval-section.just-filled .eval-num {
+  animation: done-pop 0.45s var(--spring);
+}
+.eval-section.just-filled {
+  animation: done-glow 1.6s ease-out;
+}
+.eval-saved-mark {
+  display: inline-flex;
+  animation: done-pop 0.4s var(--spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .eval-section.just-filled .eval-num,
+  .eval-saved-mark {
+    animation: none;
+  }
+  .eval-section.just-filled {
+    animation: none;
+  }
+}
+@media print {
+  .eval-num.is-done {
+    background: var(--ink);
   }
 }

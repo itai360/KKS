@@ -8,9 +8,26 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { haptic } from '../lib/haptics';
 import { animateSpring, project, rubberband, velocityOf, type SpringRun } from '../lib/spring';
 
-export function usePeriodSwipe(area: RefObject<HTMLElement | null>, { enabled, onStep }: { enabled: boolean; onStep: (dir: 1 | -1) => void }): void {
+export function usePeriodSwipe(
+  area: RefObject<HTMLElement | null>,
+  {
+    enabled,
+    onStep,
+    can,
+    skipScrollers,
+  }: {
+    enabled: boolean;
+    onStep: (dir: 1 | -1) => void;
+    /** whether there is anything that way: if not, the page resists and comes back (the first or the last one) */
+    can?: (dir: 1 | -1) => boolean;
+    /** a swipe that starts on something scrolling sideways (a wide table) scrolls it, not the page */
+    skipScrollers?: boolean;
+  },
+): void {
   const step = useRef(onStep);
   step.current = onStep;
+  const canRef = useRef(can);
+  canRef.current = can;
   useEffect(() => {
     const el = area.current;
     if (!el || !enabled) return;
@@ -44,6 +61,12 @@ export function usePeriodSwipe(area: RefObject<HTMLElement | null>, { enabled, o
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
       if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (skipScrollers) {
+        for (let n = e.target as HTMLElement | null; n && n !== el; n = n.parentElement) {
+          const ox = getComputedStyle(n).overflowX;
+          if ((ox === 'auto' || ox === 'scroll') && n.scrollWidth > n.clientWidth + 1) return;
+        }
+      }
       const caught = !!run;
       if (run) x = run.stop().value;
       run = null;
@@ -66,11 +89,13 @@ export function usePeriodSwipe(area: RefObject<HTMLElement | null>, { enabled, o
       if (e.cancelable) e.preventDefault();
       const raw = g.from + (t.clientX - g.x0);
       const w = width();
+      // nothing that way: it gives a little and resists, the way a list's end does
+      const blocked = raw !== 0 && canRef.current && !canRef.current(raw > 0 ? 1 : -1);
       // a whole page's width at most, softening past it
-      paint(Math.abs(raw) > w ? Math.sign(raw) * (w + rubberband(Math.abs(raw) - w, w)) : raw);
+      paint(blocked ? Math.sign(raw) * rubberband(Math.abs(raw), w, 0.3) : Math.abs(raw) > w ? Math.sign(raw) * (w + rubberband(Math.abs(raw) - w, w)) : raw);
       g.points.push({ y: t.clientX, t: e.timeStamp });
       if (g.points.length > 12) g.points.shift();
-      const past = Math.abs(raw) > line();
+      const past = !blocked && Math.abs(raw) > line();
       if (past !== g.past) {
         g.past = past;
         if (past) haptic('tick');
@@ -88,8 +113,9 @@ export function usePeriodSwipe(area: RefObject<HTMLElement | null>, { enabled, o
       const heading = x + project(v, 0.99);
       // a finger already heading back says no, wherever the page is
       const reversing = Math.abs(v) > 150 && Math.sign(v) !== Math.sign(x);
-      if (Math.abs(heading) < line() || reversing) return springTo(0, v);
       const side = Math.sign(heading);
+      const blocked = !!canRef.current && !canRef.current(side > 0 ? 1 : -1);
+      if (Math.abs(heading) < line() || reversing || blocked) return springTo(0, v);
       // out on its side, then the next one in from the other
       springTo(side * width(), v, () => {
         step.current(side > 0 ? 1 : -1);
@@ -112,5 +138,5 @@ export function usePeriodSwipe(area: RefObject<HTMLElement | null>, { enabled, o
       el.removeEventListener('touchend', end);
       el.removeEventListener('touchcancel', end);
     };
-  }, [area, enabled]);
+  }, [area, enabled, skipScrollers]);
 }

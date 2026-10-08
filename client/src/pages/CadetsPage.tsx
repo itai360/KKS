@@ -28,6 +28,7 @@ import type { AttendanceHistory, Cadet, CadetDetail, CadetRecord, Exemption, Tea
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
 import { ContactButtons } from '../components/ContactButtons';
+import { DocPager, useDocNav, type DocLink } from '../components/DocNav';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { unlessHeld, useRowMenu, type RowMenuItem } from '../components/RowMenu';
@@ -583,6 +584,18 @@ export function CadetPage() {
   const [params, setParams] = useSearchParams();
   const add = params.get('add') as RecordKind | null;
   const ready = !!data;
+  // the cadets of the same team, one after another: the one before and the one after, by name and the arrows
+  const all = useApi<Cadet[]>('/api/cadets', ['cadets']).data ?? [];
+  const me = all.find((x) => String(x.id) === id);
+  const team = me ? all.filter((x) => x.teamId === me.teamId && (x.status === 'active') === (me.status === 'active')) : [];
+  const at = team.findIndex((x) => String(x.id) === id);
+  const link = (i: number): DocLink | null => {
+    const x = team[i];
+    return x ? { to: `/cadets/${x.id}`, label: x.fullName, api: `/api/cadets/${x.id}` } : null;
+  };
+  const prev = at > 0 ? link(at - 1) : null;
+  const next = at >= 0 ? link(at + 1) : null;
+  useDocNav({ prev, next });
   useEffect(() => {
     if (!ready || !add) return;
     if (add === 'talk') setDialog('talk');
@@ -611,7 +624,8 @@ export function CadetPage() {
   const records = data.records.filter((r) => kind === 'all' || r.kind === kind);
 
   return (
-    <div className="page">
+    // a new cadet, a fresh page: what was being written for one cadet never carries over to the next
+    <div className="page" key={c.id}>
       <PageHead
         eyebrow={
           <Link to={`/cadets${c.teamId ? `?team=${c.teamId}` : ''}`} className="muted">
@@ -656,6 +670,11 @@ export function CadetPage() {
           </>
         }
       />
+      {team.length > 1 && (
+        <div className="eval-nav no-print">
+          <DocPager prev={prev} next={next} noun="צוערי הצוות" position={`${at + 1} מתוך ${team.length}${c.teamName ? ` ב${c.teamName}` : ''}`} />
+        </div>
+      )}
       <div className="split">
         <div className="col gap-16">
           <RecordForm cadet={c} records={data.records} onFullTalk={() => setDialog('talk')} start={add && add !== 'talk' ? add : undefined} />

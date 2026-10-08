@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { Link } from 'react-router';
 import { STANDING_LABELS, STANDING_TONES, STANDINGS, EVAL_TONE_LABELS, type Standing } from '@shared/constants';
 import { shortDate } from '@shared/dates';
-import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EVALUATION_TITLE, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, NOT_ENTERED, shownTests, TEST_ORDER } from '@shared/evaluation';
+import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EVALUATION_TITLE, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, examsEntered, NOT_ENTERED, shownTests, TEST_ORDER } from '@shared/evaluation';
 import type { EvaluationChange, EvaluationExams, EvaluationField, EvaluationFile, EvaluationNote, EvaluationPoint, ExamTest } from '@shared/types';
 import { api, ApiError } from '../lib/api';
 import { useDraft } from '../lib/draft';
@@ -16,6 +16,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
+import { SectionRail, type RailItem } from './SectionRail';
 import { useToast } from './Toasts';
 import { DateInput, ErrorBox, Field, Modal, Seg, Select } from './ui';
 
@@ -68,6 +69,77 @@ function toServer(field: FileKey, v: Value): Value {
 }
 
 const show = (v: Value) => (v === null || v === undefined || v === '' ? null : String(v));
+
+// ---------------- what the file holds, part by part ----------------
+
+export interface FilePart extends RailItem {
+  /** filled; not yet; or a part that is filled only when relevant (no "missing" for it) */
+  filled: boolean | null;
+}
+
+/**
+ * Each of the nine parts and whether it is filled - for the strip of parts, the check on each part, and
+ * the line of what is left. `value` reads a field as it is on the screen (typed, not yet saved, counts).
+ */
+export function fileParts(f: EvaluationFile, value: (k: FileKey) => Value = (k) => fieldValue(f, k)): FilePart[] {
+  const has = (k: FileKey) => {
+    const v = value(k);
+    return v !== null && v !== undefined && String(v).trim() !== '';
+  };
+  const details = (['firstName', 'lastName', 'personalNumber', 'unit', 'city', 'enlistedOn', 'releaseOn'] as const).filter(has).length;
+  const ex = examsEntered(f.tests ?? [], f.exams);
+  const grades = f.grades ?? [];
+  const gradesIn = grades.filter((g) => has(`grade:${g.id}`)).length;
+  const tests = ex.total + grades.length;
+  const testsIn = ex.entered + gradesIn;
+  const general = (has('companyCommander') || !!f.general.companyCommanderAuto) && (has('teamCommander') || !!f.general.teamCommanderAuto);
+  return [
+    { id: 'eval-1', n: 1, label: 'כללי', filled: general },
+    { id: 'eval-2', n: 2, label: 'פרטים', filled: details === 7, count: `${details}/7` },
+    { id: 'eval-3', n: 3, label: 'מסלול', filled: has('militaryPath') },
+    { id: 'eval-4', n: 4, label: 'ציונים', filled: tests > 0 && testsIn === tests, count: tests ? `${testsIn}/${tests}` : undefined },
+    { id: 'eval-5', n: 5, label: 'דינמיקה', filled: f.dynamics.length > 0, count: f.dynamics.length ? String(f.dynamics.length) : undefined },
+    { id: 'eval-6', n: 6, label: 'ועדה', filled: has('committeeReason') ? true : null },
+    { id: 'eval-7', n: 7, label: 'התייחסויות', filled: f.notes.length > 0, count: f.notes.length ? String(f.notes.length) : undefined },
+    { id: 'eval-8', n: 8, label: 'נקודות', filled: f.points.length ? true : null, count: f.points.length ? String(f.points.length) : undefined },
+    { id: 'eval-9', n: 9, label: 'סיכום', filled: has('summary') },
+  ].map((p) => ({ ...p, state: p.filled ? ('ok' as const) : null }));
+}
+
+const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+
+/** how much of the file is filled: a mark for each part, and what is left - a tap goes there */
+function FileProgress({ parts }: { parts: FilePart[] }) {
+  // the committee reason and the critical points are there when relevant: the count is of the other seven
+  const main = parts.filter((p) => ![6, 8].includes(p.n));
+  const done = main.filter((p) => p.filled).length;
+  const left = parts.filter((p) => p.filled === false);
+  return (
+    <div className={`card card-pad eval-progress${left.length ? '' : ' is-full'}`} role="group" aria-label="מה מולא בתיק">
+      <div className="row wrap gap-6">
+        <span className="strong small grow">
+          {left.length ? `${done} מתוך ${main.length} חלקים מולאו` : 'כל חלקי התיק מולאו'}
+        </span>
+        <span className="eval-marks" aria-hidden="true">
+          {parts.map((p) => (
+            <i key={p.id} className={p.filled ? 'is-on' : p.filled === null ? 'is-optional' : ''} title={`${p.n}. ${p.label}`} />
+          ))}
+        </span>
+      </div>
+      {left.length > 0 && (
+        <div className="row wrap gap-4 mt-8 eval-left">
+          <span className="tiny muted">נשאר:</span>
+          {left.map((p) => (
+            <button key={p.id} type="button" className="chip chip-sm" onClick={() => goTo(p.id)}>
+              {p.n}. {p.label}
+              {p.count && <span className="muted"> {p.count}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ---------------- saving as it is typed ----------------
 
@@ -228,7 +300,10 @@ export function SaveBar({ saver, file }: { saver: Saver; file: EvaluationFile })
         </>
       ) : (
         <>
-          <Icon name="check" size={15} /> {s.state === 'saved' ? 'כל השינויים נשמרו' : 'התיק שמור'}
+          <span className="eval-saved-mark" key={s.state === 'saved' ? s.at : 'idle'}>
+            <Icon name="check" size={15} />
+          </span>{' '}
+          {s.state === 'saved' ? 'כל השינויים נשמרו' : 'התיק שמור'}
         </>
       )}
       <span className="grow" />
@@ -302,14 +377,32 @@ function Input({ field, saver, file, type = 'text', placeholder, min, max, step,
   );
 }
 
-function Section({ n, title, children, className, hint, id }: { n?: number; title: string; children: ReactNode; className?: string; hint?: ReactNode; id?: string }) {
+function Section({ n, title, children, className, hint, id, part }: { n?: number; title: string; children: ReactNode; className?: string; hint?: ReactNode; id?: string; part?: FilePart }) {
+  const done = !!part?.filled;
+  const was = useRef(done);
+  const [justDone, setJustDone] = useState(false);
+  useEffect(() => {
+    if (done && !was.current) setJustDone(true);
+    was.current = done;
+  }, [done]);
+  useEffect(() => {
+    if (!justDone) return;
+    const t = setTimeout(() => setJustDone(false), 1600);
+    return () => clearTimeout(t);
+  }, [justDone]);
   return (
-    <section className={`card eval-section ${className ?? ''}`} id={id} aria-labelledby={id ? `${id}-h` : undefined}>
+    <section className={`card eval-section ${className ?? ''}${done ? ' is-filled' : ''}${justDone ? ' just-filled' : ''}`} id={id} aria-labelledby={id ? `${id}-h` : undefined}>
       <div className="card-head">
-        {n && <span className="eval-num">{n}</span>}
+        {n && (
+          <span className={`eval-num${done ? ' is-done' : ''}`} aria-hidden={done || undefined}>
+            {done ? <Icon name="check" size={14} /> : n}
+          </span>
+        )}
         <h3 className="grow" id={id ? `${id}-h` : undefined}>
+          {done && <span className="sr-only">{n}. </span>}
           {title}
         </h3>
+        {part?.count && <span className="tiny muted mono">{part.count}</span>}
       </div>
       <div className="card-body col gap-12">
         {hint && <p className="small muted" style={{ margin: 0 }}>{hint}</p>}
@@ -324,9 +417,14 @@ function Section({ n, title, children, className, hint, id }: { n?: number; titl
 export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; setFile: (f: EvaluationFile) => void; onHistory: (itemId?: number) => void }) {
   const saver = useFileSaver(file, setFile);
   const { user } = useSession();
+  // what is filled, as it is on the screen (typed and not yet saved counts)
+  const parts = fileParts(file, saver.value);
+  const part = (n: number) => parts[n - 1];
   return (
     <div className="col gap-16 eval-file">
       <SaveBar saver={saver} file={file} />
+      <SectionRail label="חלקי התיק" items={parts} />
+      <FileProgress parts={parts} />
 
       <div className="card card-pad row wrap gap-6">
         <div style={{ flex: '1 1 220px', minWidth: 0 }}>
@@ -336,7 +434,7 @@ export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; s
         <Seg<Standing> value={saver.value('standing') as Standing} options={STANDINGS.map((s) => ({ value: s, label: STANDING_LABELS[s] }))} onChange={(s) => saver.change('standing', s, true)} />
       </div>
 
-      <Section n={1} id="eval-1" title={EVALUATION_SECTIONS.general}>
+      <Section n={1} id="eval-1" part={part(1)} title={EVALUATION_SECTIONS.general}>
         <table className="eval-table">
           <caption>{EVALUATION_TITLE}</caption>
           <tbody>
@@ -357,7 +455,7 @@ export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; s
         {(!file.general.companyCommander || !file.general.teamCommander) && <p className="tiny muted" style={{ margin: 0 }}>שדה ריק מציג את השם מהמערכת (מפקד הקורס ומפקד הצוות).</p>}
       </Section>
 
-      <Section n={2} id="eval-2" title={EVALUATION_SECTIONS.details} hint="שם ומספר אישי מכרטיס הצוער - שינוי כאן מעדכן גם את הכרטיס.">
+      <Section n={2} id="eval-2" part={part(2)} title={EVALUATION_SECTIONS.details} hint="שם ומספר אישי מכרטיס הצוער - שינוי כאן מעדכן גם את הכרטיס.">
         <table className="eval-table">
           <tbody>
             <tr>
@@ -403,31 +501,31 @@ export function LiveFile({ file, setFile, onHistory }: { file: EvaluationFile; s
         </table>
       </Section>
 
-      <Section n={3} id="eval-3" title={EVALUATION_SECTIONS.path} hint="לפי סדר כרונולוגי: תפקידים, יחידות והכשרות קודמות.">
+      <Section n={3} id="eval-3" part={part(3)} title={EVALUATION_SECTIONS.path} hint="לפי סדר כרונולוגי: תפקידים, יחידות והכשרות קודמות.">
         <Input field="militaryPath" saver={saver} file={file} long minRows={4} placeholder="לדוגמה: 2023 - טירונות ... 2024-2025 - תפקיד ביחידה ... קורס ..." />
       </Section>
 
-      <Section n={4} id="eval-4" title={EVALUATION_SECTIONS.exams} hint={`כל נתון נשמר בנפרד. שדה ריק הוא "${NOT_ENTERED}" - שונה מציון 0.`}>
+      <Section n={4} id="eval-4" part={part(4)} title={EVALUATION_SECTIONS.exams} hint={`כל נתון נשמר בנפרד. שדה ריק הוא "${NOT_ENTERED}" - שונה מציון 0.`}>
         <ExamsSection file={file} setFile={setFile} saver={saver} />
       </Section>
 
-      <Section n={5} id="eval-5" title={EVALUATION_SECTIONS.dynamics} hint="ציון 1-5 ומיקום ביחס לצוות 1-12. הערכה חדשה מתווספת לקודמות.">
+      <Section n={5} id="eval-5" part={part(5)} title={EVALUATION_SECTIONS.dynamics} hint="ציון 1-5 ומיקום ביחס לצוות 1-12. הערכה חדשה מתווספת לקודמות.">
         <DynamicsSection file={file} setFile={setFile} />
       </Section>
 
-      <Section n={6} id="eval-6" title={EVALUATION_SECTIONS.reason} hint="ימולא כשרלוונטי: הפערים או האירועים שהובילו לכך, והסוגיה שהוועדה צריכה לבחון.">
+      <Section n={6} id="eval-6" part={part(6)} title={EVALUATION_SECTIONS.reason} hint="ימולא כשרלוונטי: הפערים או האירועים שהובילו לכך, והסוגיה שהוועדה צריכה לבחון.">
         <Input field="committeeReason" saver={saver} file={file} long minRows={4} placeholder="לא חובה" />
       </Section>
 
-      <Section n={7} id="eval-7" title={EVALUATION_SECTIONS.notes} hint="תיעוד מצטבר לאורך הקורס: תפקוד, חוזקות, פערים, אירועים, משוב שניתן לצוער והשינוי שנצפה בעקבותיו.">
+      <Section n={7} id="eval-7" part={part(7)} title={EVALUATION_SECTIONS.notes} hint="תיעוד מצטבר לאורך הקורס: תפקוד, חוזקות, פערים, אירועים, משוב שניתן לצוער והשינוי שנצפה בעקבותיו.">
         <NotesSection file={file} setFile={setFile} onHistory={onHistory} authorName={user.displayName} />
       </Section>
 
-      <Section n={8} id="eval-8" className="eval-critical" title={EVALUATION_SECTIONS.points} hint="האירועים והממצאים המשמעותיים להערכת הצוער. כשנשקלת הדחה - הבסיס לכך.">
+      <Section n={8} id="eval-8" part={part(8)} className="eval-critical" title={EVALUATION_SECTIONS.points} hint="האירועים והממצאים המשמעותיים להערכת הצוער. כשנשקלת הדחה - הבסיס לכך.">
         <PointsSection file={file} setFile={setFile} onHistory={onHistory} />
       </Section>
 
-      <Section n={9} id="eval-9" title={EVALUATION_SECTIONS.summary} hint="ההערכה הכוללת, הממצאים שעליהם היא נשענת וההמלצה להמשך דרכו. בהמלצה להדחה - הנימוק המלא.">
+      <Section n={9} id="eval-9" part={part(9)} title={EVALUATION_SECTIONS.summary} hint="ההערכה הכוללת, הממצאים שעליהם היא נשענת וההמלצה להמשך דרכו. בהמלצה להדחה - הנימוק המלא.">
         {file.canEditSummary ? (
           <Input field="summary" saver={saver} file={file} long minRows={6} placeholder={EVALUATION_SECTIONS.summary} />
         ) : (
@@ -1166,7 +1264,7 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
         <span className="label-caps grow">{EVALUATION_SECTIONS.standing}</span>
         <span className={`badge t-${STANDING_TONES[file.standing]}`}>{STANDING_LABELS[file.standing]}</span>
       </div>
-      <Section n={1} title={EVALUATION_SECTIONS.general}>
+      <Section n={1} id="eval-1" title={EVALUATION_SECTIONS.general}>
         <table className="eval-table">
           <caption>{EVALUATION_TITLE}</caption>
           <tbody>
@@ -1181,7 +1279,7 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
           </tbody>
         </table>
       </Section>
-      <Section n={2} title={EVALUATION_SECTIONS.details}>
+      <Section n={2} id="eval-2" title={EVALUATION_SECTIONS.details}>
         <table className="eval-table">
           <tbody>
             <tr>
@@ -1211,10 +1309,10 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
           </tbody>
         </table>
       </Section>
-      <Section n={3} title={EVALUATION_SECTIONS.path}>
+      <Section n={3} id="eval-3" title={EVALUATION_SECTIONS.path}>
         <div className="eval-readonly">{valueOr(file.militaryPath)}</div>
       </Section>
-      <Section n={4} title={EVALUATION_SECTIONS.exams}>
+      <Section n={4} id="eval-4" title={EVALUATION_SECTIONS.exams}>
         <table className="eval-table">
           <tbody>
             {(file.tests ?? shownTests([], e)).flatMap((t) => {
@@ -1254,7 +1352,7 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
           </tbody>
         </table>
       </Section>
-      <Section n={5} title={EVALUATION_SECTIONS.dynamics}>
+      <Section n={5} id="eval-5" title={EVALUATION_SECTIONS.dynamics}>
         {file.dynamics.length ? (
           <table className="eval-table eval-list">
             <thead>
@@ -1278,10 +1376,10 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
           <p className="small muted">{NOT_ENTERED}</p>
         )}
       </Section>
-      <Section n={6} title={EVALUATION_SECTIONS.reason}>
+      <Section n={6} id="eval-6" title={EVALUATION_SECTIONS.reason}>
         <div className="eval-readonly">{file.committeeReason || <span className="muted">לא רלוונטי / טרם נכתב</span>}</div>
       </Section>
-      <Section n={7} title={EVALUATION_SECTIONS.notes}>
+      <Section n={7} id="eval-7" title={EVALUATION_SECTIONS.notes}>
         {file.notes.length ? (
           <ol className="eval-timeline">
             {file.notes.map((n) => (
@@ -1299,7 +1397,7 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
           <p className="small muted">אין התייחסויות.</p>
         )}
       </Section>
-      <Section n={8} className="eval-critical" title={EVALUATION_SECTIONS.points}>
+      <Section n={8} id="eval-8" className="eval-critical" title={EVALUATION_SECTIONS.points}>
         {file.points.length ? (
           <ol className="eval-points">
             {file.points.map((p) => (
@@ -1312,7 +1410,7 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
           <p className="small muted">אין נקודות.</p>
         )}
       </Section>
-      <Section n={9} title={EVALUATION_SECTIONS.summary}>
+      <Section n={9} id="eval-9" title={EVALUATION_SECTIONS.summary}>
         <div className="eval-readonly">{file.summary.text || <span className="muted">טרם נכתב.</span>}</div>
         {file.summary.byName && file.summary.at && (
           <div className="tiny muted">

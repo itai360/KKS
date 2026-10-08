@@ -2,10 +2,11 @@
 // presents to the commander above them. It starts as a draft written from the course's data;
 // any part can be rewritten, the approval is recorded, and the document prints as is.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { shortDate, weekdayName } from '@shared/dates';
 import type { PlanDocument, PlanEvent, PlanEventKind, PlanSectionKey, PlansOverview, PlanStatus } from '@shared/types';
+import { DocPager, ShareButton, useDocNav, type DocLink } from '../components/DocNav';
 import { Icon } from '../components/Icon';
 import { SectionRail, type RailItem } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
@@ -324,7 +325,7 @@ function StatusSteps({ status }: { status: PlanStatus }) {
           <span className="plan-step-dot" aria-hidden="true">
             {i < at || (i === at && st === 'approved') ? <Icon name="check" size={12} /> : i + 1}
           </span>
-          {STATUS[st].label}
+          <span className="plan-step-label">{STATUS[st].label}</span>
         </li>
       ))}
     </ol>
@@ -349,7 +350,6 @@ function Prep({ e }: { e: PlanEvent }) {
 
 export function PlanPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
   const { settings, weeks, viewing } = useSession();
   const { data: doc, error, status, loading, setData } = useApi<PlanDocument>(`/api/plans/${id}`, TOPICS);
@@ -364,24 +364,31 @@ export function PlanPage() {
     return () => clearTimeout(t);
   }, [justApproved]);
   usePageTitle(doc ? `אישור תוכנית - ${doc.week.name}` : 'אישור תוכנית');
+  // the week before and after: by name, the arrows, a swipe on a phone
+  const page = useRef<HTMLDivElement>(null);
+  const at = weeks.findIndex((x) => x.id === Number(id));
+  const link = (i: number): DocLink | null => {
+    const x = weeks[i];
+    return x ? { to: `/plans/${x.id}`, label: `שבוע ${x.number} · ${x.name}`, api: `/api/plans/${x.id}` } : null;
+  };
+  const prev = at > 0 ? link(at - 1) : null;
+  const next = at >= 0 ? link(at + 1) : null;
+  useDocNav({ prev, next, swipe: page });
 
   if (loading && !doc)
     return (
-      <div className="page">
+      <div className="page" ref={page}>
         <Loading rows={7} />
       </div>
     );
   if (!doc)
     return (
-      <div className="page">
+      <div className="page" ref={page}>
         <PageError error={error} status={status} what="השבוע" back="/plans" backLabel="לאישור תוכניות" />
       </div>
     );
 
   const w = doc.week;
-  const at = weeks.findIndex((x) => x.id === w.id);
-  const prev = at > 0 ? weeks[at - 1] : null;
-  const next = at >= 0 && at < weeks.length - 1 ? weeks[at + 1] : null;
   const keyEvents = doc.horizon[0]?.events ?? [];
   const canEdit = !viewing;
 
@@ -448,16 +455,9 @@ export function PlanPage() {
   ].map(([id, label], i) => ({ id, label, n: i + 1 }));
 
   return (
-    <div className="page doc-page">
+    <div className="page doc-page" ref={page}>
       <div className="doc-toolbar no-print">
-        <div className="row gap-6">
-          <button className="btn btn-sm" disabled={!prev} onClick={() => prev && navigate(`/plans/${prev.id}`)} aria-label={prev ? `לשבוע הקודם: ${prev.name}` : 'אין שבוע קודם'}>
-            <Icon name="chevronRight" size={16} />
-          </button>
-          <button className="btn btn-sm" disabled={!next} onClick={() => next && navigate(`/plans/${next.id}`)} aria-label={next ? `לשבוע הבא: ${next.name}` : 'אין שבוע הבא'}>
-            <Icon name="chevronLeft" size={16} />
-          </button>
-        </div>
+        <DocPager prev={prev} next={next} noun="מסמכי אישור התוכנית" position={at >= 0 ? `${at + 1} מתוך ${weeks.length}` : undefined} />
         <StatusSteps status={doc.status} />
         {doc.changes.length > 0 && <span className="badge t-yellow">השתנה מאז האישור</span>}
         <span className="grow" />
@@ -481,6 +481,7 @@ export function PlanPage() {
             <Icon name="shield" /> {doc.status === 'approved' ? 'עדכון האישור' : 'רישום אישור'}
           </button>
         )}
+        <ShareButton title={`אישור תוכנית - ${w.name}`} />
         <button className="btn btn-primary" onClick={() => window.print()}>
           <Icon name="print" /> הדפסה / PDF
         </button>
