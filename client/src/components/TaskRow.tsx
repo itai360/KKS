@@ -151,7 +151,22 @@ export function ProgressBadge({ task }: { task: Task }) {
   );
 }
 
-export function TaskRow({ task, showOwner = true, extra, readOnly, folded }: { task: Task; showOwner?: boolean; extra?: ReactNode; readOnly?: boolean; folded?: boolean }) {
+export function TaskRow({
+  task,
+  showOwner = true,
+  extra,
+  readOnly,
+  folded,
+  arrived,
+}: {
+  task: Task;
+  showOwner?: boolean;
+  extra?: ReactNode;
+  readOnly?: boolean;
+  folded?: boolean;
+  /** just added while the list was open: it comes in */
+  arrived?: boolean;
+}) {
   const navigate = useNavigate();
   const bulk = useBulk();
   // a row for the whole group is no one's copy to tick
@@ -169,7 +184,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly, folded }: { t
   return (
     <SwipeRow itemId={task.id} label={task.title} done={canSwipeDone ? { label: task.requiresApproval ? 'לאישור' : 'בוצע', run: () => void tick.complete() } : null}>
     <div
-      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}`}
+      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${arrived ? ' is-arrived' : ''}`}
       {...openable(bulkClick(bulk, task.id, unlessHeld(menu, () => navigate(`/tasks/${task.id}`))))}
       {...menu.bind}
       onPointerEnter={() => prefetchTask(task.id)}

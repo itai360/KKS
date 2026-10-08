@@ -1,6 +1,6 @@
 // Sections 68-69: open tasks during a staff meeting, then save a summary to the history.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { parseTaskText } from '@shared/parser';
 import type { Meeting } from '@shared/types';
@@ -8,10 +8,21 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
-import { fmtAgo, fmtDateTime, fmtDeadline, getTz } from '../lib/format';
+import { fmtDateTime, fmtDeadline, getTz } from '../lib/format';
+import { useFresh } from '../lib/fresh';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
-import { useApi } from '../lib/useApi';
+import { useApi, useTick } from '../lib/useApi';
+
+const MISSING: Record<string, string> = { title: 'שם משימה', owner: 'אחראי', deadline: 'דד-ליין' };
+
+/** how long the meeting has been going: "12 דק'", "1:05 שעות" */
+function elapsed(since: string): string {
+  const min = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 60_000));
+  if (min < 60) return min < 1 ? 'עכשיו' : `${min} דק'`;
+  return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')} שעות`;
+}
 
 export function MeetingPage() {
   const active = useApi<Meeting | null>('/api/meetings/active', ['meetings', 'tasks']);
@@ -81,15 +92,26 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
   const [followUps, setFollowUps] = useState(meeting.followUps);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
+  useTick(30_000);
+  // what was written is kept as it is typed - and says so
+  const [saved, setSaved] = useState<'saving' | 'saved' | 'failed' | null>(null);
+  const typed = useRef(false);
   useEffect(() => {
+    if (!typed.current) return;
+    setSaved('saving');
     const t = setTimeout(() => {
-      if (decisions !== meeting.decisions || followUps !== meeting.followUps) {
-        void api.patch(`/api/meetings/${meeting.id}`, { decisions, followUps });
-      }
+      api
+        .patch(`/api/meetings/${meeting.id}`, { decisions, followUps })
+        .then(() => setSaved('saved'))
+        .catch(() => setSaved('failed'));
     }, 700);
     return () => clearTimeout(t);
-  }, [decisions, followUps, meeting.id, meeting.decisions, meeting.followUps]);
+  }, [decisions, followUps, meeting.id]);
+  const write = (set: (v: string) => void) => (v: string) => {
+    typed.current = true;
+    set(v);
+  };
+  const fresh = useFresh(meeting.summary?.newTasks.map((t) => t.id));
 
   const parsed = useMemo(
     () =>
@@ -109,7 +131,7 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
     if (!parsed) return;
     setError(null);
     if (parsed.missing.length) {
-      setError(`חסר: ${parsed.missing.map((m) => ({ title: 'שם משימה', owner: 'אחראי', deadline: 'דד-ליין' })[m]).join(', ')}. לדוגמה: "מפק"צ 4 - לבדוק הקדמת מטווח עד מחר 10:00"`);
+      setError(`חסר: ${parsed.missing.map((m) => MISSING[m]).join(', ')}. לדוגמה: "מפק"צ 4 - לבדוק הקדמת מטווח עד מחר 10:00"`);
       return;
     }
     setBusy(true);
@@ -125,6 +147,7 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
         meetingId: meeting.id,
       });
       setLine('');
+      haptic('success');
       emitLocalChange('tasks', 'meetings');
     } catch (e) {
       setError((e as Error).message);
@@ -153,8 +176,13 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
       <div className="col gap-16">
         <div className="card card-pad">
           <div className="row mb-12">
-            <span className="badge t-orange">ישיבה פתוחה</span>
-            <span className="small muted grow">נפתחה {fmtAgo(meeting.startedAt)}</span>
+            <span className="badge t-orange meeting-live">
+              <span className="meeting-live-dot" aria-hidden="true" />
+              ישיבה פתוחה
+            </span>
+            <span className="small muted grow" title={fmtDateTime(meeting.startedAt)}>
+              {elapsed(meeting.startedAt)}
+            </span>
             <button className="btn btn-primary" onClick={() => void end()} disabled={busy}>
               <Icon name="check" /> סיים ושמור סיכום
             </button>
@@ -181,6 +209,11 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
                 </span>
               ))}
               {parsed.deadline && <span className="badge t-green">{fmtDeadline(parsed.deadline)}</span>}
+              {parsed.missing.map((m) => (
+                <span key={m} className="badge t-red">
+                  חסר {MISSING[m]}
+                </span>
+              ))}
             </div>
           )}
           <div className="mt-12">
@@ -195,7 +228,7 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
           <div className="card-body col gap-6">
             {!s?.newTasks.length && <p className="small muted">משימות שתוסיפו יופיעו כאן.</p>}
             {s?.newTasks.map((t) => (
-              <Link key={t.id} to={`/tasks/${t.id}`} className="row small">
+              <Link key={t.id} to={`/tasks/${t.id}`} className={`row small${fresh(t.id) ? ' is-arrived' : ''}`}>
                 <Icon name="check" size={14} className="text-green" />
                 <span className="grow strong">{t.title}</span>
                 <span className="muted">{t.ownerName}</span>
@@ -208,11 +241,22 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
       <div className="col gap-16">
         <div className="card card-pad col gap-16">
           <Field label="החלטות" hint="שורה לכל החלטה (שינוי לו״ז, שינוי אחריות, הנחיות)">
-            <textarea className="textarea" value={decisions} onChange={(e) => setDecisions(e.target.value)} style={{ minHeight: 120 }} />
+            <textarea className="textarea" value={decisions} onChange={(e) => write(setDecisions)(e.target.value)} style={{ minHeight: 120 }} />
           </Field>
           <Field label="נקודות למעקב">
-            <textarea className="textarea" value={followUps} onChange={(e) => setFollowUps(e.target.value)} />
+            <textarea className="textarea" value={followUps} onChange={(e) => write(setFollowUps)(e.target.value)} />
           </Field>
+          {saved && (
+            <span className={`tiny meeting-saved${saved === 'failed' ? ' text-red' : ' muted'}`} role="status">
+              {saved === 'saving' ? 'שומר...' : saved === 'saved' ? (
+                <>
+                  <Icon name="check" size={12} /> נשמר
+                </>
+              ) : (
+                'לא נשמר - יישמר עם השינוי הבא'
+              )}
+            </span>
+          )}
         </div>
         {s && s.closedTasks.length > 0 && (
           <div className="card">

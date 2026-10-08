@@ -12,6 +12,8 @@ import { useToast } from '../components/Toasts';
 import { ErrorBox, Field, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDeadline, getTz, isoAt } from '../lib/format';
+import { useFresh } from '../lib/fresh';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -73,6 +75,7 @@ export function CommandPage() {
         domain: parsed.domain ?? '',
         weekId: parsed.weekId ?? undefined,
       });
+      haptic('success');
       toast({ title: r.ids.length > 1 ? `נפתחו ${r.ids.length} משימות` : 'הפקודה נשלחה', body: `${parsed.title} · ${fmtDeadline(deadline)}`, tone: 'green' });
       emitLocalChange('tasks');
       reset();
@@ -116,6 +119,12 @@ export function CommandPage() {
 
         {parsed && (
           <div className="card card-pad col gap-16 fade-in">
+            {/* what is understood so far: each part turns green as it is found; the send waits for all three */}
+            <div className="order-parts" aria-live="polite">
+              <OrderPart ok={!!parsed.title} label="משימה" />
+              <OrderPart ok={allStaff || ownerIds.length > 0} label="למי" />
+              <OrderPart ok={!!dDate} label="עד מתי" />
+            </div>
             <div>
               <div className="label-caps">משימה</div>
               <div className="strong" style={{ fontSize: 20 }}>
@@ -164,21 +173,35 @@ export function CommandPage() {
       <div className="section-title">
         <h2>פקודות אחרונות</h2>
       </div>
-      <RecentOrders tasks={recent.data ?? []} />
+      <RecentOrders tasks={recent.data} />
     </div>
   );
 }
 
+function OrderPart({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={`order-part${ok ? ' is-ok' : ''}`}>
+      <span className="order-part-mark" aria-hidden="true">
+        {ok && <Icon name="check" size={12} />}
+      </span>
+      {label}
+      <span className="sr-only">{ok ? ' - זוהה' : ' - חסר'}</span>
+    </span>
+  );
+}
+
 /** Latest orders; the copies of an order given to a group collapse into one row, under the group's name, with its progress. */
-function RecentOrders({ tasks }: { tasks: Task[] }) {
+function RecentOrders({ tasks }: { tasks: Task[] | undefined }) {
   const { user } = useSession();
-  const sorted = [...tasks].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const rows = foldTasks(sorted, user.id);
+  const sorted = [...(tasks ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const rows = foldTasks(sorted, user.id).slice(0, 15);
+  // the order just sent comes in at the top (once the list has loaded: what was there before is not new)
+  const fresh = useFresh(tasks && rows.map((r) => r.task.id));
   if (!rows.length) return <p className="small muted">משימות שתפתח יופיעו כאן עם הסטטוס שלהן.</p>;
   return (
     <div className="list">
-      {rows.slice(0, 15).map((r) => (
-        <TaskRow key={r.task.id} task={r.task} folded={r.folded} />
+      {rows.map((r) => (
+        <TaskRow key={r.task.id} task={r.task} folded={r.folded} arrived={fresh(r.task.id)} />
       ))}
     </div>
   );

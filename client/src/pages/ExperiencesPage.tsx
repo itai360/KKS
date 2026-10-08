@@ -1,8 +1,8 @@
 // Section 31 - experiences: role, goals, mentor, tasks, feedback and evaluation.
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { shortDate } from '@shared/dates';
+import { diffDays, shortDate } from '@shared/dates';
 import { BROAD_EXPERIENCES, EXPERIENCE_KIND_LABELS, EXPERIENCE_SPANS, SPAN_LABELS, SPAN_SHORT, spanDates, type ExperienceKind, type ExperienceSpan } from '@shared/experiences';
 import { byHe } from '@shared/sort';
 import type { Cadet, Experience } from '@shared/types';
@@ -12,6 +12,7 @@ import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -93,13 +94,44 @@ export function ExperiencesPage() {
   );
 }
 
+/** where an experience is in its days: starting in N days, day N of M (with a bar), or over */
+function Period({ x }: { x: Experience }) {
+  const today = todayKey();
+  const total = diffDays(x.endDate, x.startDate) + 1;
+  if (x.phase === 'planned') {
+    const n = diffDays(x.startDate, today);
+    return <div className="tiny muted exp-period">{n <= 0 ? 'מתחילה היום' : n === 1 ? 'מתחילה מחר' : `מתחילה בעוד ${n} ימים`}</div>;
+  }
+  if (x.phase !== 'active' || total < 2) return null;
+  const day = Math.min(total, Math.max(1, diffDays(today, x.startDate) + 1));
+  return (
+    <div className="tiny muted exp-period">
+      יום {day} מתוך {total}
+      <span className="mini-bar exp-bar" aria-hidden="true">
+        <i style={{ width: `${(day / total) * 100}%` }} />
+      </span>
+      {day === total && <span>· מסתיימת היום</span>}
+    </div>
+  );
+}
+
 export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolean }) {
   const [feedback, setFeedback] = useState(false);
   const [editing, setEditing] = useState(false);
+  // the feedback just given: the card turns done with a glow (and a buzz) - the moment, not every visit
+  const wasStatus = useRef(x.status);
+  const [justDone, setJustDone] = useState(false);
+  useEffect(() => {
+    if (wasStatus.current !== 'done' && x.status === 'done') {
+      haptic('success');
+      setJustDone(true);
+    }
+    wasStatus.current = x.status;
+  }, [x.status]);
   const p = PHASE[x.phase];
   return (
     <SwipeRow itemId={x.id} label={`${x.role} - ${x.cadetName}`}>
-    <div className={`card card-pad t-${p.tone}`} style={{ borderRight: '4px solid var(--tone)', padding: compact ? 12 : 16 }}>
+    <div className={`card card-pad t-${p.tone}${justDone ? ' just-cleared' : ''}`} style={{ borderRight: '4px solid var(--tone)', padding: compact ? 12 : 16 }}>
       <div className="row wrap gap-6">
         {x.canEdit && <BulkCheck id={x.id} />}
         <span className={`badge t-${p.tone}`}>{p.label}</span>
@@ -122,6 +154,7 @@ export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolea
         </Link>
       )}
       <div className="tiny muted">מפקד חונך: {x.mentorName ?? 'לא נקבע'}</div>
+      <Period x={x} />
       {x.goals && !compact && (
         <p className="small mt-8" style={{ whiteSpace: 'pre-wrap' }}>
           <b>מטרות:</b> {x.goals}
@@ -343,15 +376,31 @@ function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => void }) 
         <Field label="משוב כללי">
           <textarea className="textarea" value={feedback} onChange={(e) => setFeedback(e.target.value)} style={{ minHeight: 64 }} />
         </Field>
-        <Field label="הערכה" required>
-          <div className="chips">
+        <div className="field" role="group" aria-labelledby="exp-score-l">
+          <span id="exp-score-l">
+            הערכה<span className="req"> *</span>
+          </span>
+          <div className="score-scale">
             {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} type="button" className={`chip${score === n ? ' on' : ''}`} onClick={() => setScore(n)} style={{ minWidth: 44, justifyContent: 'center' }}>
+              <button
+                key={n}
+                type="button"
+                className={`score-step${score !== null && n <= score ? ' is-filled' : ''}${score === n ? ' on' : ''}`}
+                aria-pressed={score === n}
+                onClick={() => {
+                  setScore(n);
+                  haptic('tick');
+                }}
+              >
                 {n}
               </button>
             ))}
           </div>
-        </Field>
+          <span className="hint score-ends" aria-hidden="true">
+            <span>נמוך</span>
+            <span>גבוה</span>
+          </span>
+        </div>
         <ErrorBox error={error} />
       </div>
     </Modal>

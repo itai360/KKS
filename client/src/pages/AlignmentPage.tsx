@@ -8,8 +8,10 @@ import { useSearchParams } from 'react-router';
 import { longDate } from '@shared/dates';
 import type { AlignmentFeed, AlignmentImport, AlignmentMessage } from '@shared/types';
 import { ask } from '../components/Confirm';
+import { Highlight } from '../components/Highlight';
 import { useNewTask } from '../components/NewTask';
 import { Icon } from '../components/Icon';
+import { useRowMenu, type RowMenuItem } from '../components/RowMenu';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, Modal, PageHead, initials } from '../components/ui';
 import { api } from '../lib/api';
@@ -20,15 +22,15 @@ import { useApi } from '../lib/useApi';
 
 const URL_RE = /(https?:\/\/[^\s<>"']+)/g;
 
-/** the text with its links clickable */
-function linkify(text: string): ReactNode[] {
+/** the text with its links clickable - and what was searched for marked */
+function linkify(text: string, q = ''): ReactNode[] {
   return text.split(URL_RE).map((part, i) =>
     i % 2 ? (
       <a key={i} href={part} target="_blank" rel="noopener noreferrer" dir="ltr">
         {part}
       </a>
     ) : (
-      part
+      <Highlight key={i} text={part} q={q} />
     ),
   );
 }
@@ -177,7 +179,7 @@ export function AlignmentPage() {
                 <h3 className="grow">מוצמדות</h3>
               </div>
               {data.pinned.map((m) => (
-                <Message key={m.id} m={m} withDay canManage={canManage} onTask={viewing ? undefined : () => toTask(m)} onPin={() => void pin(m)} onRemove={() => void remove(m)} />
+                <Message key={m.id} m={m} withDay canManage={canManage} q={query} onTask={viewing ? undefined : () => toTask(m)} onPin={() => void pin(m)} onRemove={() => void remove(m)} />
               ))}
             </section>
           )}
@@ -189,7 +191,7 @@ export function AlignmentPage() {
                 <span className="tiny mono muted">{list.length}</span>
               </div>
               {list.map((m) => (
-                <Message key={m.id} m={m} canManage={canManage} onTask={viewing ? undefined : () => toTask(m)} onPin={() => void pin(m)} onRemove={() => void remove(m)} />
+                <Message key={m.id} m={m} canManage={canManage} q={query} onTask={viewing ? undefined : () => toTask(m)} onPin={() => void pin(m)} onRemove={() => void remove(m)} />
               ))}
             </section>
           ))}
@@ -205,22 +207,41 @@ export function AlignmentPage() {
   );
 }
 
-function Message({ m, withDay, canManage, onTask, onPin, onRemove }: { m: AlignmentMessage; withDay?: boolean; canManage: boolean; onTask?: () => void; onPin: () => void; onRemove: () => void }) {
+function Message({ m, withDay, canManage, q, onTask, onPin, onRemove }: { m: AlignmentMessage; withDay?: boolean; canManage: boolean; q: string; onTask?: () => void; onPin: () => void; onRemove: () => void }) {
   const name = m.userName ?? m.sender;
+  const toast = useToast();
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(m.body);
+      toast({ title: 'ההודעה הועתקה', tone: 'green' });
+    } catch {
+      toast({ title: 'לא ניתן להעתיק כאן - אפשר לסמן את הטקסט ולהעתיק', tone: 'gray' });
+    }
+  };
+  // held (a phone) or right-clicked (a computer): what is done with a message, without hunting for its small buttons
+  const items: RowMenuItem[] = [
+    ...(onTask && m.body ? [{ key: 'task', label: 'משימה מההודעה', icon: 'tasks', primary: true, run: onTask }] : []),
+    ...(m.body ? [{ key: 'copy', label: 'העתקת ההודעה', icon: 'copy', run: () => void copy() }] : []),
+    ...(canManage ? [{ key: 'pin', label: m.pinned ? 'ביטול הצמדה' : 'הצמדה למעלה', icon: 'pin', run: onPin }] : []),
+    ...(canManage ? [{ key: 'remove', label: 'הסרה מהדף', icon: 'trash', run: onRemove }] : []),
+  ];
+  const menu = useRowMenu({ title: `${name}, ${fmtTime(m.sentAt)}`, items, disabled: !items.length, links: false });
   return (
-    <div className="al-msg">
+    <div className={`al-msg holdable${menu.lifted ? ' is-lifted' : ''}`} {...menu.bind}>
       <span className="avatar" aria-hidden="true">
         {initials(name)}
       </span>
       <div className="grow" style={{ minWidth: 0 }}>
         <div className="al-meta">
-          <span className="strong small">{name}</span>
+          <span className="strong small">
+            <Highlight text={name} q={q} />
+          </span>
           <span className="tiny muted mono">
             {withDay ? `${longDate(dateKeyOf(m.sentAt))} ` : ''}
             {fmtTime(m.sentAt)}
           </span>
         </div>
-        {m.body && <div className="al-body">{linkify(m.body)}</div>}
+        {m.body && <div className="al-body">{linkify(m.body, q)}</div>}
         {m.media && (
           <div className="tiny muted al-media">
             <Icon name="clip" size={12} /> קובץ או תמונה (לא נכללו בייצוא מהוואטסאפ)
@@ -246,6 +267,7 @@ function Message({ m, withDay, canManage, onTask, onPin, onRemove }: { m: Alignm
           )}
         </div>
       )}
+      {menu.menu}
     </div>
   );
 }

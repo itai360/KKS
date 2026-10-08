@@ -6,16 +6,16 @@ import { ABSENCE_REASON_LABELS, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, ATTENDAN
 import type { AttentionItem, AttentionKind, DashboardData } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
 import { PendingAnnouncements } from '../components/Announcements';
+import { CheckMark } from '../components/CheckMark';
+import { Decided, useDecision } from '../components/Decision';
 import { DisciplineCard } from '../components/DisciplineCard';
 import { Icon } from '../components/Icon';
 import { WeeklyCard } from '../components/WeeklyCard';
 import { useNewTask } from '../components/NewTask';
-import { useToast } from '../components/Toasts';
 import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { api } from '../lib/api';
 import { endMinutes, inMinutes, leftMinutes, nowAndNext } from '../lib/agenda';
 import { fmtDeadline, fmtLongDate, fmtTime, greetName, greeting, todayKey } from '../lib/format';
-import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
 import { shortDate } from '@shared/dates';
@@ -165,33 +165,39 @@ const LANES: { key: string; label: string; title: string; tone: string; kinds: A
 ];
 const LANE_LIMIT = 4;
 
+/** an item's key by what it is (not where it stands), so a refreshed list keeps telling the same items apart */
+function attnKeys(items: AttentionItem[]): string[] {
+  const seen = new Map<string, number>();
+  return items.map((i) => {
+    const k = [i.kind, i.taskId, i.weekId, i.userId, i.requestId, i.title].join('|');
+    const n = seen.get(k) ?? 0;
+    seen.set(k, n + 1);
+    return n ? `${k}#${n}` : k;
+  });
+}
+
 function Attention({ items }: { items: AttentionItem[] }) {
-  const toast = useToast();
-  const [busy, setBusy] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('all');
+  // decided here: out of the counts once its row has folded away (the list catches up a moment later)
+  const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
+  const [cleared, setCleared] = useState(false);
 
+  const keys = attnKeys(items);
+  const keyed = items.map((i, idx) => ({ i, key: keys[idx] }));
+  const left = keyed.filter((x) => !gone.has(x.key));
   // a blocker the owner escalated to the commander belongs with the red items
   const laneOf = (i: AttentionItem) => (i.kind === 'blocked' && i.tone === 'red' ? 'red' : LANES.find((l) => l.kinds.includes(i.kind))?.key);
-  const lanes = LANES.map((l) => ({ ...l, items: items.filter((i) => laneOf(i) === l.key) }));
-  const visible = lanes.filter((l) => l.items.length && (filter === 'all' || l.key === filter));
-
-  const destination = (i: AttentionItem) => i.link || (i.taskId ? `/tasks/${i.taskId}` : i.weekId ? `/weeks/${i.weekId}` : i.userId ? `/team/${i.userId}` : '/tasks');
-
-  const act = async (e: React.MouseEvent, i: AttentionItem, approve: boolean) => {
-    e.stopPropagation();
-    setBusy(i.requestId ?? i.taskId ?? 0);
-    try {
-      if (i.kind === 'approval' && i.taskId) await api.post(`/api/tasks/${i.taskId}/transition`, { action: 'approve' });
-      else if (i.kind === 'request' && i.requestId) await api.post(`/api/requests/${i.requestId}/decide`, { approve });
-      toast({ title: approve ? 'אושר' : 'נדחה', body: i.title, tone: 'green' });
-      emitLocalChange('tasks', 'requests');
-    } catch (err) {
-      toast({ title: (err as Error).message, tone: 'red' });
-    } finally {
-      setBusy(null);
-    }
-  };
+  const lanes = LANES.map((l) => ({ ...l, items: keyed.filter((x) => laneOf(x.i) === l.key), left: left.filter((x) => laneOf(x.i) === l.key).length }));
+  const visible = lanes.filter((l) => l.left && (filter === 'all' || l.key === filter));
+  const decided = (key: string) =>
+    setTimeout(() => {
+      setGone((g) => {
+        const next = new Set(g).add(key);
+        if (keyed.every((x) => next.has(x.key))) setCleared(true);
+        return next;
+      });
+    }, 700);
 
   return (
     <section className="card dashboard-attention" aria-labelledby="attn-title">
@@ -203,17 +209,17 @@ function Attention({ items }: { items: AttentionItem[] }) {
           <h2 id="attn-title">לטיפול שלך</h2>
           <p className="small muted">מהדחוף ביותר ועד הדברים שכדאי לעקוב אחריהם</p>
         </div>
-        <span className="badge" aria-label={`${items.length} פריטים לטיפול`}>
-          {items.length}
+        <span className="badge" aria-label={`${left.length} פריטים לטיפול`} key={left.length}>
+          {left.length}
         </span>
       </div>
-      {items.length > 0 && (
+      {left.length > 0 && (
         <div className="attention-filters" role="group" aria-label="סינון פריטים לטיפול">
           <button className={`chip${filter === 'all' ? ' on' : ''}`} aria-pressed={filter === 'all'} aria-controls="attention-results" onClick={() => setFilter('all')}>
-            הכל <span>{items.length}</span>
+            הכל <span>{left.length}</span>
           </button>
           {lanes
-            .filter((l) => l.items.length || filter === l.key)
+            .filter((l) => l.left || filter === l.key)
             .map((l) => (
               <button
                 key={l.key}
@@ -224,14 +230,20 @@ function Attention({ items }: { items: AttentionItem[] }) {
               >
                 <span className={`dot t-${l.tone}`} />
                 {l.label}
-                <span>{l.items.length}</span>
+                <span>{l.left}</span>
               </button>
             ))}
         </div>
       )}
       <div id="attention-results">
-        {items.length === 0 ? (
-          <Empty icon="check" title="הכל מתקדם כמתוכנן" text="אין חריגות שמחייבות את התערבותך כרגע." />
+        {left.length === 0 ? (
+          <div className={cleared ? 'just-cleared attention-cleared' : undefined}>
+            <Empty
+              mark={cleared ? <CheckMark size={44} /> : undefined}
+              title="הכל מתקדם כמתוכנן"
+              text={cleared ? 'טיפלת בכל מה שחיכה לך. דברים חדשים יופיעו כאן כשיגיעו.' : 'אין חריגות שמחייבות את התערבותך כרגע.'}
+            />
+          </div>
         ) : visible.length === 0 ? (
           <Empty
             icon="check"
@@ -251,44 +263,11 @@ function Attention({ items }: { items: AttentionItem[] }) {
                 <div className="group-title attention-group-title">
                   <span className={`dot t-${l.tone}`} />
                   <span>{l.title}</span>
-                  <span className="n">{l.items.length}</span>
+                  <span className="n">{l.left}</span>
                   <span className="line" />
                 </div>
-                {list.map((i, idx) => (
-                  <div key={`${i.kind}-${i.taskId ?? i.weekId ?? i.userId}-${i.requestId ?? idx}`} className={`attn-item dashboard-attn-item t-${i.tone}`}>
-                    <Link className="attention-link" to={destination(i)}>
-                      <span className="attn-bar" />
-                      <div style={{ minWidth: 0 }}>
-                        <div className="attn-kind">
-                          {KIND_LABEL[i.kind]}
-                          {i.count && i.count > 1 ? ` · ${i.count} אנשי סגל` : ''}
-                        </div>
-                        <div className="attn-title">{i.title}</div>
-                        <div className="attn-sub">
-                          {[
-                            i.ownerName && (i.kind === 'readiness' ? `מפק"צ: ${i.ownerName}` : `אחראי: ${i.ownerName}`),
-                            i.deadline && `דד-ליין: ${fmtDeadline(i.deadline)}`,
-                            i.subtitle,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </div>
-                      </div>
-                      <Icon name="chevronLeft" className="faint" size={18} />
-                    </Link>
-                    {(i.kind === 'approval' || i.kind === 'request') && (
-                      <div className="row gap-6 attention-actions">
-                        <button className="btn btn-sm btn-primary" disabled={busy !== null} onClick={(e) => void act(e, i, true)} aria-label={`אישור: ${i.title}`}>
-                          אשר
-                        </button>
-                        {i.kind === 'request' && (
-                          <button className="btn btn-sm" disabled={busy !== null} onClick={(e) => void act(e, i, false)} aria-label={`דחייה: ${i.title}`}>
-                            דחה
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                {list.map(({ i, key }) => (
+                  <AttentionRow key={key} i={i} onDecided={() => decided(key)} />
                 ))}
                 {l.items.length > LANE_LIMIT && (
                   <button className="btn btn-ghost attention-more" aria-expanded={all} onClick={() => setExpanded({ ...expanded, [l.key]: !all })}>
@@ -301,6 +280,61 @@ function Attention({ items }: { items: AttentionItem[] }) {
         )}
       </div>
     </section>
+  );
+}
+
+const destination = (i: AttentionItem) => i.link || (i.taskId ? `/tasks/${i.taskId}` : i.weekId ? `/weeks/${i.weekId}` : i.userId ? `/team/${i.userId}` : '/tasks');
+
+/** one thing that needs the commander: approved or rejected right here, it says so and folds away */
+function AttentionRow({ i, onDecided }: { i: AttentionItem; onDecided: () => void }) {
+  const d = useDecision(onDecided);
+  const decides = i.kind === 'approval' || i.kind === 'request';
+  const approve = () =>
+    void d.decide(
+      'approved',
+      () => (i.kind === 'approval' && i.taskId ? api.post(`/api/tasks/${i.taskId}/transition`, { action: 'approve' }) : api.post(`/api/requests/${i.requestId}/decide`, { approve: true })),
+      i.kind === 'approval' ? 'המשימה אושרה ונסגרה' : 'הבקשה אושרה',
+    );
+  const reject = () => void d.decide('rejected', () => api.post(`/api/requests/${i.requestId}/decide`, { approve: false }), 'הבקשה נדחתה');
+  return (
+    <div className={`swipe-wrap attn-decide${d.fold ? ' is-removing' : ''}`}>
+      <div className="swipe-row">
+        <div className={`attn-item dashboard-attn-item t-${i.tone}`}>
+          <Link className="attention-link" to={destination(i)}>
+            <span className="attn-bar" />
+            <div style={{ minWidth: 0 }}>
+              <div className="attn-kind">
+                {KIND_LABEL[i.kind]}
+                {i.count && i.count > 1 ? ` · ${i.count} אנשי סגל` : ''}
+              </div>
+              <div className="attn-title">{i.title}</div>
+              <div className="attn-sub">
+                {[i.ownerName && (i.kind === 'readiness' ? `מפק"צ: ${i.ownerName}` : `אחראי: ${i.ownerName}`), i.deadline && `דד-ליין: ${fmtDeadline(i.deadline)}`, i.subtitle].filter(Boolean).join(' · ')}
+              </div>
+              {d.error && <div className="tiny text-red">{d.error}</div>}
+            </div>
+            <Icon name="chevronLeft" className="faint" size={18} />
+          </Link>
+          {decides &&
+            (d.verdict ? (
+              <div className="attention-actions">
+                <Decided verdict={d.verdict} />
+              </div>
+            ) : (
+              <div className="row gap-6 attention-actions">
+                <button className="btn btn-sm btn-primary" onClick={approve} aria-label={`אישור: ${i.title}`}>
+                  אשר
+                </button>
+                {i.kind === 'request' && (
+                  <button className="btn btn-sm" onClick={reject} aria-label={`דחייה: ${i.title}`}>
+                    דחה
+                  </button>
+                )}
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

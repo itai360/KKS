@@ -3884,14 +3884,38 @@ input::-webkit-date-and-time-value {
   flex-wrap: wrap;
 }
 
-.brief-nums div b {
+.brief-num {
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 0.15s, scale 0.25s var(--spring);
+}
+.brief-num:disabled {
+  cursor: default;
+}
+@media (hover: hover) {
+  .brief-num:not(:disabled):hover {
+    background: var(--hover);
+  }
+}
+.brief-num:not(:disabled):active {
+  scale: 0.95;
+  transition-duration: 0.08s;
+}
+.brief-num b {
   display: block;
   font-family: var(--display);
   font-size: 60px;
   line-height: 0.85;
 }
 
-.brief-nums div span {
+.brief-num span {
   font-size: 13px;
   color: var(--muted);
 }
@@ -11103,5 +11127,514 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 @media (prefers-reduced-motion: reduce) {
   .save-bar {
     animation: fade 0.2s ease-out;
+  }
+}
+
+/* ---------------- home: a decision in "לטיפול שלך" answers in place and folds away (pages/DashboardPage.tsx) ---------------- */
+.attn-decide > .swipe-row > .attn-item {
+  border-bottom: 1px solid var(--line);
+}
+.attn-decide:not(:has(~ .attn-decide)) > .swipe-row > .attn-item {
+  border-bottom: none;
+}
+.attention-actions .verdict-pill {
+  margin-block: 8px;
+}
+.attention-cleared {
+  margin: 8px;
+  border-radius: var(--radius);
+}
+
+/* ---------------- a new arrival in a list (an announcement, a meeting's task, an order just sent): it comes in ---------------- */
+.is-arrived {
+  animation: item-in 0.45s var(--spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-arrived {
+    animation: fade 0.2s ease-out;
+  }
+}
+
+/* ---------------- announcements: "קראתי" answers at once; who confirmed, filling in (pages/AnnouncementsPage.tsx) ---------------- */
+.announce.is-waiting {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 30%, transparent);
+}
+.announce-acked {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 8px;
+  border-radius: 999px;
+  background: var(--green-bg);
+  color: var(--green-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.announce-bar {
+  width: 72px;
+  margin-inline: 0 4px;
+}
+.announce-waiting .chip {
+  gap: 4px;
+  cursor: default;
+}
+.btn.is-sent {
+  border-color: transparent;
+  background: var(--green-bg);
+  color: var(--green-ink);
+  opacity: 1;
+}
+.announce-composer {
+  border-inline-start: 4px solid var(--blue);
+  transition: border-color 0.2s;
+}
+.announce-composer.is-urgent {
+  border-inline-start-color: var(--red);
+}
+.announce-hint {
+  align-self: center;
+}
+
+/* ---------------- recurring tasks: on which days, and when the next one opens (pages/RecurringPage.tsx) ---------------- */
+/* paused: its title steps back and its days dim - the text itself stays readable */
+.rule-row .strong {
+  transition: color 0.25s;
+}
+.rule-row.is-paused .strong {
+  color: var(--muted);
+}
+.rule-row > svg,
+.rule-days {
+  transition: opacity 0.25s;
+}
+.rule-row.is-paused > svg,
+.rule-row.is-paused .rule-days {
+  opacity: 0.55;
+}
+.rule-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 6px;
+}
+.rule-days {
+  display: inline-flex;
+  gap: 3px;
+}
+.rule-days i {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--card-2);
+  color: var(--faint, var(--muted));
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+.rule-days i.on {
+  background: var(--gray-bg);
+  color: var(--ink);
+}
+.rule-days i.next {
+  background: var(--ink);
+  color: var(--paper);
+}
+.rule-row.is-paused .rule-days i.on {
+  background: var(--card-2);
+  color: var(--muted);
+}
+
+/* an on / off switch: the knob slides, the track fills */
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 9px 4px;
+  cursor: pointer;
+}
+.switch input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.switch-track {
+  position: relative;
+  width: 42px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--line-2, var(--line));
+  transition: background-color 0.25s ease;
+}
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+  transition: inset-inline-start 0.32s var(--spring), width 0.2s var(--spring);
+}
+.switch input:checked + .switch-track {
+  background: var(--green);
+}
+.switch input:checked + .switch-track::after {
+  inset-inline-start: 19px;
+}
+/* pressed: the knob stretches toward where it goes, as on iOS */
+.switch input:active + .switch-track::after {
+  width: 25px;
+}
+.switch input:checked:active + .switch-track::after {
+  inset-inline-start: 14px;
+}
+.switch input:focus-visible + .switch-track {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .switch-track::after {
+    transition: none;
+  }
+}
+
+/* ---------------- tracks: a week's bar brings its tasks into view (pages/TracksPage.tsx) ---------------- */
+.track-week-bar {
+  width: 100%;
+  margin: 0 -8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  box-sizing: content-box;
+  transition: background-color 0.15s;
+}
+@media (hover: hover) {
+  .track-week-bar:hover {
+    background: var(--hover);
+  }
+}
+.track-week-bar:active {
+  background: var(--hover);
+  scale: 0.99;
+}
+.track-group {
+  scroll-margin-top: calc(var(--top-h) + 16px);
+  border-radius: var(--radius);
+}
+.track-group.is-pointed {
+  animation: done-glow 1.6s ease-out;
+}
+
+/* ---------------- plan approval: how far the course's documents are; a document's steps (pages/PlansPage.tsx) ---------------- */
+.plan-progress-all {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+  margin-bottom: 10px;
+}
+.plan-progress-all span {
+  flex-basis: 0;
+  border-radius: 4px;
+  transition: flex-grow 0.6s var(--spring);
+}
+.plan-progress-all .is-approved {
+  background: var(--green);
+}
+.plan-progress-all .is-ready {
+  background: var(--blue);
+}
+.plan-progress-all .is-draft {
+  background: var(--line-2);
+}
+.plan-steps {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.plan-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.plan-steps li + li::before {
+  content: '';
+  width: 14px;
+  height: 1.5px;
+  margin-inline-end: 2px;
+  background: var(--line-2);
+}
+.plan-step-dot {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--card-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.plan-steps .is-past {
+  color: var(--ink-2);
+}
+.plan-steps .is-past .plan-step-dot {
+  background: var(--green-bg);
+  color: var(--green-ink);
+}
+.plan-steps .is-now {
+  color: var(--ink);
+  font-weight: 700;
+}
+.plan-steps .is-now .plan-step-dot {
+  background: var(--ink);
+  color: var(--paper);
+  animation: done-pop 0.4s var(--spring);
+}
+@media (max-width: 600px) {
+  /* a phone: the steps' names, but the one on now */
+  .plan-steps li:not(.is-now) {
+    font-size: 0;
+    gap: 0;
+  }
+}
+.plan-doc > section {
+  scroll-margin-top: calc(var(--top-h) + 60px);
+}
+.plan-approval.just-approved {
+  animation: done-glow 2s ease-out;
+}
+.plan-approval.just-approved > div:first-child {
+  animation: stamp-in 0.5s var(--spring);
+}
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    scale: 1.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-steps .is-now .plan-step-dot,
+  .plan-approval.just-approved > div:first-child {
+    animation: none;
+  }
+}
+
+/* ---------------- experiences: the days so far; feedback as a scale (pages/ExperiencesPage.tsx) ---------------- */
+.exp-period {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.exp-bar {
+  width: 64px;
+}
+.exp-bar i {
+  background: var(--yellow);
+}
+.score-scale {
+  display: flex;
+  gap: 6px;
+}
+.score-step {
+  flex: 1;
+  min-width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink-2);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, scale 0.25s var(--spring);
+}
+.score-step.is-filled {
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+  background: var(--gray-bg);
+  color: var(--ink);
+}
+.score-step.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+.score-step:active {
+  scale: 0.92;
+  transition-duration: 0.08s;
+}
+.score-ends {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ---------------- morning briefing: a number leads to its part; the event on now (pages/BriefingPage.tsx) ---------------- */
+.brief-section {
+  scroll-margin-top: calc(var(--top-h) + 16px);
+}
+.brief-when {
+  margin-inline-start: 8px;
+  vertical-align: 2px;
+}
+
+/* ---------------- staff meeting: running for, kept as typed (pages/MeetingPage.tsx) ---------------- */
+.meeting-live {
+  gap: 6px;
+}
+.meeting-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: live-dot 2s ease-in-out infinite;
+}
+@keyframes live-dot {
+  50% {
+    opacity: 0.35;
+  }
+}
+.meeting-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .meeting-live-dot {
+    animation: none;
+  }
+}
+
+/* ---------------- search: what was searched lately; what matched, marked ---------------- */
+mark.hl {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--focus) 30%, transparent);
+  color: inherit;
+}
+.search-summary {
+  margin-bottom: 4px;
+}
+.search-results .group-title {
+  scroll-margin-top: calc(var(--top-h) + 16px);
+}
+.search-recent .chip {
+  gap: 6px;
+}
+
+/* ---------------- directory: a contact held or right-clicked ---------------- */
+.contact-row.is-lifted {
+  background: var(--card-2);
+}
+
+/* ---------------- orders: each part turns green as it is understood (pages/CommandPage.tsx) ---------------- */
+.order-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.order-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 6px;
+  border: 1px dashed var(--line-2);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  transition: background-color 0.25s, border-color 0.25s, color 0.25s;
+}
+.order-part-mark {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 50%;
+}
+.order-part.is-ok {
+  border-style: solid;
+  border-color: transparent;
+  background: var(--green-bg);
+  color: var(--green-ink);
+}
+.order-part.is-ok .order-part-mark {
+  border-color: transparent;
+  background: var(--green);
+  color: #fff;
+  animation: done-pop 0.35s var(--spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .order-part.is-ok .order-part-mark {
+    animation: none;
+  }
+}
+
+/* ---------------- reports: the days ahead grow in, and a day opens in the schedule; the day closed (pages/ReportsPage.tsx) ---------------- */
+.bars-grow .col-fill {
+  transform-origin: bottom;
+  animation: bar-grow 0.55s var(--spring) both;
+}
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+.bars .b-link {
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 0.15s;
+}
+@media (hover: hover) {
+  .bars .b-link:hover {
+    background: var(--hover);
+  }
+  .bars .b-link:hover .col-fill {
+    background: var(--ink);
+  }
+}
+.bars .b-link:active .col-fill {
+  scale: 0.96 1;
+}
+.day-end-head {
+  transition: background-color 0.4s, border-color 0.4s;
+}
+.day-end-head.is-clear {
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+  background: var(--green-bg);
+}
+.day-end-clear {
+  align-items: center;
+  margin: 2px 0 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bars-grow .col-fill {
+    animation: none;
   }
 }

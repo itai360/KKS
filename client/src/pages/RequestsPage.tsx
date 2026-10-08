@@ -6,14 +6,12 @@ import { REQUEST_TYPE_LABELS } from '@shared/constants';
 import { diffDays } from '@shared/dates';
 import type { Task, TaskRequest } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
+import { Decided, useDecision } from '../components/Decision';
 import { Icon } from '../components/Icon';
 import { NoteDialog } from '../components/TaskActions';
-import { useToast } from '../components/Toasts';
 import { Empty, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtDeadline } from '../lib/format';
-import { haptic } from '../lib/haptics';
-import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
@@ -110,51 +108,6 @@ export function RequestsPage() {
         </div>
       )}
     </div>
-  );
-}
-
-type Verdict = 'approved' | 'rejected' | 'returned';
-const VERDICT_LABELS: Record<Verdict, string> = { approved: 'אושר', rejected: 'נדחה', returned: 'הוחזר להשלמה' };
-
-/**
- * One decision, at once: the row says what was decided, folds away, and the next one is right there -
- * the rest of the list stays to hand meanwhile (one row's answer does not hold up the others). If the
- * server says no, the row comes back with the reason.
- */
-function useDecision(onDecided: () => void) {
-  const toast = useToast();
-  const [verdict, setVerdict] = useState<Verdict | null>(null);
-  const [fold, setFold] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const decide = async (as: Verdict, fn: () => Promise<unknown>, title: string) => {
-    setVerdict(as);
-    setError(null);
-    if (as === 'approved') haptic('success');
-    const folding = setTimeout(() => setFold(true), 650);
-    try {
-      await fn();
-      toast({ title, tone: 'green' });
-      onDecided();
-      // the lists catch up once the row has folded away
-      setTimeout(() => emitLocalChange('tasks', 'requests'), 1000);
-      return true;
-    } catch (e) {
-      clearTimeout(folding);
-      setVerdict(null);
-      setFold(false);
-      setError((e as Error).message);
-      return false;
-    }
-  };
-  return { verdict, fold, error, decide };
-}
-
-function Decided({ verdict }: { verdict: Verdict }) {
-  return (
-    <span className={`verdict-pill t-${verdict === 'approved' ? 'green' : 'gray'}`} role="status">
-      <Icon name={verdict === 'approved' ? 'check' : verdict === 'returned' ? 'repeat' : 'x'} size={15} />
-      {VERDICT_LABELS[verdict]}
-    </span>
   );
 }
 

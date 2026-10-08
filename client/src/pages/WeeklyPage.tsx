@@ -19,6 +19,7 @@ import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Select } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
+import { useFresh } from '../lib/fresh';
 import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -360,15 +361,8 @@ function QuickAdd({ weekId, kind, placeholder, eventRef, eventDate, onDone }: { 
   );
 }
 
-/** which items were already there when the page opened: the ones added since (here, or by someone else in the meeting) come in */
-function useFresh(items: WeeklyItem[]): (id: number) => boolean {
-  const seen = useRef<Set<number> | null>(null);
-  if (!seen.current) seen.current = new Set(items.map((i) => i.id));
-  return (id) => !seen.current!.has(id);
-}
-
 function Items({ items, onEdit, empty, numbered }: { items: WeeklyItem[]; onEdit: (i: WeeklyItem) => void; empty: string; numbered?: boolean }) {
-  const fresh = useFresh(items);
+  const fresh = useFresh(items.map((i) => i.id));
   if (!items.length) return <p className="small muted">{empty}</p>;
   const Tag = numbered ? 'ol' : 'ul';
   return (
@@ -567,7 +561,7 @@ function ScheduleDays({ view, external, canAdd, onEdit }: { view: WeeklyView; ex
 }
 
 function NoteList({ notes, onEdit }: { notes: WeeklyItem[]; onEdit: (i: WeeklyItem) => void }) {
-  const fresh = useFresh(notes);
+  const fresh = useFresh(notes.map((n) => n.id));
   if (!notes.length) return null;
   return (
     <ul className="weekly-items weekly-notes">

@@ -1,14 +1,17 @@
 // Sections 24 (weekly snapshot), 25 (look ahead), 52 (end of day), 20 (activity log).
 
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { addDays, shortDate, startOfWeek, weekdayName, weekdayOf } from '@shared/dates';
 import { DISCIPLINE_NOTE_LIMIT } from '@shared/constants';
 import type { ActivityEntry, DayEndData, DisciplineLogEntry, DisciplineSummary, LookAheadData, WeeklyReport } from '@shared/types';
+import { CheckMark } from '../components/CheckMark';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { GroupTitle, TaskList } from '../components/TaskRow';
 import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtLongDate, todayKey } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { api, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { useSession } from '../lib/session';
@@ -263,17 +266,28 @@ export function LookAheadPage() {
                 <span className="dot" style={{ background: 'var(--orange)' }} /> עדיפות גבוהה/קריטית
               </span>
             </div>
-            <div className="bars" style={{ height: 190 }}>
-              {data.days.map((d) => {
+            <div className="bars bars-grow" style={{ height: 190 }}>
+              {data.days.map((d, i) => {
                 const wd = weekdayOf(d.date);
-                return (
-                  <div key={d.date} className={`b${wd === 5 || wd === 6 ? ' weekend' : ''}`} title={`${weekdayName(d.date)} ${shortDate(d.date)}: ${d.total}`}>
+                const body = (
+                  <>
                     <span className="val">{d.total || ''}</span>
-                    <div className="col-fill" style={{ height: `${(d.total / max) * 130}px` }}>
+                    <div className="col-fill" style={{ height: `${(d.total / max) * 130}px`, animationDelay: `${i * 25}ms` }}>
                       {d.critical > 0 && <div className="crit" style={{ height: `${(d.critical / Math.max(1, d.total)) * 100}%` }} />}
                     </div>
                     <span className="lbl lbl-day">{weekdayName(d.date)}</span>
                     <span className="lbl">{shortDate(d.date)}</span>
+                  </>
+                );
+                const title = `${weekdayName(d.date)} ${shortDate(d.date)}: ${d.total}${d.critical ? ` (${d.critical} בעדיפות גבוהה)` : ''}`;
+                // a day with tasks opens in the schedule, where its deadlines are
+                return d.total ? (
+                  <Link key={d.date} to={`/schedule?date=${d.date}`} className={`b b-link${wd === 5 || wd === 6 ? ' weekend' : ''}`} title={title} aria-label={`${title} - פתיחה בלו"ז`}>
+                    {body}
+                  </Link>
+                ) : (
+                  <div key={d.date} className={`b${wd === 5 || wd === 6 ? ' weekend' : ''}`} title={title}>
+                    {body}
                   </div>
                 );
               })}
@@ -314,6 +328,18 @@ export function DayEndPage() {
   const { data, error, loading } = useApi<DayEndData>('/api/reports/day-end', ['tasks']);
   const navigate = useNavigate();
   const pct = data && data.dueToday ? Math.round((data.doneToday / data.dueToday) * 100) : 0;
+  const clear = !!data && data.dueToday > 0 && data.stillOpen.length === 0;
+  // the last one closed from here: the moment is marked (with a buzz)
+  const left = useRef<number | null>(null);
+  const [justCleared, setJustCleared] = useState(false);
+  useEffect(() => {
+    if (!data) return;
+    if (left.current !== null && left.current > 0 && data.stillOpen.length === 0) {
+      haptic('success');
+      setJustCleared(true);
+    }
+    left.current = data.stillOpen.length;
+  }, [data]);
   return (
     <div className="page narrow">
       <PageHead eyebrow={data ? fmtLongDate(data.date) : undefined} title="סיכום היום" sub="אין צורך בדוח יומי נפרד - המידע כבר במערכת." />
@@ -322,10 +348,15 @@ export function DayEndPage() {
         <Loading rows={3} />
       ) : data ? (
         <div className="fade-in col gap-16">
-          <div className="card card-pad row">
+          <div className={`card card-pad row day-end-head${clear ? ' is-clear' : ''}${justCleared ? ' just-cleared' : ''}`}>
             {data.dueToday ? <Ring value={pct} size={110} /> : <Ring value={0} size={110} tone="gray" />}
-            <div>
+            <div className="grow">
               <div className="label-caps">השלמת היום</div>
+              {clear && (
+                <div className="row gap-6 strong text-green day-end-clear">
+                  <CheckMark size={20} /> כל מה שהיה להיום נסגר
+                </div>
+              )}
               {data.dueToday ? (
                 <>
                   <div className="stat-num" style={{ fontSize: 56 }}>

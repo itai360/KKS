@@ -10,7 +10,7 @@ import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
 import { SocioImport } from '../components/SocioImport';
 import { useToast } from '../components/Toasts';
-import { Empty, Loading, openable, PageError, PageHead, Seg, Select } from '../components/ui';
+import { CountUp, Empty, Loading, openable, PageError, PageHead, Seg, Select } from '../components/ui';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -130,7 +130,7 @@ export function SociometricPage() {
             <div className="card card-pad">
               <div className="label-caps">{round.name}</div>
               <div className="strong" style={{ fontSize: 22 }}>
-                {all.length} צוערים
+                <CountUp value={all.length} /> צוערים
               </div>
               <div className="tiny muted">
                 {round.teams === 1 ? 'צוות אחד' : `${round.teams} צוותים`}
@@ -140,7 +140,7 @@ export function SociometricPage() {
             <button type="button" className={`card card-pad socio-outliers${onlyOut ? ' on' : ''}`} onClick={() => setOnlyOut(!onlyOut)} aria-pressed={onlyOut}>
               <div className="label-caps">חריגים</div>
               <div className={`strong${outliers ? ' text-red' : ''}`} style={{ fontSize: 22 }}>
-                {outliers}
+                <CountUp value={outliers} />
               </div>
               <div className="tiny muted">{onlyOut ? 'מוצגים רק החריגים - לחיצה להצגת כולם' : 'לחיצה להצגת החריגים בלבד'}</div>
             </button>

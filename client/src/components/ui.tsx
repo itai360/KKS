@@ -218,10 +218,10 @@ export function Field({ label, required, hint, children, className }: { label: R
   );
 }
 
-export function Empty({ title, text, icon = 'check' }: { title: string; text?: ReactNode; icon?: string }) {
+export function Empty({ title, text, icon = 'check', mark }: { title: string; text?: ReactNode; icon?: string; mark?: ReactNode }) {
   return (
     <div className="empty">
-      <Icon name={icon} />
+      {mark ?? <Icon name={icon} />}
       <div className="big">{title}</div>
       {text && <div className="small">{text}</div>}
     </div>

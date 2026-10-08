@@ -1,7 +1,7 @@
 // The course's tracks (צירים בקורס) - its lines of work alongside the weeks: a lead, goals and the
 // tasks marked with the track, with readiness by course week (server/src/tracks.ts).
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { addDays } from '@shared/dates';
 import type { Task, Track, TrackDetail } from '@shared/types';
@@ -9,6 +9,7 @@ import { BulkToggle } from '../components/Bulk';
 import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
 import { UserPicker, useNewTask } from '../components/NewTask';
+import { unlessHeld, useRowMenu } from '../components/RowMenu';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Bar, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg, Select } from '../components/ui';
@@ -22,7 +23,6 @@ export function TracksPage() {
   const { tracks, isCommander } = useSession();
   const { data, loading } = useApi<Track[]>('/api/tracks', ['weeks', 'tasks']);
   const list = data ?? tracks;
-  const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [leads, setLeads] = useState(false);
   const noLead = list.filter((t) => !t.leadId).length;
@@ -53,7 +53,33 @@ export function TracksPage() {
       ) : (
         <div className="weeks-track fade-in">
           {list.map((t) => (
-            <div key={t.id} className="card week-card track-card" {...openable(() => navigate(`/tracks/${t.id}`))}>
+            <TrackCard key={t.id} t={t} />
+          ))}
+        </div>
+      )}
+      {creating && <TrackForm onClose={() => setCreating(false)} />}
+      {leads && <LeadsDialog tracks={list} onClose={() => setLeads(false)} />}
+    </div>
+  );
+}
+
+/** one track: opened with a tap; held or right-clicked, a task for it or its tasks without opening it first */
+function TrackCard({ t }: { t: Track }) {
+  const navigate = useNavigate();
+  const newTask = useNewTask();
+  const { viewing } = useSession();
+  const today = todayKey();
+  const menu = useRowMenu({
+    title: `ציר ${t.name}`,
+    items: [
+      { key: 'open', label: 'פתיחת הציר', icon: 'route', primary: true, run: () => navigate(`/tracks/${t.id}`) },
+      ...(viewing ? [] : [{ key: 'task', label: 'משימה לציר', icon: 'plus', run: () => newTask({ trackId: t.id, ownerIds: t.leadId ? [t.leadId] : undefined, deadline: isoAt(addDays(today, 7), '18:00') }) }]),
+      { key: 'tasks', label: 'משימות הציר בכל המשימות', icon: 'tasks', run: () => navigate(`/tasks?track=${t.id}&scope=all`) },
+      ...(t.overdueTasks ? [{ key: 'late', label: `${t.overdueTasks} באיחור`, icon: 'clock', run: () => navigate(`/tasks?track=${t.id}&scope=overdue`) }] : []),
+    ],
+  });
+  return (
+            <div className={`card week-card track-card holdable${menu.lifted ? ' is-lifted' : ''}`} {...openable(unlessHeld(menu, () => navigate(`/tracks/${t.id}`)))} {...menu.bind}>
               <div>
                 <div className="strong" style={{ fontSize: 19 }}>
                   {t.name}
@@ -71,13 +97,8 @@ export function TracksPage() {
                 </div>
                 <Ring value={t.readiness} size={64} tone={t.totalTasks === 0 ? 'gray' : undefined} />
               </div>
+              {menu.menu}
             </div>
-          ))}
-        </div>
-      )}
-      {creating && <TrackForm onClose={() => setCreating(false)} />}
-      {leads && <LeadsDialog tracks={list} onClose={() => setLeads(false)} />}
-    </div>
   );
 }
 
@@ -209,6 +230,12 @@ export function TrackPage() {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>('week');
+  // a week picked from the readiness bars: its tasks, grouped by week, come into view and light up
+  const [pointed, setPointed] = useState<{ key: string; at: number } | null>(null);
+  const showWeek = (name: string) => {
+    setGroupBy('week');
+    setPointed({ key: name, at: Date.now() });
+  };
 
   if (loading && !data)
     return (
@@ -296,9 +323,9 @@ export function TrackPage() {
             ) : (
               <div className="col gap-6">
                 {data.byWeek.map((w) => (
-                  <div key={w.weekId ?? 'none'} className="row small">
+                  <button key={w.weekId ?? 'none'} type="button" className="row small track-week-bar" onClick={() => showWeek(w.name)} title={`משימות הציר ב${w.name}`}>
                     <span style={{ width: 130 }} className="strong clip-text">
-                      {w.weekId ? <Link to={`/weeks/${w.weekId}`}>{w.name}</Link> : w.name}
+                      {w.name}
                     </span>
                     <div className="grow">
                       <Bar value={w.readiness} label={`מוכנות ${w.name}`} />
@@ -306,7 +333,7 @@ export function TrackPage() {
                     <span className="mono" style={{ width: 90, textAlign: 'left' }}>
                       {w.readiness}% · {w.done}/{w.total}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -330,7 +357,7 @@ export function TrackPage() {
                 ]}
               />
             </div>
-            <Grouped tasks={data.tasks} by={groupBy} />
+            <Grouped tasks={data.tasks} by={groupBy} pointed={pointed} />
           </div>
           <div className="col gap-16 sticky-side">
             <div className="card card-pad">
@@ -366,7 +393,7 @@ export function TrackPage() {
   );
 }
 
-function Grouped({ tasks, by }: { tasks: Task[]; by: GroupBy }) {
+function Grouped({ tasks, by, pointed }: { tasks: Task[]; by: GroupBy; pointed?: { key: string; at: number } | null }) {
   const groups = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const t of tasks) {
@@ -375,11 +402,20 @@ function Grouped({ tasks, by }: { tasks: Task[]; by: GroupBy }) {
     }
     return [...map.entries()];
   }, [tasks, by]);
+  useEffect(() => {
+    if (!pointed) return;
+    const el = [...document.querySelectorAll<HTMLElement>('.track-group')].find((g) => g.dataset.group === pointed.key);
+    if (!el) return;
+    el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    el.classList.remove('is-pointed');
+    void el.offsetWidth;
+    el.classList.add('is-pointed');
+  }, [pointed]);
   if (!tasks.length) return <Empty icon="route" title="אין משימות בציר" text='"משימה לציר" פותחת משימה שכבר משויכת אליו.' />;
   return (
     <>
       {groups.map(([k, list]) => (
-        <div key={k}>
+        <div key={k} className="track-group" data-group={k}>
           <GroupTitle title={k} count={list.length} tone={list.every((t) => t.status === 'done') ? 'green' : list.some((t) => t.overdue) ? 'red' : undefined} />
           <TaskList tasks={list} />
         </div>

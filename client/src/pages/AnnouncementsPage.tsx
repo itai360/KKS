@@ -4,12 +4,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Announcement } from '@shared/types';
+import { CheckMark } from '../components/CheckMark';
 import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime } from '../lib/format';
+import { useFresh } from '../lib/fresh';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -19,6 +22,8 @@ export function AnnouncementsPage() {
   const { data, error, loading, setData } = useApi<Announcement[]>('/api/announcements', ['announcements']);
   const toast = useToast();
   const seen = useRef(new Set<number>());
+  // one written here (or by the commander, while this is open) comes in at the top
+  const fresh = useFresh(data?.map((a) => a.id));
 
   // on screen counts as read (not as confirmed)
   useEffect(() => {
@@ -56,13 +61,16 @@ export function AnnouncementsPage() {
             <AnnouncementCard
               key={a.id}
               a={a}
+              fresh={fresh(a.id)}
               onAck={() => run(() => api.post<Announcement[]>(`/api/announcements/${a.id}/read`, { ack: true }))}
               onRemind={async () => {
                 try {
                   const r = await api.post<{ reminded: number }>(`/api/announcements/${a.id}/remind`);
                   toast({ title: r.reminded ? `נשלחה תזכורת ל-${r.reminded}` : 'כולם כבר אישרו', tone: 'green' });
+                  return true;
                 } catch (e) {
                   toast({ title: (e as Error).message, tone: 'red' });
+                  return false;
                 }
               }}
               onDelete={async () => (await ask({ title: 'למחוק את ההודעה?', body: a.title, confirm: 'מחיקה', danger: true })) && void run(() => api.del<Announcement[]>(`/api/announcements/${a.id}`))}
@@ -89,17 +97,26 @@ function Composer({ onPost }: { onPost: (body: object) => Promise<boolean> }) {
     );
   return (
     <form
-      className="card card-pad col gap-12 mb-12"
+      className={`card card-pad col gap-12 mb-12 announce-composer${urgent ? ' is-urgent' : ''}`}
       onSubmit={async (e) => {
         e.preventDefault();
+        if (busy || !title.trim()) return;
         setBusy(true);
         if (await onPost({ title, body, requireAck, urgent })) {
+          haptic('success');
           setTitle('');
           setBody('');
           setUrgent(false);
           setOpen(false);
         }
         setBusy(false);
+      }}
+      // Ctrl+Enter (⌘+Enter) sends from the text too, as in a chat
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          e.currentTarget.requestSubmit();
+        }
       }}
     >
       <Field label="כותרת" required>
@@ -115,9 +132,10 @@ function Composer({ onPost }: { onPost: (body: object) => Promise<boolean> }) {
         <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} /> דחוף
       </label>
       <div className="row gap-6">
-        <button className="btn btn-primary" disabled={busy || !title.trim()}>
-          <Icon name="check" /> שליחה לכל הסגל
+        <button className="btn btn-primary" disabled={busy || !title.trim()} aria-keyshortcuts="Control+Enter">
+          <Icon name="check" /> {busy ? 'שולח...' : urgent ? 'שליחה דחופה לכל הסגל' : 'שליחה לכל הסגל'}
         </button>
+        <span className="tiny muted hide-mobile announce-hint">Ctrl+Enter</span>
         <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
           ביטול
         </button>
@@ -126,11 +144,33 @@ function Composer({ onPost }: { onPost: (body: object) => Promise<boolean> }) {
   );
 }
 
-function AnnouncementCard({ a, onAck, onRemind, onDelete }: { a: Announcement; onAck: () => void; onRemind: () => void; onDelete: () => void }) {
+function AnnouncementCard({ a, fresh, onAck, onRemind, onDelete }: { a: Announcement; fresh?: boolean; onAck: () => Promise<boolean>; onRemind: () => Promise<boolean>; onDelete: () => void }) {
   const acked = a.audience?.filter((x) => x.ackedAt) ?? [];
   const waiting = a.audience?.filter((x) => !x.ackedAt) ?? [];
+  // "קראתי" answers at once: the confirmation shows, with a buzz; if the server says no, the button is back
+  const [confirming, setConfirming] = useState(false);
+  const [justAcked, setJustAcked] = useState(false);
+  const ack = async () => {
+    setConfirming(true);
+    haptic('success');
+    if (await onAck()) setJustAcked(true);
+    setConfirming(false);
+  };
+  // a reminder just sent: the button says so for a moment, and cannot send it twice
+  const [reminded, setReminded] = useState(false);
+  useEffect(() => {
+    if (!reminded) return;
+    const t = setTimeout(() => setReminded(false), 6000);
+    return () => clearTimeout(t);
+  }, [reminded]);
+  const remind = async () => {
+    setReminded(true);
+    if (!(await onRemind())) setReminded(false);
+  };
+  const total = a.audience?.length ?? 0;
+  const confirmed = !!a.ackedAt || confirming;
   return (
-    <article className={`card announce ${a.urgent ? 't-red' : 't-blue'}`}>
+    <article className={`card announce ${a.urgent ? 't-red' : 't-blue'}${fresh ? ' is-arrived' : ''}${a.requireAck && !a.audience && !confirmed ? ' is-waiting' : ''}`}>
       <div className="card-head">
         <Icon name={a.urgent ? 'alert' : 'flag'} />
         <h2 className="grow">
@@ -148,11 +188,14 @@ function AnnouncementCard({ a, onAck, onRemind, onDelete }: { a: Announcement; o
             <div className="col gap-6">
               <div className="row wrap gap-6">
                 <span className={`badge ${waiting.length ? 't-orange' : 't-green'}`}>
-                  אישרו {acked.length}/{a.audience.length}
+                  אישרו {acked.length}/{total}
+                </span>
+                <span className="mini-bar announce-bar" aria-hidden="true">
+                  <i style={{ width: `${total ? (acked.length / total) * 100 : 0}%` }} />
                 </span>
                 {waiting.length > 0 && (
-                  <button className="btn btn-sm" onClick={onRemind}>
-                    <Icon name="bell" /> תזכורת למי שלא אישר
+                  <button className={`btn btn-sm${reminded ? ' is-sent' : ''}`} onClick={() => void remind()} disabled={reminded}>
+                    <Icon name={reminded ? 'check' : 'bell'} /> {reminded ? 'התזכורת נשלחה' : 'תזכורת למי שלא אישר'}
                   </button>
                 )}
                 <span className="grow" />
@@ -160,16 +203,27 @@ function AnnouncementCard({ a, onAck, onRemind, onDelete }: { a: Announcement; o
                   <Icon name="trash" size={15} />
                 </button>
               </div>
-              {waiting.length > 0 && <div className="small">ממתינים: {waiting.map((w) => (w.readAt ? `${w.name} (ראה)` : w.name)).join(', ')}</div>}
+              {waiting.length > 0 && (
+                <div className="row wrap gap-4 announce-waiting" aria-label="ממתינים לאישור">
+                  <span className="tiny muted">ממתינים:</span>
+                  {waiting.map((w) => (
+                    <span key={w.userId} className="chip chip-sm" title={w.readAt ? `ראה ב-${fmtDateTime(w.readAt)}, עוד לא אישר` : 'עוד לא ראה'}>
+                      {w.readAt && <Icon name="eye" size={12} />}
+                      {w.name}
+                      {w.readAt && <span className="sr-only"> (ראה)</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )
         ) : a.requireAck ? (
-          a.ackedAt ? (
-            <span className="badge t-green">
-              <Icon name="check" size={11} /> אישרת קריאה
+          confirmed ? (
+            <span className={`announce-acked${justAcked || confirming ? ' just-cleared' : ''}`} role="status">
+              <CheckMark size={18} /> אישרת קריאה
             </span>
           ) : (
-            <button className="btn btn-primary btn-sm" onClick={onAck} style={{ alignSelf: 'flex-start' }}>
+            <button className="btn btn-primary btn-sm" onClick={() => void ack()} style={{ alignSelf: 'flex-start' }}>
               <Icon name="check" /> קראתי
             </button>
           )

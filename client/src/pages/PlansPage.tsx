@@ -2,15 +2,17 @@
 // presents to the commander above them. It starts as a draft written from the course's data;
 // any part can be rewritten, the approval is recorded, and the document prints as is.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { shortDate, weekdayName } from '@shared/dates';
 import type { PlanDocument, PlanEvent, PlanEventKind, PlanSectionKey, PlansOverview, PlanStatus } from '@shared/types';
 import { Icon } from '../components/Icon';
+import { SectionRail, type RailItem } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
@@ -103,6 +105,11 @@ export function PlansPage() {
         />
       ) : (
         <>
+          <div className="plan-progress-all" role="img" aria-label={`${count('approved')} מתוך ${data.weeks.length} אושרו, ${count('ready')} מוכנים להצגה, ${count('draft')} בטיוטה`}>
+            {(['approved', 'ready', 'draft'] as const).map((st) =>
+              count(st) ? <span key={st} className={`is-${st}`} style={{ flexGrow: count(st) }} /> : null,
+            )}
+          </div>
           <div className="row wrap gap-6 small muted plan-counts">
             <span className="badge t-green">{count('approved')} אושרו</span>
             <span className="badge t-blue">{count('ready')} מוכנים להצגה</span>
@@ -305,6 +312,25 @@ function Horizon({ doc }: { doc: PlanDocument }) {
   );
 }
 
+const STEPS: PlanStatus[] = ['draft', 'ready', 'approved'];
+
+/** where the document is on its way: draft, ready to present, approved - the steps behind it ticked */
+function StatusSteps({ status }: { status: PlanStatus }) {
+  const at = STEPS.indexOf(status);
+  return (
+    <ol className="plan-steps" aria-label={`מצב המסמך: ${STATUS[status].label}`}>
+      {STEPS.map((st, i) => (
+        <li key={st} className={i < at ? 'is-past' : i === at ? 'is-now' : ''} aria-current={i === at ? 'step' : undefined}>
+          <span className="plan-step-dot" aria-hidden="true">
+            {i < at || (i === at && st === 'approved') ? <Icon name="check" size={12} /> : i + 1}
+          </span>
+          {STATUS[st].label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function Prep({ e }: { e: PlanEvent }) {
   if (!e.prep) return <span className="muted small">מהיומן</span>;
   if (!e.prep.total) return <span className="muted small">אין משימות הכנה</span>;
@@ -329,6 +355,14 @@ export function PlanPage() {
   const { data: doc, error, status, loading, setData } = useApi<PlanDocument>(`/api/plans/${id}`, TOPICS);
   const [editing, setEditing] = useState<PlanSectionKey | 'bluf' | null>(null);
   const [approving, setApproving] = useState(false);
+  // the approval just recorded: its line at the foot of the document comes in, stamped
+  const [justApproved, setJustApproved] = useState(false);
+  useEffect(() => {
+    if (!justApproved) return;
+    document.querySelector('.plan-approval')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+    const t = setTimeout(() => setJustApproved(false), 2200);
+    return () => clearTimeout(t);
+  }, [justApproved]);
   usePageTitle(doc ? `אישור תוכנית - ${doc.week.name}` : 'אישור תוכנית');
 
   if (loading && !doc)
@@ -368,7 +402,7 @@ export function PlanPage() {
     const s = doc.sections[k];
     const List = ordered ? 'ol' : 'ul';
     return (
-      <section>
+      <section id={`plan-${k}`}>
         <div className="plan-h2">
           <h2>
             {n}. {SECTION_TITLES[k]}
@@ -400,6 +434,19 @@ export function PlanPage() {
     );
   };
 
+  const parts: RailItem[] = [
+    ['plan-bluf', 'השורה התחתונה'],
+    ['plan-horizon', 'ארבעה שבועות'],
+    ['plan-events', 'אירועי המפתח'],
+    ['plan-goals', 'מטרות'],
+    ['plan-achievements', 'הישגים'],
+    ['plan-emphases', 'דגשים'],
+    ['plan-risks', 'סיכונים'],
+    ['plan-picture', 'תמונת מצב'],
+    ...(doc.lessons.length ? [['plan-lessons', 'לקחים']] : []),
+    ['plan-requests', 'בקשות'],
+  ].map(([id, label], i) => ({ id, label, n: i + 1 }));
+
   return (
     <div className="page doc-page">
       <div className="doc-toolbar no-print">
@@ -411,7 +458,7 @@ export function PlanPage() {
             <Icon name="chevronLeft" size={16} />
           </button>
         </div>
-        <span className={`badge ${STATUS[doc.status].tone}`}>{STATUS[doc.status].label}</span>
+        <StatusSteps status={doc.status} />
         {doc.changes.length > 0 && <span className="badge t-yellow">השתנה מאז האישור</span>}
         <span className="grow" />
         {canEdit && doc.status === 'draft' && (
@@ -439,6 +486,7 @@ export function PlanPage() {
         </button>
       </div>
 
+      <SectionRail label="חלקי המסמך" items={parts} />
       <article className="doc plan-doc" aria-label={`אישור תוכנית - ${w.name}`}>
         <header className="doc-head">
           <div className="doc-kicker">{settings.courseName}</div>
@@ -483,7 +531,7 @@ export function PlanPage() {
           </div>
         )}
 
-        <section>
+        <section id="plan-bluf">
           <div className="plan-h2">
             <h2>1. השורה התחתונה</h2>
             <Wording edited={doc.bluf.edited} />
@@ -492,12 +540,12 @@ export function PlanPage() {
           <p className="plan-bluf">{doc.bluf.text}</p>
         </section>
 
-        <section>
+        <section id="plan-horizon">
           <h2>2. מבט על ארבעה שבועות</h2>
           <Horizon doc={doc} />
         </section>
 
-        <section>
+        <section id="plan-events">
           <h2>3. אירועי המפתח השבוע</h2>
           {keyEvents.length ? (
             <table className="doc-table plan-events">
@@ -546,7 +594,7 @@ export function PlanPage() {
         {section('achievements', 5)}
         {section('emphases', 6, false)}
 
-        <section>
+        <section id="plan-risks">
           <h2>7. סיכונים ומענה</h2>
           {doc.risks.length ? (
             <table className="doc-table plan-risks">
@@ -572,7 +620,7 @@ export function PlanPage() {
           )}
         </section>
 
-        <section>
+        <section id="plan-picture">
           <h2>8. תמונת מצב</h2>
           <div className="plan-kpis">
             <div>
@@ -616,7 +664,7 @@ export function PlanPage() {
         </section>
 
         {doc.lessons.length > 0 && (
-          <section>
+          <section id="plan-lessons">
             <h2>9. לקחים מהמחזור הקודם לשבוע הזה</h2>
             <ul className="doc-list">
               {doc.lessons.map((l) => (
@@ -633,7 +681,7 @@ export function PlanPage() {
 
         <footer className="doc-foot">
           {doc.approval ? (
-            <div className="plan-approval">
+            <div className={`plan-approval${justApproved ? ' just-approved' : ''}`}>
               <div>
                 <Icon name="check" size={16} /> <b>אושר</b> ע"י {doc.approval.by}, ב-<span className="mono">{shortDate(doc.approval.on)}</span>
               </div>
@@ -685,6 +733,8 @@ export function PlanPage() {
             setData(d);
             setApproving(false);
             emitLocalChange('plans');
+            haptic('success');
+            setJustApproved(true);
             toast({ title: 'האישור נרשם', tone: 'green' });
           }}
         />
