@@ -14,6 +14,7 @@ import { BulkCheck, bulkClick, BulkScope, SwipeRow, useBulk } from './Bulk';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { useIncremental } from '../lib/incremental';
+import { unlessHeld, useTaskMenu } from './TaskMenu';
 import { Empty, openable } from './ui';
 
 export function canQuickUpdate(t: Task, userId: number, commander: boolean): boolean {
@@ -162,12 +163,15 @@ export function TaskRow({ task, showOwner = true, extra, readOnly, folded }: { t
   // on a phone, swiped toward its leading side it is done (the round button stays for everyone else),
   // and toward its trailing side deleted - where the list deletes
   const canSwipeDone = tick.canCheck && !done && !tick.busy;
+  // held (a phone) or right-clicked (a computer): what is done with it most, without opening it
+  const menu = useTaskMenu(task, tick, bulk?.active);
 
   return (
     <SwipeRow itemId={task.id} label={task.title} done={canSwipeDone ? { label: task.requiresApproval ? 'לאישור' : 'בוצע', run: () => void tick.complete() } : null}>
     <div
-      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}`}
-      {...openable(bulkClick(bulk, task.id, () => navigate(`/tasks/${task.id}`)))}
+      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}`}
+      {...openable(bulkClick(bulk, task.id, unlessHeld(menu, () => navigate(`/tasks/${task.id}`))))}
+      {...menu.bind}
       onPointerEnter={() => prefetchTask(task.id)}
       onFocus={() => prefetchTask(task.id)}
     >
@@ -200,6 +204,7 @@ export function TaskRow({ task, showOwner = true, extra, readOnly, folded }: { t
         <StatusBadge status={task.status} overdue={task.overdue} />
       </div>
     </div>
+    {menu.menu}
     </SwipeRow>
   );
 }

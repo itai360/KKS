@@ -40,23 +40,32 @@ export function TeamPage() {
                   </div>
                 </div>
               </div>
+              {/* each number opens the tasks it counts - straight from the card */}
               <div className="staff-nums">
-                <div>
-                  <b>{s.open}</b>
-                  <span>פתוחות</span>
-                </div>
-                <div>
-                  <b>{s.inProgress}</b>
-                  <span>בטיפול</span>
-                </div>
-                <div>
-                  <b className={s.overdue ? 'text-red' : ''}>{s.overdue}</b>
-                  <span>באיחור</span>
-                </div>
-                <div>
-                  <b>{s.done}</b>
-                  <span>הושלמו</span>
-                </div>
+                {(
+                  [
+                    [s.open, 'פתוחות', 'scope=open', ''],
+                    [s.inProgress, 'בטיפול', 'scope=open&status=in_progress', ''],
+                    [s.overdue, 'באיחור', 'scope=overdue', s.overdue ? 'text-red' : ''],
+                    [s.done, 'הושלמו', 'scope=done', ''],
+                  ] as const
+                ).map(([n, label, q, tone]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="staff-num"
+                    disabled={!n}
+                    aria-label={`${s.name}: ${n} ${label}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/tasks?owner=${s.userId}&${q}`);
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <b className={tone}>{n}</b>
+                    <span>{label}</span>
+                  </button>
+                ))}
               </div>
               {(s.waiting > 0 || s.dueToday > 0) && (
                 <div className="row gap-6 mt-12 wrap">

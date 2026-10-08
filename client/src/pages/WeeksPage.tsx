@@ -12,7 +12,7 @@ import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, SwipeRow, useBulk } from '../components/Bulk';
 import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg, Select } from '../components/ui';
+import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, readinessTone, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -83,11 +83,35 @@ export function WeeksPage() {
 function WeekCards({ list, today }: { list: Week[]; today: string }) {
   const navigate = useNavigate();
   const bulk = useBulk();
+  // what is over folds into a row of small links; the week now - and the ones to come - lead the page
+  const past = bulk?.active ? [] : list.filter((w) => w.endDate < today);
+  const ahead = bulk?.active ? list : list.filter((w) => w.endDate >= today);
   return (
+    <>
+      {past.length > 0 && (
+        <section className="weeks-past" aria-label="שבועות שעברו">
+          <span className="label-caps">שבועות שעברו</span>
+          <div className="weeks-past-list">
+            {past.map((w) => {
+              const open = w.status !== 'closed';
+              return (
+                <Link key={w.id} to={`/weeks/${w.id}`} className={`week-pill${open ? ' is-open' : ''}`} onPointerEnter={() => prefetch(`/api/weeks/${w.id}`)}>
+                  <span className="week-pill-num">{w.number}</span>
+                  <span className="week-pill-name">{w.name}</span>
+                  <span className={`week-pill-pct t-${open ? 'orange' : readinessTone(w.readiness, w.totalTasks)}`}>{open ? 'לא נסגר' : `${w.readiness}%`}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+      {!ahead.length && <p className="small muted mt-12">כל שבועות הקורס כבר מאחור.</p>}
         <div className="weeks-track fade-in">
-          {list.map((w) => {
+          {ahead.map((w) => {
             const current = w.startDate <= today && w.endDate >= today;
             const until = diffDays(w.startDate, today);
+            const day = diffDays(today, w.startDate) + 1;
+            const days = diffDays(w.endDate, w.startDate) + 1;
             return (
               <SwipeRow key={w.id} itemId={w.id} label={w.name}>
               <div
@@ -112,8 +136,19 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
                     <span className="mono">
                       {shortDate(w.startDate)}-{shortDate(w.endDate)}
                     </span>
-                    {until > 0 && until <= 21 && ` · בעוד ${until} ימים`}
+                    {until > 0 && until <= 21 && ` · ${until === 1 ? 'מתחיל מחר' : `בעוד ${until} ימים`}`}
                   </div>
+                  {/* the week now: how far into it, day by day */}
+                  {current && (
+                    <div className="week-days" aria-label={`יום ${day} מתוך ${days}`}>
+                      {Array.from({ length: days }, (_, i) => (
+                        <i key={i} className={i + 1 < day ? 'past' : i + 1 === day ? 'today' : ''} />
+                      ))}
+                      <span className="tiny muted">
+                        יום {day} מתוך {days}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="row">
                   <div className="grow">
@@ -129,6 +164,7 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
             );
           })}
         </div>
+    </>
   );
 }
 
@@ -482,8 +518,9 @@ export function WeekPage() {
             <p className="small muted">אין עדיין משימות לשבוע. השתמשו ב"פתיחת שבוע" כדי לפתוח את רשימת התיוג הקבועה.</p>
           ) : (
             <div className="col gap-6">
+              {/* a line opens the week's tasks of that domain */}
               {data.byDomain.map((d) => (
-                <div key={d.domain} className="row small">
+                <Link key={d.domain} to={`/tasks?week=${data.week.id}&scope=all${d.domain === 'ללא תחום' ? '' : `&domain=${encodeURIComponent(d.domain)}`}`} className="row small domain-line">
                   <span style={{ width: 110 }} className="strong">
                     {d.domain}
                   </span>
@@ -493,7 +530,7 @@ export function WeekPage() {
                   <span className="mono" style={{ width: 90, textAlign: 'left' }}>
                     {d.readiness}% · {d.done}/{d.total}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           )}

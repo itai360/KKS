@@ -8,6 +8,7 @@ import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
+import { unlessHeld, useTaskMenu } from '../components/TaskMenu';
 import { canQuickUpdate, GroupTag, prefetchTask, ProgressBadge, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useTaskTick } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
@@ -275,10 +276,12 @@ function TaskTableRow({ t, folded }: { t: Task; folded: boolean }) {
   const tick = useTaskTick(t, folded);
   const tag = useGroupTag(t, !folded);
   const flash = useLiveFlash(`${t.status}|${t.deadline}|${t.ownerId}|${t.title}|${t.priority}|${t.overdue}`);
+  const menu = useTaskMenu(t, tick, bulk?.active || folded);
   return (
     <tr
-      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}`}
-      {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)), { role: false })}
+      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}`}
+      {...openable(bulkClick(bulk, t.id, unlessHeld(menu, () => navigate(`/tasks/${t.id}`))), { role: false })}
+      {...menu.bind}
       onPointerEnter={() => prefetchTask(t.id)}
       onFocus={() => prefetchTask(t.id)}
     >
@@ -319,6 +322,7 @@ function TaskTableRow({ t, folded }: { t: Task; folded: boolean }) {
       <td style={{ whiteSpace: 'nowrap' }}>
         <StatusBadge status={tick.done ? 'done' : t.status} overdue={!tick.done && t.overdue} />
       </td>
+      {menu.menu}
     </tr>
   );
 }
@@ -413,12 +417,14 @@ function BoardCard({ t, folded }: { t: Task; folded: boolean }) {
   const tick = useTaskTick(t, folded);
   const tag = useGroupTag(t, !folded);
   const flash = useLiveFlash(`${t.status}|${t.deadline}|${t.ownerId}|${t.title}|${t.priority}|${t.overdue}`);
+  const menu = useTaskMenu(t, tick, bulk?.active || folded);
   return (
     <div
-      className={`board-card t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}`}
+      className={`board-card t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}`}
       draggable={!bulk?.active && !folded}
       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
-      {...openable(bulkClick(bulk, t.id, () => navigate(`/tasks/${t.id}`)))}
+      {...openable(bulkClick(bulk, t.id, unlessHeld(menu, () => navigate(`/tasks/${t.id}`))))}
+      {...menu.bind}
       onPointerEnter={() => prefetchTask(t.id)}
       onFocus={() => prefetchTask(t.id)}
     >
@@ -439,6 +445,7 @@ function BoardCard({ t, folded }: { t: Task; folded: boolean }) {
         {t.overdue && <span className="badge t-red">באיחור</span>}
         {t.domain && <span className="badge">{t.domain}</span>}
       </div>
+      {menu.menu}
     </div>
   );
 }

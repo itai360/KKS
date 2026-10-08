@@ -22,6 +22,8 @@ import { noteScreen, screenOf } from '../lib/frequent';
 import { bottomBarScreens } from '../lib/bottomBar';
 import { switchCourse } from '../lib/courses';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
+import { useMedia } from '../lib/media';
+import { usePullToRefresh } from '../lib/pullRefresh';
 
 interface NavItem {
   to: string;
@@ -260,6 +262,35 @@ export function Layout({ children }: { children: ReactNode }) {
   const newTask = useNewTask();
   const navigate = useNavigate();
   const location = useLocation();
+  // the screen's big title, once it has gone under the top bar: its name shows in the bar
+  const [barTitle, setBarTitle] = useState<string | null>(null);
+  useEffect(() => {
+    setBarTitle(null);
+    let io: IntersectionObserver | null = null;
+    let seen: HTMLElement | null = null;
+    const watch = () => {
+      const h1 = document.querySelector<HTMLElement>('#main .page-title');
+      if (h1 === seen) return;
+      io?.disconnect();
+      seen = h1;
+      if (!h1) return setBarTitle(null);
+      const bar = document.querySelector('.topbar')?.getBoundingClientRect().height ?? 56;
+      io = new IntersectionObserver(([e]) => setBarTitle(e.isIntersecting ? null : (h1.textContent ?? '').trim() || null), { rootMargin: `-${Math.round(bar)}px 0px 0px 0px` });
+      io.observe(h1);
+    };
+    watch();
+    const main = document.getElementById('main');
+    const mo = new MutationObserver(watch);
+    if (main) mo.observe(main, { childList: true, subtree: true });
+    return () => {
+      io?.disconnect();
+      mo.disconnect();
+    };
+  }, [location.pathname]);
+  // a phone: pulling the screen down from its top brings it up to date
+  const mainRef = useRef<HTMLElement>(null);
+  const ptrRef = useRef<HTMLDivElement>(null);
+  usePullToRefresh(mainRef, ptrRef, useMedia('(pointer: coarse)'));
   const [q, setQ] = useState('');
   const [live, setLive] = useState(false);
 
@@ -608,7 +639,13 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
             {/* the course's name opens every screen, as a sheet over the page */}
             <button type="button" className="top-brand-menu" onClick={() => setMenuOpen(true)} aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={`${settings.courseName} - כל המסכים`} title="כל המסכים">
-              <span className="small top-brand-name">{settings.courseName}</span>
+              {/* scrolled past the screen's big title: its name takes the course's place, as an iPhone's large titles do */}
+              <span className={`top-brand-names${barTitle ? ' is-titled' : ''}`}>
+                <span className="small top-brand-name">{settings.courseName}</span>
+                <span className="top-brand-title" aria-hidden="true">
+                  {barTitle}
+                </span>
+              </span>
               <Icon name="chevronDown" size={15} className="top-brand-chev" />
             </button>
           </div>
@@ -669,7 +706,10 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         )}
         <TopProgress />
-        <main id="main" tabIndex={-1}>
+        <div className="ptr no-print" ref={ptrRef} aria-hidden="true">
+          <Icon name="arrowUp" size={18} />
+        </div>
+        <main id="main" tabIndex={-1} ref={mainRef}>
           <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
           <ShortcutsHelp />
           <CommandPalette pages={sections.flatMap((s) => s.items)} />

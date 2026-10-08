@@ -7,6 +7,8 @@ import { ATTENDANCE_IN, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, ATTENDANCE_TONES
 import { addDays, longDate } from '@shared/dates';
 import type { RollCall, RollEntry } from '@shared/types';
 import { Icon } from '../components/Icon';
+import { usePhonePicker } from '../components/pickers';
+import { useSwipeAction } from '../components/swipeAction';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
@@ -240,38 +242,51 @@ export function AttendancePage() {
 function RollRow({ entry: e, onMark }: { entry: RollEntry; onMark: (status: AttendanceStatus | null, note?: string) => void }) {
   const [note, setNote] = useState(e.note);
   const away = e.status && !ATTENDANCE_IN.includes(e.status);
+  // on a phone, a cadet swiped toward the row's leading side is present - most of the roll in one gesture each
+  const row = useRef<HTMLDivElement>(null);
+  useSwipeAction(row, { enabled: usePhonePicker() && e.status !== 'present', lead: () => onMark('present', '') });
   return (
-    <div className={`roll-row${e.status ? ` is-${ATTENDANCE_TONES[e.status]}` : ''}`}>
-      <div className="roll-name">
-        <Link to={`/cadets/${e.cadetId}`} className="strong">
-          {e.fullName}
-        </Link>
-        {e.exemptions.length > 0 && (
-          <span className="badge t-purple" title={`פטור: ${e.exemptions.join(', ')}`}>
-            פטור
-          </span>
-        )}
-        <span className="print-only small">{e.status ? ATTENDANCE_LABELS[e.status] : '-'}</span>
-      </div>
-      <div className="roll-choices no-print" role="group" aria-label={`המצב של ${e.fullName}`}>
-        {ATTENDANCE_STATUSES.map((s) => (
-          <button key={s} type="button" className={`t-${ATTENDANCE_TONES[s]}`} aria-pressed={e.status === s} onClick={() => onMark(e.status === s ? null : s, s === 'present' ? '' : note)}>
-            {SHORT[s]}
-          </button>
-        ))}
-      </div>
-      {(away || e.status === 'late') && (
-        <input
-          className="input roll-note"
-          value={note}
-          onChange={(ev) => setNote(ev.target.value)}
-          onBlur={() => note !== e.note && onMark(e.status, note)}
-          placeholder={e.status === 'late' ? 'מתי הגיע?' : 'סיבה / עד מתי'}
-          aria-label={`הערה ל${e.fullName}`}
-          maxLength={200}
-          data-transient
-        />
+    <div className="swipe-wrap roll-swipe">
+      {e.status !== 'present' && (
+        <div className="swipe-pad is-lead" aria-hidden="true">
+          <Icon name="check" size={20} />
+          <span>נוכח</span>
+        </div>
       )}
+      <div className="swipe-row" ref={row}>
+        <div className={`roll-row${e.status ? ` is-${ATTENDANCE_TONES[e.status]}` : ''}`}>
+          <div className="roll-name">
+            <Link to={`/cadets/${e.cadetId}`} className="strong">
+              {e.fullName}
+            </Link>
+            {e.exemptions.length > 0 && (
+              <span className="badge t-purple" title={`פטור: ${e.exemptions.join(', ')}`}>
+                פטור
+              </span>
+            )}
+            <span className="print-only small">{e.status ? ATTENDANCE_LABELS[e.status] : '-'}</span>
+          </div>
+          <div className="roll-choices no-print" role="group" aria-label={`המצב של ${e.fullName}`}>
+            {ATTENDANCE_STATUSES.map((s) => (
+              <button key={s} type="button" className={`t-${ATTENDANCE_TONES[s]}`} aria-pressed={e.status === s} onClick={() => onMark(e.status === s ? null : s, s === 'present' ? '' : note)}>
+                {SHORT[s]}
+              </button>
+            ))}
+          </div>
+          {(away || e.status === 'late') && (
+            <input
+              className="input roll-note"
+              value={note}
+              onChange={(ev) => setNote(ev.target.value)}
+              onBlur={() => note !== e.note && onMark(e.status, note)}
+              placeholder={e.status === 'late' ? 'מתי הגיע?' : 'סיבה / עד מתי'}
+              aria-label={`הערה ל${e.fullName}`}
+              maxLength={200}
+              data-transient
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

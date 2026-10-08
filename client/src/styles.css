@@ -3705,9 +3705,39 @@ input::-webkit-date-and-time-value {
 
 .staff-nums b {
   display: block;
-  font-family: var(--display);
-  font-size: 34px;
-  line-height: 0.9;
+  font-family: var(--font);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+/* a number is a way to its tasks: it gives under the press, and lights under the pointer */
+.staff-num {
+  display: grid;
+  gap: 2px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: scale 0.32s var(--spring), background-color 0.15s;
+}
+.staff-num:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.staff-num:not(:disabled):active {
+  scale: 0.92;
+  background: var(--hover-2);
+  transition-duration: 0.08s;
+}
+@media (hover: hover) {
+  .staff-num:not(:disabled):hover {
+    background: var(--hover);
+  }
 }
 
 .staff-nums span {
@@ -7198,6 +7228,13 @@ button.fab-missing {
 .roll-row:first-child {
   border-top: none;
 }
+/* each cadet's row swipes on its own (a phone: toward the leading side is "נוכח") */
+.roll-swipe .swipe-row {
+  background: var(--card);
+}
+.roll-swipe + .roll-swipe .roll-row {
+  border-top: 1px solid var(--line);
+}
 
 .roll-row.is-green { box-shadow: inset -3px 0 0 var(--green); }
 .roll-row.is-yellow { box-shadow: inset -3px 0 0 var(--yellow); }
@@ -10063,5 +10100,433 @@ html {
     background: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+}
+
+/* ---------------- every control answers (the site-wide pass) ----------------
+   Apple's first rule of fluid interfaces: the response starts the moment the finger lands. Every kind of
+   control gives a little under the press and springs back when let go; rows and fields light up; links
+   dim like an iPhone's; with a mouse, everything that can be clicked shows it while the pointer rests on
+   it; and what is small to the eye still takes a whole finger. */
+
+/* the give of a press, for things you tap one at a time */
+.seg button,
+.tab,
+.roll-choices button,
+.ws-step,
+.agenda-add,
+.mine-bar .btn,
+.cal-chip,
+.cal-dayhead .dn {
+  transition-property: scale, background-color, border-color, color, box-shadow, opacity;
+  transition-duration: 0.34s, 0.15s, 0.15s, 0.15s, 0.15s, 0.15s;
+  transition-timing-function: var(--spring), ease, ease, ease, ease, ease;
+}
+.seg button:active,
+.tab:active,
+.roll-choices button:active,
+.ws-step:active,
+.agenda-add:active,
+.chip:active,
+.task-check:active,
+.cal-chip:active,
+.cal-dayhead .dn:active:not(:disabled),
+.icon-btn:active {
+  scale: 0.93;
+  transition-duration: 0.08s;
+}
+.roll-choices button:active {
+  background: var(--tone-bg);
+  border-color: var(--tone);
+}
+
+/* the phone bar: the tab's symbol sinks under the finger and springs back */
+.bottom-nav a:active,
+.bottom-nav a:active svg {
+  color: var(--rail-ink);
+}
+.bottom-nav a:active svg {
+  transform: scale(0.84);
+  transition-duration: 0.08s;
+}
+.bottom-nav a.active:active svg {
+  transform: translateY(-1px) scale(0.94);
+}
+
+/* rows, cards and fields: a tint laid over whatever they are made of (it never replaces their colour) */
+@media (hover: hover) {
+  :where([role='link'], a.row, .attention-link, summary, label.check, .un-row, .search-palette, .select-button, .status-pill, .date-input-pick, .cal-chip):hover {
+    background-image: linear-gradient(var(--hover), var(--hover));
+  }
+}
+:where([role='link'], a.row, .attention-link, summary, label.check, .un-row, .search-palette, .select-button, .status-pill, .date-input-pick, .health, .dashboard-event, .weekly-step, .week-card, .staff-card, .task-row, .event-row, .stat, .week-summary, .side-week, .agenda-week):active {
+  background-image: linear-gradient(var(--hover-2), var(--hover-2));
+}
+label.check {
+  border-radius: 6px;
+}
+/* on the dark menu: a light tint */
+.rail :is(.rail-link, .rail-group-head):active {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08));
+}
+.search-palette:active {
+  scale: 0.98;
+}
+
+/* links in text and names: they dim under the finger, as on an iPhone, and underline under a mouse */
+a:not([class]),
+a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row, .btn, .card) {
+  transition: opacity 0.2s;
+}
+a:not([class]):active,
+a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row, .btn, .card):active {
+  opacity: 0.5;
+  transition-duration: 0s;
+}
+@media (hover: hover) {
+  a:not([class]):hover,
+  a:where(.strong, .muted, .small, .un-link, .attn-title, .grow):not(.row, .btn, .card, .badge):hover {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+  .seg button:not(.on):hover,
+  .tab:not(.on):hover {
+    color: var(--ink);
+  }
+  .select-button:hover,
+  .status-pill:hover {
+    border-color: var(--ink-2);
+  }
+}
+
+/* a finger's worth around what is small to the eye (44px, as Apple asks), without changing how it looks */
+@media (pointer: coarse) {
+  :where(.task-check, .agenda-add, .exemption-add, .chip-sm, .btn-sm, .icon-btn, .un-link, .qa-more, .ws-step) {
+    position: relative;
+  }
+  .task-check::after,
+  .agenda-add::after,
+  .exemption-add::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .icon-btn::after,
+  .date-input-pick::after {
+    content: '';
+    position: absolute;
+    inset: -5px;
+  }
+  .btn-sm::after,
+  .chip-sm::after {
+    content: '';
+    position: absolute;
+    inset: -6px 0;
+  }
+  .un-link::after,
+  .qa-more::after {
+    content: '';
+    position: absolute;
+    inset: -12px -8px;
+  }
+  .ws-step {
+    width: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg button:active,
+  .tab:active,
+  .roll-choices button:active,
+  .ws-step:active,
+  .agenda-add:active,
+  .chip:active,
+  .task-check:active,
+  .cal-chip:active,
+  .cal-dayhead .dn:active,
+  .icon-btn:active,
+  .search-palette:active {
+    scale: none;
+  }
+  .bottom-nav a:active svg {
+    transform: none;
+  }
+}
+
+/* ---------------- a task held or right-clicked: its quick actions (components/TaskMenu.tsx) ---------------- */
+/* the row lifts under the finger as its menu comes up */
+:is(.task-row, .board-card, tr.click).is-lifted {
+  position: relative;
+  z-index: 3;
+  scale: 1.02;
+  box-shadow: var(--shadow-lg);
+  transition: scale 0.32s var(--spring), box-shadow 0.32s var(--spring);
+}
+@media (pointer: coarse) {
+  /* a hold is for the menu, not for selecting the text under the finger */
+  .task-row,
+  .board-card {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+.task-menu-sheet .task-menu-done {
+  background: var(--green-bg);
+  border-color: var(--green);
+  color: var(--green-ink);
+}
+/* a computer's menu at the pointer: a light, floating layer */
+.ctx-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
+  box-shadow: var(--shadow-lg);
+  transform-origin: top right;
+  animation: ctx-in 0.18s var(--spring);
+}
+@keyframes ctx-in {
+  from {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: start;
+  cursor: pointer;
+}
+.ctx-item svg {
+  color: var(--muted);
+}
+.ctx-item:focus {
+  background: var(--ink);
+  color: var(--paper);
+  outline: none;
+}
+.ctx-item:focus svg {
+  color: var(--paper);
+}
+.ctx-item.is-done svg {
+  color: var(--green);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ctx-menu {
+    animation: fade 0.15s ease-out;
+  }
+  :is(.task-row, .board-card, tr.click).is-lifted {
+    scale: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ctx-menu {
+    background: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---------------- the screen's title in the top bar, once its big title has scrolled away ---------------- */
+.top-brand-names {
+  display: grid;
+  min-width: 0;
+}
+.top-brand-names > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+  transition: opacity 0.22s ease, translate 0.38s var(--spring);
+}
+.top-brand-title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  translate: 0 55%;
+}
+.top-brand-names.is-titled .top-brand-name {
+  opacity: 0;
+  translate: 0 -55%;
+}
+.top-brand-names.is-titled .top-brand-title {
+  opacity: 1;
+  translate: 0 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .top-brand-names > * {
+    translate: none !important;
+  }
+}
+
+/* ---------------- pulled down from the top: the screen comes up to date (lib/pullRefresh.ts) ---------------- */
+.ptr {
+  position: fixed;
+  top: calc(var(--top-h) + 8px);
+  left: 50%;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(-50%, -44px, 0);
+}
+/* the arrow points down while pulling; past the point it turns up - let go to refresh */
+.ptr svg {
+  rotate: 180deg;
+  transition: color 0.15s;
+}
+.ptr.is-armed {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.ptr.is-loading svg {
+  display: none;
+}
+.ptr.is-loading::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@media (pointer: coarse) {
+  /* the browser's own bounce and pull-to-refresh give way to the app's */
+  html {
+    overscroll-behavior-y: none;
+  }
+}
+
+/* ---------------- the course's weeks: what is over as small links, the week now leading ---------------- */
+.weeks-past {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.weeks-past-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.week-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 6px 4px 12px;
+  padding-inline: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: scale 0.32s var(--spring), border-color 0.15s;
+}
+.week-pill:active {
+  scale: 0.96;
+  transition-duration: 0.08s;
+}
+@media (hover: hover) {
+  .week-pill:hover {
+    border-color: var(--ink-2);
+  }
+}
+.week-pill-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--paper-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.week-pill-pct {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--tone-bg, var(--gray-bg));
+  color: var(--tone-ink, var(--ink-2));
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.week-pill.is-open {
+  border-color: var(--orange);
+}
+/* the week now: a dot for each of its days, today's marked */
+.week-days {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+.week-days i {
+  width: 14px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--paper-2);
+}
+.week-days i.past {
+  background: var(--ink-2);
+}
+.week-days i.today {
+  width: 22px;
+  background: var(--focus);
+}
+.week-days span {
+  margin-inline-start: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .week-pill:active {
+    scale: none;
+  }
+}
+
+/* a week's readiness by domain: each line is a way to those tasks */
+.domain-line {
+  margin: 0 -8px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+  transition: scale 0.32s var(--spring), background-color 0.15s;
+}
+.domain-line:active {
+  scale: 0.98;
+  background: var(--hover-2);
+  transition-duration: 0.08s;
+}
+@media (hover: hover) {
+  .domain-line:hover {
+    background: var(--hover);
   }
 }
