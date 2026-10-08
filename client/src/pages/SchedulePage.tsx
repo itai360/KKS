@@ -1,48 +1,66 @@
 // Sections 22-23 (daily schedule, linked tasks), 58 (activity workflow),
 // 66-67 (schedule changes and cancellations ripple into tasks).
+// Read the way the calendar apps people keep opening are read: on a phone one running list of days
+// ("סדר יום") under a strip of the week, three days side by side, a month with dots over the day
+// picked; on a computer the week, the day or the list with the month beside them, and the month.
+// Adding is a line of text (components/Agenda.tsx).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { type CalendarView as CalendarViewName, stepDate, viewDays, viewTitle } from '@shared/calendarGrid';
-import { addDays, shortDate, weekdayName } from '@shared/dates';
+import { type CalendarView as CalendarViewName, MONTH_NAMES, monthWeeks, stepDate, viewDays, viewTitle } from '@shared/calendarGrid';
+import { addDays, diffDays, parseDateKey, shortDate, startOfWeek, weekdayName } from '@shared/dates';
 import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
-import { BulkCheck, bulkClick, BulkScope, BulkToggle, SwipeRow, useBulk } from '../components/Bulk';
+import { AgendaList, MonthDots, QuickAdd, scrollToDay, UpNext, WeekStrip, type EventPrefill } from '../components/Agenda';
+import { BulkScope, BulkToggle } from '../components/Bulk';
 import { CalendarView } from '../components/CalendarView';
 import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { usePeriodSwipe } from '../components/periodSwipe';
-import { usePhonePicker } from '../components/pickers';
 import { useNewTask } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg, Select, TimeInput } from '../components/ui';
+import { DateInput, ErrorBox, Field, Loading, Modal, PageHead, Ring, Seg, Select, TimeInput } from '../components/ui';
+import { agendaDays, endMinutes, foldQuiet, type AgendaRow } from '../lib/agenda';
 import { api, changedFields } from '../lib/api';
-import { fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '../lib/format';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
+import { dateKeyOf, fileSize, fmtDeadline, fmtLongDate, fmtTime, isoAt, todayKey } from '../lib/format';
+import { useMedia } from '../lib/media';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
 import { safeUrl } from '../lib/safeUrl';
 import { ask } from '../components/Confirm';
 
-type ScheduleView = 'list' | CalendarViewName;
-const VIEWS: { value: ScheduleView; label: string }[] = [
-  { value: 'list', label: 'רשימה' },
+type ScheduleView = 'agenda' | CalendarViewName;
+const ALL_VIEWS: ScheduleView[] = ['agenda', 'day', 'three', 'week', 'month'];
+const PHONE_VIEWS: { value: ScheduleView; label: string }[] = [
+  { value: 'agenda', label: 'סדר יום' },
+  { value: 'day', label: 'יום' },
+  { value: 'three', label: '3 ימים' },
+  { value: 'month', label: 'חודש' },
+];
+const DESK_VIEWS: { value: ScheduleView; label: string }[] = [
+  { value: 'agenda', label: 'סדר יום' },
   { value: 'day', label: 'יום' },
   { value: 'week', label: 'שבוע' },
   { value: 'month', label: 'חודש' },
 ];
 const VIEW_KEY = 'kks.scheduleView';
-const isView = (v: unknown): v is ScheduleView => VIEWS.some((o) => o.value === v);
+/** "list" was a list of one day: the running list took its place */
+const asView = (v: string | null): ScheduleView | null => (v === 'list' ? 'agenda' : ALL_VIEWS.includes(v as ScheduleView) ? (v as ScheduleView) : null);
 // a remembered view is a convenience: storage can be missing or blocked
-function savedView(): ScheduleView {
+function savedView(): ScheduleView | null {
   try {
-    const v = localStorage.getItem(VIEW_KEY);
-    return isView(v) ? v : 'list';
+    return asView(localStorage.getItem(VIEW_KEY));
   } catch {
-    return 'list';
+    return null;
   }
 }
+/** seven columns do not fit a phone; a computer has room for the whole week */
+const fitView = (v: ScheduleView, phone: boolean): ScheduleView => (phone && v === 'week' ? 'three' : !phone && v === 'three' ? 'week' : v);
+/** the running list: two weeks from the day picked, and a week more at a time */
+const AGENDA_DAYS = 14;
 type TasksShown = 'mine' | 'all' | 'none';
 const TASKS_KEY = 'kks.scheduleTasks';
 function savedTasksShown(): TasksShown {
@@ -53,24 +71,63 @@ function savedTasksShown(): TasksShown {
     return 'mine';
   }
 }
+const TASKS_OPTIONS: { value: TasksShown; label: string }[] = [
+  { value: 'mine', label: 'שלי' },
+  { value: 'all', label: 'של כולם' },
+  { value: 'none', label: 'בלי' },
+];
 // keys by position, so they work with a Hebrew keyboard too (as in Google Calendar)
-const VIEW_KEYS: Record<string, ScheduleView> = { KeyA: 'list', KeyD: 'day', KeyW: 'week', KeyM: 'month' };
+const VIEW_KEYS: Record<string, ScheduleView> = { KeyA: 'agenda', KeyD: 'day', KeyW: 'week', KeyM: 'month' };
+const VIEW_STEP: Record<ScheduleView, string> = { agenda: 'שבוע', day: 'יום', three: '3 ימים', week: 'שבוע', month: 'חודש' };
+
+const earliest = (a: string[]) => a.reduce((m, x) => (x < m ? x : m));
+const latest = (a: string[]) => a.reduce((m, x) => (x > m ? x : m));
+/** whole months' grids around the days needed: moving inside them asks the server for nothing new */
+function fetchRange(days: string[]): { from: string; to: string } {
+  const last = monthWeeks(latest(days));
+  return { from: monthWeeks(earliest(days))[0][0], to: last[last.length - 1][6] };
+}
+const deadlineAt = (t: Task) => ({ date: dateKeyOf(t.deadline), time: fmtTime(t.deadline) });
+// nothing yet, always the same nothing - so what is built from it is not built again on every render
+const NO_EVENTS: ScheduleEvent[] = [];
+const NO_EXTERNAL: ExternalEvent[] = [];
+const NO_TASKS: Task[] = [];
+const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 
 export function SchedulePage() {
   const [params, setParams] = useSearchParams();
+  const phone = useMedia(BOTTOM_BAR_MEDIA);
   const today = todayKey();
   const date = params.get('date') ?? today;
   const eventId = params.get('event');
-  const viewParam = params.get('view');
-  const view: ScheduleView = isView(viewParam) ? viewParam : savedView();
-  // the list and the day view show the week's strip of days; the month view its whole weeks
-  const days = view === 'month' ? viewDays('month', date) : viewDays('week', date);
-  const from = days[0];
-  const to = days[days.length - 1];
+  const view = fitView(asView(params.get('view')) ?? savedView() ?? (phone ? 'agenda' : 'week'), phone);
+  const { isCommander, weeks, user, viewing } = useSession();
+  const navigate = useNavigate();
+  const toast = useToast();
+  useTick(60_000);
+
+  // the running list: from the day picked; the day at its top as it scrolls, which the strip follows
+  const [more, setMore] = useState({ date, days: AGENDA_DAYS });
+  const span = more.date === date ? more.days : AGENDA_DAYS;
+  const agendaTo = addDays(date, span - 1);
+  const [focusFor, setFocusFor] = useState({ date, day: date });
+  const focus = view === 'agenda' && focusFor.date === date ? focusFor.day : date;
+  // the month to jump by: on a phone under the title, on a computer beside the day and the list
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const side = !phone && (view === 'agenda' || view === 'day');
+  const [miniFor, setMiniFor] = useState<{ day: string; month: string } | null>(null);
+  const miniMonth = miniFor?.day === focus ? miniFor.month : focus;
+  const miniShown = side || (phone && (pickerOpen || view === 'month'));
+
+  const shown = view === 'agenda' ? [] : viewDays(view, date);
+  const needed =
+    view === 'agenda' ? [startOfWeek(date), addDays(startOfWeek(agendaTo), 6)] : [shown[0], shown[shown.length - 1], ...(phone ? viewDays('week', date) : [])];
+  if (miniShown) needed.push(miniMonth);
+  const { from, to } = fetchRange(needed);
   const { data, error, loading, setData, reload } = useApi<ScheduleEvent[]>(`/api/events?from=${from}&to=${to}`, ['events', 'tasks']);
   // events of connected Google calendars (read-only); loaded on their own so the course schedule never waits for Google
   const external = useApi<ExternalEvent[]>(`/api/calendar/external?from=${from}&to=${to}`, ['events']);
-  // deadlines of open tasks in the calendar views (routine recurring tasks left out)
+  // deadlines of open tasks (routine recurring tasks left out)
   const [tasksShown, setTasksShownRaw] = useState<TasksShown>(savedTasksShown);
   const setTasksShown = (v: TasksShown) => {
     setTasksShownRaw(v);
@@ -80,16 +137,17 @@ export function SchedulePage() {
       /* not remembered */
     }
   };
-  const tasks = useApi<Task[]>(view !== 'list' && tasksShown !== 'none' ? `/api/tasks?from=${from}&to=${to}&hideClosed=1&recurring=0${tasksShown === 'mine' ? '&owner=me' : ''}` : null, ['tasks']);
-  const { isCommander, weeks, user } = useSession();
-  const navigate = useNavigate();
-  const toast = useToast();
-  const [creating, setCreating] = useState<{ date: string; start?: string; end?: string | null } | null>(params.get('new') === '1' ? { date } : null);
+  const tasks = useApi<Task[]>(tasksShown !== 'none' ? `/api/tasks?from=${from}&to=${to}&hideClosed=1&recurring=0${tasksShown === 'mine' ? '&owner=me' : ''}` : null, ['tasks']);
+  const events = data ?? NO_EVENTS;
+  const externalEvents = external.data ?? NO_EXTERNAL;
+  const taskList = tasksShown === 'none' ? NO_TASKS : (tasks.data ?? NO_TASKS);
+
+  const [creating, setCreating] = useState<EventPrefill | null>(null);
   const [editing, setEditing] = useState<ScheduleEvent | null>(null);
   const [google, setGoogle] = useState(false);
   const [peek, setPeek] = useState<ExternalEvent | null>(null);
   const [affected, setAffected] = useState<{ tasks: Task[]; delta: number; id: number } | null>(null);
-  useTick(60_000);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const set = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
@@ -106,15 +164,48 @@ export function SchedulePage() {
     } catch {
       /* not remembered */
     }
-    set({ view: v });
+    // the day being read goes along to the next view
+    set({ view: v, date: focus === today ? null : focus });
+    setPickerOpen(false);
   };
-  const step = (dir: 1 | -1) => set({ date: stepDate(view === 'list' ? 'day' : view, date, dir), event: null });
+  const step = (dir: 1 | -1) => set({ date: view === 'agenda' ? addDays(date, 7 * dir) : stepDate(view, date, dir), event: null });
+  // while the list is brought to a day, the day picked is the one being read - not each day passed on the way
+  const steering = useRef(0);
+  const steer = () => void (steering.current = Date.now() + 1000);
+  // the list started again from a day: once it is on the screen, that day is in sight
+  const pendingDay = useRef<string | null>(null);
+  /** to a day: in the list already - there; otherwise the list (or the view) starts from it */
+  const goTo = (d: string) => {
+    if (view === 'agenda' && d >= date && d <= agendaTo && scrollToDay(listRef.current, d)) {
+      steer();
+      setFocusFor({ date, day: d });
+      return;
+    }
+    set({ date: d === today ? null : d, event: null });
+    if (view === 'agenda' && d !== date) pendingDay.current = d;
+  };
+  useEffect(() => {
+    const d = pendingDay.current;
+    if (!d || view !== 'agenda') return;
+    pendingDay.current = null;
+    steer();
+    scrollToDay(listRef.current, d, true);
+  }, [date, view]);
+  const goToday = () => (view === 'agenda' && date === today ? goTo(today) : set({ date: null, event: null }));
+  const asked = params.get('new') === '1';
+  useEffect(() => {
+    if (!asked) return;
+    setCreating({ date: focus });
+    set({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked]);
   const swipeArea = useRef<HTMLDivElement>(null);
-  usePeriodSwipe(swipeArea, { enabled: usePhonePicker(), onStep: step });
+  const grid = view !== 'agenda' && !(phone && view === 'month');
+  usePeriodSwipe(swipeArea, { enabled: phone && grid, onStep: step });
 
   // t: today, j/k: next/previous, a/d/w/m: list/day/week/month (n stays "new task", everywhere)
-  const keys = useRef({ step, setView, set, today });
-  keys.current = { step, setView, set, today };
+  const keys = useRef({ step, setView, goToday });
+  keys.current = { step, setView, goToday };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
@@ -122,7 +213,7 @@ export function SchedulePage() {
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
       if (document.querySelector('.modal')) return;
       const k = keys.current;
-      if (e.code === 'KeyT') k.set({ date: k.today, event: null });
+      if (e.code === 'KeyT') k.goToday();
       else if (e.code === 'KeyJ') k.step(1);
       else if (e.code === 'KeyK') k.step(-1);
       else if (VIEW_KEYS[e.code]) k.setView(VIEW_KEYS[e.code]);
@@ -133,24 +224,46 @@ export function SchedulePage() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  const dayEvents = (data ?? []).filter((e) => e.date === date);
-  const dayExternal = (external.data ?? []).filter((e) => e.date === date);
-  const allDay = dayExternal.filter((e) => !e.startTime);
-  // course events and timed Google events in one timeline
-  const timeline: ({ kind: 'event'; at: string; e: ScheduleEvent } | { kind: 'external'; at: string; e: ExternalEvent })[] = [
-    ...dayEvents.map((e) => ({ kind: 'event' as const, at: e.startTime, e })),
-    ...dayExternal.filter((e) => e.startTime).map((e) => ({ kind: 'external' as const, at: e.startTime!, e })),
-  ].sort((a, b) => a.at.localeCompare(b.at));
-  const week = weeks.find((w) => w.startDate <= date && w.endDate >= date);
-  const leadOn = (d: string) => weeks.find((w) => w.startDate <= d && w.endDate >= d)?.leadId === user.id;
-  const canAdd = isCommander || week?.leadId === user.id;
-  const canAddOn = (d: string) => isCommander || leadOn(d);
-  const canMove = (e: ScheduleEvent) => isCommander || e.ownerId === user.id || leadOn(e.date);
+  const weekOf = (d: string) => weeks.find((w) => w.startDate <= d && w.endDate >= d);
+  const week = weekOf(focus);
+  const leadOn = (d: string) => weekOf(d)?.leadId === user.id;
+  const canAdd = !viewing && (isCommander || week?.leadId === user.id);
+  const canAddOn = (d: string) => !viewing && (isCommander || leadOn(d));
+  // as the server has it: the commander, the week's lead - or anyone, for an event in their own charge
+  const mayAdd = (d: string, ownerId: number | null) => canAddOn(d) || (!viewing && ownerId === user.id);
+  const canQuick = !viewing && (isCommander || weeks.some((w) => w.leadId === user.id));
+  const canMove = (e: ScheduleEvent) => !viewing && (isCommander || e.ownerId === user.id || leadOn(e.date));
   const nowTime = fmtTime(new Date().toISOString());
-  const shown = view === 'list' ? days : viewDays(view, date);
-  const shownEvents = (data ?? []).filter((e) => shown.includes(e.date));
-  const bulkIds = (view === 'list' ? dayEvents : shownEvents).map((e) => e.id);
-  const onToday = view === 'list' || view === 'day' ? date === today : shown.includes(today);
+
+  const loadOf = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const e of events) if (!e.cancelled) n.set(e.date, (n.get(e.date) ?? 0) + 1);
+    for (const x of externalEvents) n.set(x.date, (n.get(x.date) ?? 0) + 1);
+    return (d: string) => n.get(d) ?? 0;
+  }, [events, externalEvents]);
+  const rows: AgendaRow[] = useMemo(() => {
+    if (view === 'agenda') return foldQuiet(agendaDays(date, span, events, externalEvents, taskList, deadlineAt), new Set([today, date]));
+    if (phone && view === 'month') return agendaDays(date, 1, events, externalEvents, taskList, deadlineAt).map((d) => ({ kind: 'day' as const, ...d }));
+    return [];
+  }, [view, phone, date, span, events, externalEvents, taskList, today]);
+  const listed = view === 'agenda' ? (d: string) => d >= date && d <= agendaTo : phone && view === 'month' ? (d: string) => d === date : (d: string) => shown.includes(d);
+  const bulkIds = events.filter((e) => listed(e.date)).map((e) => e.id);
+  const onToday = view === 'agenda' ? date === today && focus === today : view === 'day' ? date === today : listed(today);
+  const title = view === 'agenda' ? viewTitle('day', focus) : viewTitle(view, date);
+  const stripDate = view === 'agenda' ? focus : date;
+  // a phone's title is the month: a tap on it opens the month to jump by
+  const phoneTitle = phone && view !== 'month';
+  const monthName = (d: string) => {
+    const { year, month } = parseDateKey(d);
+    return `${MONTH_NAMES[month - 1]}${year !== Number(today.slice(0, 4)) ? ` ${year}` : ''}`;
+  };
+  const inView = (d: string) => (view === 'agenda' || view === 'month' ? d === stripDate : shown.includes(d));
+  const openEvent = (e: ScheduleEvent) => set({ event: String(e.id) });
+  const monthPick = (d: string) => {
+    setPickerOpen(false);
+    goTo(d);
+  };
+  const monthStep = (dir: 1 | -1) => setMiniFor({ day: focus, month: stepDate('month', miniMonth, dir) });
 
   // dragged in the calendar: shown at once, saved, and put back if the server refuses
   const move = async (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }) => {
@@ -171,6 +284,54 @@ export function SchedulePage() {
     }
   };
 
+  const dayList = loading && !data ? (
+    <div className="card card-body">
+      <Loading rows={3} />
+    </div>
+  ) : (
+    <AgendaList
+      rows={rows}
+      today={today}
+      nowTime={nowTime}
+      weeks={weeks}
+      canAddOn={canAddOn}
+      onAdd={(d) => setCreating({ date: d })}
+      onOpen={openEvent}
+      onOpenExternal={setPeek}
+      onOpenTask={(t) => navigate(`/tasks/${t.id}`)}
+    />
+  );
+  const list = (
+    <>
+      {canQuick && <QuickAdd defaultDate={focus} today={today} allowed={mayAdd} onMore={setCreating} onAdded={openEvent} />}
+      {loading && !data ? (
+        <div className="card card-body">
+          <Loading rows={5} />
+        </div>
+      ) : (
+        <div ref={listRef}>
+          <AgendaList
+            rows={rows}
+            today={today}
+            nowTime={nowTime}
+            weeks={weeks}
+            canAddOn={canAddOn}
+            onAdd={(d) => setCreating({ date: d })}
+            onOpen={openEvent}
+            onOpenExternal={setPeek}
+            onOpenTask={(t) => navigate(`/tasks/${t.id}`)}
+            onFocusDay={view === 'agenda' ? (d) => Date.now() > steering.current && setFocusFor({ date, day: d }) : undefined}
+          />
+          {view === 'agenda' && (
+            <button type="button" className="btn agenda-more no-print" onClick={() => setMore({ date, days: span + 7 })}>
+              <Icon name="chevronDown" size={16} /> עוד שבוע
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <BulkScope
       entity="events"
@@ -184,11 +345,32 @@ export function SchedulePage() {
         { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} אירועים?' },
       ]}
     >
-    <div className="page">
+    <div className={`page schedule-page view-${view}${phone ? ' is-phone' : ''}${phone && view !== 'month' && !pickerOpen ? ' has-strip' : ''}`}>
       <PageHead
-        eyebrow={week ? week.name : 'לו"ז'}
-        title={date === today && (view === 'list' || view === 'day') ? `לו"ז היום` : 'לו"ז'}
-        sub={view === 'list' || view === 'day' ? fmtLongDate(date) : viewTitle(view, date)}
+        eyebrow={phoneTitle ? `לו"ז${week ? ` · ${week.name}` : ''}` : week?.name}
+        title={
+          phoneTitle ? (
+            // the month, in the title's own font - a tap on it (or on its arrow) opens the month to jump by
+            <span className="cal-month-title" onClick={() => setPickerOpen((o) => !o)}>
+              {monthName(stripDate)}
+              <button
+                type="button"
+                className="icon-btn cal-month-btn"
+                aria-expanded={pickerOpen}
+                aria-label={pickerOpen ? 'סגירת החודש' : 'בחירת יום מהחודש'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPickerOpen((o) => !o);
+                }}
+              >
+                <Icon name="chevronDown" size={20} />
+              </button>
+            </span>
+          ) : (
+            'לו"ז'
+          )
+        }
+        docTitle='לו"ז'
         actions={
           <>
             {canAdd && <BulkToggle />}
@@ -198,146 +380,120 @@ export function SchedulePage() {
             <button className="btn" onClick={() => window.print()}>
               <Icon name="print" /> הדפסה
             </button>
+            {phone && (
+              <div className="more-field">
+                <span className="small muted">דד-ליינים של משימות</span>
+                <Seg value={tasksShown} options={TASKS_OPTIONS} onChange={setTasksShown} />
+              </div>
+            )}
             {canAdd && (
-              <button className="btn btn-primary" onClick={() => setCreating({ date })}>
+              <button className="btn btn-primary" onClick={() => setCreating({ date: focus })}>
                 <Icon name="plus" /> אירוע
               </button>
             )}
           </>
         }
       />
-      <div className="cal-toolbar mb-12">
-        <button className="btn btn-sm" onClick={() => set({ date: today, event: null })} disabled={onToday} title="היום (T)">
-          היום
-        </button>
-        <button className="icon-btn" aria-label={`${VIEW_STEP[view]} קודם`} title={`${VIEW_STEP[view]} קודם (K)`} onClick={() => step(-1)}>
-          <Icon name="chevronRight" />
-        </button>
-        <button className="icon-btn" aria-label={`${VIEW_STEP[view]} הבא`} title={`${VIEW_STEP[view]} הבא (J)`} onClick={() => step(1)}>
-          <Icon name="chevronLeft" />
-        </button>
-        <h2 className="cal-title">{viewTitle(view === 'list' ? 'day' : view, date)}</h2>
-        <span className="grow" />
-        {view !== 'list' && (
+      {phone ? (
+        <>
+          <div className="cal-toolbar">
+            <Seg value={view} options={PHONE_VIEWS} onChange={setView} />
+            <span className="grow" />
+            <button className="btn btn-sm" onClick={goToday} disabled={onToday}>
+              היום
+            </button>
+          </div>
+          {view !== 'month' &&
+            (pickerOpen ? (
+              <div className="card mdots-card">
+                <MonthDots month={miniMonth} selected={stripDate} today={today} load={loadOf} onPick={monthPick} onStep={monthStep} />
+              </div>
+            ) : (
+              <div className="ws-sticky">
+                <WeekStrip date={stripDate} today={today} inView={inView} load={loadOf} onPick={goTo} onStep={(dir) => goTo(addDays(stripDate, 7 * dir))} />
+              </div>
+            ))}
+        </>
+      ) : (
+        <div className="cal-toolbar mb-12">
+          <button className="btn btn-sm" onClick={goToday} disabled={onToday} title="היום (T)">
+            היום
+          </button>
+          <button className="icon-btn" aria-label={`${VIEW_STEP[view]} קודם`} title={`${VIEW_STEP[view]} קודם (K)`} onClick={() => step(-1)}>
+            <Icon name="chevronRight" />
+          </button>
+          <button className="icon-btn" aria-label={`${VIEW_STEP[view]} הבא`} title={`${VIEW_STEP[view]} הבא (J)`} onClick={() => step(1)}>
+            <Icon name="chevronLeft" />
+          </button>
+          <h2 className="cal-title">{title}</h2>
+          <span className="grow" />
           <Select className="select cal-tasks" value={tasksShown} onChange={(e) => setTasksShown(e.target.value as TasksShown)} aria-label="דד-ליינים של משימות ביומן">
             <option value="mine">דד-ליינים: שלי</option>
             <option value="all">דד-ליינים: כל המשימות</option>
             <option value="none">בלי דד-ליינים</option>
           </Select>
-        )}
-        <Seg value={view} options={VIEWS} onChange={setView} />
-      </div>
-      {(view === 'list' || view === 'day') && (
-        <div className="day-strip mb-12">
-          {days.map((d) => {
-            const n = (data ?? []).filter((e) => e.date === d && !e.cancelled).length + (external.data ?? []).filter((e) => e.date === d).length;
-            return (
-              <button key={d} className={`day-pill${d === date ? ' on' : ''}${d === today ? ' today' : ''}`} onClick={() => set({ date: d, event: null })}>
-                <div className="dw">{weekdayName(d)}</div>
-                <div className="dn">{Number(d.slice(8))}</div>
-                <div className="dc">{n ? `${n} אירועים` : '·'}</div>
-              </button>
-            );
-          })}
+          <Seg value={view} options={DESK_VIEWS} onChange={setView} />
         </div>
       )}
       <ErrorBox error={error} />
-      {/* on a phone the day, week or month turns with the finger, like a page */}
-      <div className="period-clip">
-      <div className="period-swipe" ref={swipeArea}>
-      {view !== 'list' ? (
-        loading && !data ? (
-          <div className="card card-body">
-            <Loading rows={6} />
-          </div>
-        ) : (
-          <CalendarView
-            view={view}
-            date={date}
-            today={today}
-            ready={!loading}
-            nowTime={nowTime}
-            events={data ?? []}
-            external={external.data ?? []}
-            tasks={tasksShown === 'none' ? [] : (tasks.data ?? [])}
-            canCreate={canAddOn}
-            canMove={canMove}
-            onOpen={(e) => set({ event: String(e.id) })}
-            onOpenExternal={setPeek}
-            onOpenTask={(t) => navigate(`/tasks/${t.id}`)}
-            onCreate={(d, start, end) => setCreating({ date: d, start, end })}
-            onMove={(e, to) => void move(e, to)}
-            onPickDay={(d) => set({ date: d, view: 'day', event: null })}
-          />
-        )
-      ) : (
-      <div className="card">
-        {loading && !data ? (
-          <div className="card-body">
-            <Loading rows={4} />
-          </div>
-        ) : timeline.length === 0 && allDay.length === 0 ? (
-          <Empty icon="calendar" title="אין אירועים" text={canAdd ? 'הוסיפו אירועים ללו"ז היום - ולכל אירוע אחראי, מיקום ומשימות הכנה.' : undefined} />
-        ) : (
-          <>
-            {allDay.map((e) => (
-              <div key={e.id} className="event-row external">
-                <div className="event-time small">כל היום</div>
-                <div style={{ minWidth: 0 }}>
-                  <div className="event-title">{e.title}</div>
-                  <div className="task-meta">
-                    <span>{e.sourceName}</span>
-                    {e.location && (
-                      <span className="sep">
-                        <Icon name="pin" size={13} /> {e.location}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <span className="badge t-blue">Google</span>
+      <div className={`schedule-body${side ? ' with-side' : ''}`}>
+        <div className="schedule-main">
+          {view === 'agenda' ? (
+            list
+          ) : phone && view === 'month' ? (
+            <>
+              <div className="card mdots-card">
+                <MonthDots month={date} selected={date} today={today} load={loadOf} onPick={(d) => set({ date: d === today ? null : d, event: null })} onStep={step} />
               </div>
-            ))}
-            {timeline.map((item) => {
-              if (item.kind === 'external') {
-                const e = item.e;
-                return (
-                  <div key={e.id} className="event-row external">
-                    <div className="event-time">
-                      {e.startTime}
-                      {e.endTime && <span className="end">עד {e.endTime}</span>}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="event-title">{e.title}</div>
-                      <div className="task-meta">
-                        <span>{e.sourceName}</span>
-                        {e.location && (
-                          <span className="sep">
-                            <Icon name="pin" size={13} /> {e.location}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span className="badge t-blue">Google</span>
-                  </div>
-                );
-              }
-              const e = item.e;
-              const isNow = date === today && e.startTime <= nowTime && (e.endTime ? e.endTime > nowTime : false);
-              return <CourseEventRow key={e.id} e={e} isNow={isNow} onOpen={() => set({ event: String(e.id) })} />;
-            })}
-          </>
+              {dayList}
+            </>
+          ) : loading && !data ? (
+            <div className="card card-body">
+              <Loading rows={6} />
+            </div>
+          ) : (
+            // on a phone the day or the three days turn with the finger, like a page
+            <div className="period-clip">
+              <div className="period-swipe" ref={swipeArea}>
+                <CalendarView
+                  view={view}
+                  date={date}
+                  today={today}
+                  ready={!loading}
+                  nowTime={nowTime}
+                  events={events}
+                  external={externalEvents}
+                  tasks={taskList}
+                  canCreate={canAddOn}
+                  canMove={canMove}
+                  onOpen={openEvent}
+                  onOpenExternal={setPeek}
+                  onOpenTask={(t) => navigate(`/tasks/${t.id}`)}
+                  onCreate={(d, start, end) => setCreating({ date: d, start, end })}
+                  onMove={(e, to) => void move(e, to)}
+                  onPickDay={(d) => set({ date: d, view: 'day', event: null })}
+                />
+              </div>
+            </div>
+          )}
+          {grid && !phone && (
+            <div className="cal-hint small muted no-print">
+              {canAdd ? 'לחיצה או גרירה על זמן פנוי - אירוע חדש · גרירת אירוע - הזזה · גרירת הקצה התחתון - שינוי משך · ' : ''}
+              קיצורים: T היום, J/K הבא/הקודם, A/D/W/M סדר יום/יום/שבוע/חודש
+            </div>
+          )}
+        </div>
+        {side && (
+          <aside className="schedule-side no-print" aria-label="החודש והשבוע">
+            <UpNext events={events} today={today} nowTime={nowTime} onOpen={openEvent} />
+            <div className="card mdots-card">
+              <MonthDots month={miniMonth} selected={focus} today={today} load={loadOf} onPick={goTo} onStep={monthStep} />
+            </div>
+            {week && <SideWeek week={week} />}
+          </aside>
         )}
       </div>
-      )}
-      </div>
-      </div>
-      {view !== 'list' && (
-        <div className="cal-hint small muted no-print">
-          {canAdd ? 'לחיצה או גרירה על זמן פנוי - אירוע חדש · גרירת אירוע - הזזה · גרירת הקצה התחתון - שינוי משך · ' : ''}
-          קיצורים: T היום, J/K הבא/הקודם, A/D/W/M רשימה/יום/שבוע/חודש
-        </div>
-      )}
-      {creating && <EventForm defaultDate={creating.date} defaultStart={creating.start} defaultEnd={creating.end} onClose={() => setCreating(null)} />}
+      {creating && <EventForm prefill={creating} onClose={() => setCreating(null)} />}
       {google && <GoogleCalendarModal onClose={() => setGoogle(false)} />}
       {peek && <ExternalEventModal event={peek} onClose={() => setPeek(null)} />}
       {affected && <ShiftTasks {...affected} onClose={() => setAffected(null)} />}
@@ -349,7 +505,22 @@ export function SchedulePage() {
   );
 }
 
-const VIEW_STEP: Record<ScheduleView, string> = { list: 'יום', day: 'יום', week: 'שבוע', month: 'חודש' };
+/** The course week of the day being read, beside the calendar: its lead, how ready it is, its page. */
+function SideWeek({ week: w }: { week: { id: number; name: string; startDate: string; endDate: string; leadName: string | null; readiness: number; totalTasks: number } }) {
+  return (
+    <Link className="card side-week" to={`/weeks/${w.id}`}>
+      <span className="grow">
+        <span className="label-caps">השבוע בקורס</span>
+        <b className="side-week-name">{w.name}</b>
+        <span className="small muted">
+          {shortDate(w.startDate)} - {shortDate(w.endDate)}
+          {w.leadName ? ` · ${w.leadName}` : ''}
+        </span>
+      </span>
+      <Ring value={w.readiness} size={48} tone={w.totalTasks === 0 ? 'gray' : undefined} />
+    </Link>
+  );
+}
 
 /** An event of a connected Google calendar: read-only, so just its details. */
 function ExternalEventModal({ event: e, onClose }: { event: ExternalEvent; onClose: () => void }) {
@@ -384,64 +555,25 @@ function ExternalEventModal({ event: e, onClose }: { event: ExternalEvent; onClo
   );
 }
 
-function CourseEventRow({ e, isNow, onOpen }: { e: ScheduleEvent; isNow: boolean; onOpen: () => void }) {
-  const bulk = useBulk();
-  return (
-    <SwipeRow itemId={e.id} label={e.title}>
-    <div className={`event-row${e.cancelled ? ' cancelled' : ''}${isNow ? ' now' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, e.id, onOpen))}>
-      <div className="event-time">
-        <BulkCheck id={e.id} />
-        {e.startTime}
-        {e.endTime && <span className="end">עד {e.endTime}</span>}
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div className="event-title">
-          {e.title} {e.cancelled && <span className="badge t-red">בוטל</span>}
-          {isNow && <span className="badge t-orange">עכשיו</span>}
-        </div>
-        <div className="task-meta">
-          {e.location && (
-            <span>
-              <Icon name="pin" size={13} /> {e.location}
-            </span>
-          )}
-          {e.ownerName && <span className={e.location ? 'sep' : ''}>אחראי: {e.ownerName}</span>}
-          {e.notes && <span className="sep">{e.notes.slice(0, 60)}</span>}
-        </div>
-      </div>
-      <div className="row gap-6">
-        {e.taskTotal > 0 && (
-          <span className={`badge t-${e.taskDone === e.taskTotal ? 'green' : 'orange'}`}>
-            הכנה {e.taskDone}/{e.taskTotal}
-          </span>
-        )}
-      </div>
-    </div>
-    </SwipeRow>
-  );
-}
-
 function EventForm({
   event,
-  defaultDate,
-  defaultStart,
-  defaultEnd,
+  prefill,
   onClose,
 }: {
   event?: ScheduleEvent;
-  defaultDate?: string;
-  defaultStart?: string;
-  defaultEnd?: string | null;
+  /** a new event: the day, and what is already known (a time chosen in the calendar, a line written) */
+  prefill?: EventPrefill;
   onClose: () => void;
 }) {
   const { users } = useSession();
   const toast = useToast();
-  const [date, setDate] = useState(event?.date ?? defaultDate ?? todayKey());
-  const [start, setStart] = useState(event?.startTime ?? defaultStart ?? '08:00');
-  const [end, setEnd] = useState(event?.endTime ?? defaultEnd ?? '');
-  const [title, setTitle] = useState(event?.title ?? '');
-  const [location, setLocation] = useState(event?.location ?? '');
-  const [owner, setOwner] = useState<string>(event?.ownerId ? String(event.ownerId) : '');
+  const [date, setDate] = useState(event?.date ?? prefill?.date ?? todayKey());
+  const [start, setStart] = useState(event?.startTime ?? prefill?.start ?? '08:00');
+  const [end, setEnd] = useState(event?.endTime ?? prefill?.end ?? '');
+  const [title, setTitle] = useState(event?.title ?? prefill?.title ?? '');
+  const [location, setLocation] = useState(event?.location ?? prefill?.location ?? '');
+  const ownerId = event ? event.ownerId : prefill?.ownerId;
+  const [owner, setOwner] = useState<string>(ownerId ? String(ownerId) : '');
   const [notes, setNotes] = useState(event?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
   const [affected, setAffected] = useState<{ tasks: Task[]; delta: number; id: number } | null>(null);
@@ -608,6 +740,13 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
   const e = data.event;
   const week = weeks.find((w) => w.startDate <= e.date && w.endDate >= e.date);
   const canManage = isCommander || e.ownerId === user.id || week?.leadId === user.id;
+  const today = todayKey();
+  const nowMin = minutesOf(fmtTime(new Date().toISOString()));
+  // over, and lately: the debrief is asked for while it is still fresh
+  const ended = !e.cancelled && (e.date < today || (e.date === today && endMinutes(e) <= nowMin));
+  const askDebrief = ended && !data.debriefs.length && diffDays(today, e.date) <= 7;
+  const prep = data.tasks.filter((t) => t.status !== 'cancelled');
+  const prepDone = prep.filter((t) => t.status === 'done').length;
 
   const run = async (fn: () => Promise<unknown>, ok?: string) => {
     setErr(null);
@@ -664,11 +803,27 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
             </div>
           )}
         </div>
+        {askDebrief && (
+          <div className="info-box drawer-prompt">
+            <Icon name="lightbulb" size={18} />
+            <span className="grow">הפעילות הסתיימה - זה הזמן לתחקיר, כשהפרטים עוד טריים.</span>
+            <button className="btn btn-sm btn-primary" onClick={() => navigate(`/debriefs?event=${e.id}`)}>
+              פתח תחקיר
+            </button>
+          </div>
+        )}
         {e.notes && <div className="info-box" style={{ whiteSpace: 'pre-wrap' }}>{e.notes}</div>}
 
         <div>
           <div className="row mb-12">
-            <h3 className="grow">משימות הכנה ({data.tasks.length})</h3>
+            <h3 className="grow">
+              משימות הכנה{' '}
+              {prep.length > 0 && (
+                <span className={`badge t-${prepDone === prep.length ? 'green' : ended ? 'red' : 'orange'}`}>
+                  {prepDone}/{prep.length} הושלמו
+                </span>
+              )}
+            </h3>
             {canManage && (
               <button className="btn btn-sm" onClick={() => setTplOpen(true)}>
                 <Icon name="template" /> מתבנית פעילות

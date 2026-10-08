@@ -253,7 +253,9 @@ function readRailPref(): 'collapsed' | 'expanded' | null {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, settings, unread, logout, isCommander, viewing } = useSession();
+  const { user, settings, unread, logout, isCommander, viewing, weeks } = useSession();
+  // the commander and the week leads add to the schedule from anywhere, as they add a task
+  const canEvent = !viewing && (isCommander || weeks.some((w) => w.leadId === user.id));
   const sections = useNavSections();
   const newTask = useNewTask();
   const navigate = useNavigate();
@@ -689,7 +691,7 @@ export function Layout({ children }: { children: ReactNode }) {
           id="plus-button"
           className={plusOpen ? 'plus-open' : ''}
           onClick={() => !viewing && setPlusOpen((o) => !o)}
-          aria-label={viewing ? 'קורס קודם - לקריאה בלבד' : 'הוספה: משימה או שבועי'}
+          aria-label={viewing ? 'קורס קודם - לקריאה בלבד' : canEvent ? 'הוספה: משימה, אירוע בלו"ז או שבועי' : 'הוספה: משימה או שבועי'}
           aria-disabled={viewing ? 'true' : undefined}
           aria-haspopup="menu"
           aria-expanded={plusOpen}
@@ -725,14 +727,22 @@ export function Layout({ children }: { children: ReactNode }) {
             setPlusOpen(false);
             addToWeekly();
           }}
+          onEvent={
+            canEvent
+              ? () => {
+                  setPlusOpen(false);
+                  navigate('/schedule?new=1');
+                }
+              : undefined
+          }
         />
       )}
     </div>
   );
 }
 
-/** the phone bar's "+": the two things one adds on the move, rising above it */
-function PlusMenu({ onClose, onTask, onWeekly, leaving }: { onClose: () => void; onTask: () => void; onWeekly: () => void; leaving: boolean }) {
+/** the phone bar's "+": the things one adds on the move, rising above it */
+function PlusMenu({ onClose, onTask, onWeekly, onEvent, leaving }: { onClose: () => void; onTask: () => void; onWeekly: () => void; onEvent?: () => void; leaving: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus();
@@ -773,6 +783,17 @@ function PlusMenu({ onClose, onTask, onWeekly, leaving }: { onClose: () => void;
             <span className="plus-menu-sub">משימה חדשה עם אחראי ודד-ליין</span>
           </span>
         </button>
+        {onEvent && (
+          <button type="button" role="menuitem" onClick={onEvent}>
+            <span className="plus-menu-icon">
+              <Icon name="calendar" />
+            </span>
+            <span className="grow">
+              <span className="plus-menu-title">אירוע בלו"ז</span>
+              <span className="plus-menu-sub">פעילות חדשה עם שעות, מיקום ואחראי</span>
+            </span>
+          </button>
+        )}
         <button type="button" role="menuitem" onClick={onWeekly}>
           <span className="plus-menu-icon">
             <Icon name="weekly" />

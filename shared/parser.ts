@@ -36,9 +36,9 @@ export interface ParsedTask {
   missing: ('title' | 'owner' | 'deadline')[];
 }
 
-const HB = '\\u0590-\\u05FF';
-const LB = `(?<![${HB}\\w])`; // word start (JS \b does not understand Hebrew)
-const RB = `(?![${HB}\\w])`; // word end
+export const HB = '\\u0590-\\u05FF';
+export const LB = `(?<![${HB}\\w])`; // word start (JS \b does not understand Hebrew)
+export const RB = `(?![${HB}\\w])`; // word end
 
 export function normalizeHebrew(s: string): string {
   return s
@@ -54,7 +54,7 @@ function escapeRe(s: string): string {
 }
 
 /** Regex source for a name where quote marks are optional (מפק"צ == מפקצ). */
-function looseNameSource(name: string): string {
+export function looseNameSource(name: string): string {
   const n = normalizeHebrew(name).replace(/["']/g, '');
   return n
     .split('')
@@ -67,7 +67,7 @@ interface Span {
   end: number;
 }
 
-class Extractor {
+export class Extractor {
   text: string;
   private removed: Span[] = [];
   constructor(text: string) {
@@ -91,9 +91,17 @@ class Extractor {
     return null;
   }
   remaining(): string {
+    return this.pieces().join(' ');
+  }
+  /** What is left, in the pieces the matches taken cut it into. */
+  pieces(): string[] {
     const chars = this.text.split('');
-    for (const r of this.removed) for (let i = r.start; i < r.end; i++) chars[i] = ' ';
-    return chars.join('').replace(/\s+/g, ' ').trim();
+    for (const r of this.removed) for (let i = r.start; i < r.end; i++) chars[i] = '\u0000';
+    return chars
+      .join('')
+      .split(/\u0000+/)
+      .map((s) => s.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
   }
 }
 
@@ -191,7 +199,7 @@ const DOMAIN_KEYWORDS: [RegExp, string][] = [
   [/הערכ|משוב|ציון/, 'הערכה'],
 ];
 
-function nextWeekday(todayKey: string, target: number): string {
+export function nextWeekday(todayKey: string, target: number): string {
   const cur = weekdayOf(todayKey);
   let diff = (target - cur + 7) % 7;
   if (diff === 0) diff = 7;

@@ -1,8 +1,9 @@
 // Sections 10 and 48 - what a staff member opens in the morning.
 
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { shortDate } from '@shared/dates';
-import type { MyTasksData } from '@shared/types';
+import type { MyTasksData, ScheduleEvent } from '@shared/types';
+import { UpNext } from '../components/Agenda';
 import { DisciplineCard } from '../components/DisciplineCard';
 import { PendingAnnouncements } from '../components/Announcements';
 import { Icon } from '../components/Icon';
@@ -10,7 +11,7 @@ import { useNewTask } from '../components/NewTask';
 import { BulkToggle } from '../components/Bulk';
 import { GroupTaskRow, GroupTitle, TaskBulkScope, TaskList, TaskRow } from '../components/TaskRow';
 import { CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
-import { fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
+import { fmtLongDate, fmtTime, greetName, greeting, todayKey } from '../lib/format';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
 
@@ -51,6 +52,7 @@ export function MyTasksPage() {
       ) : data ? (
         <div className="fade-in">
           <PendingAnnouncements spaced />
+          <TodayOnSchedule />
           {/* four zeros say nothing: with nothing open and nothing done today, the empty state says it */}
           {(total > 0 || data.stats.doneToday > 0) && (
             <div className="stats">
@@ -162,6 +164,33 @@ export function MyTasksPage() {
       ) : null}
     </div>
     </TaskBulkScope>
+  );
+}
+
+/** What goes on now in the course's schedule and what comes next - the schedule where the day starts. */
+function TodayOnSchedule() {
+  const today = todayKey();
+  const { data } = useApi<ScheduleEvent[]>(`/api/events?from=${today}&to=${today}`, ['events']);
+  const navigate = useNavigate();
+  if (!data) return null;
+  return (
+    <div className="my-up-next">
+      <UpNext
+        events={data}
+        today={today}
+        nowTime={fmtTime(new Date().toISOString())}
+        onOpen={(e) => navigate(`/schedule?date=${e.date}&event=${e.id}`)}
+        head={
+          <>
+            <Icon name="calendar" size={15} />
+            <span className="grow">לו"ז היום</span>
+            <Link to="/schedule" className="un-link">
+              ללו"ז <Icon name="chevronLeft" size={14} />
+            </Link>
+          </>
+        }
+      />
+    </div>
   );
 }
 

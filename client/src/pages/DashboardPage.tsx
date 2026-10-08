@@ -13,7 +13,8 @@ import { useNewTask } from '../components/NewTask';
 import { useToast } from '../components/Toasts';
 import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { api } from '../lib/api';
-import { fmtDeadline, fmtLongDate, greetName, greeting, todayKey } from '../lib/format';
+import { endMinutes, inMinutes, leftMinutes, nowAndNext } from '../lib/agenda';
+import { fmtDeadline, fmtLongDate, fmtTime, greetName, greeting, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
@@ -458,7 +459,15 @@ function StaffHealth({ data }: { data: DashboardData }) {
 
 function TodayEvents({ data }: { data: DashboardData }) {
   const [expanded, setExpanded] = useState(false);
-  const events = expanded ? data.todayEvents : data.todayEvents.slice(0, 3);
+  const today = todayKey();
+  const nowTime = fmtTime(new Date().toISOString());
+  const live = nowAndNext(data.todayEvents, today, nowTime);
+  const nowMin = Number(nowTime.slice(0, 2)) * 60 + Number(nowTime.slice(3, 5));
+  // folded, the three that matter now: from the one going on (or the next one), or the day's last three once it is over
+  const all = data.todayEvents;
+  const from = all.findIndex((e) => e.id === (live.now ?? live.next)?.id);
+  const start = Math.min(from === -1 ? all.length : from, Math.max(0, all.length - 3));
+  const events = expanded ? all : all.slice(start, start + 3);
   return (
     <section className="card dashboard-schedule" aria-labelledby="today-title">
       <div className="card-head">
@@ -479,8 +488,12 @@ function TodayEvents({ data }: { data: DashboardData }) {
           </Link>
         </div>
       ) : (
-        events.map((e) => (
-          <Link key={e.id} className="dashboard-event" to={`/schedule?date=${e.date}&event=${e.id}`}>
+        events.map((e) => {
+          const isNow = live.now?.id === e.id;
+          const isNext = live.next?.id === e.id;
+          const past = !isNow && endMinutes(e) <= nowMin;
+          return (
+          <Link key={e.id} className={`dashboard-event${isNow ? ' is-now' : ''}${past ? ' is-past' : ''}`} to={`/schedule?date=${e.date}&event=${e.id}`}>
             <span className="dashboard-event-time mono">
               <b>{e.startTime}</b>
               {e.endTime && <span>{e.endTime}</span>}
@@ -488,7 +501,14 @@ function TodayEvents({ data }: { data: DashboardData }) {
             <span className="dashboard-event-marker" aria-hidden="true" />
             <span className="grow">
               <b>{e.title}</b>
+              {isNow && <span className="badge t-orange dashboard-event-when">עכשיו · {leftMinutes(live.left)}</span>}
+              {isNext && <span className="badge t-blue dashboard-event-when">{inMinutes(live.until)}</span>}
               {(e.location || e.ownerName) && <span className="dashboard-event-detail">{[e.location, e.ownerName].filter(Boolean).join(' · ')}</span>}
+              {isNow && (
+                <span className="un-bar dashboard-event-bar" aria-hidden="true">
+                  <i style={{ inlineSize: `${Math.round(live.progress * 100)}%` }} />
+                </span>
+              )}
             </span>
             {e.taskTotal > 0 && (
               <span className={`badge ${e.taskDone < e.taskTotal ? 't-orange' : 't-green'}`} title="משימות הכנה שהושלמו">
@@ -499,7 +519,8 @@ function TodayEvents({ data }: { data: DashboardData }) {
               </span>
             )}
           </Link>
-        ))
+          );
+        })
       )}
       {data.todayEvents.length > 3 && (
         <button className="btn btn-ghost agenda-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>

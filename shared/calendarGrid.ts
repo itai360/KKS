@@ -5,7 +5,8 @@
 
 import { addDays, parseDateKey, startOfWeek, toDateKey } from './dates';
 
-export type CalendarView = 'day' | 'week' | 'month';
+/** 'three': the day chosen and the two after it - a phone's week, wide enough to read */
+export type CalendarView = 'day' | 'three' | 'week' | 'month';
 
 export const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'] as const;
 
@@ -58,6 +59,7 @@ export function monthWeeks(date: string): string[][] {
 /** The days a view shows, in order. */
 export function viewDays(view: CalendarView, date: string): string[] {
   if (view === 'day') return [date];
+  if (view === 'three') return [date, addDays(date, 1), addDays(date, 2)];
   if (view === 'week') return Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(date), i));
   return monthWeeks(date).flat();
 }
@@ -65,6 +67,7 @@ export function viewDays(view: CalendarView, date: string): string[] {
 /** The previous or next day, week or month. A month step keeps the day, or the month's last day. */
 export function stepDate(view: CalendarView, date: string, dir: 1 | -1): string {
   if (view === 'day') return addDays(date, dir);
+  if (view === 'three') return addDays(date, 3 * dir);
   if (view === 'week') return addDays(date, 7 * dir);
   const { year, month, day } = parseDateKey(date);
   const m = month - 1 + dir;
@@ -75,7 +78,7 @@ export function stepDate(view: CalendarView, date: string, dir: 1 | -1): string 
 
 /** "אוקטובר 2026", or "ספטמבר - אוקטובר 2026" for a week across two months. */
 export function viewTitle(view: CalendarView, date: string): string {
-  const days = view === 'week' ? viewDays('week', date) : [date];
+  const days = view === 'week' || view === 'three' ? viewDays(view, date) : [date];
   const a = parseDateKey(days[0]);
   const b = parseDateKey(days[days.length - 1]);
   if (a.month === b.month) return `${MONTH_NAMES[a.month - 1]} ${a.year}`;
