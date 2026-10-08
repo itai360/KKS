@@ -1,7 +1,8 @@
 // Section 36 - setting up the course (dates, weeks, staff, domains, templates,
 // recurring tasks, permissions) and personal settings.
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
 import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Template, User } from '@shared/types';
@@ -9,6 +10,7 @@ import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../compone
 import { GuideImportCard } from '../components/Discipline';
 import { AbsencesCard } from '../components/Absences';
 import { Icon } from '../components/Icon';
+import { SectionRail, type RailItem } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
 import { DateInput, ErrorBox, Field, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
@@ -28,28 +30,38 @@ import { useStaffGroups } from '../lib/taskGroups';
 
 export function SettingsPage() {
   const { isCommander, user } = useSession();
+  // the page's parts, in order - each one a stop on the floating strip once the page is scrolled
+  const parts: { key: string; label: string; node: ReactNode }[] = [
+    ...(isCommander
+      ? [
+          { key: 'setup', label: 'הקמת הקורס', node: <SetupChecklist /> },
+          { key: 'course', label: 'פרטי הקורס', node: <CourseSettingsCard /> },
+          { key: 'staff', label: 'סגל ומשתמשים', node: <StaffCard /> },
+          { key: 'domains', label: 'תחומים', node: <DomainsCard /> },
+          { key: 'groups', label: 'קבוצות סגל', node: <StaffGroupsCard /> },
+          { key: 'permissions', label: 'הרשאות', node: <PermissionsCard /> },
+          { key: 'guide', label: 'מדרג אכיפה', node: <GuideImportCard /> },
+          { key: 'backups', label: 'גיבויים', node: <BackupCard /> },
+        ]
+      : []),
+    { key: 'contact', label: 'פרטי קשר', node: <ContactCard /> },
+    { key: 'absences', label: 'היעדרויות', node: <AbsencesCard userId={user.id} mine canEdit /> },
+    { key: 'appearance', label: 'מראה', node: <AppearanceCard /> },
+    { key: 'push', label: 'התראות', node: <BrowserNotificationsCard /> },
+    { key: 'password', label: 'סיסמה', node: <PasswordCard /> },
+    { key: 'twofactor', label: 'אימות דו-שלבי', node: <TwoFactorSettings /> },
+  ];
+  const rail: RailItem[] = parts.map((p, i) => ({ id: `part-${p.key}`, n: i + 1, label: p.label }));
   return (
     <div className="page narrow">
       <PageHead title={isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'} />
+      <SectionRail label="חלקי ההגדרות" items={rail} />
       <div className="col gap-16">
-        {isCommander && (
-          <>
-            <SetupChecklist />
-            <CourseSettingsCard />
-            <StaffCard />
-            <DomainsCard />
-            <StaffGroupsCard />
-            <PermissionsCard />
-            <GuideImportCard />
-            <BackupCard />
-          </>
-        )}
-        <ContactCard />
-        <AbsencesCard userId={user.id} mine canEdit />
-        <AppearanceCard />
-        <BrowserNotificationsCard />
-        <PasswordCard />
-        <TwoFactorSettings />
+        {parts.map((p) => (
+          <div key={p.key} id={`part-${p.key}`} className="settings-part">
+            {p.node}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -106,16 +118,44 @@ function SetupChecklist() {
   );
 }
 
+const COURSE_FIELDS = ['courseName', 'courseSymbol', 'startDate', 'endDate', 'timezone', 'staleDays', 'defaultDeadlineTime', 'overloadThreshold', 'readinessWarnThreshold'] as const;
+const same = (a: unknown, b: unknown) => String(a ?? '') === String(b ?? '');
+
 function CourseSettingsCard() {
   const { settings } = useSession();
   const toast = useToast();
   const [s, setS] = useState<CourseSettings>(settings);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  // what the form started from: a change made elsewhere (another card, someone else) comes in to the fields
+  // not touched here - never over what is being typed
+  const base = useRef(settings);
   useEffect(() => {
-    setS(settings);
+    setS((cur) => {
+      const next = { ...settings };
+      for (const k of COURSE_FIELDS) if (!same(cur[k], base.current[k])) (next as Record<string, unknown>)[k] = cur[k];
+      return next;
+    });
+    base.current = settings;
   }, [settings]);
+  const dirty = COURSE_FIELDS.some((k) => !same(s[k], base.current[k]));
+  const undo = () => setS(base.current);
+  // Ctrl+S / ⌘S saves, while there is something to save
+  const saveRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    if (!dirty) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveRef.current();
+      }
+    };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [dirty]);
   const save = async () => {
     setError(null);
+    setSaving(true);
     try {
       await api.patch('/api/settings', {
         courseName: s.courseName,
@@ -132,16 +172,34 @@ function CourseSettingsCard() {
       emitLocalChange('settings');
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setSaving(false);
     }
   };
+  saveRef.current = () => void save();
   return (
     <div className="card" id="course">
       <div className="card-head">
         <h3 className="grow">פרטי הקורס</h3>
-        <button className="btn btn-sm btn-primary" onClick={() => void save()}>
-          שמור
+        {dirty && <span className="badge t-orange">לא נשמר</span>}
+        <button className={`btn btn-sm${dirty ? ' btn-primary' : ''}`} onClick={() => void save()} disabled={!dirty || saving}>
+          {saving ? 'שומר...' : dirty ? 'שמור' : 'נשמר'}
         </button>
       </div>
+      {/* while something here is not saved: a bar in sight wherever the page is, to save it or put it back */}
+      {dirty &&
+        createPortal(
+          <div className="save-bar no-print" role="status">
+            <span className="small">שינויים בפרטי הקורס שלא נשמרו</span>
+            <button type="button" className="btn btn-sm save-bar-undo" onClick={undo}>
+              ביטול
+            </button>
+            <button type="button" className="btn btn-sm save-bar-save" onClick={() => void save()} disabled={saving}>
+              {saving ? 'שומר...' : 'שמירה'}
+            </button>
+          </div>,
+          document.body,
+        )}
       <div className="card-body">
         <div className="form-grid">
           <Field label="שם הקורס">

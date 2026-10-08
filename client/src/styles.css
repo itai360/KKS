@@ -10947,3 +10947,161 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   border-radius: var(--radius-sm);
   background: var(--blue-bg);
 }
+
+/* ---------------- documents: the whole card opens it; opened lately (pages/DocumentsPage.tsx) ---------------- */
+.doc-card {
+  position: relative;
+}
+.doc-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.doc-card :is(button, input, .badge) {
+  position: relative;
+  z-index: 1;
+}
+.doc-card:has(.doc-link:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.doc-link:focus-visible {
+  outline: none;
+}
+@media (hover: hover) {
+  .doc-card:hover {
+    border-color: var(--line-2);
+    box-shadow: var(--shadow-lg);
+  }
+}
+.doc-card:active:not(:has(button:active, input:active)) {
+  scale: 0.985;
+  transition: scale 0.08s;
+}
+.doc-card {
+  transition: scale 0.32s var(--spring), box-shadow 0.2s, border-color 0.2s;
+}
+.doc-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.doc-recent-chip {
+  max-width: 260px;
+  color: inherit;
+  text-decoration: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-card:active {
+    scale: none;
+  }
+}
+
+/* ---------------- templates: the steps on a line of days (pages/TemplatesPage.tsx) ---------------- */
+.steps-line-wrap {
+  margin-bottom: 14px;
+}
+.steps-line {
+  position: relative;
+  height: 22px;
+  margin-inline: 10px;
+}
+.steps-axis {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line);
+}
+.steps-day {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 2px;
+  translate: 50% 0;
+  border-radius: 1px;
+  background: var(--ink);
+}
+.steps-dot {
+  position: absolute;
+  top: 50%;
+  width: calc(8px + var(--n, 1) * 2px);
+  height: calc(8px + var(--n, 1) * 2px);
+  translate: 50% -50%;
+  border: 2px solid var(--card);
+  border-radius: 50%;
+  background: var(--blue);
+}
+.steps-line-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+.steps-more {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.steps-more .flip {
+  rotate: 180deg;
+}
+
+/* ---------------- settings: each part a stop on the strip; unsaved course details (pages/SettingsPage.tsx) ---------------- */
+.settings-part {
+  scroll-margin-top: calc(var(--top-h) + 60px);
+}
+.save-bar {
+  position: fixed;
+  z-index: 40;
+  inset-inline: 0;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  margin-inline: auto;
+  padding: 6px;
+  padding-inline-start: 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: var(--shadow-lg);
+  animation: save-bar-in 0.36s var(--spring);
+}
+@keyframes save-bar-in {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+}
+.save-bar .small {
+  margin-inline-end: 6px;
+}
+.save-bar-undo {
+  border-color: transparent;
+  background: transparent;
+  color: var(--paper);
+}
+.save-bar-save {
+  border-color: var(--paper);
+  background: var(--paper);
+  color: var(--ink);
+}
+@media (max-width: 860px) {
+  /* above the floating navigation bar - and down to the edge while it steps aside */
+  .save-bar {
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    transition: bottom 0.3s var(--spring);
+  }
+  body:has(.bottom-nav.away) .save-bar {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-bar {
+    animation: fade 0.2s ease-out;
+  }
+}

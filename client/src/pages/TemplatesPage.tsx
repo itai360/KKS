@@ -73,18 +73,8 @@ export function TemplatesPage() {
               </div>
               <div className="card-body">
                 {t.description && <p className="small muted mb-12">{t.description}</p>}
-                <div className="col gap-4">
-                  {t.items.map((it, i) => (
-                    <div key={i} className="row small">
-                      <span className="dot t-gray" />
-                      {it.stage && <span className="badge">{it.stage}</span>}
-                      <span className="grow">{it.title}</span>
-                      <span className="mono tiny muted">
-                        {it.offsetDays === 0 ? 'ביום' : it.offsetDays < 0 ? `${-it.offsetDays} ימים לפני` : `${it.offsetDays} ימים אחרי`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <StepsLine items={t.items} kind={t.kind} />
+                <Steps items={t.items} />
               </div>
             </div>
             </SwipeRow>
@@ -95,6 +85,63 @@ export function TemplatesPage() {
       {applying && <ApplyTemplate template={applying} onClose={() => setApplying(null)} />}
     </div>
     </BulkScope>
+  );
+}
+
+const offsetLabel = (o: number) => (o === 0 ? 'ביום' : o < 0 ? `${-o} ימים לפני` : `${o} ימים אחרי`);
+const DAY_LABELS: Record<Template['kind'], string> = { week: 'תחילת השבוע', activity: 'יום הפעילות', general: 'היום' };
+
+/**
+ * A template's steps on a line of days, earliest first (on the right), with the day itself marked - how
+ * the work spreads out ahead of the week or the activity, at a glance. A point grows with the steps on it.
+ */
+function StepsLine({ items, kind }: { items: TemplateItem[]; kind: Template['kind'] }) {
+  if (items.length < 2) return null;
+  const offsets = items.map((i) => i.offsetDays);
+  const min = Math.min(0, ...offsets);
+  const max = Math.max(0, ...offsets);
+  const at = (o: number) => `${((o - min) / (max - min || 1)) * 100}%`;
+  const byDay = new Map<number, string[]>();
+  for (const it of items) byDay.set(it.offsetDays, [...(byDay.get(it.offsetDays) ?? []), it.title]);
+  return (
+    <div className="steps-line-wrap" role="img" aria-label={`${items.length} סעיפים, מ${offsetLabel(min)} עד ${offsetLabel(max)}`}>
+      <div className="steps-line">
+        <span className="steps-axis" />
+        <span className="steps-day" style={{ insetInlineStart: at(0) }} title={DAY_LABELS[kind]} />
+        {[...byDay.entries()].map(([o, titles]) => (
+          <span key={o} className="steps-dot" style={{ insetInlineStart: at(o), ['--n' as string]: Math.min(titles.length, 4) }} title={`${offsetLabel(o)}: ${titles.join(', ')}`} />
+        ))}
+      </div>
+      <div className="steps-line-ends tiny muted">
+        <span>{offsetLabel(min)}</span>
+        <span>{max > 0 ? offsetLabel(max) : DAY_LABELS[kind]}</span>
+      </div>
+    </div>
+  );
+}
+
+/** the steps, the first few in sight - the rest one press away, so the page reads at a glance */
+function Steps({ items }: { items: TemplateItem[] }) {
+  const [all, setAll] = useState(false);
+  const FIRST = 5;
+  const shown = all ? items : items.slice(0, FIRST);
+  return (
+    <div className="col gap-4">
+      {shown.map((it, i) => (
+        <div key={i} className="row small">
+          <span className="dot t-gray" />
+          {it.stage && <span className="badge">{it.stage}</span>}
+          <span className="grow">{it.title}</span>
+          <span className="mono tiny muted">{offsetLabel(it.offsetDays)}</span>
+        </div>
+      ))}
+      {items.length > FIRST && (
+        <button type="button" className="btn btn-ghost btn-sm steps-more" onClick={() => setAll(!all)} aria-expanded={all}>
+          {all ? 'פחות' : `עוד ${items.length - FIRST} סעיפים`}
+          <Icon name="chevronDown" size={14} className={all ? 'flip' : undefined} />
+        </button>
+      )}
+    </div>
   );
 }
 

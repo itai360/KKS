@@ -24,7 +24,18 @@ export interface RowMenuItem {
  * One row's quick actions: `bind` goes on the row, `menu` is rendered beside it, `lifted` marks the row
  * while its menu is up, and `swallow()` tells a click that a hold just opened the menu.
  */
-export function useRowMenu({ title, items, disabled }: { title: string; items: RowMenuItem[]; disabled?: boolean }) {
+export function useRowMenu({
+  title,
+  items,
+  disabled,
+  links,
+}: {
+  title: string;
+  items: RowMenuItem[];
+  disabled?: boolean;
+  /** the row is a link itself (a document's card): held or right-clicked there too, its menu instead of the browser's */
+  links?: boolean;
+}) {
   const phone = usePhonePicker();
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const hold = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
@@ -48,7 +59,7 @@ export function useRowMenu({ title, items, disabled }: { title: string; items: R
       if (!onRow(e)) return;
       row.current = e.currentTarget;
       swallowNext.current = false;
-      if (disabled || e.pointerType !== 'touch' || (e.target as HTMLElement).closest('button, a, input, label')) return;
+      if (disabled || e.pointerType !== 'touch' || (e.target as HTMLElement).closest(links ? 'button, input, label' : 'button, a, input, label')) return;
       const { clientX: x, clientY: y } = e;
       cancelHold();
       hold.current = {
@@ -70,7 +81,7 @@ export function useRowMenu({ title, items, disabled }: { title: string; items: R
     onPointerUp: cancelHold,
     onPointerCancel: cancelHold,
     onContextMenu: (e: ReactMouseEvent<HTMLElement>) => {
-      if (disabled || !onRow(e) || (e.target as HTMLElement).closest('a, input, textarea')) return;
+      if (disabled || !onRow(e) || (e.target as HTMLElement).closest(links ? 'input, textarea' : 'a, input, textarea')) return;
       e.preventDefault();
       row.current = e.currentTarget;
       cancelHold();
