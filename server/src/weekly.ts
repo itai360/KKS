@@ -188,8 +188,8 @@ function checkOwner(id: number | null | undefined): void {
   if (!u || !u.active) throw badRequest('איש הסגל שנבחר אינו פעיל');
 }
 
-function notifyOwner(actor: UserRow, w: WeekRow, ownerId: number | null, title: string): void {
-  if (ownerId) notify([ownerId], { type: 'weekly_closure', category: 'action', title: `סגירה מקצועית לשבועי: ${title}`, body: w.name, link: `/weekly/${w.id}` }, actor.id);
+function notifyOwner(actor: UserRow, w: WeekRow, itemId: number, ownerId: number | null, title: string): void {
+  if (ownerId) notify([ownerId], { type: 'weekly_closure', category: 'action', title: `סגירה מקצועית לשבועי: ${title}`, body: w.name, link: `/weekly/${w.id}`, ref: `weekly-item:${itemId}` }, actor.id);
 }
 
 export function addWeeklyItem(actor: UserRow, raw: z.input<typeof weeklyItemSchema>): { id: number; weekId: number } {
@@ -216,7 +216,7 @@ export function addWeeklyItem(actor: UserRow, raw: z.input<typeof weeklyItemSche
     now,
     now,
   ).id;
-  if (ownerId) notifyOwner(actor, w, ownerId, p.title);
+  if (ownerId) notifyOwner(actor, w, id, ownerId, p.title);
   changed('weekly');
   return { id, weekId };
 }
@@ -262,7 +262,7 @@ export function updateWeeklyItem(actor: UserRow, id: number, raw: z.input<typeof
     nowIso(),
     id,
   );
-  if (ownerId && ownerId !== cur.owner_id) notifyOwner(actor, w, ownerId, p.title ?? cur.title);
+  if (ownerId && ownerId !== cur.owner_id) notifyOwner(actor, w, id, ownerId, p.title ?? cur.title);
   changed('weekly');
 }
 

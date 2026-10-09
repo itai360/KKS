@@ -1,5 +1,6 @@
 // Section 73 - notification center: action required / information / exceptions. The same live list as
-// the bell's panel (components/Notifications.tsx), with every kind, the ones put off, and selecting.
+// the bell's panel (components/Notifications.tsx), with every kind, the ones put off, and selecting -
+// only what is still open: once what one is about is finished it is ticked and folds away.
 
 import { useEffect, useState } from 'react';
 import { NOTIFICATION_CATEGORY_LABELS, type NotificationCategory } from '@shared/constants';
@@ -9,16 +10,17 @@ import { Icon } from '../components/Icon';
 import { NotificationList, NotificationsScope, useOpenNotification } from '../components/Notifications';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, PageHead } from '../components/ui';
-import { ensureNotifications, markAllRead, useNotifications } from '../lib/notifications';
+import { ensureNotifications, markAllRead, NOTIFICATION_SUBJECTS, useNotifications } from '../lib/notifications';
 import { useApi } from '../lib/useApi';
 
 type Tab = '' | 'unread' | NotificationCategory | 'snoozed';
 
 export function NotificationsPage() {
   const [tab, setTab] = useState<Tab>('');
-  const { list, error, unread, fresh } = useNotifications();
+  const { list, error, unread, fresh, leaving } = useNotifications();
   useEffect(ensureNotifications, []);
-  const snoozed = useApi<Notification[]>(tab === 'snoozed' ? '/api/notifications?snoozed=1' : null, ['notifications']);
+  // put off: what they are about finished meanwhile, they are out of here too
+  const snoozed = useApi<Notification[]>(tab === 'snoozed' ? '/api/notifications?snoozed=1' : null, ['notifications', ...NOTIFICATION_SUBJECTS]);
   const toast = useToast();
   const open = useOpenNotification();
 
@@ -31,7 +33,7 @@ export function NotificationsPage() {
   ];
 
   return (
-    <NotificationsScope list={shown ?? []} actions={tab === 'snoozed' ? [] : [{ key: 'read', label: 'סימון כנקראו', icon: 'check' }]}>
+    <NotificationsScope list={(shown ?? []).filter((n) => !leaving.has(n.id))} actions={tab === 'snoozed' ? [] : [{ key: 'read', label: 'סימון כנקראו', icon: 'check' }]}>
       <div className="page narrow">
         <PageHead
           title="התראות"
@@ -68,7 +70,7 @@ export function NotificationsPage() {
           />
         ) : (
           <div className="card notif-card">
-            <NotificationList list={shown} fresh={fresh} onOpen={open} snoozedView={tab === 'snoozed'} />
+            <NotificationList list={shown} fresh={fresh} leaving={tab === 'snoozed' ? undefined : leaving} onOpen={open} snoozedView={tab === 'snoozed'} />
           </div>
         )}
       </div>

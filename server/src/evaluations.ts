@@ -873,7 +873,11 @@ export function referToCommittee(actor: UserRow, cadetId: number, raw: z.input<t
     ).id;
     const name = `${c.first_name} ${c.last_name}`.trim();
     logActivity({ userId: actor.id, action: 'committee_referral', text: `${actor.display_name} העביר את ${name} ${to(r.kind)}` });
-    notify([c.team_commander_id], { type: 'committee', category: 'action', title: `${name} הועבר ${to(r.kind)}`, body: 'תיק ההערכה שלו הוא מה שהוועדה תקבל - כדאי לוודא שהוא מלא ומעודכן.', link: `/evaluations/${cadetId}` }, actor.id);
+    notify(
+      [c.team_commander_id],
+      { type: 'committee', category: 'action', title: `${name} הועבר ${to(r.kind)}`, body: 'תיק ההערכה שלו הוא מה שהוועדה תקבל - כדאי לוודא שהוא מלא ומעודכן.', link: `/evaluations/${cadetId}`, ref: `committee:${id}` },
+      actor.id,
+    );
     return id;
   });
   changed('cadets');

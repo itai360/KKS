@@ -3,7 +3,7 @@ import { animateSpring, project, velocityOf, type SpringRun } from '../lib/sprin
 import { useNavigate } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { onNotification } from '../lib/realtime';
-import { isPanelOpen } from '../lib/notifications';
+import { listInSight } from '../lib/notifications';
 import { Icon } from './Icon';
 
 interface Toast {
@@ -68,8 +68,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     () =>
       onNotification((n) => {
         // the panel or the page is open: it comes in there, with no message on top
-        const inSight = isPanelOpen() || window.location.pathname === '/notifications';
-        if (!inSight)
+        if (!listInSight())
           push({
             title: n.title,
             body: n.body,

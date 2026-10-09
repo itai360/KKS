@@ -29,7 +29,7 @@ import {
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { db } from './db';
 import { getFile, putFile, removeFile, sendStoredFile, uploadName } from './files';
-import { changed, logActivity, notificationsChanged, notify, snoozeNotification, toNotification, unreadCount } from './journal';
+import { changed, FINISHED, logActivity, NOTIFICATION_ROWS, notificationsChanged, notify, snoozeNotification, toNotification, unreadCount } from './journal';
 import { activeMeeting, endMeeting, getMeeting, listMeetings, startMeeting, updateMeeting } from './meetings';
 import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
@@ -250,7 +250,7 @@ export function apiRouter(): Router {
   r.use(requireAuth);
 
   r.get('/auth/me', (req, res) => {
-    const unread = db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', me(req).id)!.n;
+    const unread = unreadCount(me(req).id);
     res.json({
       user: { ...toUser(me(req)), twoFactor: !!me(req).totp_secret },
       settings: getSettings(),
@@ -937,17 +937,23 @@ export function apiRouter(): Router {
 
   // ---------------- notifications ----------------
 
+  // the ones still open - what they are about finished, they are out (journal.ts FINISHED). "known": the ones
+  // a screen shows now; those of them finished since come after the list, marked so, for it to see them go
   r.get('/notifications', (req, res) => {
     const u = me(req);
     const cat = str(req.query.category);
     // put off for later: only in their own list ("נדחו")
     const snoozed = req.query.snoozed === '1';
     const rows = db().all<Parameters<typeof toNotification>[0]>(
-      `SELECT * FROM notifications WHERE user_id = ? AND ${snoozed ? 'snoozed_until IS NOT NULL' : 'snoozed_until IS NULL'} ${cat ? 'AND category = ?' : ''}
-       ORDER BY ${snoozed ? 'snoozed_until' : 'created_at DESC'}, id DESC LIMIT 200`,
+      `${NOTIFICATION_ROWS} WHERE n.user_id = ? AND ${snoozed ? 'n.snoozed_until IS NOT NULL' : 'n.snoozed_until IS NULL'} AND NOT ${FINISHED} ${cat ? 'AND n.category = ?' : ''}
+       ORDER BY ${snoozed ? 'n.snoozed_until' : 'n.created_at DESC'}, n.id DESC LIMIT 200`,
       ...(cat ? [u.id, cat] : [u.id]),
     );
-    res.json(rows.map(toNotification));
+    const known = [...new Set((str(req.query.known) ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 300);
+    const finished = known.length
+      ? db().all<Parameters<typeof toNotification>[0]>(`${NOTIFICATION_ROWS} WHERE n.user_id = ? AND n.id IN (${known.map(() => '?').join(', ')}) AND ${FINISHED}`, u.id, ...known)
+      : [];
+    res.json([...rows, ...finished].map(toNotification));
   });
 
   // how many are unread - the bell, after the connection came back

@@ -1,7 +1,10 @@
 // This person's notifications, live, in one place for the bell's panel, the page and the count on the
 // bell. A new one comes in at the top as it arrives; one read, put off or deleted on another device
 // changes here too (the server says how many are unread after every change - realtime.ts); what is done
-// here shows at once, and the server's answer settles the count.
+// here shows at once, and the server's answer settles the count. Only what is still open is kept: once
+// what one is about is finished (its task done, the request decided...) it shows done for a moment and
+// folds away - the server decides what is finished (journal.ts FINISHED), and a change to what they can
+// be about (a task, a request, an announcement...) is when to ask it again.
 
 import { useSyncExternalStore } from 'react';
 import type { Notification } from '@shared/types';
@@ -15,9 +18,14 @@ export interface NotificationsState {
   unread: number;
   /** just arrived: shown with a moment of light */
   fresh: ReadonlySet<number>;
+  /** what they were about is finished: shown done ("done"), then folding away ("fold"), then out of the list -
+   * "news": the news of something done, just come, read before it goes */
+  leaving: ReadonlyMap<number, LeavePhase>;
 }
 
-let state: NotificationsState = { list: null, error: null, unread: 0, fresh: new Set() };
+export type LeavePhase = 'done' | 'fold' | 'news' | 'news-fold';
+
+let state: NotificationsState = { list: null, error: null, unread: 0, fresh: new Set(), leaving: new Map() };
 const listeners = new Set<() => void>();
 function set(patch: Partial<NotificationsState>) {
   state = { ...state, ...patch };
@@ -34,16 +42,56 @@ export function useNotifications(): NotificationsState {
 
 export const useUnread = () => useSyncExternalStore(subscribe, () => state.unread, () => state.unread);
 
+/** the most the server sends: a list this long may not be all of them */
+const PAGE = 200;
+const newestFirst = (a: Notification, b: Notification) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id;
+const open = (list: Notification[]) => list.filter((n) => !state.leaving.has(n.id));
+
 let seq = 0;
 async function load(): Promise<void> {
   const mine = ++seq;
+  // the ones on screen now: those of them finished since come back marked, to be seen going
+  const known = open(state.list ?? [])
+    .map((n) => n.id)
+    .slice(0, PAGE);
   try {
-    const list = await api.get<Notification[]>('/api/notifications');
-    if (mine === seq) set({ list, error: null });
+    const rows = await api.get<Notification[]>(`/api/notifications${known.length ? `?known=${known.join(',')}` : ''}`);
+    if (mine !== seq) return;
+    const still = rows.filter((n) => !n.finished);
+    const done = rows.filter((n) => n.finished);
+    // open again while it was going (a task reopened): it stays
+    if (still.some((n) => state.leaving.has(n.id))) set({ leaving: new Map([...state.leaving].filter(([id]) => !still.some((n) => n.id === id))) });
+    const going = (state.list ?? []).filter((n) => state.leaving.has(n.id) && !rows.some((r) => r.id === n.id));
+    set({ list: [...still, ...done, ...going].sort(newestFirst), error: null });
+    finish(done.map((n) => n.id));
+    // all of them are here: the count is theirs (more than a page - the server counts)
+    if (still.length < PAGE) setUnread(unreadIn(still));
+    else void api.get<{ unread: number }>('/api/notifications/unread').then((r) => setUnread(r.unread)).catch(() => undefined);
   } catch (e) {
     if (mine === seq) set({ error: (e as Error).message });
   }
 }
+
+/** finished: done for a moment (news just come for longer, to be read), then folded away and out of the list */
+function finish(ids: number[], news = false) {
+  const going = ids.filter((id) => !state.leaving.has(id));
+  if (!going.length) return;
+  set({ leaving: new Map([...state.leaving, ...going.map((id) => [id, news ? 'news' : 'done'] as const)]) });
+  setTimeout(
+    () => {
+      set({ leaving: new Map([...state.leaving].map(([id, p]) => [id, going.includes(id) ? (news ? 'news-fold' : 'fold') : p] as const)) });
+      setTimeout(() => {
+        const gone = going.filter((id) => state.leaving.get(id)?.endsWith('fold'));
+        set({
+          leaving: new Map([...state.leaving].filter(([id]) => !gone.includes(id))),
+          list: state.list && state.list.filter((n) => !gone.includes(n.id)),
+        });
+      }, FOLD_MS);
+    },
+    news ? 2600 : 900,
+  );
+}
+const FOLD_MS = 380;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 function reloadSoon(ms = 200) {
@@ -52,6 +100,20 @@ function reloadSoon(ms = 200) {
   timer = setTimeout(() => {
     timer = null;
     void load();
+  }, ms);
+}
+
+/** what notifications can be about (realtime topics): a change there may have finished some of them */
+export const NOTIFICATION_SUBJECTS = ['tasks', 'requests', 'announcements', 'weekly', 'cadets', 'debriefs', 'weeks', 'events'];
+
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+/** something they can be about changed: the list asked again (the finished ones go), or - not shown yet - just the count */
+function settleSoon(ms = 350) {
+  if (settleTimer) clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    settleTimer = null;
+    if (state.list) void load();
+    else void api.get<{ unread: number }>('/api/notifications/unread').then((r) => setUnread(r.unread)).catch(() => undefined);
   }, ms);
 }
 
@@ -65,7 +127,7 @@ const unreadIn = (list: Notification[]) => list.filter((n) => !n.read).length;
 /** signed in: the count the server gave; signed out: nothing kept for the next person */
 export function startNotifications(unread: number): void {
   seq++;
-  state = { list: null, error: null, unread, fresh: new Set() };
+  state = { list: null, error: null, unread, fresh: new Set(), leaving: new Map() };
   listeners.forEach((l) => l());
 }
 
@@ -94,9 +156,21 @@ let panelOpen = false;
 /** the panel is open: a new notification comes into it, with no message on top */
 export const setPanelOpen = (open: boolean) => void (panelOpen = open);
 export const isPanelOpen = () => panelOpen;
+/** the list is on screen (the panel, or the notifications page): what comes in is seen there */
+export const listInSight = () => panelOpen || window.location.pathname === '/notifications';
 
 if (typeof window !== 'undefined') {
   onNotification((n) => {
+    if (n.finished) {
+      // the news of something done: heard as it comes (a message on top, the phone) and not kept - where the list
+      // is on screen it comes in, done, and goes
+      if (state.list && listInSight() && !state.list.some((x) => x.id === n.id)) {
+        set({ list: [n, ...state.list] });
+        markFresh(n.id);
+        finish([n.id], true);
+      }
+      return;
+    }
     const before = state.list?.find((x) => x.id === n.id);
     const counts = !n.read && (!before || before.read);
     if (state.list) set({ list: [n, ...state.list.filter((x) => x.id !== n.id)] });
@@ -105,14 +179,15 @@ if (typeof window !== 'undefined') {
   });
   onNotificationState(({ unread }) => {
     setUnread(unread);
-    // changed somewhere else (read on the phone, deleted on the computer): the list follows
-    if (state.list && unreadIn(state.list) !== unread) reloadSoon();
+    // changed somewhere else (read on the phone, deleted on the computer, finished): the list follows
+    if (state.list && unreadIn(open(state.list)) !== unread) reloadSoon();
   });
   onChange((topics) => {
-    if (!topics.includes('*') && !topics.includes('notifications')) return;
-    reloadSoon(60);
-    // back after the connection was lost: the count as it is now
-    if (topics.includes('*')) void api.get<{ unread: number }>('/api/notifications/unread').then((r) => setUnread(r.unread)).catch(() => undefined);
+    if (topics.includes('*') || topics.includes('notifications')) {
+      reloadSoon(60);
+      // back after the connection was lost: the count as it is now
+      if (topics.includes('*')) void api.get<{ unread: number }>('/api/notifications/unread').then((r) => setUnread(r.unread)).catch(() => undefined);
+    } else if (topics.some((t) => NOTIFICATION_SUBJECTS.includes(t))) settleSoon();
   });
 }
 

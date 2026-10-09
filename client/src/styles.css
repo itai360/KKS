@@ -7741,6 +7741,47 @@ button.fab-missing {
     box-shadow: inset 0 0 0 1.5px transparent, 0 6px 18px -8px transparent;
   }
 }
+/* finished: what it was about is done (lib/notifications.ts) - the row greens, its title is struck, a tick
+   draws "הסתיים", and a moment later it folds away the way a deleted row does. The news of something done,
+   just come, is not struck: it is there to be read before it goes */
+.notif-wrap.is-finished .notif-item {
+  background: color-mix(in srgb, var(--green-bg) 50%, var(--card));
+  transition: background 0.3s ease;
+}
+.notif-wrap.is-finished .notif-icon {
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+.notif-wrap.is-finished:not(.is-news) .notif-title {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--green) 60%, transparent);
+  text-decoration-thickness: 1.5px;
+}
+.notif-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--green-ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 30%, transparent);
+  animation: done-pop 0.45s var(--spring);
+}
+.notif-done .day-check path {
+  animation: check-draw 0.42s 0.12s ease-out both;
+}
+.notif-wrap.is-folding {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+.notif-wrap.is-folding > .swipe-row {
+  overflow: hidden;
+}
 @media (prefers-reduced-motion: reduce) {
   .bell.is-ringing .bell-icon,
   .notif-wrap.is-fresh,
@@ -7750,6 +7791,14 @@ button.fab-missing {
   }
   .notif-wrap.is-fresh .notif-item {
     animation-duration: 0.01s;
+  }
+  /* no fold: the row fades where it is */
+  .notif-done,
+  .notif-done .day-check path {
+    animation: fade 0.2s ease-out;
+  }
+  .notif-wrap.is-folding {
+    grid-template-rows: 1fr;
   }
 }
 

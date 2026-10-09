@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { ADDED_DOMAINS, COURSE_TRACKS } from '../../shared/constants';
 
-type Param = SQLInputValue | boolean | undefined;
+export type Param = SQLInputValue | boolean | undefined;
 
 function bind(params: Param[]): SQLInputValue[] {
   return params.map((p) => (p === undefined ? null : typeof p === 'boolean' ? (p ? 1 : 0) : p));
@@ -1053,8 +1053,28 @@ CREATE TABLE week_debrief_tasks (
 CREATE INDEX idx_week_debrief_tasks_task ON week_debrief_tasks(task_id);
 `;
 
+/** a notification leaves the bell once what it is about is finished (journal.ts FINISHED): what that is
+ * when it is not (only) its task - "request:12", "announcement:3", "weekly-item:7", "committee:2",
+ * "attendance:2026-10-09:3" - and when it was marked finished (said again by a newer one, lessons decided):
+ * the ones already said again are marked here. The indexes serve that marking and a task's notifications. */
+const SCHEMA_V36 = `
+ALTER TABLE notifications ADD COLUMN ref TEXT;
+ALTER TABLE notifications ADD COLUMN finished_at TEXT;
+CREATE INDEX notifications_user_type ON notifications(user_id, type, id);
+CREATE INDEX notifications_task ON notifications(task_id);
+UPDATE notifications SET finished_at = created_at WHERE finished_at IS NULL AND task_id IS NOT NULL
+  AND type IN ('task_assigned', 'deadline_changed', 'owner_changed', 'dependency_done', 'blocked', 'unblocked', 'approval_requested', 'returned',
+    'reopened', 'escalated', 'request_decided', 'carried', 'overdue', 'critical_overdue', 'reminder_24h', 'reminder_2h')
+  AND EXISTS (SELECT 1 FROM notifications n2 WHERE n2.user_id = notifications.user_id AND n2.task_id = notifications.task_id AND n2.type = notifications.type AND n2.id > notifications.id);
+UPDATE notifications SET finished_at = created_at WHERE finished_at IS NULL AND task_id IS NOT NULL AND type IN ('reminder_24h', 'reminder_2h')
+  AND EXISTS (SELECT 1 FROM notifications n2 WHERE n2.user_id = notifications.user_id AND n2.task_id = notifications.task_id
+    AND n2.type IN ('reminder_24h', 'reminder_2h', 'overdue') AND n2.id > notifications.id);
+UPDATE notifications SET finished_at = created_at WHERE finished_at IS NULL AND type IN ('attendance', 'brief')
+  AND EXISTS (SELECT 1 FROM notifications n2 WHERE n2.user_id = notifications.user_id AND n2.type = notifications.type AND n2.id > notifications.id);
+`;
+
 /** a migration is SQL, or a step that changes data the way SQL alone can't */
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

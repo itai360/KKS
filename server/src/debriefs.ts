@@ -27,7 +27,7 @@ import type { BankLesson, Debrief, DebriefDetail, DebriefItem, LessonReview } fr
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
-import { changed, firstTime as once, logActivity, notify } from './journal';
+import { changed, finishNotifications, firstTime as once, logActivity, notify } from './journal';
 import { recurringSchema, saveRule } from './recurring';
 import { isCommander, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime, weekForDate } from './taskService';
@@ -659,6 +659,7 @@ export function reviewLesson(actor: UserRow, itemId: number, raw: z.input<typeof
   db().tx(() => {
     if (p.decision === null) {
       db().run('DELETE FROM lesson_reviews WHERE item_id = ? AND context = ?', itemId, context);
+      settleLessonReminders(f);
       return;
     }
     let taskId: number | null = null;
@@ -685,8 +686,20 @@ export function reviewLesson(actor: UserRow, itemId: number, raw: z.input<typeof
       actor.id,
       nowIso(),
     );
+    settleLessonReminders(f);
   });
   changed('debriefs', 'tasks');
+}
+
+/** the reminders about a week's (or an event's) earlier-cycle lessons leave the bell once every one of them is
+ * decided - and come back when a decision is taken back and one waits again */
+function settleLessonReminders(f: { weekId?: number; eventId?: number }): void {
+  const rows = bankRows();
+  const lessons = f.weekId ? forWeek(rows, weekRow(f.weekId)) : forEvent(rows, eventRow(f.eventId!));
+  const reviews = reviewsFor(contextKey(f));
+  const waiting = lessons.some((l) => !reviews.has(l.id));
+  if (f.weekId) finishNotifications(!waiting, "type = 'lessons' AND link = ?", `/weeks/${f.weekId}#prior`);
+  else finishNotifications(!waiting, "type = 'lessons' AND link LIKE ?", `/schedule?date=%&event=${f.eventId}`);
 }
 
 /** the weeks ahead whose earlier-cycle lessons are still waiting for a decision */

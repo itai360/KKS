@@ -780,7 +780,7 @@ export function createRequest(actor: UserRow, taskId: number, raw: z.input<typeo
       logActivity({ taskId, weekId: t.week_id, userId: actor.id, action: 'request', text: `${actor.display_name} ביקש שינוי דד-ליין ל-${fmt(input.newDeadline)}: ${input.reason}` });
       notify(
         approverIds(t),
-        { type: 'request', category: 'action', title: `בקשת שינוי דד-ליין: "${t.title}"`, body: `${actor.display_name} · ${fmt(t.deadline)} ← ${fmt(input.newDeadline)} · ${input.reason}`, taskId, link: '/requests' },
+        { type: 'request', category: 'action', title: `בקשת שינוי דד-ליין: "${t.title}"`, body: `${actor.display_name} · ${fmt(t.deadline)} ← ${fmt(input.newDeadline)} · ${input.reason}`, taskId, link: '/requests', ref: `request:${id}` },
         actor.id,
       );
     } else {
@@ -798,7 +798,7 @@ export function createRequest(actor: UserRow, taskId: number, raw: z.input<typeo
       logActivity({ taskId, weekId: t.week_id, userId: actor.id, action: 'request', text: `${actor.display_name} ביקש להעביר את האחריות ל${target.display_name}: ${input.reason}` });
       notify(
         approverIds(t),
-        { type: 'request', category: 'action', title: `בקשת העברת אחריות: "${t.title}"`, body: `${actor.display_name} ← ${target.display_name} · ${input.reason}`, taskId, link: '/requests' },
+        { type: 'request', category: 'action', title: `בקשת העברת אחריות: "${t.title}"`, body: `${actor.display_name} ← ${target.display_name} · ${input.reason}`, taskId, link: '/requests', ref: `request:${id}` },
         actor.id,
       );
     }

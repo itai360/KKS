@@ -2,7 +2,8 @@
 // and the page share it. Grouped by day; a new one slides in at the top as it arrives; each can be
 // opened (it is read), marked read or new again, put off until later, or deleted with a moment to bring
 // it back - on a phone by swiping it (toward its leading side read / new, toward its trailing side
-// deleted), on a computer from the buttons that show on the row under the pointer.
+// deleted), on a computer from the buttons that show on the row under the pointer. Once what one is
+// about is finished (lib/notifications.ts) it is ticked "הסתיים" and folds away: only what is open stays.
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,13 +11,14 @@ import { Link, useNavigate } from 'react-router';
 import { NOTIFICATION_CATEGORY_LABELS, type NotificationCategory } from '@shared/constants';
 import { addDays, shortDate, startOfWeek, weekdayName } from '@shared/dates';
 import type { Notification } from '@shared/types';
-import { ensureNotifications, markAllRead, markRead, markUnread, setPanelOpen, snooze, useNotifications } from '../lib/notifications';
+import { ensureNotifications, markAllRead, markRead, markUnread, setPanelOpen, snooze, useNotifications, type LeavePhase } from '../lib/notifications';
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtTime, isoAt, todayKey } from '../lib/format';
 import { lockScroll } from '../lib/scrollLock';
 import { usePresence } from '../lib/presence';
 import { quickDelete } from '../lib/quickDelete';
 import { useTick } from '../lib/useApi';
 import { BulkCheck, bulkClick, BulkScope, SwipeRow, useBulk } from './Bulk';
+import { CheckMark } from './CheckMark';
 import { Icon } from './Icon';
 import { Sheet, usePhonePicker } from './pickers';
 import { useToast } from './Toasts';
@@ -49,8 +51,8 @@ export function dayLabel(iso: string, today = todayKey()): string {
   return shortDate(key);
 }
 
-/** one notification: open it, read / new, later, delete */
-export function NotificationItem({ n, fresh, onOpen, snoozedView }: { n: Notification; fresh?: boolean; onOpen: (n: Notification) => void; snoozedView?: boolean }) {
+/** one notification: open it, read / new, later, delete - and, its subject finished, ticked and folded away */
+export function NotificationItem({ n, fresh, leaving, onOpen, snoozedView }: { n: Notification; fresh?: boolean; leaving?: LeavePhase; onOpen: (n: Notification) => void; snoozedView?: boolean }) {
   const toast = useToast();
   const bulk = useBulk();
   const [later, setLater] = useState(false);
@@ -72,13 +74,13 @@ export function NotificationItem({ n, fresh, onOpen, snoozedView }: { n: Notific
       itemId={n.id}
       label={n.title}
       trash={false}
-      done={snoozedView ? null : { label: n.read ? 'חדשה' : 'נקראה', run: toggle }}
-      className={`notif-wrap${fresh ? ' is-fresh' : ''}`}
+      done={snoozedView || leaving ? null : { label: n.read ? 'חדשה' : 'נקראה', run: toggle }}
+      className={`notif-wrap${fresh ? ' is-fresh' : ''}${leaving ? ' is-finished' : ''}${leaving?.startsWith('news') ? ' is-news' : ''}${leaving?.endsWith('fold') ? ' is-folding' : ''}`}
     >
       <div
         className={`notif-item t-${NOTIFICATION_TONE[n.category]}${n.read ? '' : ' is-unread'}${bulk?.selected.has(n.id) ? ' selected' : ''}`}
         {...openable(bulkClick(bulk, n.id, () => onOpen(n)))}
-        aria-label={`${n.read ? '' : 'חדשה: '}${n.title}`}
+        aria-label={`${leaving ? 'הסתיים: ' : n.read ? '' : 'חדשה: '}${n.title}`}
       >
         {bulk?.active ? <BulkCheck id={n.id} /> : <span className="notif-icon" aria-hidden="true">{<Icon name={NOTIFICATION_ICON[n.category]} size={16} />}</span>}
         <div className="notif-main">
@@ -98,8 +100,13 @@ export function NotificationItem({ n, fresh, onOpen, snoozedView }: { n: Notific
           </div>
         </div>
         <div className="notif-side">
-          {!n.read && <span className="notif-dot" aria-hidden="true" />}
-          {!bulk?.active && (
+          {leaving && (
+            <span className="notif-done" aria-hidden="true">
+              <CheckMark size={16} /> הסתיים
+            </span>
+          )}
+          {!n.read && !leaving && <span className="notif-dot" aria-hidden="true" />}
+          {!bulk?.active && !leaving && (
             <span className="notif-acts">
               {snoozedView ? (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={stop(() => putOff(null))}>
@@ -121,7 +128,7 @@ export function NotificationItem({ n, fresh, onOpen, snoozedView }: { n: Notific
             </span>
           )}
         </div>
-        {later && (
+        {later && !leaving && (
           <div className="notif-later-menu" role="group" aria-label="מתי להזכיר" onClick={(e) => e.stopPropagation()}>
             {laterOptions().map((o) => (
               <button key={o.label} type="button" className="chip chip-sm" onClick={() => putOff(o.at, o.label)}>
@@ -136,7 +143,19 @@ export function NotificationItem({ n, fresh, onOpen, snoozedView }: { n: Notific
 }
 
 /** a list of notifications under day headings, newest first */
-export function NotificationList({ list, fresh, onOpen, snoozedView }: { list: Notification[]; fresh?: ReadonlySet<number>; onOpen: (n: Notification) => void; snoozedView?: boolean }) {
+export function NotificationList({
+  list,
+  fresh,
+  leaving,
+  onOpen,
+  snoozedView,
+}: {
+  list: Notification[];
+  fresh?: ReadonlySet<number>;
+  leaving?: ReadonlyMap<number, LeavePhase>;
+  onOpen: (n: Notification) => void;
+  snoozedView?: boolean;
+}) {
   useTick(30_000);
   const today = todayKey();
   const groups: { label: string; items: Notification[] }[] = [];
@@ -152,7 +171,7 @@ export function NotificationList({ list, fresh, onOpen, snoozedView }: { list: N
         <section key={g.label} className="notif-group" aria-label={g.label}>
           <h3 className="notif-day">{g.label}</h3>
           {g.items.map((n) => (
-            <NotificationItem key={n.id} n={n} fresh={fresh?.has(n.id)} onOpen={onOpen} snoozedView={snoozedView} />
+            <NotificationItem key={n.id} n={n} fresh={fresh?.has(n.id)} leaving={leaving?.get(n.id)} onOpen={onOpen} snoozedView={snoozedView} />
           ))}
         </section>
       ))}
@@ -213,7 +232,7 @@ function PanelTools({ only, setOnly }: { only: Only; setOnly: (v: Only) => void 
 }
 
 function PanelBody({ onClose, only, tools, inSheet }: { onClose: () => void; only: Only; tools?: ReactNode; inSheet?: boolean }) {
-  const { list, error, fresh } = useNotifications();
+  const { list, error, fresh, leaving } = useNotifications();
   useEffect(ensureNotifications, []);
   const open = useOpenNotification(onClose);
   const shown = (list ?? []).filter((n) => only === 'all' || !n.read);
@@ -229,8 +248,8 @@ function PanelBody({ onClose, only, tools, inSheet }: { onClose: () => void; onl
       ) : list && !shown.length ? (
         <Empty icon="bell" title={only === 'unread' ? 'הכל נקרא' : 'אין התראות'} text={only === 'unread' ? 'התראות חדשות יופיעו כאן ברגע שיגיעו.' : 'כשמשהו ידרוש את תשומת לבך - הוא יופיע כאן.'} />
       ) : (
-        <NotificationsScope list={shown}>
-          <NotificationList list={shown} fresh={fresh} onOpen={open} />
+        <NotificationsScope list={shown.filter((n) => !leaving.has(n.id))}>
+          <NotificationList list={shown} fresh={fresh} leaving={leaving} onOpen={open} />
         </NotificationsScope>
       )}
     </>

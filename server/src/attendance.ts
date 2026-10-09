@@ -150,12 +150,12 @@ export function rollCallReminders(now: Date): number {
   for (const t of missing) {
     const commander = t.teamId ? db().get<{ commander_id: number | null }>('SELECT commander_id FROM teams WHERE id = ?', t.teamId)?.commander_id : null;
     if (!commander || !firstTime(`roll:${day}:${t.teamId}`)) continue;
-    notify([commander], { type: 'attendance', category: 'action', title: `מצבת ${t.name} להיום עוד לא סומנה`, body: `${t.total} צוערים - סימון בלחיצה לכל אחד`, link: `/attendance?team=${t.teamId}` });
+    notify([commander], { type: 'attendance', category: 'action', title: `מצבת ${t.name} להיום עוד לא סומנה`, body: `${t.total} צוערים - סימון בלחיצה לכל אחד`, link: `/attendance?team=${t.teamId}`, ref: `attendance:${day}:${t.teamId}` });
     sent++;
   }
   if (time >= '10:00' && missing.length && firstTime(`roll:${day}:commander`)) {
     const ids = db().all<{ id: number }>("SELECT id FROM users WHERE role = 'commander' AND active = 1").map((u) => u.id);
-    notify(ids, { type: 'attendance', category: 'info', title: `מצבה: ${missing.map((t) => t.name).join(', ')} עוד לא דיווחו`, body: `סומנו ${roll.counts.total - roll.counts.unmarked} מתוך ${roll.counts.total}`, link: '/attendance' });
+    notify(ids, { type: 'attendance', category: 'info', title: `מצבה: ${missing.map((t) => t.name).join(', ')} עוד לא דיווחו`, body: `סומנו ${roll.counts.total - roll.counts.unmarked} מתוך ${roll.counts.total}`, link: '/attendance', ref: `attendance:${day}` });
     sent++;
   }
   return sent;

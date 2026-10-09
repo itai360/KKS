@@ -401,6 +401,8 @@ export interface Notification {
   createdAt: string;
   /** put off: comes back unread at this time */
   snoozedUntil: string | null;
+  /** what it is about is finished (or it was the news of something done): heard as it comes, not kept in the bell */
+  finished?: boolean;
 }
 
 export type AttentionKind =

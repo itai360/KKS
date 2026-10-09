@@ -90,6 +90,7 @@ export function postAnnouncement(actor: UserRow, raw: z.input<typeof announcemen
       title: `${a.urgent ? 'דחוף - ' : ''}הודעה לסגל: ${a.title}`,
       body: a.body.slice(0, 200),
       link: '/announcements',
+      ref: `announcement:${id}`,
     },
     actor.id,
   );
@@ -130,7 +131,7 @@ export function remindAnnouncement(actor: UserRow, id: number): number {
       a.created_by,
     )
     .map((u) => u.id);
-  notify(waiting, { type: 'announcement', category: 'action', title: `תזכורת: נא לאשר קריאה - ${a.title}`, link: '/announcements' }, actor.id);
+  notify(waiting, { type: 'announcement', category: 'action', title: `תזכורת: נא לאשר קריאה - ${a.title}`, link: '/announcements', ref: `announcement:${id}` }, actor.id);
   return waiting.length;
 }
 

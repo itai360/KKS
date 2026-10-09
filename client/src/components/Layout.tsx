@@ -58,7 +58,8 @@ function Bell({ unread }: { unread: number }) {
   const [ring, setRing] = useState(0);
   const ref = useRef<HTMLButtonElement>(null);
   const location = useLocation();
-  useEffect(() => onNotification(() => setRing((r) => r + 1)), []);
+  // the news of something done is heard, not kept: the bell rings for what stays in it
+  useEffect(() => onNotification((n) => void (!n.finished && setRing((r) => r + 1))), []);
   useEffect(() => {
     if (!ring) return;
     const t = setTimeout(() => setRing(0), 1100);

@@ -22,7 +22,7 @@ import { runAutomation } from './automation';
 import { clock, config, nowIso } from './core';
 import { db, openDb } from './db';
 import { setFileStore } from './files';
-import { toNotification, unreadCount } from './journal';
+import { NOTIFICATION_ROWS, toNotification, unreadCount } from './journal';
 import { pushesSettled } from './push';
 import { setSnapshotProvider, storedSnapshots } from './snapshots';
 import { decodeDb, encodeDb } from './storedDb';
@@ -244,8 +244,8 @@ function sync(req: IncomingMessage, res: ServerResponse): void {
     Number.isFinite(since) && url.searchParams.has('n')
       ? db()
           .all<Parameters<typeof toNotification>[0]>(
-            `SELECT * FROM notifications WHERE user_id = ? AND (id > ? OR (? <> '' AND created_at > ? AND read_at IS NULL AND snoozed_until IS NULL))
-             ORDER BY created_at, id LIMIT 20`,
+            `${NOTIFICATION_ROWS} WHERE n.user_id = ? AND (n.id > ? OR (? <> '' AND n.created_at > ? AND n.read_at IS NULL AND n.snoozed_until IS NULL))
+             ORDER BY n.created_at, n.id LIMIT 20`,
             user.id,
             since,
             after,
