@@ -1,9 +1,10 @@
 // Sections 26-27: "פקודות שלי" - type an order, the system asks "למי?", press send.
 
 import { useMemo, useRef, useState } from 'react';
-import { PRIORITY_LABELS } from '@shared/constants';
+import { isOpenStatus, PRIORITY_LABELS } from '@shared/constants';
 import { parseTaskText } from '@shared/parser';
 import type { Task } from '@shared/types';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, quickDeadlines } from '../components/NewTask';
 import { TaskRow } from '../components/TaskRow';
@@ -14,6 +15,7 @@ import { api } from '../lib/api';
 import { fmtDeadline, getTz, isoAt } from '../lib/format';
 import { useFresh } from '../lib/fresh';
 import { haptic } from '../lib/haptics';
+import { useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -190,19 +192,40 @@ function OrderPart({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-/** Latest orders; the copies of an order given to a group collapse into one row, under the group's name, with its progress. */
+/**
+ * Latest orders; the copies of an order given to a group collapse into one row, under the group's name, with
+ * its progress. The ones still open on top; one carried out (here, or by its owner while this is open) goes -
+ * a moment done, then folded - to "בוצעו" under them.
+ */
 function RecentOrders({ tasks }: { tasks: Task[] | undefined }) {
   const { user } = useSession();
-  const sorted = [...(tasks ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const rows = foldTasks(sorted, user.id).slice(0, 15);
+  const rows = useMemo(() => foldTasks([...(tasks ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), user.id).slice(0, 15), [tasks, user.id]);
+  const open = useMemo(() => rows.filter((r) => isOpenStatus(r.task.status)), [rows]);
+  const done = useMemo(() => rows.filter((r) => !isOpenStatus(r.task.status)), [rows]);
+  const leaving = useLeaving(open, (r) => r.task.id, (id) => done.find((r) => r.task.id === id));
   // the order just sent comes in at the top (once the list has loaded: what was there before is not new)
   const fresh = useFresh(tasks && rows.map((r) => r.task.id));
   if (!rows.length) return <p className="small muted">משימות שתפתח יופיעו כאן עם הסטטוס שלהן.</p>;
   return (
-    <div className="list">
-      {rows.map((r) => (
-        <TaskRow key={r.task.id} task={r.task} folded={r.folded} arrived={fresh(r.task.id)} />
-      ))}
-    </div>
+    <>
+      {leaving.rows.length ? (
+        <div className="list">
+          {leaving.rows.map((r) => (
+            <TaskRow key={r.task.id} task={r.task} folded={r.folded} arrived={fresh(r.task.id)} leaving={leaving.phaseOf(r.task.id)} />
+          ))}
+        </div>
+      ) : (
+        <p className="small all-done-line">
+          <Icon name="check" size={15} /> כל הפקודות האחרונות בוצעו.
+        </p>
+      )}
+      <DoneDrawer id="orders-done" count={done.length} label="בוצעו">
+        <div className="list">
+          {done.map((r) => (
+            <TaskRow key={r.task.id} task={r.task} folded={r.folded} />
+          ))}
+        </div>
+      </DoneDrawer>
+    </>
   );
 }

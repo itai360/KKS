@@ -12,9 +12,11 @@ import { parseEventText, type ParsedEvent } from '@shared/eventParser';
 import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Week } from '@shared/types';
 import { endMinutes, inMinutes, leftMinutes, nowAndNext, type AgendaItem, type AgendaRow } from '../lib/agenda';
 import { api } from '../lib/api';
+import { leaveClass, useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { BulkCheck, bulkClick, SwipeRow, useBulk } from './Bulk';
+import { DoneDrawer } from './DoneDrawer';
 import { Icon } from './Icon';
 import { usePeriodSwipe } from './periodSwipe';
 import { usePhonePicker } from './pickers';
@@ -532,8 +534,21 @@ function AgendaDaySection({
   const events = items.filter((i) => i.kind === 'event').map((i) => i.e as ScheduleEvent);
   const live = isToday ? nowAndNext(events, today, nowTime) : null;
   const at = minutesOf(nowTime);
+  // today, what is over is out of the way - one line at the top that opens to it; one that ends while the
+  // page is open goes there (a moment, then folded). A deadline stays: what is still open is not over.
+  const liveNow = live?.now?.id;
+  const { over, rest } = useMemo(() => {
+    const ended = (it: AgendaItem) =>
+      isToday &&
+      (it.kind === 'event'
+        ? it.e.id !== liveNow && endMinutes(it.e) <= at
+        : it.kind === 'external' && !!it.e.startTime && endMinutes({ startTime: it.e.startTime, endTime: it.e.endTime }) <= at);
+    return { over: items.filter(ended), rest: items.filter((it) => !ended(it)) };
+  }, [items, isToday, at, liveNow]);
+  const leaving = useLeaving(rest, (it) => it.key, (k) => over.find((it) => it.key === k));
+  const rows = leaving.rows;
   // the line of now goes before the first thing that has not started yet
-  const nowAt = isToday ? items.findIndex((i) => i.at && minutesOf(i.at) > at) : -2;
+  const nowAt = isToday ? rows.findIndex((i) => i.at && minutesOf(i.at) > at) : -2;
   const count = items.filter((i) => i.kind !== 'task' && !(i.kind === 'event' && i.e.cancelled)).length;
   const dueCount = items.length - items.filter((i) => i.kind !== 'task').length;
   const nowLine = (
@@ -542,7 +557,8 @@ function AgendaDaySection({
     </div>
   );
   // after the last thing of the day only once it is over: an event still going on shows now itself
-  const nowLast = isToday && items.length > 0 && nowAt === -1 && !live?.now;
+  const nowLast = isToday && rows.length > 0 && nowAt === -1 && !live?.now;
+  const row = (it: AgendaItem) => <ItemRow key={it.key} it={it} date={date} today={today} at={at} live={live} onOpen={onOpen} onOpenExternal={onOpenExternal} onOpenTask={onOpenTask} />;
   return (
     <section className={`agenda-day${isToday ? ' is-today' : ''}${date < today ? ' is-past' : ''}`} data-day={date} aria-labelledby={`ad-${date}`}>
       <h3 className="agenda-dayhead" id={`ad-${date}`}>
@@ -559,7 +575,14 @@ function AgendaDaySection({
         )}
       </h3>
       <div className="card agenda-items">
-        {items.length === 0 ? (
+        {over.length > 0 && (
+          <DoneDrawer row id="agenda-earlier" count={over.length} label="מוקדם יותר היום">
+            {over.map(row)}
+          </DoneDrawer>
+        )}
+        {over.length > 0 && !rows.length ? (
+          <div className="agenda-empty">אין עוד אירועים היום</div>
+        ) : items.length === 0 ? (
           <div className="agenda-empty">
             {`אין אירועים${onlyMine ? ' שלך' : ''}${isToday ? ' היום' : ''}`}
             {canAdd && (
@@ -569,9 +592,13 @@ function AgendaDaySection({
             )}
           </div>
         ) : (
-          items.flatMap((it, i) => {
-            const row = <ItemRow key={it.key} it={it} date={date} today={today} at={at} live={live} onOpen={onOpen} onOpenExternal={onOpenExternal} onOpenTask={onOpenTask} />;
-            return i === nowAt ? [nowLine, row] : [row];
+          rows.flatMap((it, i) => {
+            const one = (
+              <div key={it.key} className={leaveClass(leaving.phaseOf(it.key))}>
+                {row(it)}
+              </div>
+            );
+            return i === nowAt ? [nowLine, one] : [one];
           })
         )}
         {nowLast && nowLine}

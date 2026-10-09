@@ -9,6 +9,7 @@ import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Templa
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GuideImportCard } from '../components/Discipline';
 import { AbsencesCard } from '../components/Absences';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { SectionRail, type RailItem } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
@@ -241,6 +242,53 @@ function CourseSettingsCard() {
 function StaffCard() {
   const { data } = useApi<User[]>('/api/users?all=1', ['users']);
   const [editing, setEditing] = useState<User | 'new' | null>(null);
+  // the ones who can sign in; the ones turned off are out of the way, in a drawer under them
+  const active = (data ?? []).filter((u) => u.active);
+  const inactive = (data ?? []).filter((u) => !u.active);
+  const table = (list: User[]) => (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>שם</th>
+            <th>תפקיד</th>
+            <th>שם משתמש</th>
+            <th>הרשאה</th>
+            <th>טלפון</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((u) => (
+            <StaffRow key={u.id} u={u} onOpen={() => setEditing(u)}>
+              <td className="strong">
+                <span className="row gap-6">
+                  <BulkCheck id={u.id} />
+                  {u.displayName}
+                </span>
+              </td>
+              <td className="small">{u.title || '-'}</td>
+              <td className="mono small" dir="ltr" style={{ textAlign: 'right' }}>
+                {u.username}
+              </td>
+              <td>
+                <span className={`badge${u.role === 'commander' ? ' t-blue' : ''}`}>{ROLE_LABELS[u.role]}</span>
+                {!u.active && (
+                  <span className="badge t-red" style={{ marginInlineStart: 4 }}>
+                    לא פעיל
+                  </span>
+                )}
+              </td>
+              <td className="mono small">{u.phone}</td>
+              <td>
+                <Icon name="edit" size={16} className="muted" />
+              </td>
+            </StaffRow>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
   return (
     <BulkScope
       entity="users"
@@ -261,44 +309,14 @@ function StaffCard() {
           <Icon name="plus" /> משתמש
         </button>
       </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>שם</th>
-              <th>תפקיד</th>
-              <th>שם משתמש</th>
-              <th>הרשאה</th>
-              <th>טלפון</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((u) => (
-              <StaffRow key={u.id} u={u} onOpen={() => setEditing(u)}>
-                <td className="strong">
-                  <span className="row gap-6">
-                    <BulkCheck id={u.id} />
-                    {u.displayName}
-                  </span>
-                </td>
-                <td className="small">{u.title || '-'}</td>
-                <td className="mono small" dir="ltr" style={{ textAlign: 'right' }}>
-                  {u.username}
-                </td>
-                <td>
-                  <span className={`badge${u.role === 'commander' ? ' t-blue' : ''}`}>{ROLE_LABELS[u.role]}</span>
-                  {!u.active && <span className="badge t-red" style={{ marginInlineStart: 4 }}>לא פעיל</span>}
-                </td>
-                <td className="mono small">{u.phone}</td>
-                <td>
-                  <Icon name="edit" size={16} className="muted" />
-                </td>
-              </StaffRow>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {table(active)}
+      {inactive.length > 0 && (
+        <div className="card-body">
+          <DoneDrawer id="users-inactive" count={inactive.length} label="לא פעילים">
+            {table(inactive)}
+          </DoneDrawer>
+        </div>
+      )}
       {editing && <UserEditor user={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
     </div>
     </BulkScope>
@@ -308,7 +326,7 @@ function StaffCard() {
 function StaffRow({ u, onOpen, children }: { u: User; onOpen: () => void; children: ReactNode }) {
   const bulk = useBulk();
   return (
-    <tr className={`click${bulk?.selected.has(u.id) ? ' selected' : ''}`} style={{ opacity: u.active ? 1 : 0.5 }} {...openable(bulkClick(bulk, u.id, onOpen), { role: false })}>
+    <tr className={`click${bulk?.selected.has(u.id) ? ' selected' : ''}`} {...openable(bulkClick(bulk, u.id, onOpen), { role: false })}>
       {children}
     </tr>
   );

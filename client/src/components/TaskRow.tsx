@@ -312,6 +312,32 @@ export function TaskSection({ title, id, tone, tasks, showOwner = true, collapse
   );
 }
 
+/** the open tasks of something (a task's parts, a debrief's follow-ups) - and the done ones in a drawer under them */
+export function OpenTaskList({ tasks, drawerId, empty, showOwner = true }: { tasks: Task[]; drawerId: string; empty?: ReactNode; showOwner?: boolean }) {
+  const open = useMemo(() => tasks.filter((t) => isOpenStatus(t.status)), [tasks]);
+  const done = useMemo(() => tasks.filter((t) => !isOpenStatus(t.status)), [tasks]);
+  return (
+    <>
+      <TaskList
+        tasks={open}
+        showOwner={showOwner}
+        empty={
+          tasks.length ? (
+            <p className="small all-done-line">
+              <Icon name="check" size={15} /> כולן הושלמו.
+            </p>
+          ) : (
+            empty
+          )
+        }
+      />
+      <DoneDrawer id={drawerId} count={done.length} label="הושלמו">
+        <TaskList tasks={done} showOwner={showOwner} />
+      </DoneDrawer>
+    </>
+  );
+}
+
 /** an open task's heading when grouped by status */
 const openStatusGroup = (t: Task) => (t.overdue ? 'באיחור' : t.status === 'waiting' ? 'ממתינות' : 'פתוחות');
 

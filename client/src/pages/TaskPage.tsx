@@ -1,7 +1,7 @@
 // Section 9 (task page), 20 (activity log), 41-46 (receiving, updating, blocking,
 // completing), 59-60 (dependencies, subtasks), 64 (all-staff progress).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { domainLabel, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
 import type { Task, TaskDetail } from '@shared/types';
@@ -10,10 +10,11 @@ import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskActions, useTaskMutation, type EditField } from '../components/TaskActions';
-import { TaskList } from '../components/TaskRow';
+import { OpenTaskList } from '../components/TaskRow';
 import { Bar, ErrorBox, PageError, Loading, Modal } from '../components/ui';
 import { api } from '../lib/api';
 import { haptic } from '../lib/haptics';
+import { leaveClass, useLeaving } from '../lib/leaving';
 import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
@@ -442,10 +443,7 @@ function Subtasks({ detail }: { detail: TaskDetail }) {
           </div>
         )}
         {/* the open parts; the done ones out of the way, in a drawer */}
-        <TaskList tasks={detail.subtasks.filter((s) => isOpenStatus(s.status))} empty={<p className="small muted">כל משימות המשנה הושלמו.</p>} />
-        <DoneDrawer id="subtasks-done" count={detail.subtasks.filter((s) => !isOpenStatus(s.status)).length} label="הושלמו">
-          <TaskList tasks={detail.subtasks.filter((s) => !isOpenStatus(s.status))} />
-        </DoneDrawer>
+        <OpenTaskList tasks={detail.subtasks} drawerId="subtasks-done" />
       </div>
     </div>
   );
@@ -455,8 +453,27 @@ function Dependencies({ detail, onChange }: { detail: TaskDetail; onChange: (d: 
   const [adding, setAdding] = useState(false);
   const m = useTaskMutation(detail.task.id, onChange);
   const canEdit = detail.permissions.canEdit || detail.permissions.canUpdateStatus;
+  // what it still waits for; one done (here or by its owner, live) goes - a moment, then folded - to the drawer
+  const waiting = useMemo(() => detail.dependsOn.filter((d) => isOpenStatus(d.status)), [detail.dependsOn]);
+  const resolved = useMemo(() => detail.dependsOn.filter((d) => !isOpenStatus(d.status)), [detail.dependsOn]);
+  const leaving = useLeaving(waiting, (d) => d.id, (id) => resolved.find((d) => d.id === id));
   // none yet: offered in the row of what can be added
   if (!detail.dependsOn.length && !detail.blocks.length) return null;
+  const dep = (d: TaskDetail['dependsOn'][number]) => (
+    <div className="row small">
+      <span className={`dot t-${d.status === 'done' ? 'green' : isOpenStatus(d.status) ? 'orange' : 'gray'}`} />
+      <Link to={`/tasks/${d.id}`} className="grow strong">
+        {d.title}
+      </Link>
+      <span className="muted">{d.ownerName}</span>
+      <span className={`badge${d.status === 'done' ? ' t-green' : ''}`}>{STATUS_LABELS[d.status]}</span>
+      {canEdit && (
+        <button className="icon-btn" aria-label="הסר תלות" onClick={() => void m.run(() => api.del<TaskDetail>(`/api/tasks/${detail.task.id}/dependencies/${d.id}`))}>
+          <Icon name="x" size={16} />
+        </button>
+      )}
+    </div>
+  );
   return (
     <div className="card">
       <div className="card-head">
@@ -470,21 +487,23 @@ function Dependencies({ detail, onChange }: { detail: TaskDetail; onChange: (d: 
       </div>
       <div className="card-body col gap-6">
         {detail.dependsOn.length > 0 && <div className="label-caps">חייבת להסתיים קודם</div>}
-        {detail.dependsOn.map((d) => (
-          <div key={d.id} className="row small">
-            <span className={`dot t-${d.status === 'done' ? 'green' : 'orange'}`} />
-            <Link to={`/tasks/${d.id}`} className="grow strong">
-              {d.title}
-            </Link>
-            <span className="muted">{d.ownerName}</span>
-            <span className="badge">{STATUS_LABELS[d.status]}</span>
-            {canEdit && (
-              <button className="icon-btn" aria-label="הסר תלות" onClick={() => void m.run(() => api.del<TaskDetail>(`/api/tasks/${detail.task.id}/dependencies/${d.id}`))}>
-                <Icon name="x" size={16} />
-              </button>
-            )}
+        {leaving.rows.map((d) => (
+          <div key={d.id} className={leaveClass(leaving.phaseOf(d.id))}>
+            {dep(d)}
           </div>
         ))}
+        {detail.dependsOn.length > 0 && !waiting.length && !leaving.rows.length && (
+          <p className="small all-done-line">
+            <Icon name="check" size={15} /> כל מה שהיא תלויה בו הושלם - אפשר להתקדם.
+          </p>
+        )}
+        <DoneDrawer id="dependencies-done" count={resolved.length} label="הושלמו">
+          <div className="col gap-6">
+            {resolved.map((d) => (
+              <div key={d.id}>{dep(d)}</div>
+            ))}
+          </div>
+        </DoneDrawer>
         {detail.blocks.length > 0 && <div className="label-caps mt-8">ממתינות למשימה זו</div>}
         {detail.blocks.map((d) => (
           <div key={d.id} className="row small">

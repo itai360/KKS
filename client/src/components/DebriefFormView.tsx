@@ -30,7 +30,7 @@ import { ask } from './Confirm';
 import { Icon } from './Icon';
 import { SectionRail, useCurrentSection, type RailItem } from './SectionRail';
 import { KIND_TONES, PriorLessons } from './DebriefBits';
-import { TaskList } from './TaskRow';
+import { OpenTaskList } from './TaskRow';
 import { useToast } from './Toasts';
 import { Bar, DateInput, PageHead, Select } from './ui';
 import { api } from '../lib/api';
@@ -325,7 +325,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
               <span className="mono tiny muted">{data.tasks.length}</span>
             </div>
             <div className="card-body">
-              <TaskList tasks={data.tasks} empty={<p className="small muted">בסיכום התחקיר כל לקח להמשך המחזור נפתח כאן כמשימה לאחראי שלו.</p>} />
+              <OpenTaskList tasks={data.tasks} drawerId="debrief-tasks-done" empty={<p className="small muted">בסיכום התחקיר כל לקח להמשך המחזור נפתח כאן כמשימה לאחראי שלו.</p>} />
             </div>
           </div>
         </div>

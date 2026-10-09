@@ -15,7 +15,7 @@ import { DebriefFormView } from '../components/DebriefFormView';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
-import { TaskList } from '../components/TaskRow';
+import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Seg, Select, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
@@ -631,7 +631,7 @@ export function DebriefPage() {
         <h2>משימות בעקבות התחקיר</h2>
         <span className="count-pill">{data.tasks.length}</span>
       </div>
-      <TaskList tasks={data.tasks} empty={<p className="small muted">הפכו לקח או מסקנה למשימה עם אחראי ודד-ליין - כך הלקח לא נשאר רק כטקסט.</p>} />
+      <OpenTaskList tasks={data.tasks} drawerId="debrief-tasks-done" empty={<p className="small muted">הפכו לקח או מסקנה למשימה עם אחראי ודד-ליין - כך הלקח לא נשאר רק כטקסט.</p>} />
       {editing && <DebriefForm debrief={d} onClose={() => setEditing(false)} />}
       {dialog?.to === 'task' && <ItemToTask item={dialog.item} onClose={() => setDialog(null)} onDone={setData} />}
       {dialog?.to === 'recurring' && <ItemToRecurring item={dialog.item} onClose={() => setDialog(null)} onDone={setData} />}

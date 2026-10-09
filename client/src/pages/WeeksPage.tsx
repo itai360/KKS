@@ -1,11 +1,12 @@
 // Sections 13-14, 37-38, 53-56, 70, 76: the course weeks.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CARRY_ACTION_LABELS, LESSON_KIND_LABELS, LESSON_KINDS, WEEK_STATUS_LABELS, type CarryAction, type LessonKind } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { CarryDecision, CloseCheck, PreviousCycleWeek, Task, Template, Week, WeekDetail } from '@shared/types';
 import { KindBadge, PriorLessons } from '../components/DebriefBits';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { CalendarWeeksModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
@@ -15,6 +16,7 @@ import { useToast } from '../components/Toasts';
 import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, readinessTone, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { dateKeyOf, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
+import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { prefetch, useApi } from '../lib/useApi';
@@ -337,10 +339,13 @@ function PreviousCycle({ week: w, canCopy }: { week: Week; canCopy: boolean }) {
   const [busy, setBusy] = useState(false);
   const [all, setAll] = useState(false);
   const toast = useToast();
+  // what is not in this week yet; one opened here goes - a moment, then folded - to "already in this week"
+  const open = useMemo(() => (data?.tasks ?? []).filter((t) => !t.exists), [data]);
+  const added = useMemo(() => (data?.tasks ?? []).filter((t) => t.exists), [data]);
+  const leaving = useLeaving(open, (t) => t.id, (id) => added.find((t) => t.id === id));
   if (!data?.week || !data.tasks.length) return null;
   const FOLD = 8;
-  const shown = all ? data.tasks : data.tasks.slice(0, FOLD);
-  const open = data.tasks.filter((t) => !t.exists);
+  const shown = all ? leaving.rows : leaving.rows.slice(0, FOLD);
   const chosen = picked ?? new Set(open.map((t) => t.id));
   const toggle = (id: number) => {
     const next = new Set(chosen);
@@ -366,6 +371,22 @@ function PreviousCycle({ week: w, canCopy }: { week: Week; canCopy: boolean }) {
     }
   };
   const Row = canCopy ? 'label' : 'div';
+  const row = (t: (typeof data.tasks)[number], phase?: LeavePhase) => (
+    <div key={t.id} className={leaveClass(phase)}>
+      <Row className={`prev-task${t.exists ? ' done' : ''}`}>
+        {canCopy && <input type="checkbox" disabled={t.exists} checked={!t.exists && chosen.has(t.id)} onChange={() => toggle(t.id)} />}
+        <span className="grow">
+          <span className="small strong">{t.title}</span>
+          <span className="tiny muted prev-meta">
+            {when(t.dayOffset, t.time)}
+            {t.people > 1 ? ` · עותק לכל אחד (${t.people})` : t.assigneeName && ` · ${t.assigneeName}`}
+            {t.ownerName && t.assigneeName && t.ownerName !== t.assigneeName && ` (במקום ${t.ownerName})`}
+            {t.exists && ' · כבר בשבוע הזה'}
+          </span>
+        </span>
+      </Row>
+    </div>
+  );
   return (
     <div className="card">
       <div className="card-head">
@@ -376,23 +397,15 @@ function PreviousCycle({ week: w, canCopy }: { week: Week; canCopy: boolean }) {
       <p className="card-body small muted prev-intro">
         המשימות של {data.week.name} ב{data.archiveName}, באותו מועד בשבוע הזה.
       </p>
-      {shown.map((t) => (
-        <Row key={t.id} className={`prev-task${t.exists ? ' done' : ''}`}>
-          {canCopy && <input type="checkbox" disabled={t.exists} checked={!t.exists && chosen.has(t.id)} onChange={() => toggle(t.id)} />}
-          <span className="grow">
-            <span className="small strong">{t.title}</span>
-            <span className="tiny muted prev-meta">
-              {when(t.dayOffset, t.time)}
-              {t.people > 1 ? ` · עותק לכל אחד (${t.people})` : t.assigneeName && ` · ${t.assigneeName}`}
-              {t.ownerName && t.assigneeName && t.ownerName !== t.assigneeName && ` (במקום ${t.ownerName})`}
-              {t.exists && ' · כבר בשבוע הזה'}
-            </span>
-          </span>
-        </Row>
-      ))}
-      {data.tasks.length > FOLD && (
+      {shown.map((t) => row(t, leaving.phaseOf(t.id)))}
+      {!leaving.rows.length && (
+        <p className="card-body small all-done-line">
+          <Icon name="check" size={15} /> כל המשימות של אז כבר בשבוע הזה.
+        </p>
+      )}
+      {leaving.rows.length > FOLD && (
         <button type="button" className="btn btn-ghost btn-sm prev-more" onClick={() => setAll(!all)} aria-expanded={all}>
-          {all ? 'פחות' : `הצגת כל ${data.tasks.length}`}
+          {all ? 'פחות' : `הצגת כל ${leaving.rows.length}`}
         </button>
       )}
       {canCopy && open.length > 0 && (
@@ -400,6 +413,13 @@ function PreviousCycle({ week: w, canCopy }: { week: Week; canCopy: boolean }) {
           <button className="btn btn-sm" onClick={() => void copy()} disabled={busy || !chosen.size}>
             <Icon name="plus" /> {busy ? 'פותח...' : `פתיחה בשבוע הזה (${chosen.size})`}
           </button>
+        </div>
+      )}
+      {added.length > 0 && (
+        <div className="card-body prev-added">
+          <DoneDrawer id="prev-added" count={added.length} label="כבר בשבוע הזה">
+            {added.map((t) => row(t))}
+          </DoneDrawer>
         </div>
       )}
     </div>

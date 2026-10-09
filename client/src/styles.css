@@ -751,10 +751,13 @@ html[data-scrolled] .topbar {
   position: relative;
 }
 
+/* how many are new: centered over the bell, its number in the middle of the circle (a line as tall as the
+   letters - a taller one sat lower than the middle) */
 .bell .count {
   position: absolute;
-  top: -3px;
-  left: -3px;
+  top: -5px;
+  left: 50%;
+  translate: -50% 0;
   min-width: 18px;
   height: 18px;
   border-radius: 9px;
@@ -762,10 +765,14 @@ html[data-scrolled] .topbar {
   color: #fff;
   font-size: 11px;
   font-weight: 700;
-  display: grid;
-  place-items: center;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 0 4px;
   border: 2px solid var(--paper);
+  pointer-events: none;
 }
 
 .page {
@@ -8024,8 +8031,15 @@ label.prev-task {
   min-width: 0;
 }
 
-.prev-task.done {
-  opacity: 0.6;
+.prev-task.done .strong {
+  color: var(--ink-2);
+}
+/* the ones already in this week, in their drawer (pages/WeeksPage.tsx) */
+.prev-added {
+  padding-top: 0;
+}
+.prev-added .prev-task {
+  padding-inline: 0;
 }
 
 .prev-more {
@@ -12108,4 +12122,27 @@ tr.is-finished.is-folding {
   .roll-body {
     grid-template-rows: 1fr;
   }
+}
+/* every one of them done (TaskRow.tsx OpenTaskList, the task page's dependencies) */
+.all-done-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--green-ink);
+  font-weight: 600;
+}
+/* a drawer that is a row of its card (the agenda's day: what is over today) */
+.done-drawer.is-row {
+  margin: 0;
+}
+.done-drawer.is-row .done-drawer-head {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.done-drawer.is-row .done-drawer-inner > :first-child {
+  margin-top: 0;
 }

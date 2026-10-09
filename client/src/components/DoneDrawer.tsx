@@ -30,7 +30,8 @@ export function revealDrawer(id: string): void {
   window.dispatchEvent(new CustomEvent('kks-reveal-drawer', { detail: id }));
 }
 
-export function DoneDrawer({ id, count, label, children }: { id: string; count: number; label: string; children: ReactNode }) {
+/** row: as a row of the card it is in (the agenda's day), not a box of its own under a list */
+export function DoneDrawer({ id, count, label, row, children }: { id: string; count: number; label: string; row?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(() => !!openOnes()[id]);
   const body = useId();
   const ref = useRef<HTMLDivElement>(null);
@@ -57,7 +58,7 @@ export function DoneDrawer({ id, count, label, children }: { id: string; count: 
     remember(id, !open);
   };
   return (
-    <div ref={ref} id={id} className={`done-drawer${open ? ' is-open' : ''}`}>
+    <div ref={ref} id={id} className={`done-drawer${open ? ' is-open' : ''}${row ? ' is-row' : ''}`}>
       <button type="button" className="done-drawer-head" aria-expanded={open} aria-controls={body} onClick={toggle}>
         <span className="done-drawer-check" aria-hidden="true">
           <Icon name="check" size={13} />
