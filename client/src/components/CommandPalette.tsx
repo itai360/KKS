@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
+import { isOpenStatus, STATUS_LABELS } from '@shared/constants';
 import { shortDate } from '@shared/dates';
 import { matchesSearch, searchKey } from '@shared/search';
 import type { SearchResults } from '@shared/types';
@@ -118,7 +119,15 @@ function Palette({ pages, onClose }: { pages: { to: string; label: string; icon:
     const local = [...actions, ...screens].filter((i) => !q.trim() || matchesSearch(q, i.label));
     if (!found) return local;
     const fromSearch: Item[] = [
-      ...found.tasks.slice(0, 6).map((t) => ({ id: `t:${t.id}`, group: 'משימות', label: t.title, sub: `${t.ownerName} · ${fmtDeadline(t.deadline)}`, icon: 'tasks', run: go(`/tasks/${t.id}`) })),
+      // the open ones first (the search puts them there); one already closed says so instead of its deadline
+      ...found.tasks.slice(0, 6).map((t) => ({
+        id: `t:${t.id}`,
+        group: 'משימות',
+        label: t.title,
+        sub: `${t.ownerName} · ${isOpenStatus(t.status) ? fmtDeadline(t.deadline) : STATUS_LABELS[t.status]}`,
+        icon: isOpenStatus(t.status) ? 'tasks' : 'check',
+        run: go(`/tasks/${t.id}`),
+      })),
       ...found.weeks.slice(0, 4).map((w) => ({ id: `w:${w.id}`, group: 'שבועות', label: w.name, sub: `שבוע ${w.number} · ${shortDate(w.startDate)}-${shortDate(w.endDate)}`, icon: 'layers', run: go(`/weeks/${w.id}`) })),
       ...found.cadets.slice(0, 5).map((c) => ({ id: `c:${c.id}`, group: 'צוערים', label: c.fullName, sub: c.teamName ?? undefined, icon: 'shield', run: go(`/cadets/${c.id}`) })),
       ...found.events.slice(0, 4).map((e) => ({ id: `e:${e.id}`, group: 'לו"ז', label: e.title, sub: `${shortDate(e.date)} ${e.startTime}`, icon: 'calendar', run: go(`/schedule?date=${e.date}&event=${e.id}`) })),

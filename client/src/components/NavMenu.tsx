@@ -13,6 +13,7 @@ import { BOTTOM_BAR_MEDIA, bottomBarScreens } from '../lib/bottomBar';
 import { frequentScreens } from '../lib/frequent';
 import { useSession } from '../lib/session';
 import { setThemePref, shownTheme } from '../lib/theme';
+import { Count } from './Count';
 import { Icon } from './Icon';
 import { Empty, initials } from './ui';
 
@@ -182,11 +183,7 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
                   <span className="grow">{title}</span>
                   {/* closed: where the screen on show is, and how much waits inside */}
                   {!open && isHere && <span className="nav-menu-here" aria-label="המסך הפתוח נמצא כאן" />}
-                  {!open && total > 0 && (
-                    <span className="menu-tile-count is-inline" aria-label={`${total} ממתינים`}>
-                      {total > 99 ? '99+' : total}
-                    </span>
-                  )}
+                  {!open && <Count n={total} className="menu-tile-count is-inline" label={`${total} ממתינים`} />}
                   <span className="tiny muted mono nav-menu-n" aria-hidden="true">
                     {s.items.length}
                   </span>
@@ -223,11 +220,7 @@ function MenuTile({ item: it, on, index, onNavigate }: { item: MenuItem; on: boo
         <Icon name={it.icon} size={21} />
       </span>
       <span className="menu-tile-label">{it.label}</span>
-      {!!it.count && (
-        <span className="menu-tile-count" aria-label={`${it.count} ממתינים`}>
-          {it.count > 99 ? '99+' : it.count}
-        </span>
-      )}
+      <Count n={it.count ?? 0} className="menu-tile-count" label={`${it.count} ממתינים`} />
     </Link>
   );
 }

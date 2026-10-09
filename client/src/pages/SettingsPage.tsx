@@ -1,7 +1,7 @@
 // Section 36 - setting up the course (dates, weeks, staff, domains, templates,
 // recurring tasks, permissions) and personal settings.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
@@ -13,9 +13,10 @@ import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { SectionRail, type RailItem } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
-import { DateInput, ErrorBox, Field, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { demoHooks, IS_DEMO } from '../lib/demo';
+import { leaveClass, useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { fmtAgo, fmtDateTime } from '../lib/format';
@@ -68,51 +69,88 @@ export function SettingsPage() {
   );
 }
 
+interface SetupStep {
+  done: boolean;
+  label: string;
+  hint?: string;
+  link?: string;
+  action?: () => void;
+  actionLabel?: string;
+}
+
+/** the steps still to take; the ones taken in a line under them - one taken while on screen is ticked a
+ *  moment, then folds into it - and once all are taken, the card says so in one line */
 function SetupChecklist() {
-  const { settings, weeks, staff } = useSession();
+  const { settings, weeks, staff, loaded } = useSession();
   const templates = useApi<Template[]>('/api/templates', ['templates']);
   const recurring = useApi<RecurringRule[]>('/api/recurring', ['recurring']);
   const [gen, setGen] = useState(false);
-  const steps = [
-    { done: true, label: 'יצירת הקורס', hint: settings.courseName },
-    { done: !!settings.startDate && !!settings.endDate, label: 'תאריכי התחלה וסיום', hint: settings.startDate ? `${settings.startDate} - ${settings.endDate ?? '?'}` : 'בכרטיס פרטי הקורס' },
-    { done: weeks.length > 0, label: 'רשימת שבועות הקורס', hint: weeks.length ? `${weeks.length} שבועות` : undefined, action: () => setGen(true), actionLabel: 'יצירת שבועות' },
-    { done: weeks.length > 0 && weeks.every((w) => w.leadId), label: 'מפק"צ אחראי לכל שבוע', hint: weeks.length ? `${weeks.filter((w) => w.leadId).length}/${weeks.length}` : undefined, link: '/weeks' },
-    { done: staff.length > 0, label: 'אנשי הסגל', hint: staff.length ? `${staff.length} אנשי סגל` : 'בכרטיס אנשי סגל' },
-    { done: settings.domains.length > 0, label: 'תחומי אחריות', hint: `${settings.domains.length} תחומים` },
-    { done: (templates.data?.length ?? 0) > 0, label: 'תבניות בסיסיות', hint: templates.data?.length ? `${templates.data.length} תבניות` : undefined, link: '/templates' },
-    { done: (recurring.data?.length ?? 0) > 0, label: 'משימות חוזרות', hint: recurring.data?.length ? `${recurring.data.length} משימות` : undefined, link: '/recurring' },
-  ];
-  const done = steps.filter((s) => s.done).length;
+  // what is still loading is not "not done": the steps are told apart only once all of it is in - so a
+  // visit does not see steps "taken" that only came in late
+  const ready = loaded && templates.data !== undefined && recurring.data !== undefined;
+  const steps = useMemo<SetupStep[]>(
+    () => [
+      { done: true, label: 'יצירת הקורס', hint: settings.courseName },
+      { done: !!settings.startDate && !!settings.endDate, label: 'תאריכי התחלה וסיום', hint: settings.startDate ? `${settings.startDate} - ${settings.endDate ?? '?'}` : 'בכרטיס פרטי הקורס' },
+      { done: weeks.length > 0, label: 'רשימת שבועות הקורס', hint: weeks.length ? `${weeks.length} שבועות` : undefined, action: () => setGen(true), actionLabel: 'יצירת שבועות' },
+      { done: weeks.length > 0 && weeks.every((w) => w.leadId), label: 'מפק"צ אחראי לכל שבוע', hint: weeks.length ? `${weeks.filter((w) => w.leadId).length}/${weeks.length}` : undefined, link: '/weeks' },
+      { done: staff.length > 0, label: 'אנשי הסגל', hint: staff.length ? `${staff.length} אנשי סגל` : 'בכרטיס אנשי סגל' },
+      { done: settings.domains.length > 0, label: 'תחומי אחריות', hint: `${settings.domains.length} תחומים` },
+      { done: (templates.data?.length ?? 0) > 0, label: 'תבניות בסיסיות', hint: templates.data?.length ? `${templates.data.length} תבניות` : undefined, link: '/templates' },
+      { done: (recurring.data?.length ?? 0) > 0, label: 'משימות חוזרות', hint: recurring.data?.length ? `${recurring.data.length} משימות` : undefined, link: '/recurring' },
+    ],
+    [settings, weeks, staff, templates.data, recurring.data],
+  );
+  const open = useMemo(() => (ready ? steps.filter((s) => !s.done) : []), [steps, ready]);
+  const taken = useMemo(() => (ready ? steps.filter((s) => s.done) : []), [steps, ready]);
+  const leaving = useLeaving(open, (s) => s.label, (label) => taken.find((s) => s.label === label));
+  const step = (s: SetupStep) => (
+    <div key={s.label} className="row small">
+      <span className={`task-check${s.done ? ' checked' : ''}`} style={{ width: 22, height: 22, cursor: 'default' }}>
+        <Icon name="check" />
+      </span>
+      <span className={`grow ${s.done ? '' : 'strong'}`}>{s.label}</span>
+      {s.hint && <span className="tiny muted">{s.hint}</span>}
+      {!s.done && s.link && (
+        <Link to={s.link} className="btn btn-sm">
+          להגדרה
+        </Link>
+      )}
+      {!s.done && s.action && (
+        <button className="btn btn-sm" onClick={s.action}>
+          {s.actionLabel}
+        </button>
+      )}
+    </div>
+  );
   return (
     <div className="card">
       <div className="card-head">
         <Icon name="flag" />
         <h3 className="grow">הקמת הקורס</h3>
-        <span className="mono small">
-          {done}/{steps.length}
-        </span>
+        {ready && (
+          <span className="mono small">
+            {taken.length}/{steps.length}
+          </span>
+        )}
       </div>
       <div className="card-body col gap-6">
-        {steps.map((s) => (
-          <div key={s.label} className="row small">
-            <span className={`task-check${s.done ? ' checked' : ''}`} style={{ width: 22, height: 22, cursor: 'default' }}>
-              <Icon name="check" />
-            </span>
-            <span className={`grow ${s.done ? '' : 'strong'}`}>{s.label}</span>
-            {s.hint && <span className="tiny muted">{s.hint}</span>}
-            {!s.done && s.link && (
-              <Link to={s.link} className="btn btn-sm">
-                להגדרה
-              </Link>
-            )}
-            {!s.done && s.action && (
-              <button className="btn btn-sm" onClick={s.action}>
-                {s.actionLabel}
-              </button>
-            )}
-          </div>
-        ))}
+        {!ready ? (
+          <Loading rows={2} />
+        ) : leaving.rows.length ? (
+          leaving.rows.map((s) => (
+            <div key={s.label} className={leaveClass(leaving.phaseOf(s.label))}>
+              {step(s)}
+            </div>
+          ))
+        ) : (
+          <p className="small all-done-line">
+            <Icon name="check" size={15} /> הקמת הקורס הושלמה - כל הצעדים בוצעו.
+          </p>
+        )}
+        <DoneDrawer id="setup-done" count={taken.length} label="בוצעו">
+          <div className="col gap-6">{taken.map(step)}</div>
+        </DoneDrawer>
       </div>
       {gen && <GenerateWeeks onClose={() => setGen(false)} />}
     </div>

@@ -6,6 +6,7 @@ import { BLOCK_REASONS, isOpenStatus, OTHER_DOMAIN, OVERDUE_RESPONSE_LABELS, OVE
 import type { TaskDetail } from '@shared/types';
 import { api } from '../lib/api';
 import { dateKeyOf, fmtTime, isoAt } from '../lib/format';
+import { forgetFinished, noteFinished } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { Icon } from './Icon';
@@ -42,6 +43,9 @@ export function useTaskMutation(taskId: number, onDone: (d: TaskDetail) => void)
     try {
       const d = await fn();
       if (d) onDone(d);
+      // done here: a list it goes from (the schedule's deadlines, "my tasks" on the way back) lets it go done
+      if (d && d.task.status === 'done') noteFinished('tasks', [d.task.id]);
+      else if (d && isOpenStatus(d.task.status)) forgetFinished('tasks', d.task.id);
       if (success) toast({ title: success, tone: 'green', action });
       emitLocalChange('tasks');
       return true;

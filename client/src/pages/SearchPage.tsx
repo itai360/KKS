@@ -6,7 +6,7 @@ import { shortDate } from '@shared/dates';
 import type { SearchResults } from '@shared/types';
 import { Highlight } from '../components/Highlight';
 import { Icon } from '../components/Icon';
-import { GroupTitle, TaskList } from '../components/TaskRow';
+import { GroupTitle, OpenTaskList } from '../components/TaskRow';
 import { Empty, Loading, PageHead } from '../components/ui';
 import { useSession } from '../lib/session';
 import { matchesSearch } from '@shared/search';
@@ -226,10 +226,11 @@ export function SearchPage() {
                 </div>
               </>
             )}
+            {/* the open ones; what is done or cancelled in a line under them that opens to it */}
             {data.tasks.length > 0 && (
               <>
                 <GroupTitle title="משימות" count={data.tasks.length} />
-                <TaskList tasks={data.tasks} />
+                <OpenTaskList tasks={data.tasks} drawerId="search-done" />
               </>
             )}
           </div>

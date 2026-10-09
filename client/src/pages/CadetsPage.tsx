@@ -24,7 +24,7 @@ import {
 } from '@shared/constants';
 import { shortDate } from '@shared/dates';
 import { sortHe } from '@shared/sort';
-import type { AttendanceHistory, Cadet, CadetDetail, CadetRecord, Exemption, Team } from '@shared/types';
+import type { AttendanceHistory, Cadet, CadetDetail, CadetRecord, Exemption, Experience, Team } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
 import { ContactButtons } from '../components/ContactButtons';
@@ -33,13 +33,14 @@ import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { unlessHeld, useRowMenu, type RowMenuItem } from '../components/RowMenu';
-import { TaskList } from '../components/TaskRow';
+import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
 import { api, changedFields, qs } from '../lib/api';
 import { telHref, waHref } from '../lib/contact';
 import { saveCsv } from '../lib/csv';
 import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
+import { useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -572,6 +573,27 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
 
 // ---------------- profile ----------------
 
+/** a cadet's experiences: the ones under way or ahead; the done ones in a line under them - one given its
+ *  feedback while the file is open is marked a moment, then folds into it (as on the experiences page) */
+function CadetExperiences({ experiences }: { experiences: Experience[] }) {
+  const open = useMemo(() => experiences.filter((x) => x.phase !== 'done'), [experiences]);
+  const done = useMemo(() => experiences.filter((x) => x.phase === 'done'), [experiences]);
+  const leaving = useLeaving(open, (x) => x.id, (id) => done.find((x) => x.id === id));
+  if (!experiences.length) return <p className="small muted">לא שובץ להתנסויות.</p>;
+  return (
+    <>
+      {leaving.rows.length ? leaving.rows.map((x) => <ExperienceCard key={x.id} x={x} compact leaving={leaving.phaseOf(x.id)} />) : <p className="small muted">כל ההתנסויות הושלמו.</p>}
+      <DoneDrawer id="cadet-experiences-done" count={done.length} label="הושלמו">
+        <div className="col gap-6">
+          {done.map((x) => (
+            <ExperienceCard key={x.id} x={x} compact />
+          ))}
+        </div>
+      </DoneDrawer>
+    </>
+  );
+}
+
 export function CadetPage() {
   const { id } = useParams();
   const { data, error, loading, status } = useApi<CadetDetail>(`/api/cadets/${id}`, ['cadets', 'tasks']);
@@ -723,7 +745,7 @@ export function CadetPage() {
               <span className="mono tiny muted">{data.experiences.length}</span>
             </div>
             <div className="card-body col gap-6">
-              {data.experiences.length === 0 ? <p className="small muted">לא שובץ להתנסויות.</p> : data.experiences.map((x) => <ExperienceCard key={x.id} x={x} compact />)}
+              <CadetExperiences experiences={data.experiences} />
             </div>
           </div>
           <div className="card">
@@ -731,7 +753,7 @@ export function CadetPage() {
               <h3 className="grow">משימות בנושא הצוער</h3>
             </div>
             <div className="card-body">
-              <TaskList tasks={data.tasks} empty={<p className="small muted">אין משימות מקושרות.</p>} />
+              <OpenTaskList tasks={data.tasks} drawerId="cadet-tasks-done" empty={<p className="small muted">אין משימות מקושרות.</p>} />
             </div>
           </div>
           {isCommander && (

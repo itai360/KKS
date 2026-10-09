@@ -18,7 +18,7 @@ import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { usePeriodSwipe } from '../components/periodSwipe';
 import { useNewTask } from '../components/NewTask';
-import { TaskList } from '../components/TaskRow';
+import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { DateInput, ErrorBox, Field, Loading, Modal, PageHead, Ring, Seg, Select, TimeInput } from '../components/ui';
 import { agendaDays, endMinutes, foldQuiet, isMine, type AgendaRow } from '../lib/agenda';
@@ -895,7 +895,8 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
               <Icon name="plus" /> משימה
             </button>
           </div>
-          <TaskList tasks={data.tasks} empty={<p className="small muted">כל פעילות יכולה להפוך למרכז משימות: תיאום, מדריכים, רפואה, בטיחות, הסעות...</p>} />
+          {/* what is still to prepare; what is done in a line under it (ticked here, it folds into it) */}
+          <OpenTaskList tasks={data.tasks} drawerId="event-prep-done" empty={<p className="small muted">כל פעילות יכולה להפוך למרכז משימות: תיאום, מדריכים, רפואה, בטיחות, הסעות...</p>} />
         </div>
 
         <div>

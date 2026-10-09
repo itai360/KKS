@@ -11,6 +11,7 @@ import { api } from '../lib/api';
 import { fmtDateTime, fmtDeadline, getTz } from '../lib/format';
 import { useFresh } from '../lib/fresh';
 import { haptic } from '../lib/haptics';
+import { leaveClass, useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
@@ -112,6 +113,13 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
     set(v);
   };
   const fresh = useFresh(meeting.summary?.newTasks.map((t) => t.id));
+  const freshClosed = useFresh(meeting.summary?.closedTasks.map((t) => t.id));
+  // a task from the meeting closed while it goes on: a moment ticked, then it folds - over to "נסגרו"
+  const { open, closedIds } = useMemo(() => {
+    const closedIds = new Set(meeting.summary?.closedTasks.map((t) => t.id));
+    return { open: (meeting.summary?.newTasks ?? []).filter((t) => !closedIds.has(t.id)), closedIds };
+  }, [meeting.summary]);
+  const leaving = useLeaving(open, (t) => t.id, (id, last) => closedIds.has(id) && last);
 
   const parsed = useMemo(
     () =>
@@ -223,18 +231,28 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
         <div className="card">
           <div className="card-head">
             <h3 className="grow">משימות חדשות מהישיבה</h3>
-            <span className="mono tiny muted">{s?.newTasks.length ?? 0}</span>
+            <span className="mono tiny muted">{open.length}</span>
           </div>
           <div className="card-body col gap-6">
             {!s?.newTasks.length && <p className="small muted">משימות שתוסיפו יופיעו כאן.</p>}
-            {s?.newTasks.map((t) => (
-              <Link key={t.id} to={`/tasks/${t.id}`} className={`row small${fresh(t.id) ? ' is-arrived' : ''}`}>
-                <Icon name="check" size={14} className="text-green" />
-                <span className="grow strong">{t.title}</span>
-                <span className="muted">{t.ownerName}</span>
-                <span className="mono tiny">{fmtDeadline(t.deadline)}</span>
-              </Link>
-            ))}
+            {s && s.newTasks.length > 0 && !leaving.rows.length && (
+              <p className="small all-done-line">
+                <Icon name="check" size={15} /> כל המשימות מהישיבה כבר נסגרו.
+              </p>
+            )}
+            {leaving.rows.map((t) => {
+              const phase = leaving.phaseOf(t.id);
+              return (
+                <div key={t.id} className={leaveClass(phase)}>
+                  <Link to={`/tasks/${t.id}`} className={`row small meeting-task${fresh(t.id) ? ' is-arrived' : ''}${phase ? ' done' : ''}`}>
+                    <Icon name={phase ? 'check' : 'tasks'} size={14} className={phase ? 'text-green' : 'muted'} />
+                    <span className="grow strong">{t.title}</span>
+                    <span className="muted">{t.ownerName}</span>
+                    <span className="mono tiny">{phase ? 'נסגרה' : fmtDeadline(t.deadline)}</span>
+                  </Link>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -265,8 +283,8 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
             </div>
             <div className="card-body col gap-4">
               {s.closedTasks.map((t) => (
-                <div key={t.id} className="small">
-                  {t.title} <span className="muted">· {t.ownerName}</span>
+                <div key={t.id} className={`small${freshClosed(t.id) ? ' is-arrived' : ''}`}>
+                  <Icon name="check" size={13} className="text-green" /> {t.title} <span className="muted">· {t.ownerName}</span>
                 </div>
               ))}
             </div>

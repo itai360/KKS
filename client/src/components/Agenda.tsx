@@ -12,7 +12,7 @@ import { parseEventText, type ParsedEvent } from '@shared/eventParser';
 import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Week } from '@shared/types';
 import { endMinutes, inMinutes, leftMinutes, nowAndNext, type AgendaItem, type AgendaRow } from '../lib/agenda';
 import { api } from '../lib/api';
-import { leaveClass, useLeaving } from '../lib/leaving';
+import { finishedJustNow, leaveClass, useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { BulkCheck, bulkClick, SwipeRow, useBulk } from './Bulk';
@@ -545,7 +545,12 @@ function AgendaDaySection({
         : it.kind === 'external' && !!it.e.startTime && endMinutes({ startTime: it.e.startTime, endTime: it.e.endTime }) <= at);
     return { over: items.filter(ended), rest: items.filter((it) => !ended(it)) };
   }, [items, isToday, at, liveNow]);
-  const leaving = useLeaving(rest, (it) => it.key, (k) => over.find((it) => it.key === k));
+  // a deadline gone because its task was done here (its page, the bell) goes done too, then folds
+  const leaving = useLeaving(
+    rest,
+    (it) => it.key,
+    (k, last) => over.find((it) => it.key === k) ?? (last.kind === 'task' && finishedJustNow('tasks', last.t.id) && { ...last, t: { ...last.t, status: 'done' as const, overdue: false } }),
+  );
   const rows = leaving.rows;
   // the line of now goes before the first thing that has not started yet
   const nowAt = isToday ? rows.findIndex((i) => i.at && minutesOf(i.at) > at) : -2;
@@ -735,10 +740,11 @@ export function ExternalRow({ x, past, onOpen }: { x: ExternalEvent; past?: bool
 
 /** A task's deadline in the timeline: a flag at its hour, never a block of time. */
 function DeadlineRow({ t, time, onOpen }: { t: Task; time: string; onOpen: () => void }) {
+  const done = t.status === 'done';
   return (
-    <div className={`event-row deadline${t.overdue ? ' overdue' : ''}`} {...openable(onOpen)}>
+    <div className={`event-row deadline${t.overdue ? ' overdue' : ''}${done ? ' done' : ''}`} {...openable(onOpen)}>
       <div className="event-time">
-        <Icon name="flag" size={13} /> {time}
+        <Icon name={done ? 'check' : 'flag'} size={13} /> {time}
       </div>
       <div style={{ minWidth: 0 }}>
         <div className="event-title">{t.title}</div>
@@ -747,7 +753,7 @@ function DeadlineRow({ t, time, onOpen }: { t: Task; time: string; onOpen: () =>
           {t.ownerName && <span className="sep">{t.ownerName}</span>}
         </div>
       </div>
-      {t.overdue && <span className="badge t-red">באיחור</span>}
+      {done ? <span className="badge t-green">הושלם</span> : t.overdue && <span className="badge t-red">באיחור</span>}
     </div>
   );
 }

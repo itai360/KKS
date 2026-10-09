@@ -8,6 +8,7 @@ import { checkForUpdate, onUpdate, updateReady } from '../lib/update';
 import { onWaiting, useApi } from '../lib/useApi';
 import { usePresence } from '../lib/presence';
 import { slideTabIndicators } from '../lib/tabIndicator';
+import { Count } from './Count';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { addToWeekly } from './WeeklyAdd';
@@ -84,11 +85,7 @@ function Bell({ unread }: { unread: number }) {
         <span className="bell-icon" key={ring} aria-hidden="true">
           <Icon name="bell" />
         </span>
-        {unread > 0 && (
-          <span className="count" key={unread}>
-            {unread > 99 ? '99+' : unread}
-          </span>
-        )}
+        <Count n={unread} />
       </button>
       <NotificationsPanel open={open} onClose={() => setOpen(false)} anchor={ref} />
     </>
@@ -559,11 +556,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
               <Icon name={it.icon} />
               <span className="rail-label">{it.label}</span>
-              {!!it.count && (
-                <span className="count" key={it.count}>
-                  {it.count > 99 ? '99+' : it.count}
-                </span>
-              )}
+              <Count n={it.count ?? 0} />
             </NavLink>
           ));
           if (!s.title)
@@ -589,11 +582,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 <span className="rail-label">{s.title}</span>
                 {/* closed, with the screen on show inside: marked, so it is clear where one is */}
                 {!open && s.title === here && <span className="rail-group-here" aria-hidden="true" />}
-                {!open && total > 0 && (
-                  <span className="count" key={total}>
-                    {total > 99 ? '99+' : total}
-                  </span>
-                )}
+                {!open && <Count n={total} />}
                 <Icon name="chevronDown" size={15} className="rail-group-chev" />
               </button>
               <div className="rail-group-body" id={id} inert={!open}>

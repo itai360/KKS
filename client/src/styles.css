@@ -8823,6 +8823,19 @@ button.weekly-item-title:hover {
 .bell .count {
   animation: count-bump 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.5);
 }
+/* the last of them taken care of: the count shrinks away, not just gone (components/Count.tsx) */
+.rail-link .count.is-going,
+.rail-group-head .count.is-going,
+.bell .count.is-going,
+.menu-tile-count.is-going {
+  animation: count-out 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+@keyframes count-out {
+  to {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+}
 @keyframes count-bump {
   0% {
     transform: scale(0.45);
@@ -10093,6 +10106,15 @@ html {
 }
 .event-row.deadline.overdue .event-time {
   color: var(--red-ink);
+}
+/* its task done here: a moment so, before it folds away (components/Agenda.tsx) */
+.event-row.deadline.done .event-time {
+  color: var(--green-ink);
+}
+.event-row.deadline.done .event-title {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-2);
 }
 
 /* only my events: the computer's switch, pressed while on */
@@ -12193,6 +12215,12 @@ tr.is-finished.is-folding {
     grid-template-columns: 1fr;
     margin-inline-end: 0;
   }
+}
+/* a task from the meeting closed while it goes on (pages/MeetingPage.tsx): a moment ticked, then folded */
+.meeting-task.done .strong {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-2);
 }
 /* a request waiting on the task (pages/TaskPage.tsx): decided, it folds away with the space above it */
 .task-request {

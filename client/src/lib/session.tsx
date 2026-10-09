@@ -36,6 +36,8 @@ export interface Session {
   viewing: { id: number; name: string } | null;
   /** backup codes left for two-step sign-in (null: it is off) */
   recoveryLeft: number | null;
+  /** the course's people, weeks and settings have come in (until then the lists are empty, not "none") */
+  loaded: boolean;
   unread: number;
   setUnread: (n: number) => void;
   refresh: () => Promise<void>;
@@ -151,6 +153,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
       isCommander: me.user.role === 'commander',
       viewing: me.course ?? null,
       recoveryLeft: me.recoveryLeft ?? null,
+      loaded: !!users.data && !!weeks.data && !!tracks.data && !!settings.data,
       unread,
       setUnread,
       refresh,
@@ -160,7 +163,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
       },
       userName: (id) => (id ? (byId.get(id)?.displayName ?? '') : ''),
     };
-  }, [me, users.data, weeks.data, tracks.data, currentSettings, unread, refresh, onLogout]);
+  }, [me, users.data, weeks.data, tracks.data, settings.data, currentSettings, unread, refresh, onLogout]);
 
   return (
     <Ctx.Provider value={value}>

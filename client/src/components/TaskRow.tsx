@@ -312,6 +312,9 @@ export function TaskSection({ title, id, tone, tasks, showOwner = true, collapse
   );
 }
 
+/** the drawer's name: "הושלמו" - or "נסגרו" when some of them were cancelled, not done */
+const closedLabel = (closed: Task[]) => (closed.some((t) => t.status === 'cancelled') ? 'נסגרו' : 'הושלמו');
+
 /** the open tasks of something (a task's parts, a debrief's follow-ups) - and the done ones in a drawer under them */
 export function OpenTaskList({ tasks, drawerId, empty, showOwner = true }: { tasks: Task[]; drawerId: string; empty?: ReactNode; showOwner?: boolean }) {
   const open = useMemo(() => tasks.filter((t) => isOpenStatus(t.status)), [tasks]);
@@ -324,14 +327,14 @@ export function OpenTaskList({ tasks, drawerId, empty, showOwner = true }: { tas
         empty={
           tasks.length ? (
             <p className="small all-done-line">
-              <Icon name="check" size={15} /> כולן הושלמו.
+              <Icon name="check" size={15} /> כולן {closedLabel(done)}.
             </p>
           ) : (
             empty
           )
         }
       />
-      <DoneDrawer id={drawerId} count={done.length} label="הושלמו">
+      <DoneDrawer id={drawerId} count={done.length} label={closedLabel(done)}>
         <TaskList tasks={done} showOwner={showOwner} />
       </DoneDrawer>
     </>
@@ -364,7 +367,7 @@ export function GroupedTaskList({ tasks, by, drawerId, empty }: { tasks: Task[];
         </div>
       ))}
       {!open.length && <p className="small muted">כל המשימות כאן הושלמו.</p>}
-      <DoneDrawer id={drawerId} count={done.length} label="הושלמו">
+      <DoneDrawer id={drawerId} count={done.length} label={closedLabel(done)}>
         <TaskList tasks={done} />
       </DoneDrawer>
     </>
