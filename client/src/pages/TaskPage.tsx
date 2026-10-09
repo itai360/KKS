@@ -3,9 +3,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { domainLabel, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
+import { domainLabel, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
 import type { Task, TaskDetail } from '@shared/types';
 import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { TaskActions, useTaskMutation, type EditField } from '../components/TaskActions';
@@ -440,7 +441,11 @@ function Subtasks({ detail }: { detail: TaskDetail }) {
             <Bar value={Math.round((t.subtaskDone / t.subtaskTotal) * 100)} label="משימות משנה שהושלמו" />
           </div>
         )}
-        <TaskList tasks={detail.subtasks} />
+        {/* the open parts; the done ones out of the way, in a drawer */}
+        <TaskList tasks={detail.subtasks.filter((s) => isOpenStatus(s.status))} empty={<p className="small muted">כל משימות המשנה הושלמו.</p>} />
+        <DoneDrawer id="subtasks-done" count={detail.subtasks.filter((s) => !isOpenStatus(s.status)).length} label="הושלמו">
+          <TaskList tasks={detail.subtasks.filter((s) => !isOpenStatus(s.status))} />
+        </DoneDrawer>
       </div>
     </div>
   );

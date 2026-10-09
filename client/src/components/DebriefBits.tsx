@@ -2,18 +2,20 @@
 // where it is needed - what an earlier cycle wrote for this week or this event, and what
 // was decided about each lesson here (a task, applied, not relevant).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { STATUS_LABELS } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
 import { LESSON_DECISION_LABELS, type DebriefKind, type LessonDecision } from '@shared/debriefForms';
 import type { BankLesson } from '@shared/types';
+import { DoneDrawer } from './DoneDrawer';
 import { Icon } from './Icon';
 import { DateTimeInputs } from './NewTask';
 import { useToast } from './Toasts';
 import { ErrorBox, Field, Modal, Select } from './ui';
 import { api } from '../lib/api';
 import { isoAt, todayKey } from '../lib/format';
+import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -41,9 +43,13 @@ export function PriorLessons({ title, context, card = true, onOpen }: { title: s
   useEffect(() => {
     if (data?.length && location.hash === '#prior') document.getElementById('prior')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [data?.length, location.hash]);
+  // the ones still waiting for a decision; a decided one goes - a moment, then folded - to the drawer under them
+  const waiting = useMemo(() => (data ?? []).filter((l) => !l.review), [data]);
+  const decided = useMemo(() => (data ?? []).filter((l) => l.review), [data]);
+  const leaving = useLeaving(waiting, (l) => l.id, (id) => decided.find((l) => l.id === id));
   // nothing kept for it yet: no empty box
   if (!data?.length) return null;
-  const pending = data.filter((l) => !l.review).length;
+  const pending = waiting.length;
 
   const decide = async (l: BankLesson, decision: LessonDecision | null, extra: object = {}) => {
     setBusy(l.id);
@@ -60,53 +66,65 @@ export function PriorLessons({ title, context, card = true, onOpen }: { title: s
     }
   };
 
-  const list = (
-    <ul className="prior-lessons">
-      {data.map((l) => (
-        <li key={l.id} className={l.review ? 'decided' : ''}>
-          <div className="small prewrap">{l.body}</div>
-          <div className="tiny muted">
-            <Link to={`/debriefs/${l.debriefId}`} onClick={onOpen}>
-              {l.debriefTitle}
-            </Link>
-            {' · '}
-            <span className="mono">{shortDate(l.occurredOn)}</span>
-            {l.ownerName && ` · ${l.ownerName}`}
+  const item = (l: BankLesson, phase?: LeavePhase) => (
+    <li key={l.id} className={`${leaveClass(phase)}${l.review ? ' decided' : ''}`}>
+      <div className="prior-lesson">
+        <div className="small prewrap">{l.body}</div>
+        <div className="tiny muted">
+          <Link to={`/debriefs/${l.debriefId}`} onClick={onOpen}>
+            {l.debriefTitle}
+          </Link>
+          {' · '}
+          <span className="mono">{shortDate(l.occurredOn)}</span>
+          {l.ownerName && ` · ${l.ownerName}`}
+        </div>
+        {l.review ? (
+          <div className="row wrap gap-6">
+            {l.review.decision === 'task' && l.review.taskId ? (
+              <Link to={`/tasks/${l.review.taskId}`} className="badge t-blue" onClick={onOpen}>
+                <Icon name="tasks" size={11} /> {l.review.taskTitle} · {l.review.taskStatus ? STATUS_LABELS[l.review.taskStatus] : ''}
+              </Link>
+            ) : (
+              <span className={`badge ${DECISION_TONES[l.review.decision]}`}>{LESSON_DECISION_LABELS[l.review.decision]}</span>
+            )}
+            {l.review.decidedByName && <span className="tiny muted">{l.review.decidedByName}</span>}
+            {context.canDecide && (
+              <button className="btn btn-ghost btn-sm" disabled={busy === l.id} onClick={() => void decide(l, null)}>
+                ביטול
+              </button>
+            )}
           </div>
-          {l.review ? (
-            <div className="row wrap gap-6">
-              {l.review.decision === 'task' && l.review.taskId ? (
-                <Link to={`/tasks/${l.review.taskId}`} className="badge t-blue" onClick={onOpen}>
-                  <Icon name="tasks" size={11} /> {l.review.taskTitle} · {l.review.taskStatus ? STATUS_LABELS[l.review.taskStatus] : ''}
-                </Link>
-              ) : (
-                <span className={`badge ${DECISION_TONES[l.review.decision]}`}>{LESSON_DECISION_LABELS[l.review.decision]}</span>
-              )}
-              {l.review.decidedByName && <span className="tiny muted">{l.review.decidedByName}</span>}
-              {context.canDecide && (
-                <button className="btn btn-ghost btn-sm" disabled={busy === l.id} onClick={() => void decide(l, null)}>
-                  ביטול
-                </button>
-              )}
+        ) : (
+          context.canDecide && (
+            <div className="row wrap gap-6 prior-actions" role="group" aria-label={`החלטה על הלקח: ${l.body.slice(0, 60)}`}>
+              <button className="btn btn-sm" disabled={busy === l.id} onClick={() => setAsTask(l)}>
+                <Icon name="plus" /> משימה
+              </button>
+              <button className="btn btn-sm" disabled={busy === l.id} onClick={() => void decide(l, 'applied')}>
+                <Icon name="check" /> יושם
+              </button>
+              <button className="btn btn-sm btn-ghost" disabled={busy === l.id} onClick={() => void decide(l, 'skip')}>
+                לא רלוונטי
+              </button>
             </div>
-          ) : (
-            context.canDecide && (
-              <div className="row wrap gap-6 prior-actions" role="group" aria-label={`החלטה על הלקח: ${l.body.slice(0, 60)}`}>
-                <button className="btn btn-sm" disabled={busy === l.id} onClick={() => setAsTask(l)}>
-                  <Icon name="plus" /> משימה
-                </button>
-                <button className="btn btn-sm" disabled={busy === l.id} onClick={() => void decide(l, 'applied')}>
-                  <Icon name="check" /> יושם
-                </button>
-                <button className="btn btn-sm btn-ghost" disabled={busy === l.id} onClick={() => void decide(l, 'skip')}>
-                  לא רלוונטי
-                </button>
-              </div>
-            )
-          )}
-        </li>
-      ))}
-    </ul>
+          )
+        )}
+      </div>
+    </li>
+  );
+  const list = (
+    <>
+      {leaving.rows.length > 0 ? (
+        <ul className="prior-lessons">{leaving.rows.map((l) => item(l, leaving.phaseOf(l.id)))}</ul>
+      ) : (
+        <p className="small prior-all-decided">
+          <Icon name="check" size={15} /> על כל הלקחים הוחלט.
+        </p>
+      )}
+      <DoneDrawer id="prior-decided" count={decided.length} label="הוחלטו">
+        <ul className="prior-lessons">{decided.map((l) => item(l))}</ul>
+      </DoneDrawer>
+    </>
   );
   const counter = pending > 0 && context.canDecide ? <span className="badge t-orange">{pending} ממתינים להחלטה</span> : <span className="mono tiny muted">{data.length}</span>;
   const dialog = asTask && <LessonToTask lesson={asTask} context={context} onClose={() => setAsTask(null)} onSave={(task) => decide(asTask, 'task', { task })} />;

@@ -1,11 +1,14 @@
 // Announcements to the staff: the commander writes one (with or without "confirm reading",
 // urgent or not); everyone sees it pinned until they confirm; the commander sees who has
-// and who has not, and reminds the rest in one click.
+// and who has not, and reminds the rest in one click. What is still open is on top - waiting
+// for this person's "קראתי" (for the commander: for someone's), or new - and the rest is in a
+// drawer under it: one confirmed goes there, a moment checked, then folded away.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Announcement } from '@shared/types';
 import { CheckMark } from '../components/CheckMark';
 import { ask } from '../components/Confirm';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, PageHead } from '../components/ui';
@@ -13,6 +16,7 @@ import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime } from '../lib/format';
 import { useFresh } from '../lib/fresh';
 import { haptic } from '../lib/haptics';
+import { leaveClass, useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -34,6 +38,17 @@ export function AnnouncementsPage() {
     }
   }, [data]);
 
+  // open: waiting for this person's confirmation (the commander: for anyone's), or new - one only to read is
+  // new until it was seen on an earlier visit (the commander's own: for two days)
+  const seenBefore = useRef<Set<number> | null>(null);
+  if (!seenBefore.current && data) seenBefore.current = new Set(data.filter((a) => a.readAt).map((a) => a.id));
+  const { open, done } = useMemo(() => {
+    const isOpen = (a: Announcement) =>
+      a.audience ? (a.requireAck ? a.audience.some((x) => !x.ackedAt) : Date.now() - Date.parse(a.createdAt) < 2 * 86_400_000) : a.requireAck ? !a.ackedAt : !seenBefore.current?.has(a.id);
+    return { open: (data ?? []).filter(isOpen), done: (data ?? []).filter((a) => !isOpen(a)) };
+  }, [data]);
+  const leaving = useLeaving(open, (a) => a.id, (id) => done.find((a) => a.id === id));
+
   const run = async (fn: () => Promise<Announcement[]>, ok?: string) => {
     try {
       setData(await fn());
@@ -46,6 +61,26 @@ export function AnnouncementsPage() {
     }
   };
 
+  const card = (a: Announcement) => (
+    <AnnouncementCard
+      key={a.id}
+      a={a}
+      fresh={fresh(a.id)}
+      onAck={() => run(() => api.post<Announcement[]>(`/api/announcements/${a.id}/read`, { ack: true }))}
+      onRemind={async () => {
+        try {
+          const r = await api.post<{ reminded: number }>(`/api/announcements/${a.id}/remind`);
+          toast({ title: r.reminded ? `נשלחה תזכורת ל-${r.reminded}` : 'כולם כבר אישרו', tone: 'green' });
+          return true;
+        } catch (e) {
+          toast({ title: (e as Error).message, tone: 'red' });
+          return false;
+        }
+      }}
+      onDelete={async () => (await ask({ title: 'למחוק את ההודעה?', body: a.title, confirm: 'מחיקה', danger: true })) && void run(() => api.del<Announcement[]>(`/api/announcements/${a.id}`))}
+    />
+  );
+
   return (
     <div className="page narrow">
       <PageHead title="הודעות לסגל" sub={isCommander ? 'הודעה לכל הסגל - ומי אישר שקרא.' : 'הודעות ממפקד הקורס. "קראתי" מאשר שראית.'} />
@@ -56,27 +91,24 @@ export function AnnouncementsPage() {
       ) : !data?.length ? (
         <Empty icon="flag" title="אין הודעות" text={isCommander ? 'הודעה שתכתבו כאן תגיע לכולם, ותישאר בראש המסך שלהם עד שיאשרו שקראו.' : 'הודעות ממפקד הקורס יופיעו כאן.'} />
       ) : (
-        <div className="col gap-12">
-          {data.map((a) => (
-            <AnnouncementCard
-              key={a.id}
-              a={a}
-              fresh={fresh(a.id)}
-              onAck={() => run(() => api.post<Announcement[]>(`/api/announcements/${a.id}/read`, { ack: true }))}
-              onRemind={async () => {
-                try {
-                  const r = await api.post<{ reminded: number }>(`/api/announcements/${a.id}/remind`);
-                  toast({ title: r.reminded ? `נשלחה תזכורת ל-${r.reminded}` : 'כולם כבר אישרו', tone: 'green' });
-                  return true;
-                } catch (e) {
-                  toast({ title: (e as Error).message, tone: 'red' });
-                  return false;
-                }
-              }}
-              onDelete={async () => (await ask({ title: 'למחוק את ההודעה?', body: a.title, confirm: 'מחיקה', danger: true })) && void run(() => api.del<Announcement[]>(`/api/announcements/${a.id}`))}
-            />
-          ))}
-        </div>
+        <>
+          {leaving.rows.length > 0 ? (
+            <div className="col gap-12">
+              {leaving.rows.map((a) => (
+                <div key={a.id} className={leaveClass(leaving.phaseOf(a.id))}>
+                  {card(a)}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="small muted announce-clear">
+              <CheckMark size={16} /> {isCommander ? 'כל מי שנדרש אישר את ההודעות.' : 'אין הודעות שממתינות לך.'}
+            </p>
+          )}
+          <DoneDrawer id="announcements-done" count={done.length} label="הודעות קודמות">
+            <div className="col gap-12">{done.map(card)}</div>
+          </DoneDrawer>
+        </>
       )}
     </div>
   );

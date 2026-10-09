@@ -1,18 +1,20 @@
 // Section 31 - experiences: role, goals, mentor, tasks, feedback and evaluation.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { diffDays, shortDate } from '@shared/dates';
 import { BROAD_EXPERIENCES, EXPERIENCE_KIND_LABELS, EXPERIENCE_SPANS, SPAN_LABELS, SPAN_SHORT, spanDates, type ExperienceKind, type ExperienceSpan } from '@shared/experiences';
 import { byHe } from '@shared/sort';
 import type { Cadet, Experience } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
+import { useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -35,10 +37,19 @@ export function ExperiencesPage() {
   const [creating, setCreating] = useState(false);
   const cadets = useApi<Cadet[]>('/api/cadets', ['cadets']);
   const canCreate = (cadets.data ?? []).some((c) => c.canManage);
-  // what needs action first: missing feedback, then running, then upcoming, then done
-  const list = (data ?? [])
-    .filter((x) => inTab(tab, x, user.id))
-    .sort((a, b) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase] || (a.phase === 'planned' ? a.startDate.localeCompare(b.startDate) : 0));
+  // what needs action first: missing feedback, then running, then upcoming - and the done ones (outside their
+  // own tab) in a drawer under them; one given its feedback goes there, a moment marked, then folded away
+  const list = useMemo(
+    () =>
+      (data ?? [])
+        .filter((x) => inTab(tab, x, user.id))
+        .sort((a, b) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase] || (a.phase === 'planned' ? a.startDate.localeCompare(b.startDate) : 0)),
+    [data, tab, user.id],
+  );
+  const tucks = tab === 'all' || tab === 'mine' || tab === 'broad';
+  const open = useMemo(() => (tucks ? list.filter((x) => x.phase !== 'done') : list), [list, tucks]);
+  const done = useMemo(() => (tucks ? list.filter((x) => x.phase === 'done') : []), [list, tucks]);
+  const leaving = useLeaving(open, (x) => x.id, (id) => done.find((x) => x.id === id));
   const count = (t: Tab) => (data ?? []).filter((x) => inTab(t, x, user.id)).length;
 
   return (
@@ -82,11 +93,24 @@ export function ExperiencesPage() {
       ) : !list.length ? (
         <Empty icon="target" title="אין התנסויות" text={canCreate ? 'שבצו צוער לתפקיד (מ"מ, מ"כ, סמל תורן...) עם מטרות ומפקד חונך.' : undefined} />
       ) : (
-        <div className="grid-2">
-          {list.map((x) => (
-            <ExperienceCard key={x.id} x={x} />
-          ))}
-        </div>
+        <>
+          {leaving.rows.length > 0 ? (
+            <div className="grid-2">
+              {leaving.rows.map((x) => (
+                <ExperienceCard key={x.id} x={x} leaving={leaving.phaseOf(x.id)} />
+              ))}
+            </div>
+          ) : (
+            <p className="small muted">כל ההתנסויות כאן הושלמו.</p>
+          )}
+          <DoneDrawer id="experiences-done" count={done.length} label="הושלמו">
+            <div className="grid-2">
+              {done.map((x) => (
+                <ExperienceCard key={x.id} x={x} />
+              ))}
+            </div>
+          </DoneDrawer>
+        </>
       )}
       {creating && <ExperienceForm onClose={() => setCreating(false)} />}
     </div>
@@ -115,7 +139,7 @@ function Period({ x }: { x: Experience }) {
   );
 }
 
-export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolean }) {
+export function ExperienceCard({ x, compact, leaving }: { x: Experience; compact?: boolean; leaving?: LeavePhase }) {
   const [feedback, setFeedback] = useState(false);
   const [editing, setEditing] = useState(false);
   // the feedback just given: the card turns done with a glow (and a buzz) - the moment, not every visit
@@ -130,7 +154,7 @@ export function ExperienceCard({ x, compact }: { x: Experience; compact?: boolea
   }, [x.status]);
   const p = PHASE[x.phase];
   return (
-    <SwipeRow itemId={x.id} label={`${x.role} - ${x.cadetName}`}>
+    <SwipeRow itemId={x.id} label={`${x.role} - ${x.cadetName}`} leaving={leaving}>
     <div className={`card card-pad t-${p.tone}${justDone ? ' just-cleared' : ''}`} style={{ borderRight: '4px solid var(--tone)', padding: compact ? 12 : 16 }}>
       <div className="row wrap gap-6">
         {x.canEdit && <BulkCheck id={x.id} />}

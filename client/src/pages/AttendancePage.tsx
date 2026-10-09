@@ -1,11 +1,13 @@
 // The daily roll call (מצבה): every active cadet by team, one tap for where they are today,
-// the head count for the morning report, and the day as CSV or on paper.
+// the head count for the morning report, and the day as CSV or on paper. A team all marked folds
+// to one line - the moment it happens with a check - and opens again with a tap, to fix a mark.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { ATTENDANCE_IN, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, ATTENDANCE_TONES, type AttendanceStatus } from '@shared/constants';
 import { addDays, longDate } from '@shared/dates';
 import type { RollCall, RollEntry } from '@shared/types';
+import { CheckMark } from '../components/CheckMark';
 import { Icon } from '../components/Icon';
 import { usePhonePicker } from '../components/pickers';
 import { useSwipeAction } from '../components/swipeAction';
@@ -14,6 +16,7 @@ import { DateInput, Empty, ErrorBox, Loading, PageHead } from '../components/ui'
 import { api } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { todayKey } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useApi } from '../lib/useApi';
 
@@ -205,37 +208,88 @@ export function AttendancePage() {
           <div className="col gap-16">
             {[...groups].map(([key, list]) => {
               const t = data.teams.find((x) => String(x.teamId ?? 0) === key)!;
-              const left = list.filter((e) => !e.status);
-              const marked = list.length - left.length;
-              return (
-                <section key={key} className="card roll-team" aria-label={t.name}>
-                  <div className="card-head">
-                    <Icon name="users" />
-                    <h2 className="grow">
-                      {t.name}
-                      {t.commanderName && <span className="small muted"> · {t.commanderName}</span>}
-                    </h2>
-                    <span className={`badge ${marked === list.length ? 't-green' : ''}`}>
-                      סומנו {marked}/{list.length}
-                    </span>
-                    {left.length > 0 && (
-                      <button className="btn btn-sm no-print" onClick={() => mark(left.map((e) => ({ cadetId: e.cadetId, status: 'present' })))}>
-                        <Icon name="check" /> {left.length === list.length ? 'כולם נוכחים' : `כל השאר נוכחים (${left.length})`}
-                      </button>
-                    )}
-                  </div>
-                  <div className="roll-list">
-                    {list.map((e) => (
-                      <RollRow key={e.cadetId} entry={e} onMark={(status, note) => mark([{ cadetId: e.cadetId, status, note }])} />
-                    ))}
-                  </div>
-                </section>
-              );
+              // a day of its own: as the team stands that day
+              return <RollTeam key={`${date}:${key}`} name={t.name} commanderName={t.commanderName} list={list} mark={mark} />;
             })}
           </div>
         </>
       )}
     </div>
+  );
+}
+
+/** one team's roll: open while some are not marked; all marked, one line with the count of each */
+function RollTeam({
+  name,
+  commanderName,
+  list,
+  mark,
+}: {
+  name: string;
+  commanderName: string | null;
+  list: RollEntry[];
+  mark: (items: { cadetId: number; status: AttendanceStatus | null; note?: string }[]) => void;
+}) {
+  const left = list.filter((e) => !e.status);
+  const marked = list.length - left.length;
+  const complete = list.length > 0 && !left.length;
+  // marked before the page opened: folded from the start
+  const [open, setOpen] = useState(!complete);
+  const [justDone, setJustDone] = useState(false);
+  const was = useRef(complete);
+  useEffect(() => {
+    const before = was.current;
+    was.current = complete;
+    // the last one marked here: a moment with the check, then it folds
+    if (!before && complete) {
+      haptic('success');
+      setJustDone(true);
+      const t = setTimeout(() => {
+        setOpen(false);
+        setJustDone(false);
+      }, 1100);
+      return () => clearTimeout(t);
+    }
+    // a mark taken back: open again
+    if (before && !complete) setOpen(true);
+  }, [complete]);
+  const counts = countOf(list);
+  const summary = ATTENDANCE_STATUSES.filter((s) => counts[s] > 0)
+    .map((s) => `${ATTENDANCE_LABELS[s]} ${counts[s]}`)
+    .join(' · ');
+  return (
+    <section className={`card roll-team${complete ? ' is-complete' : ''}${justDone ? ' just-cleared' : ''}`} aria-label={name}>
+      <div className="card-head">
+        {complete ? <CheckMark size={20} /> : <Icon name="users" />}
+        <h2 className="grow">
+          {name}
+          {commanderName && <span className="small muted"> · {commanderName}</span>}
+        </h2>
+        <span className={`badge ${complete ? 't-green' : ''}`}>
+          סומנו {marked}/{list.length}
+        </span>
+        {left.length > 0 && (
+          <button className="btn btn-sm no-print" onClick={() => mark(left.map((e) => ({ cadetId: e.cadetId, status: 'present' })))}>
+            <Icon name="check" /> {left.length === list.length ? 'כולם נוכחים' : `כל השאר נוכחים (${left.length})`}
+          </button>
+        )}
+        {complete && (
+          <button className="btn btn-ghost btn-sm no-print" aria-expanded={open} onClick={() => setOpen(!open)}>
+            {open ? 'כיווץ' : 'פתיחה'} <Icon name="chevronDown" size={15} className={`roll-chev${open ? ' is-open' : ''}`} />
+          </button>
+        )}
+      </div>
+      {complete && !open && <div className="card-body small muted roll-done-line no-print">{summary}</div>}
+      <div className={`roll-body${open ? ' is-open' : ''}`} inert={!open || undefined}>
+        <div className="roll-body-inner">
+          <div className="roll-list">
+            {list.map((e) => (
+              <RollRow key={e.cadetId} entry={e} onMark={(status, note) => mark([{ cadetId: e.cadetId, status, note }])} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

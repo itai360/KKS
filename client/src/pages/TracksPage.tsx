@@ -1,7 +1,7 @@
 // The course's tracks (צירים בקורס) - its lines of work alongside the weeks: a lead, goals and the
 // tasks marked with the track, with readiness by course week (server/src/tracks.ts).
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { addDays } from '@shared/dates';
 import type { Task, Track, TrackDetail } from '@shared/types';
@@ -10,7 +10,7 @@ import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
 import { UserPicker, useNewTask } from '../components/NewTask';
 import { unlessHeld, useRowMenu } from '../components/RowMenu';
-import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
+import { byOpenStatus, GroupedTaskList, TaskBulkScope } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Bar, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
@@ -393,33 +393,26 @@ export function TrackPage() {
   );
 }
 
+const TRACK_GROUPS: Record<GroupBy, (t: Task) => string> = {
+  week: (t) => t.weekName || 'ללא שבוע',
+  owner: (t) => t.ownerName,
+  status: byOpenStatus,
+};
+
+/** the track's open tasks under headings - what is done, in one drawer under them */
 function Grouped({ tasks, by, pointed }: { tasks: Task[]; by: GroupBy; pointed?: { key: string; at: number } | null }) {
-  const groups = useMemo(() => {
-    const map = new Map<string, Task[]>();
-    for (const t of tasks) {
-      const key = by === 'week' ? t.weekName || 'ללא שבוע' : by === 'owner' ? t.ownerName : t.status === 'done' ? 'הושלמו' : t.overdue ? 'באיחור' : t.status === 'waiting' ? 'ממתינות' : 'פתוחות';
-      map.set(key, [...(map.get(key) ?? []), t]);
-    }
-    return [...map.entries()];
-  }, [tasks, by]);
   useEffect(() => {
     if (!pointed) return;
-    const el = [...document.querySelectorAll<HTMLElement>('.track-group')].find((g) => g.dataset.group === pointed.key);
+    const el = [...document.querySelectorAll<HTMLElement>('.track-tasks .task-group')].find((g) => g.dataset.group === pointed.key);
     if (!el) return;
     el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     el.classList.remove('is-pointed');
     void el.offsetWidth;
     el.classList.add('is-pointed');
   }, [pointed]);
-  if (!tasks.length) return <Empty icon="route" title="אין משימות בציר" text='"משימה לציר" פותחת משימה שכבר משויכת אליו.' />;
   return (
-    <>
-      {groups.map(([k, list]) => (
-        <div key={k} className="track-group" data-group={k}>
-          <GroupTitle title={k} count={list.length} tone={list.every((t) => t.status === 'done') ? 'green' : list.some((t) => t.overdue) ? 'red' : undefined} />
-          <TaskList tasks={list} />
-        </div>
-      ))}
-    </>
+    <div className="track-tasks">
+      <GroupedTaskList tasks={tasks} by={TRACK_GROUPS[by]} drawerId="track-done" empty={<Empty icon="route" title="אין משימות בציר" text='"משימה לציר" פותחת משימה שכבר משויכת אליו.' />} />
+    </div>
   );
 }

@@ -29,6 +29,7 @@ import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../compone
 import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
 import { ContactButtons } from '../components/ContactButtons';
 import { DocPager, useDocNav, type DocLink } from '../components/DocNav';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { unlessHeld, useRowMenu, type RowMenuItem } from '../components/RowMenu';
@@ -842,7 +843,6 @@ function AttendanceCard({ cadetId }: { cadetId: number }) {
  */
 function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemption[] }) {
   const [adding, setAdding] = useState(false);
-  const [showPast, setShowPast] = useState(false);
   const current = exemptions.filter((x) => x.active);
   const past = exemptions.filter((x) => !x.active);
   const remove = async (x: Exemption) => {
@@ -885,12 +885,10 @@ function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemp
       <div className="card-body col gap-6">
         {current.length === 0 && <p className="small muted" style={{ margin: 0 }}>אין פטורים פעילים.</p>}
         {current.map(row)}
-        {past.length > 0 && (
-          <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowPast(!showPast)} aria-expanded={showPast}>
-            {showPast ? 'הסתרת' : 'הצגת'} פטורים שהסתיימו ({past.length})
-          </button>
-        )}
-        {showPast && <div className="col gap-6 muted">{past.map(row)}</div>}
+        {/* what has ended is out of the way, one line under the rest */}
+        <DoneDrawer id="exemptions-past" count={past.length} label="פטורים שהסתיימו">
+          <div className="col gap-6">{past.map(row)}</div>
+        </DoneDrawer>
       </div>
       {adding && <ExemptionDialog cadet={cadet} onClose={() => setAdding(false)} />}
     </div>

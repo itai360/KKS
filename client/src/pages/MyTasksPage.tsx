@@ -10,7 +10,8 @@ import { PendingAnnouncements } from '../components/Announcements';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkToggle } from '../components/Bulk';
-import { GroupTaskRow, GroupTitle, TaskBulkScope, TaskList, TaskRow } from '../components/TaskRow';
+import { DoneDrawer, revealDrawer } from '../components/DoneDrawer';
+import { GroupTaskRow, TaskBulkScope, TaskList, TaskRow, TaskSection } from '../components/TaskRow';
 import { CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { fmtLongDate, fmtTime, greetName, greeting, todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
@@ -62,7 +63,7 @@ export function MyTasksPage() {
               <MiniStat n={data.stats.today} label="היום" target="group-today" />
               <MiniStat n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
               <MiniStat n={data.stats.week} label="השבוע" target="group-week" />
-              <MiniStat n={data.stats.doneToday} label="הושלמו היום" target="group-done" />
+              <MiniStat n={data.stats.doneToday} label="הושלמו היום" target="my-done" />
             </div>
           )}
 
@@ -83,48 +84,16 @@ export function MyTasksPage() {
                   }
                 />
               )}
-              {data.overdue.length > 0 && (
-                <>
-                  <GroupTitle id="group-overdue" title="באיחור" count={data.overdue.length} tone="red" />
-                  <TaskList tasks={data.overdue} showOwner={false} />
-                </>
-              )}
-              {data.today.length > 0 && (
-                <>
-                  <GroupTitle id="group-today" title="היום" count={data.today.length} tone="orange" />
-                  <TaskList tasks={data.today} showOwner={false} />
-                </>
-              )}
-              {data.important.length > 0 && (
-                <>
-                  <GroupTitle title="חשוב - עדיפות גבוהה" count={data.important.length} tone="red" />
-                  <TaskList tasks={data.important} showOwner={false} />
-                </>
-              )}
-              {data.week.length > 0 && (
-                <>
-                  <GroupTitle id="group-week" title="השבוע" count={data.week.length} tone="yellow" />
-                  <TaskList tasks={data.week} showOwner={false} />
-                </>
-              )}
-              {data.later.length > 0 && (
-                <>
-                  <GroupTitle title="בהמשך" count={data.later.length} tone="gray" />
-                  <TaskList tasks={data.later} showOwner={false} />
-                </>
-              )}
-              {data.waiting.length > 0 && (
-                <>
-                  <GroupTitle title="ממתין לאישור מפקד" count={data.waiting.length} tone="blue" />
-                  <TaskList tasks={data.waiting} showOwner={false} />
-                </>
-              )}
-              {data.recentDone.length > 0 && (
-                <>
-                  <GroupTitle id="group-done" title="הושלמו לאחרונה" count={data.recentDone.length} tone="green" />
-                  <TaskList tasks={data.recentDone} showOwner={false} />
-                </>
-              )}
+              <TaskSection id="group-overdue" title="באיחור" tasks={data.overdue} tone="red" showOwner={false} />
+              <TaskSection id="group-today" title="היום" tasks={data.today} tone="orange" showOwner={false} />
+              <TaskSection title="חשוב - עדיפות גבוהה" tasks={data.important} tone="red" showOwner={false} />
+              <TaskSection id="group-week" title="השבוע" tasks={data.week} tone="yellow" showOwner={false} />
+              <TaskSection title="בהמשך" tasks={data.later} tone="gray" showOwner={false} />
+              <TaskSection title="ממתין לאישור מפקד" tasks={data.waiting} tone="blue" showOwner={false} />
+              {/* what was done is out of the way: one line that opens to it */}
+              <DoneDrawer id="my-done" count={data.recentDone.length} label="הושלמו לאחרונה">
+                <TaskList tasks={data.recentDone} showOwner={false} />
+              </DoneDrawer>
             </div>
             <div className="col gap-16 sticky-side">
               <DisciplineCard />
@@ -267,7 +236,11 @@ function DayProgress({ done, late, today }: { done: number; late: number; today:
 
 /** A number at the top; a tap brings its group of tasks into view (when it has any). */
 function MiniStat({ n, label, alert, target }: { n: number; label: string; alert?: boolean; target: string }) {
-  const go = () => document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // a drawer opens on the way (the done ones are tucked in one)
+  const go = () => {
+    revealDrawer(target);
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   return (
     <button type="button" className={`card stat${alert ? ' alert' : ''}`} style={{ textAlign: 'start', cursor: n ? 'pointer' : 'default' }} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
       <span className="stat-label">{label}</span>

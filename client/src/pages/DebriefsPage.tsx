@@ -1,7 +1,7 @@
 // Section 31 (debriefs) and 57: facts -> findings -> conclusions -> lessons -> tasks,
 // and two debriefs filled in as forms: the weekly debrief and an intensive event's.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
 import { sortHe } from '@shared/sort';
@@ -12,6 +12,7 @@ import type { BankLesson, Cadet, Debrief, DebriefDetail, DebriefItem, EventDetai
 import { BulkCheck, BulkRow, BulkScope, BulkToggle } from '../components/Bulk';
 import { KIND_TONES, KindBadge } from '../components/DebriefBits';
 import { DebriefFormView } from '../components/DebriefFormView';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { TaskList } from '../components/TaskRow';
@@ -20,6 +21,7 @@ import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead,
 import { api, changedFields } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { isoAt, todayKey } from '../lib/format';
+import { useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -67,11 +69,39 @@ export function DebriefsPage() {
   const [creating, setCreating] = useState<null | 'pick' | DebriefKind>(isKind(asked) ? asked : fromEvent || asked === '1' ? 'pick' : null);
   const tab = params.get('tab') === 'bank' ? 'bank' : 'list';
   const [kind, setKind] = useState<'all' | DebriefKind>('all');
-  const shown = (data ?? []).filter((d) => kind === 'all' || d.kind === kind);
+  const shown = useMemo(() => (data ?? []).filter((d) => kind === 'all' || d.kind === kind), [data, kind]);
+  // still open on top - a draft, or summed up with follow-up tasks still open; summed up and all closed, in a drawer
+  const open = useMemo(() => shown.filter((d) => d.status !== 'final' || d.openTasks > 0), [shown]);
+  const closed = useMemo(() => shown.filter((d) => d.status === 'final' && d.openTasks === 0), [shown]);
+  const leaving = useLeaving(open, (d) => d.id, (id) => closed.find((d) => d.id === id));
   const close = () => {
     setCreating(null);
     if (params.has('new') || params.has('event') || params.has('week')) setParams(tab === 'bank' ? { tab } : {}, { replace: true });
   };
+
+  const row = (d: Debrief, phase?: LeavePhase) => (
+    <BulkRow key={d.id} itemId={d.id} label={d.title} leaving={phase} className="task-row t-gray" style={{ gridTemplateColumns: 'auto 1fr auto' }} onOpen={() => navigate(`/debriefs/${d.id}`)}>
+      <BulkCheck id={d.id} />
+      <div className="task-main">
+        <div className="task-title">{d.title}</div>
+        <div className="task-meta">
+          <span className="mono">{shortDate(d.occurredOn)}</span>
+          {!isWeekDebrief(d.kind) && d.eventTitle && <span className="sep">{d.eventTitle}</span>}
+          {d.weekName && <span className="sep">{d.weekName}</span>}
+          {d.presenterName && <span className="sep">מעביר: {d.presenterName}</span>}
+          {d.facilitatorName && <span className="sep">{d.kind === 'company' ? 'אחראי' : 'מנחה'}: {d.facilitatorName}</span>}
+        </div>
+        {/* what is in it, in one line - only what there is */}
+        <div className="task-meta debrief-counts">{contentsOf(d)}</div>
+      </div>
+      <div className="task-side">
+        <KindBadge kind={d.kind} />
+        {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks === 1 ? 'משימה פתוחה' : `${d.openTasks} משימות פתוחות`}</span>}
+        <span className={`badge ${d.status === 'final' ? 't-green' : 't-yellow'}`}>{d.status === 'final' ? 'סוכם' : 'טיוטה'}</span>
+        <DraftFilled d={d} />
+      </div>
+    </BulkRow>
+  );
 
   return (
     <BulkScope entity="debriefs" noun="תחקירים" topics={['debriefs', 'tasks']} ids={shown.map((d) => d.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} תחקירים? משימות שנפתחו מהם יישארו.' }]}>
@@ -121,31 +151,16 @@ export function DebriefsPage() {
           ) : !shown.length ? (
             <Empty icon="lightbulb" title="אין תחקירים" text="בסוף כל שבוע - תחקיר שבועי. אחרי מארס או תרגיל מסכם - תחקיר מופע עצים." />
           ) : (
-            <div className="list">
-              {shown.map((d) => (
-                <BulkRow key={d.id} itemId={d.id} label={d.title} className="task-row t-gray" style={{ gridTemplateColumns: 'auto 1fr auto' }} onOpen={() => navigate(`/debriefs/${d.id}`)}>
-                  <BulkCheck id={d.id} />
-                  <div className="task-main">
-                    <div className="task-title">{d.title}</div>
-                    <div className="task-meta">
-                      <span className="mono">{shortDate(d.occurredOn)}</span>
-                      {!isWeekDebrief(d.kind) && d.eventTitle && <span className="sep">{d.eventTitle}</span>}
-                      {d.weekName && <span className="sep">{d.weekName}</span>}
-                      {d.presenterName && <span className="sep">מעביר: {d.presenterName}</span>}
-                      {d.facilitatorName && <span className="sep">{d.kind === 'company' ? 'אחראי' : 'מנחה'}: {d.facilitatorName}</span>}
-                    </div>
-                    {/* what is in it, in one line - only what there is */}
-                    <div className="task-meta debrief-counts">{contentsOf(d)}</div>
-                  </div>
-                  <div className="task-side">
-                    <KindBadge kind={d.kind} />
-                    {d.openTasks > 0 && <span className="badge t-orange">{d.openTasks === 1 ? 'משימה פתוחה' : `${d.openTasks} משימות פתוחות`}</span>}
-                    <span className={`badge ${d.status === 'final' ? 't-green' : 't-yellow'}`}>{d.status === 'final' ? 'סוכם' : 'טיוטה'}</span>
-                    <DraftFilled d={d} />
-                  </div>
-                </BulkRow>
-              ))}
-            </div>
+            <>
+              {leaving.rows.length > 0 ? (
+                <div className="list">{leaving.rows.map((d) => row(d, leaving.phaseOf(d.id)))}</div>
+              ) : (
+                <p className="small muted">כל התחקירים כאן סוכמו, וכל המשימות שנפתחו מהם נסגרו.</p>
+              )}
+              <DoneDrawer id="debriefs-closed" count={closed.length} label="סוכמו ונסגרו">
+                <div className="list">{closed.map((d) => row(d))}</div>
+              </DoneDrawer>
+            </>
           )}
         </>
       )}
@@ -155,6 +170,7 @@ export function DebriefsPage() {
     </BulkScope>
   );
 }
+
 
 /** a form's draft: how much of it is filled in (the questions answered, of all of them) - an invitation to finish it */
 function DraftFilled({ d }: { d: Debrief }) {

@@ -9,7 +9,8 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
 import { unlessHeld, useTaskMenu } from '../components/TaskMenu';
-import { canQuickUpdate, GroupTag, prefetchTask, ProgressBadge, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useTaskTick } from '../components/TaskRow';
+import { canQuickUpdate, doneNow, GroupTag, prefetchTask, ProgressBadge, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useTaskTick } from '../components/TaskRow';
+import { finishedJustNow, leaveClass, noteFinished, useLeaving, type LeavePhase } from '../lib/leaving';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
 import { api, qs } from '../lib/api';
@@ -234,7 +235,9 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
     else list.sort(byDeadline);
     return list;
   }, [rows, sort, userName]);
-  const { shown, more } = useIncremental(sorted);
+  // ticked done here and gone from the table: it stays a moment, done, and fades
+  const leaving = useLeaving(sorted, (r) => r.task.id, (id, last) => finishedJustNow('tasks', id) && { ...last, task: doneNow(last.task) });
+  const { shown, more } = useIncremental(leaving.rows);
   const th = (key: typeof sort, label: string) => (
     <th>
       <button className="btn btn-ghost btn-sm" style={{ padding: 0, height: 'auto', fontSize: 12, color: sort === key ? 'var(--ink)' : undefined }} onClick={() => setSort(key)}>
@@ -261,7 +264,7 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
         </thead>
         <tbody>
           {shown.map((r) => (
-            <TaskTableRow key={r.task.id} t={r.task} folded={r.folded} />
+            <TaskTableRow key={r.task.id} t={r.task} folded={r.folded} leaving={leaving.phaseOf(r.task.id)} />
           ))}
         </tbody>
       </table>
@@ -270,7 +273,7 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
   );
 }
 
-function TaskTableRow({ t, folded }: { t: Task; folded: boolean }) {
+function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leaving?: LeavePhase }) {
   const navigate = useNavigate();
   const bulk = useBulk();
   const tick = useTaskTick(t, folded);
@@ -279,7 +282,7 @@ function TaskTableRow({ t, folded }: { t: Task; folded: boolean }) {
   const menu = useTaskMenu(t, tick, bulk?.active || folded);
   return (
     <tr
-      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}`}
+      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${leaving ? ' is-finished' : ''}${leaving === 'fold' ? ' is-folding' : ''}`}
       {...openable(bulkClick(bulk, t.id, unlessHeld(menu, () => navigate(`/tasks/${t.id}`))), { role: false })}
       {...menu.bind}
       onPointerEnter={() => prefetchTask(t.id)}
@@ -365,7 +368,9 @@ function Board({ rows }: { rows: TaskView[] }) {
     }
     if (!action) return toast({ title: 'מעבר זה לא אפשרי מהלוח', tone: 'red' });
     try {
-      await api.post(`/api/tasks/${t.id}/transition`, { action });
+      const d = await api.post<{ task: Task }>(`/api/tasks/${t.id}/transition`, { action });
+      // closed: it goes from its column done, folding
+      if (d.task?.status === 'done') noteFinished('tasks', [t.id]);
       emitLocalChange('tasks');
     } catch (e) {
       toast({ title: (e as Error).message, tone: 'red' });
@@ -400,11 +405,15 @@ function Board({ rows }: { rows: TaskView[] }) {
 }
 
 function BoardCards({ rows }: { rows: TaskView[] }) {
-  const { shown, more } = useIncremental(rows, 60);
+  // ticked done here and gone from the column: it stays a moment, done, and folds away
+  const leaving = useLeaving(rows, (r) => r.task.id, (id, last) => finishedJustNow('tasks', id) && { ...last, task: doneNow(last.task) });
+  const { shown, more } = useIncremental(leaving.rows, 60);
   return (
     <>
       {shown.map((r) => (
-        <BoardCard key={r.task.id} t={r.task} folded={r.folded} />
+        <div key={r.task.id} className={leaveClass(leaving.phaseOf(r.task.id))}>
+          <BoardCard t={r.task} folded={r.folded} />
+        </div>
       ))}
       {more}
     </>

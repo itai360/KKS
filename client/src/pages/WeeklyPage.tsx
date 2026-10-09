@@ -8,19 +8,22 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { addDays, diffDays, shortDate, weekdayName } from '@shared/dates';
 import type { ExternalEvent } from '@shared/types';
 import { WEEKLY_DONE_LABELS, WEEKLY_KIND_LABELS, weeklySummaryText, type WeeklyHoldResult, type WeeklyItem, type WeeklyKind, type WeeklyTarget, type WeeklyView } from '@shared/weekly';
+import { CheckMark } from '../components/CheckMark';
 import { ask } from '../components/Confirm';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { usePhonePicker } from '../components/pickers';
 import { SectionRail } from '../components/SectionRail';
 import { useSwipeAction } from '../components/swipeAction';
-import { TaskRow, useLiveFlash } from '../components/TaskRow';
+import { TaskList, useLiveFlash } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Select } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
 import { useFresh } from '../lib/fresh';
 import { haptic } from '../lib/haptics';
+import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -233,7 +236,7 @@ export function WeeklyPage() {
         </Section>
 
         <Section n={2} {...SECTIONS[1]} hint="תיאומים מקצועיים שצריך לסגור, ומי סוגר כל אחד." progress={settled(of('closure'))}>
-          <Items items={of('closure')} onEdit={setEditing} empty="אין עדיין סגירות מקצועיות לשבוע הזה." />
+          <Items items={of('closure')} onEdit={setEditing} empty="אין עדיין סגירות מקצועיות לשבוע הזה." settles="closure" />
           {canAdd && <QuickAdd weekId={w.id} kind="closure" placeholder="סגירה מקצועית חדשה - למשל: אישור שטח אש" />}
           {data.openTasks.length > 0 && (
             <details className="weekly-tasks">
@@ -243,10 +246,8 @@ export function WeeklyPage() {
                 <span className="count-pill">{data.openTasks.length}</span>
                 <Icon name="chevronDown" size={15} />
               </summary>
-              <div className="list mt-8">
-                {data.openTasks.slice(0, 8).map((t) => (
-                  <TaskRow key={t.id} task={t} />
-                ))}
+              <div className="mt-8">
+                <TaskList tasks={data.openTasks.slice(0, 8)} empty={<p className="small muted">כל משימות השבוע נסגרו.</p>} />
               </div>
               {data.openTasks.length > 8 && (
                 <Link to={`/weeks/${w.id}`} className="btn btn-ghost btn-sm mt-8">
@@ -259,7 +260,7 @@ export function WeeklyPage() {
         </Section>
 
         <Section n={3} {...SECTIONS[2]} hint="מה שעלה במהלך השבוע והמפק״צים רוצים להעלות לשיח. בשבועי מסמנים ״נדון״ וכותבים מה הוחלט." progress={settled(of('topic'))}>
-          <Items items={of('topic')} onEdit={setEditing} empty="אין עדיין נושאים. כל אחד בסגל יכול להוסיף - כאן, או מה-+ בסרגל התחתון בטלפון." />
+          <Items items={of('topic')} onEdit={setEditing} empty="אין עדיין נושאים. כל אחד בסגל יכול להוסיף - כאן, או מה-+ בסרגל התחתון בטלפון." settles="topic" />
           {canAdd && <QuickAdd weekId={w.id} kind="topic" placeholder="נושא לשיח - למשל: עומס השמירות על הצוערים" />}
         </Section>
 
@@ -361,20 +362,60 @@ function QuickAdd({ weekId, kind, placeholder, eventRef, eventDate, onDone }: { 
   );
 }
 
-function Items({ items, onEdit, empty, numbered }: { items: WeeklyItem[]; onEdit: (i: WeeklyItem) => void; empty: string; numbered?: boolean }) {
+/** what is settled in a part, and what is left of it when all is settled */
+const SETTLED: Record<'closure' | 'topic', { label: string; all: string }> = {
+  closure: { label: 'נסגרו', all: 'כל הסגירות נסגרו.' },
+  topic: { label: 'נדונו', all: 'כל הנושאים נדונו.' },
+};
+
+/**
+ * A part's items. Where an item is settled (a closure closed, a topic discussed) the open ones are listed,
+ * and the settled ones are in a drawer under them: one marked goes there - a moment ticked, then folded
+ * away - and one opened again comes back up.
+ */
+function Items({ items, onEdit, empty, numbered, settles }: { items: WeeklyItem[]; onEdit: (i: WeeklyItem) => void; empty: string; numbered?: boolean; settles?: 'closure' | 'topic' }) {
   const fresh = useFresh(items.map((i) => i.id));
+  const open = useMemo(() => (settles ? items.filter((i) => !i.done) : items), [items, settles]);
+  const done = useMemo(() => (settles ? items.filter((i) => i.done) : []), [items, settles]);
+  const leaving = useLeaving(open, (i) => i.id, (id) => done.find((i) => i.id === id));
+  // the last one settled while on screen: that is the moment to mark
+  const hadOpen = useRef(open.length > 0);
+  const [cleared, setCleared] = useState(false);
+  useEffect(() => {
+    if (hadOpen.current && !open.length) setCleared(true);
+    hadOpen.current = open.length > 0;
+  }, [open.length]);
   if (!items.length) return <p className="small muted">{empty}</p>;
   const Tag = numbered ? 'ol' : 'ul';
   return (
-    <Tag className={`weekly-items${numbered ? ' numbered' : ''}`}>
-      {items.map((i) => (
-        <ItemRow key={i.id} item={i} onEdit={onEdit} fresh={fresh(i.id)} />
-      ))}
-    </Tag>
+    <>
+      {leaving.rows.length ? (
+        <Tag className={`weekly-items${numbered ? ' numbered' : ''}`}>
+          {leaving.rows.map((i) => (
+            <ItemRow key={i.id} item={i} onEdit={onEdit} fresh={fresh(i.id)} leaving={leaving.phaseOf(i.id)} />
+          ))}
+        </Tag>
+      ) : (
+        settles && (
+          <p className={`small weekly-all-settled${cleared ? ' just-cleared' : ''}`}>
+            <CheckMark size={16} /> {SETTLED[settles].all}
+          </p>
+        )
+      )}
+      {settles && (
+        <DoneDrawer id={`weekly-${settles}-done`} count={done.length} label={SETTLED[settles].label}>
+          <ul className="weekly-items">
+            {done.map((i) => (
+              <ItemRow key={i.id} item={i} onEdit={onEdit} />
+            ))}
+          </ul>
+        </DoneDrawer>
+      )}
+    </>
   );
 }
 
-function ItemRow({ item: i, onEdit, fresh }: { item: WeeklyItem; onEdit: (i: WeeklyItem) => void; fresh?: boolean }) {
+function ItemRow({ item: i, onEdit, fresh, leaving }: { item: WeeklyItem; onEdit: (i: WeeklyItem) => void; fresh?: boolean; leaving?: LeavePhase }) {
   const toast = useToast();
   // marked at once; the answer from the server takes over when it comes
   const [mine, setMine] = useState<boolean | null>(null);
@@ -398,9 +439,9 @@ function ItemRow({ item: i, onEdit, fresh }: { item: WeeklyItem; onEdit: (i: Wee
   // on a phone, swiped toward its leading side it is closed / discussed (or open again)
   const row = useRef<HTMLDivElement>(null);
   const swipes = i.kind !== 'point' && i.canSettle;
-  useSwipeAction(row, { enabled: usePhonePicker() && swipes, lead: () => void toggle() });
+  useSwipeAction(row, { enabled: usePhonePicker() && swipes && !leaving, lead: () => void toggle() });
   return (
-    <li className={`${swipes ? 'swipe-wrap weekly-swipe' : ''}${fresh ? ' is-new' : ''}`}>
+    <li className={`${leaveClass(leaving)}${swipes ? ' swipe-wrap weekly-swipe' : ''}${fresh ? ' is-new' : ''}`}>
       {swipes && (
         <div className="swipe-pad is-lead" aria-hidden="true">
           <Icon name={done ? 'repeat' : 'check'} size={20} />

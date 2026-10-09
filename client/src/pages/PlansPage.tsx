@@ -77,6 +77,9 @@ export function PlansPage() {
     );
 
   const at = data.weeks.findIndex((w) => w.week.id === data.currentWeekId);
+  const today = todayKey();
+  const past = data.weeks.filter((w) => w.week.endDate < today);
+  const ahead = data.weeks.filter((w) => w.week.endDate >= today);
   // the next one to present: from this week on, the first that is not approved as it stands
   const next = data.weeks.slice(Math.max(0, at)).find((w) => w.status !== 'approved' || w.changed);
   const count = (s: PlanStatus) => data.weeks.filter((w) => w.status === s).length;
@@ -117,8 +120,23 @@ export function PlansPage() {
             <span className="badge t-gray">{count('draft')} בטיוטה</span>
             {data.weeks.some((w) => w.changed) && <span className="badge t-yellow">{data.weeks.filter((w) => w.changed).length} השתנו מאז האישור</span>}
           </div>
+          {/* what is over folds into a row of small links, as on the weeks page: the week now and the ones to come lead */}
+          {past.length > 0 && (
+            <section className="weeks-past" aria-label="שבועות שעברו">
+              <span className="label-caps">שבועות שעברו</span>
+              <div className="weeks-past-list">
+                {past.map(({ week: w, status: s }) => (
+                  <Link key={w.id} to={`/plans/${w.id}`} className={`week-pill${s !== 'approved' ? ' is-open' : ''}`}>
+                    <span className="week-pill-num">{w.number}</span>
+                    <span className="week-pill-name">{w.name}</span>
+                    <span className={`week-pill-pct ${STATUS[s].tone}`}>{STATUS[s].label}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
           <div className="weeks-track fade-in">
-            {data.weeks.map(({ week: w, status: s, approval, changed, edited }) => {
+            {ahead.map(({ week: w, status: s, approval, changed, edited }) => {
               const current = w.id === data.currentWeekId;
               return (
                 <div key={w.id} className={`card week-card plan-card${current ? ' current' : ''}`} {...openable(() => navigate(`/plans/${w.id}`))} aria-label={`אישור תוכנית - ${w.name}`}>

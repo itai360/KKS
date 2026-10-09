@@ -6,6 +6,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { api } from '../lib/api';
+import { noteFinished, type LeavePhase } from '../lib/leaving';
 import { quickDelete, useRemoving } from '../lib/quickDelete';
 import { emitLocalChange } from '../lib/realtime';
 import { Icon } from './Icon';
@@ -111,6 +112,8 @@ export function BulkScope({
     setBusy(true);
     try {
       const r = await api.post<{ done: number; failed: { id: number; error: string }[] }>('/api/bulk', { entity, action: a.key, ids: reach, value: value ?? a.value });
+      // done together: each goes from its list done, folding, as one ticked alone does
+      if (a.key === 'complete' || a.key === 'approve') noteFinished(entity, reach.filter((id) => !r.failed.some((f) => f.id === id)));
       emitLocalChange(...topics);
       if (r.failed.length) {
         const reasons = [...new Set(r.failed.map((f) => f.error))].join('; ');
@@ -229,6 +232,7 @@ export function SwipeRow({
   children,
   className = '',
   trash = true,
+  leaving,
 }: {
   itemId: number;
   label: string;
@@ -237,6 +241,8 @@ export function SwipeRow({
   className?: string;
   /** false: the row shows its own delete among its actions (the swipe and the Delete key stay) */
   trash?: boolean;
+  /** finished, and going from the list (lib/leaving.ts): done a moment, then it folds away */
+  leaving?: LeavePhase;
 }) {
   const b = useBulk();
   const toast = useToast();
@@ -252,10 +258,10 @@ export function SwipeRow({
   const remove = () => q && quickDelete({ entity: q.entity, id: itemId, ids: q.idsOf(itemId), label, topics: q.topics, toast });
   const row = useRef<HTMLDivElement>(null);
   const phone = usePhonePicker();
-  useSwipeAction(row, { enabled: phone && !b?.active && !removing && (!!q || !!done), lead: done?.run, trail: q ? remove : undefined });
+  useSwipeAction(row, { enabled: phone && !b?.active && !removing && !leaving && (!!q || !!done), lead: done?.run, trail: q ? remove : undefined });
   return (
     <div
-      className={`swipe-wrap${removing ? ' is-removing' : ''}${className ? ` ${className}` : ''}`}
+      className={`swipe-wrap${removing || leaving === 'fold' ? ' is-removing' : ''}${leaving ? ' is-finished' : ''}${className ? ` ${className}` : ''}`}
       hidden={gone}
       onKeyDown={(e) => {
         if (e.key !== 'Delete' || !q || b?.active || (e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
@@ -297,10 +303,18 @@ export function SwipeRow({
 }
 
 /** A row that opens on click, and toggles while selecting - deleted in place where its list deletes. */
-export function BulkRow({ itemId, label = 'הפריט', onOpen, className = '', children, ...rest }: { itemId: number; label?: string; onOpen?: () => void; className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, 'onClick' | 'id'>) {
+export function BulkRow({
+  itemId,
+  label = 'הפריט',
+  onOpen,
+  className = '',
+  leaving,
+  children,
+  ...rest
+}: { itemId: number; label?: string; onOpen?: () => void; className?: string; leaving?: LeavePhase; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, 'onClick' | 'id'>) {
   const b = useBulk();
   return (
-    <SwipeRow itemId={itemId} label={label}>
+    <SwipeRow itemId={itemId} label={label} leaving={leaving}>
       <div
         {...(onOpen ? openable(() => (b?.active ? b.toggle(itemId) : onOpen())) : {})}
         {...rest}

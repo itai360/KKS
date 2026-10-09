@@ -5883,11 +5883,22 @@ button.fab-missing {
 }
 
 .prior-lessons li {
+  border-bottom: 1px dashed var(--line);
+}
+.prior-lesson {
   display: flex;
   flex-direction: column;
   gap: 3px;
   padding: 8px 0;
-  border-bottom: 1px dashed var(--line);
+}
+/* every lesson decided (components/DebriefBits.tsx) */
+.prior-all-decided {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--green-ink);
+  font-weight: 600;
 }
 
 .prior-lessons li:last-child {
@@ -5903,7 +5914,7 @@ button.fab-missing {
   border-top: 3px solid var(--blue);
 }
 
-.prior-lessons li.decided > .small {
+.prior-lessons li.decided .prior-lesson > .small {
   color: var(--ink-2);
 }
 
@@ -11383,11 +11394,12 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   background: var(--hover);
   scale: 0.99;
 }
-.track-group {
+/* a heading of a grouped task list (TaskRow.tsx GroupedTaskList) - on a track pointed at from its bars */
+.task-group {
   scroll-margin-top: calc(var(--top-h) + 16px);
   border-radius: var(--radius);
 }
-.track-group.is-pointed {
+.task-group.is-pointed {
   animation: done-glow 1.6s ease-out;
 }
 
@@ -11881,5 +11893,219 @@ mark.hl {
 @media print {
   .eval-num.is-done {
     background: var(--ink);
+  }
+}
+
+/* ---------------- what is finished, out of the way (lib/leaving.ts, components/DoneDrawer.tsx) ----------------
+   A row that was open and is now finished stays a moment, done, then folds away; under the list, one line
+   opens to the finished ones. */
+.leave-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.34s var(--spring), opacity 0.22s ease, margin 0.34s var(--spring);
+}
+.leave-wrap > * {
+  min-height: 0;
+}
+.leave-wrap.is-folding {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+.leave-wrap.is-folding > * {
+  overflow: hidden;
+}
+/* in a spaced column, the gap it leaves closes with it */
+.col.gap-6 > .leave-wrap.is-folding {
+  margin-bottom: -6px;
+}
+.col.gap-12 > .leave-wrap.is-folding {
+  margin-bottom: -12px;
+}
+.col.gap-16 > .leave-wrap.is-folding {
+  margin-bottom: -16px;
+}
+.list > .leave-wrap.is-folding {
+  margin-bottom: -8px;
+}
+/* a table row cannot fold: it fades where it is, then goes */
+tr.is-finished {
+  transition: opacity 0.3s ease;
+}
+tr.is-finished.is-folding {
+  opacity: 0;
+}
+
+.done-drawer {
+  margin-top: 12px;
+}
+.done-drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+@media (hover: hover) {
+  .done-drawer-head:hover {
+    background: var(--gray-bg);
+    color: var(--ink);
+  }
+}
+.done-drawer-head:active {
+  transform: scale(0.99);
+}
+.done-drawer.is-open .done-drawer-head {
+  border-style: solid;
+  color: var(--ink);
+}
+.done-drawer-check {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--green-bg);
+  color: var(--green-ink);
+}
+.done-drawer-n {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--gray-bg);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: center;
+}
+.done-drawer-n.is-hop {
+  animation: count-bump 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.5);
+}
+.done-drawer-chev {
+  transition: transform 0.22s var(--spring);
+}
+.done-drawer.is-open .done-drawer-chev {
+  transform: rotate(180deg);
+}
+.done-drawer-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s var(--spring);
+}
+.done-drawer.is-open .done-drawer-body {
+  grid-template-rows: 1fr;
+}
+.done-drawer-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.done-drawer-inner > :first-child {
+  margin-top: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .leave-wrap,
+  .done-drawer-body,
+  .done-drawer-chev {
+    transition: opacity 0.2s ease;
+  }
+  .leave-wrap.is-folding {
+    grid-template-rows: 1fr;
+  }
+  .done-drawer-n.is-hop {
+    animation: none;
+  }
+}
+@media print {
+  .done-drawer-body {
+    grid-template-rows: 1fr;
+  }
+  .done-drawer-head {
+    border: 0;
+    padding-inline: 0;
+  }
+  .done-drawer-chev {
+    display: none;
+  }
+}
+/* a part of the weekly with all of it settled (pages/WeeklyPage.tsx) */
+.weekly-all-settled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--green-ink);
+  font-weight: 600;
+}
+/* nothing waiting on the announcements page (pages/AnnouncementsPage.tsx) */
+.announce-clear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+/* the drawer of my decided requests sits in the card's padding (pages/RequestsPage.tsx) */
+.my-decided:has(.done-drawer) {
+  padding-top: 0;
+}
+.my-decided:not(:has(.done-drawer)) {
+  display: none;
+}
+.my-decided .done-drawer {
+  margin-top: 4px;
+}
+/* a team all marked folds to one line, opens again with a tap (pages/AttendancePage.tsx) */
+.roll-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.34s var(--spring);
+}
+.roll-body.is-open {
+  grid-template-rows: 1fr;
+}
+.roll-body-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.roll-team.is-complete .card-head .day-check {
+  display: inline-flex;
+}
+.roll-done-line {
+  padding-top: 0;
+}
+.roll-chev {
+  transition: transform 0.22s var(--spring);
+}
+.roll-chev.is-open {
+  transform: rotate(180deg);
+}
+.roll-team.just-cleared .day-check {
+  animation: done-pop 0.5s var(--spring);
+}
+.roll-team.just-cleared .day-check path {
+  animation: check-draw 0.42s 0.12s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .roll-body,
+  .roll-chev {
+    transition: none;
+  }
+}
+@media print {
+  .roll-body {
+    grid-template-rows: 1fr;
   }
 }

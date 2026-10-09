@@ -1,6 +1,6 @@
 // Sections 13-14, 37-38, 53-56, 70, 76: the course weeks.
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CARRY_ACTION_LABELS, LESSON_KIND_LABELS, LESSON_KINDS, WEEK_STATUS_LABELS, type CarryAction, type LessonKind } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
@@ -10,7 +10,7 @@ import { CalendarWeeksModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, SwipeRow, useBulk } from '../components/Bulk';
-import { GroupTitle, TaskBulkScope, TaskList } from '../components/TaskRow';
+import { byOpenStatus, GroupedTaskList, TaskBulkScope } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, readinessTone, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
@@ -650,26 +650,15 @@ export function WeekPage() {
   );
 }
 
+const WEEK_GROUPS: Record<'domain' | 'status' | 'owner', (t: Task) => string> = {
+  domain: (t) => t.domain || 'ללא תחום',
+  owner: (t) => t.ownerName,
+  status: byOpenStatus,
+};
+
+/** the week's open tasks under headings - what is done, in one drawer under them */
 function GroupedTasks({ tasks, by }: { tasks: Task[]; by: 'domain' | 'status' | 'owner' }) {
-  const groups = useMemo(() => {
-    const map = new Map<string, Task[]>();
-    for (const t of tasks) {
-      const key = by === 'domain' ? t.domain || 'ללא תחום' : by === 'owner' ? t.ownerName : t.status === 'done' ? 'הושלמו' : t.overdue ? 'באיחור' : t.status === 'waiting' ? 'ממתינות' : 'פתוחות';
-      map.set(key, [...(map.get(key) ?? []), t]);
-    }
-    return [...map.entries()];
-  }, [tasks, by]);
-  if (!tasks.length) return <Empty title="אין משימות" text='התחילו ב"פתיחת שבוע" או הוסיפו משימה.' />;
-  return (
-    <>
-      {groups.map(([k, list]) => (
-        <div key={k}>
-          <GroupTitle title={k} count={list.length} tone={list.every((t) => t.status === 'done') ? 'green' : list.some((t) => t.overdue) ? 'red' : undefined} />
-          <TaskList tasks={list} />
-        </div>
-      ))}
-    </>
-  );
+  return <GroupedTaskList tasks={tasks} by={WEEK_GROUPS[by]} drawerId="week-done" empty={<Empty title="אין משימות" text='התחילו ב"פתיחת שבוע" או הוסיפו משימה.' />} />;
 }
 
 // Section 70 - the week lead's timeline, highlighting where we are now.

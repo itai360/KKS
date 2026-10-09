@@ -1,17 +1,19 @@
 // Sections 46, 62, 63 - completion approvals, deadline extensions and transfers in one inbox.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { REQUEST_TYPE_LABELS } from '@shared/constants';
 import { diffDays } from '@shared/dates';
 import type { Task, TaskRequest } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle } from '../components/Bulk';
 import { Decided, useDecision } from '../components/Decision';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { NoteDialog } from '../components/TaskActions';
 import { Empty, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtDeadline } from '../lib/format';
+import { leaveClass, useLeaving } from '../lib/leaving';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
@@ -25,7 +27,12 @@ export function RequestsPage() {
   const decided = (k: keyof typeof handled) => () => setHandled((h) => ({ ...h, [k]: h[k] + 1 }));
 
   const toDecide = (pending.data ?? []).filter((r) => r.requestedBy !== user.id);
-  const mine = (history.data ?? []).filter((r) => r.requestedBy === user.id);
+  // the ones I asked for: still waiting on top, the decided ones in a drawer under them
+  const { myPending, myDecided } = useMemo(() => {
+    const mine = (history.data ?? []).filter((r) => r.requestedBy === user.id);
+    return { myPending: mine.filter((r) => r.status === 'pending'), myDecided: mine.filter((r) => r.status !== 'pending') };
+  }, [history.data, user.id]);
+  const leavingMine = useLeaving(myPending, (r) => r.id, (id) => myDecided.find((r) => r.id === id));
   const myApprovals = (approvals.data ?? []).filter((t) => isCommander || (t.createdBy === user.id && t.ownerId !== user.id));
   const allClear = (n: number) => (n > 0 ? `טיפלת ב${n === 1 ? 'בקשה אחת' : `-${n} בקשות`} - אין עוד` : undefined);
 
@@ -86,23 +93,25 @@ export function RequestsPage() {
               <Icon name="history" />
               <h3 className="grow">הבקשות שהגשתי</h3>
             </div>
-            {mine.length === 0 ? (
+            {!myPending.length && !myDecided.length ? (
               <div className="card-body small muted">לא הגשת בקשות. בקשת הארכה או העברה מוגשת מתוך עמוד המשימה.</div>
             ) : (
-              mine.map((r) => (
-                <div key={r.id} className="health" style={{ cursor: 'default' }}>
-                  <span className={`dot t-${r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'blue'}`} />
-                  <div className="grow">
-                    <Link to={`/tasks/${r.taskId}`} className="strong">
-                      {r.taskTitle}
-                    </Link>
-                    <div className="tiny muted">
-                      {REQUEST_TYPE_LABELS[r.type]} · {r.status === 'pending' ? 'ממתינה' : r.status === 'approved' ? `אושרה ע"י ${r.decidedByName}` : `נדחתה ע"י ${r.decidedByName}`}
-                      {r.decisionNote && ` · ${r.decisionNote}`}
-                    </div>
+              <>
+                {/* still waiting on top; one decided (while the page is open too) goes to the drawer under them */}
+                {leavingMine.rows.map((r) => (
+                  <div key={r.id} className={leaveClass(leavingMine.phaseOf(r.id))}>
+                    <MyRequest r={r} />
                   </div>
+                ))}
+                {!myPending.length && <div className="card-body small muted">אין בקשות שממתינות להחלטה.</div>}
+                <div className="card-body my-decided">
+                  <DoneDrawer id="my-requests-decided" count={myDecided.length} label="הוחלטו">
+                    {myDecided.map((r) => (
+                      <MyRequest key={r.id} r={r} />
+                    ))}
+                  </DoneDrawer>
                 </div>
-              ))
+              </>
             )}
           </section>
         </div>
@@ -172,6 +181,24 @@ function shiftOf(from: string, to: string): string {
   }
   const n = Math.abs(days);
   return `${way(days)} ${n === 1 ? 'ביום' : n === 2 ? 'ביומיים' : n === 7 ? 'בשבוע' : n === 14 ? 'בשבועיים' : `ב-${n} ימים`}`;
+}
+
+/** a request I made, and what came of it */
+function MyRequest({ r }: { r: TaskRequest }) {
+  return (
+    <div className="health" style={{ cursor: 'default' }}>
+      <span className={`dot t-${r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'blue'}`} />
+      <div className="grow">
+        <Link to={`/tasks/${r.taskId}`} className="strong">
+          {r.taskTitle}
+        </Link>
+        <div className="tiny muted">
+          {REQUEST_TYPE_LABELS[r.type]} · {r.status === 'pending' ? 'ממתינה' : r.status === 'approved' ? `אושרה ע"י ${r.decidedByName}` : `נדחתה ע"י ${r.decidedByName}`}
+          {r.decisionNote && ` · ${r.decisionNote}`}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function RequestRow({ request: r, onDecided }: { request: TaskRequest; onDecided: () => void }) {

@@ -4,6 +4,7 @@ import { domainLabel, isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/
 import type { Task } from '@shared/types';
 import { api } from '../lib/api';
 import { haptic } from '../lib/haptics';
+import { finishedJustNow, forgetFinished, noteFinished, useLeaving, type LeavePhase } from '../lib/leaving';
 import { namesOf } from '@shared/staffGroups';
 import { collapseGroups, expandUnits, foldTasks, groupView, isGrouped, peopleOf } from '../lib/taskGroups';
 import { emitLocalChange } from '../lib/realtime';
@@ -11,6 +12,7 @@ import { useSession } from '../lib/session';
 import { prefetch } from '../lib/useApi';
 import { DeadlineText, PriorityBadge, StatusBadge } from './Badges';
 import { BulkCheck, bulkClick, BulkScope, SwipeRow, useBulk } from './Bulk';
+import { DoneDrawer } from './DoneDrawer';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { useIncremental } from '../lib/incremental';
@@ -51,6 +53,8 @@ export function useTaskTick(task: Task, readOnly?: boolean) {
     try {
       const d = await api.post<{ task: Task }>(`/api/tasks/${task.id}/transition`, { action: 'complete' });
       const closed = d.task.status === 'done';
+      // a list it now goes from lets it go done, folding (lib/leaving.ts)
+      if (closed) noteFinished('tasks', [task.id]);
       toast({
         title: closed ? 'המשימה הושלמה' : 'נשלח לאישור מפקד',
         body: task.title,
@@ -69,6 +73,7 @@ export function useTaskTick(task: Task, readOnly?: boolean) {
   const undo = async () => {
     try {
       await api.post(`/api/tasks/${task.id}/transition`, { action: 'undo_complete' });
+      forgetFinished('tasks', task.id);
       setTicked(false);
       emitLocalChange('tasks');
       toast({ title: 'הסימון בוטל', body: task.title, tone: 'gray' });
@@ -158,6 +163,7 @@ export function TaskRow({
   readOnly,
   folded,
   arrived,
+  leaving,
 }: {
   task: Task;
   showOwner?: boolean;
@@ -166,6 +172,8 @@ export function TaskRow({
   folded?: boolean;
   /** just added while the list was open: it comes in */
   arrived?: boolean;
+  /** done, and going from the list: a moment, then it folds away */
+  leaving?: LeavePhase;
 }) {
   const navigate = useNavigate();
   const bulk = useBulk();
@@ -182,7 +190,7 @@ export function TaskRow({
   const menu = useTaskMenu(task, tick, bulk?.active);
 
   return (
-    <SwipeRow itemId={task.id} label={task.title} done={canSwipeDone ? { label: task.requiresApproval ? 'לאישור' : 'בוצע', run: () => void tick.complete() } : null}>
+    <SwipeRow itemId={task.id} label={task.title} leaving={leaving} done={canSwipeDone && !leaving ? { label: task.requiresApproval ? 'לאישור' : 'בוצע', run: () => void tick.complete() } : null}>
     <div
       className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${arrived ? ' is-arrived' : ''}`}
       {...openable(bulkClick(bulk, task.id, unlessHeld(menu, () => navigate(`/tasks/${task.id}`))))}
@@ -265,22 +273,83 @@ export function TaskBulkScope({ tasks, collapse = true, children }: { tasks: Tas
   );
 }
 
-export function TaskList({ tasks, empty, showOwner = true, collapse = true }: { tasks: Task[]; empty?: ReactNode; showOwner?: boolean; /** false: one person's tasks - each copy is theirs */ collapse?: boolean }) {
+/** a list's rows, with the ones ticked done here and gone from it: they stay a moment, done, and fold away */
+function useLeavingTasks(tasks: Task[], collapse: boolean) {
   const { user } = useSession();
-  const rows = useMemo(() => foldTasks(tasks, user.id, collapse), [tasks, collapse, user.id]);
-  const { shown, more } = useIncremental(rows);
-  if (!tasks.length) return <>{empty ?? <Empty title="אין משימות" />}</>;
+  const folded = useMemo(() => foldTasks(tasks, user.id, collapse), [tasks, collapse, user.id]);
+  return useLeaving(folded, (r) => r.task.id, (id, last) => finishedJustNow('tasks', id) && { ...last, task: doneNow(last.task) });
+}
+
+function Rows({ leaving, showOwner }: { leaving: ReturnType<typeof useLeavingTasks>; showOwner: boolean }) {
+  const { shown, more } = useIncremental(leaving.rows);
   return (
     <>
       <div className="list">
         {shown.map((r) => (
-          <TaskRow key={r.task.id} task={r.task} showOwner={showOwner} folded={r.folded} />
+          <TaskRow key={r.task.id} task={r.task} showOwner={showOwner} folded={r.folded} leaving={leaving.phaseOf(r.task.id)} />
         ))}
       </div>
       {more}
     </>
   );
 }
+
+export function TaskList({ tasks, empty, showOwner = true, collapse = true }: { tasks: Task[]; empty?: ReactNode; showOwner?: boolean; /** false: one person's tasks - each copy is theirs */ collapse?: boolean }) {
+  const leaving = useLeavingTasks(tasks, collapse);
+  if (!leaving.rows.length) return <>{empty ?? <Empty title="אין משימות" />}</>;
+  return <Rows leaving={leaving} showOwner={showOwner} />;
+}
+
+/** a titled part of a list ("היום", "באיחור"): there while it has tasks - and while its last one, done, goes */
+export function TaskSection({ title, id, tone, tasks, showOwner = true, collapse = true }: { title: string; id?: string; tone?: string; tasks: Task[]; showOwner?: boolean; collapse?: boolean }) {
+  const leaving = useLeavingTasks(tasks, collapse);
+  if (!leaving.rows.length) return null;
+  return (
+    <>
+      <GroupTitle id={id} title={title} count={tasks.length} tone={tone} />
+      <Rows leaving={leaving} showOwner={showOwner} />
+    </>
+  );
+}
+
+/** an open task's heading when grouped by status */
+const openStatusGroup = (t: Task) => (t.overdue ? 'באיחור' : t.status === 'waiting' ? 'ממתינות' : 'פתוחות');
+
+/**
+ * Tasks under headings (by area, owner, week or status): the open ones - what is done is in one drawer
+ * under them. A heading whose last task is ticked done stays until that task has folded away.
+ */
+export function GroupedTaskList({ tasks, by, drawerId, empty }: { tasks: Task[]; by: (t: Task) => string; drawerId: string; empty?: ReactNode }) {
+  const open = useMemo(() => tasks.filter((t) => isOpenStatus(t.status)), [tasks]);
+  const done = useMemo(() => tasks.filter((t) => !isOpenStatus(t.status)), [tasks]);
+  const groups = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const t of open) map.set(by(t), [...(map.get(by(t)) ?? []), t]);
+    return [...map.entries()];
+  }, [open, by]);
+  // a heading gone with its last task stays, empty, while that task folds away
+  const shownGroups = useLeaving(groups, ([k]) => k, (k) => [k, []] as [string, Task[]]);
+  if (!tasks.length) return <>{empty ?? <Empty title="אין משימות" />}</>;
+  return (
+    <>
+      {shownGroups.rows.map(([k, list]) => (
+        <div key={k} className="task-group" data-group={k}>
+          <TaskSection title={k} tasks={list} tone={list.some((t) => t.overdue) ? 'red' : undefined} />
+        </div>
+      ))}
+      {!open.length && <p className="small muted">כל המשימות כאן הושלמו.</p>}
+      <DoneDrawer id={drawerId} count={done.length} label="הושלמו">
+        <TaskList tasks={done} />
+      </DoneDrawer>
+    </>
+  );
+}
+
+/** grouping by status, for GroupedTaskList */
+export const byOpenStatus = openStatusGroup;
+
+/** a task as it is once done, for the moment it is seen going */
+export const doneNow = (t: Task): Task => ({ ...t, status: 'done', overdue: false });
 
 export function GroupTitle({ title, count, tone, id }: { title: string; count?: number; tone?: string; id?: string }) {
   return (
