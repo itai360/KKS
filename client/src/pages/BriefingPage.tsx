@@ -1,14 +1,16 @@
 // Section 50 - morning briefing: one screen to go over the day with the staff.
 
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { shortDate } from '@shared/dates';
-import type { BriefingData } from '@shared/types';
+import type { BriefingData, ScheduleEvent } from '@shared/types';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { TaskList } from '../components/TaskRow';
 import { CountUp, ErrorBox, Loading, openable } from '../components/ui';
-import { inMinutes, leftMinutes, nowAndNext } from '../lib/agenda';
+import { endMinutes, inMinutes, leftMinutes, nowAndNext, type NowAndNext } from '../lib/agenda';
 import { fmtLongDate, fmtTime } from '../lib/format';
+import { leaveClass, useLeaving } from '../lib/leaving';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
 import { useApi, useTick } from '../lib/useApi';
@@ -74,35 +76,7 @@ export function BriefingPage() {
             </Section>
           </div>
           <div className="col gap-16">
-            <div className="card brief-section" id="brief-events">
-              <div className="card-head">
-                <h3>אירועים מרכזיים</h3>
-              </div>
-              {data.events.length === 0 && <div className="card-body muted small">אין אירועים בלו"ז היום.</div>}
-              {data.events.map((e) => (
-                <div key={e.id} className={`event-row${live.now?.id === e.id ? ' now' : ''}`} {...openable(() => navigate(`/schedule?date=${e.date}&event=${e.id}`))}>
-                  <div className="event-time">{e.startTime}</div>
-                  <div>
-                    <div className="event-title">
-                      {e.title}
-                      {live.now?.id === e.id && <span className="badge t-orange brief-when">עכשיו · {leftMinutes(live.left)}</span>}
-                      {live.next?.id === e.id && <span className="badge t-blue brief-when">{inMinutes(live.until)}</span>}
-                    </div>
-                    <div className="small muted">{[e.location, e.ownerName].filter(Boolean).join(' · ')}</div>
-                    {live.now?.id === e.id && (
-                      <span className="un-bar dashboard-event-bar" aria-hidden="true">
-                        <i style={{ inlineSize: `${Math.round(live.progress * 100)}%` }} />
-                      </span>
-                    )}
-                  </div>
-                  {e.taskTotal > 0 && (
-                    <span className="small mono">
-                      {e.taskDone}/{e.taskTotal}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
+            <BriefEvents events={data.events} live={live} now={now} />
             {data.exemptions.length > 0 && (
               <div className="card">
                 <div className="card-head">
@@ -142,6 +116,70 @@ export function BriefingPage() {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** the day's events: what is still ahead; what is over in one line at the top that opens to it - one that
+ *  ends while the briefing is on screen goes there (a moment, then folded), as in the schedule */
+function BriefEvents({ events, live, now }: { events: ScheduleEvent[]; live: NowAndNext; now: string }) {
+  const navigate = useNavigate();
+  const at = Number(now.slice(0, 2)) * 60 + Number(now.slice(3, 5));
+  const liveNow = live.now?.id;
+  const { over, ahead } = useMemo(() => {
+    const ended = (e: ScheduleEvent) => e.id !== liveNow && endMinutes(e) <= at;
+    return { over: events.filter(ended), ahead: events.filter((e) => !ended(e)) };
+  }, [events, at, liveNow]);
+  const leaving = useLeaving(ahead, (e) => e.id, (id) => over.find((e) => e.id === id));
+  const row = (e: ScheduleEvent, past?: boolean) => (
+    <div key={e.id} className={`event-row${live.now?.id === e.id ? ' now' : ''}${past ? ' past' : ''}`} {...openable(() => navigate(`/schedule?date=${e.date}&event=${e.id}`))}>
+      <div className="event-time">{e.startTime}</div>
+      <div>
+        <div className="event-title">
+          {e.title}
+          {live.now?.id === e.id && <span className="badge t-orange brief-when">עכשיו · {leftMinutes(live.left)}</span>}
+          {live.next?.id === e.id && <span className="badge t-blue brief-when">{inMinutes(live.until)}</span>}
+        </div>
+        <div className="small muted">{[e.location, e.ownerName].filter(Boolean).join(' · ')}</div>
+        {live.now?.id === e.id && (
+          <span className="un-bar dashboard-event-bar" aria-hidden="true">
+            <i style={{ inlineSize: `${Math.round(live.progress * 100)}%` }} />
+          </span>
+        )}
+      </div>
+      {e.taskTotal > 0 && (
+        <span className="small mono">
+          {e.taskDone}/{e.taskTotal}
+        </span>
+      )}
+    </div>
+  );
+  return (
+    <div className="card brief-section" id="brief-events">
+      <div className="card-head">
+        <h3>אירועים מרכזיים</h3>
+      </div>
+      {events.length === 0 ? (
+        <div className="card-body muted small">אין אירועים בלו"ז היום.</div>
+      ) : (
+        <>
+          <DoneDrawer row id="brief-earlier" count={over.length} label="מוקדם יותר היום">
+            {over.map((e) => row(e, true))}
+          </DoneDrawer>
+          {leaving.rows.length === 0 ? (
+            <div className="card-body muted small">אין עוד אירועים היום.</div>
+          ) : (
+            leaving.rows.map((e) => {
+              const phase = leaving.phaseOf(e.id);
+              return (
+                <div key={e.id} className={leaveClass(phase)}>
+                  {row(e, !!phase)}
+                </div>
+              );
+            })
+          )}
+        </>
+      )}
     </div>
   );
 }

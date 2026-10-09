@@ -207,12 +207,12 @@ export function WeeklyPage() {
                   {n === null
                     ? 'בסוף השבועי'
                     : s.kind === 'schedule'
-                      ? `${n} אירועים${items.length ? ` · ${items.length} הערות` : ''}`
+                      ? `${n} אירועים${items.length ? (open ? ` · ${open === 1 ? 'הערה אחת' : `${open} הערות`}` : ' · ההערות טופלו') : ''}`
                       : n === 0
                         ? 'אין עדיין'
                         : s.kind === 'point'
                           ? `${n} דגשים`
-                          : `${n} ·${open ? `${open} פתוחים` : `כולם ${s.kind === 'closure' ? 'נסגרו' : 'נדונו'}`}`}
+                          : `${n} · ${open ? `${open} פתוחים` : `כולם ${s.kind === 'closure' ? 'נסגרו' : 'נדונו'}`}`}
                 </span>
               </span>
             </a>
@@ -415,7 +415,8 @@ function Items({ items, onEdit, empty, numbered, settles }: { items: WeeklyItem[
   );
 }
 
-function ItemRow({ item: i, onEdit, fresh, leaving }: { item: WeeklyItem; onEdit: (i: WeeklyItem) => void; fresh?: boolean; leaving?: LeavePhase }) {
+/** context: where it stood, once it is out of its place (a note handled, under its day: "על מסדר בוקר") */
+function ItemRow({ item: i, onEdit, fresh, leaving, context }: { item: WeeklyItem; onEdit: (i: WeeklyItem) => void; fresh?: boolean; leaving?: LeavePhase; context?: string }) {
   const toast = useToast();
   // marked at once; the answer from the server takes over when it comes
   const [mine, setMine] = useState<boolean | null>(null);
@@ -478,6 +479,7 @@ function ItemRow({ item: i, onEdit, fresh, leaving }: { item: WeeklyItem; onEdit
             </div>
           )}
           <div className="weekly-item-meta tiny muted">
+            {context && <span className="weekly-item-context">{context}</span>}
             {i.kind === 'closure' && <span className={`badge${i.ownerName ? ' t-blue' : ''}`}>{i.ownerName ? `סוגר: ${i.ownerName}` : 'עוד לא נקבע מי סוגר'}</span>}
             {i.carriedFrom && <span className="badge t-yellow">עבר מ{i.carriedFrom.name}</span>}
             {i.taskId && (
@@ -546,11 +548,17 @@ function ScheduleDays({ view, external, canAdd, onEdit }: { view: WeeklyView; ex
           </div>
           <NoteList notes={general} onEdit={onEdit} />
           {addHere(null, null) && <QuickAdd weekId={w.id} kind="schedule" placeholder="הערה על הלו״ז של השבוע" eventRef={undefined} onDone={() => setAdding(null)} />}
+          <HandledNotes id="weekly-handled-week" notes={general} onEdit={onEdit} />
         </div>
       )}
       {days.map((d) => {
         const evs = eventsOf(d);
         const dayNotes = notes.filter((n) => n.eventDate === d && (!n.eventRef || !evs.some((e) => e.ref === n.eventRef)));
+        // the handled ones of the day: out of their places, in one line under the day - each says what it was on
+        const on = (n: WeeklyItem) => {
+          const e = n.eventRef ? evs.find((x) => x.ref === n.eventRef) : undefined;
+          return e ? `על ${e.time ? `${e.time} ` : ''}${e.title}` : undefined;
+        };
         return (
           <div key={d} className={`weekly-day${d === today ? ' is-today' : ''}`}>
             <div className="weekly-day-head">
@@ -564,7 +572,7 @@ function ScheduleDays({ view, external, canAdd, onEdit }: { view: WeeklyView; ex
                 </button>
               )}
             </div>
-            {evs.length === 0 && dayNotes.length === 0 && !addHere(null, d) && <div className="tiny muted weekly-none">אין אירועים בלו"ז</div>}
+            {evs.length === 0 && !dayNotes.some((n) => !n.done) && !addHere(null, d) && <div className="tiny muted weekly-none">אין אירועים בלו"ז</div>}
             {evs.map((e) => {
               const mine = notes.filter((n) => n.eventRef === e.ref);
               return (
@@ -594,6 +602,7 @@ function ScheduleDays({ view, external, canAdd, onEdit }: { view: WeeklyView; ex
             })}
             <NoteList notes={dayNotes} onEdit={onEdit} />
             {addHere(null, d) && <QuickAdd weekId={w.id} kind="schedule" placeholder={`הערה על יום ${weekdayName(d)}`} eventDate={d} onDone={() => setAdding(null)} />}
+            <HandledNotes id={`weekly-handled-${d}`} notes={notes.filter((n) => n.eventDate === d)} context={on} onEdit={onEdit} />
           </div>
         );
       })}
@@ -601,15 +610,32 @@ function ScheduleDays({ view, external, canAdd, onEdit }: { view: WeeklyView; ex
   );
 }
 
+/** a place's notes still to handle; one marked handled stays a moment, ticked, then goes under its day */
 function NoteList({ notes, onEdit }: { notes: WeeklyItem[]; onEdit: (i: WeeklyItem) => void }) {
   const fresh = useFresh(notes.map((n) => n.id));
-  if (!notes.length) return null;
+  const open = useMemo(() => notes.filter((n) => !n.done), [notes]);
+  const leaving = useLeaving(open, (n) => n.id, (id) => notes.find((n) => n.id === id && n.done));
+  if (!leaving.rows.length) return null;
   return (
     <ul className="weekly-items weekly-notes">
-      {notes.map((n) => (
-        <ItemRow key={n.id} item={n} onEdit={onEdit} fresh={fresh(n.id)} />
+      {leaving.rows.map((n) => (
+        <ItemRow key={n.id} item={n} onEdit={onEdit} fresh={fresh(n.id)} leaving={leaving.phaseOf(n.id)} />
       ))}
     </ul>
+  );
+}
+
+/** the notes of a day (or of the whole week) already handled: one line that opens to them */
+function HandledNotes({ id, notes, context, onEdit }: { id: string; notes: WeeklyItem[]; context?: (n: WeeklyItem) => string | undefined; onEdit: (i: WeeklyItem) => void }) {
+  const handled = notes.filter((n) => n.done);
+  return (
+    <DoneDrawer id={id} count={handled.length} label="טופלו">
+      <ul className="weekly-items weekly-notes">
+        {handled.map((n) => (
+          <ItemRow key={n.id} item={n} onEdit={onEdit} context={context?.(n)} />
+        ))}
+      </ul>
+    </DoneDrawer>
   );
 }
 

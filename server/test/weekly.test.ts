@@ -55,6 +55,8 @@ describe('the weekly', () => {
     expect((await c.s2.patch(`/api/weekly/items/${topic}`, { done: true, outcome: 'הוחלט לפצל את השמירות' })).status).toBe(200);
     // the closure's owner closes it
     expect((await c.s3.patch(`/api/weekly/items/${closure}`, { done: true })).status).toBe(200);
+    // the commander's home counts what is still open; the settled ones apart
+    expect((await c.cmd.get('/api/weekly/target')).body.counts).toMatchObject({ topic: 0, closure: 0, open: 0, settled: 2 });
     const v = await view(c.s1, w1);
     expect(v.items.map((i) => [i.title, i.done, i.outcome])).toEqual([
       ['נושא', true, 'הוחלט לפצל את השמירות'],

@@ -1,14 +1,15 @@
 // Sections 4, 5, 32, 49 - the commander's home: understand the course in 10 seconds.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ABSENCE_REASON_LABELS, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, ATTENDANCE_TONES } from '@shared/constants';
-import type { AttentionItem, AttentionKind, DashboardData } from '@shared/types';
+import type { AttentionItem, AttentionKind, DashboardData, ScheduleEvent } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
 import { PendingAnnouncements } from '../components/Announcements';
 import { CheckMark } from '../components/CheckMark';
 import { Decided, useDecision } from '../components/Decision';
 import { DisciplineCard } from '../components/DisciplineCard';
+import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { WeeklyCard } from '../components/WeeklyCard';
 import { useNewTask } from '../components/NewTask';
@@ -16,6 +17,7 @@ import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from
 import { api } from '../lib/api';
 import { endMinutes, inMinutes, leftMinutes, nowAndNext } from '../lib/agenda';
 import { fmtDeadline, fmtLongDate, fmtTime, greetName, greeting, todayKey } from '../lib/format';
+import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
 import { shortDate } from '@shared/dates';
@@ -176,6 +178,11 @@ function attnKeys(items: AttentionItem[]): string[] {
   });
 }
 
+/** what an item is about: a task or a request stays one thing when it moves on (due soon, then late) */
+const subjectOf = (i: AttentionItem) => (i.taskId ? `t${i.taskId}` : i.requestId ? `r${i.requestId}` : [i.kind, i.weekId, i.userId, i.title].join('|'));
+/** these go by the calendar (an absence over, a week begun), not because someone took care of them */
+const PASSING: ReadonlySet<AttentionKind> = new Set(['away', 'overload', 'readiness']);
+
 function Attention({ items }: { items: AttentionItem[] }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('all');
@@ -183,13 +190,26 @@ function Attention({ items }: { items: AttentionItem[] }) {
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [cleared, setCleared] = useState(false);
 
-  const keys = attnKeys(items);
-  const keyed = items.map((i, idx) => ({ i, key: keys[idx] }));
+  const keyed = useMemo(() => {
+    const keys = attnKeys(items);
+    return items.map((i, idx) => ({ i, key: keys[idx] }));
+  }, [items]);
+  // taken care of somewhere else (the task done, the request decided - from the bell, by its owner): it
+  // says so where it stood, then folds away; one that only moved on (due soon, now late) just moves
+  const subjects = useMemo(() => new Set(keyed.map((x) => subjectOf(x.i))), [keyed]);
+  const leaving = useLeaving(keyed, (x) => x.key, (k, last) => !gone.has(k) && !PASSING.has(last.i.kind) && !subjects.has(subjectOf(last.i)) && last);
   const left = keyed.filter((x) => !gone.has(x.key));
+  const going = leaving.rows.length > keyed.length;
   // a blocker the owner escalated to the commander belongs with the red items
   const laneOf = (i: AttentionItem) => (i.kind === 'blocked' && i.tone === 'red' ? 'red' : LANES.find((l) => l.kinds.includes(i.kind))?.key);
-  const lanes = LANES.map((l) => ({ ...l, items: keyed.filter((x) => laneOf(x.i) === l.key), left: left.filter((x) => laneOf(x.i) === l.key).length }));
-  const visible = lanes.filter((l) => l.left && (filter === 'all' || l.key === filter));
+  const lanes = LANES.map((l) => {
+    const rows = leaving.rows.filter((x) => laneOf(x.i) === l.key);
+    const n = left.filter((x) => laneOf(x.i) === l.key).length;
+    // its last one going: the lane goes with it
+    const phases = n ? [] : rows.map((x) => leaving.phaseOf(x.key)).filter(Boolean);
+    return { ...l, items: rows, left: n, phase: phases.length ? (phases.includes('done') ? ('done' as const) : ('fold' as const)) : undefined };
+  });
+  const visible = lanes.filter((l) => (l.left || l.phase) && (filter === 'all' || l.key === filter));
   const decided = (key: string) =>
     setTimeout(() => {
       setGone((g) => {
@@ -213,7 +233,7 @@ function Attention({ items }: { items: AttentionItem[] }) {
           {left.length}
         </span>
       </div>
-      {left.length > 0 && (
+      {(left.length > 0 || going) && (
         <div className="attention-filters" role="group" aria-label="סינון פריטים לטיפול">
           <button className={`chip${filter === 'all' ? ' on' : ''}`} aria-pressed={filter === 'all'} aria-controls="attention-results" onClick={() => setFilter('all')}>
             הכל <span>{left.length}</span>
@@ -236,7 +256,7 @@ function Attention({ items }: { items: AttentionItem[] }) {
         </div>
       )}
       <div id="attention-results">
-        {left.length === 0 ? (
+        {left.length === 0 && !going ? (
           <div className={cleared ? 'just-cleared attention-cleared' : undefined}>
             <Empty
               mark={cleared ? <CheckMark size={44} /> : undefined}
@@ -259,21 +279,23 @@ function Attention({ items }: { items: AttentionItem[] }) {
             const all = !!expanded[l.key];
             const list = all ? l.items : l.items.slice(0, LANE_LIMIT);
             return (
-              <div key={l.key} id={`lane-${l.key}`} className="attn">
-                <div className="group-title attention-group-title">
-                  <span className={`dot t-${l.tone}`} />
-                  <span>{l.title}</span>
-                  <span className="n">{l.left}</span>
-                  <span className="line" />
+              <div key={l.key} className={leaveClass(l.phase)}>
+                <div id={`lane-${l.key}`} className="attn">
+                  <div className="group-title attention-group-title">
+                    <span className={`dot t-${l.tone}`} />
+                    <span>{l.title}</span>
+                    {l.left > 0 && <span className="n">{l.left}</span>}
+                    <span className="line" />
+                  </div>
+                  {list.map(({ i, key }) => (
+                    <AttentionRow key={key} i={i} onDecided={() => decided(key)} leaving={leaving.phaseOf(key)} />
+                  ))}
+                  {l.items.length > LANE_LIMIT && (
+                    <button className="btn btn-ghost attention-more" aria-expanded={all} onClick={() => setExpanded({ ...expanded, [l.key]: !all })}>
+                      {all ? 'הצג פחות' : `הצג עוד ${l.items.length - LANE_LIMIT}`}
+                    </button>
+                  )}
                 </div>
-                {list.map(({ i, key }) => (
-                  <AttentionRow key={key} i={i} onDecided={() => decided(key)} />
-                ))}
-                {l.items.length > LANE_LIMIT && (
-                  <button className="btn btn-ghost attention-more" aria-expanded={all} onClick={() => setExpanded({ ...expanded, [l.key]: !all })}>
-                    {all ? 'הצג פחות' : `הצג עוד ${l.items.length - LANE_LIMIT}`}
-                  </button>
-                )}
               </div>
             );
           })
@@ -285,8 +307,9 @@ function Attention({ items }: { items: AttentionItem[] }) {
 
 const destination = (i: AttentionItem) => i.link || (i.taskId ? `/tasks/${i.taskId}` : i.weekId ? `/weeks/${i.weekId}` : i.userId ? `/team/${i.userId}` : '/tasks');
 
-/** one thing that needs the commander: approved or rejected right here, it says so and folds away */
-function AttentionRow({ i, onDecided }: { i: AttentionItem; onDecided: () => void }) {
+/** one thing that needs the commander: approved or rejected right here, it says so and folds away - and
+ *  so does one taken care of elsewhere meanwhile (leaving) */
+function AttentionRow({ i, onDecided, leaving }: { i: AttentionItem; onDecided: () => void; leaving?: LeavePhase }) {
   const d = useDecision(onDecided);
   const decides = i.kind === 'approval' || i.kind === 'request';
   const approve = () =>
@@ -297,7 +320,7 @@ function AttentionRow({ i, onDecided }: { i: AttentionItem; onDecided: () => voi
     );
   const reject = () => void d.decide('rejected', () => api.post(`/api/requests/${i.requestId}/decide`, { approve: false }), 'הבקשה נדחתה');
   return (
-    <div className={`swipe-wrap attn-decide${d.fold ? ' is-removing' : ''}`}>
+    <div className={`swipe-wrap attn-decide${d.fold || leaving === 'fold' ? ' is-removing' : ''}${leaving ? ' is-finished' : ''}`}>
       <div className="swipe-row">
         <div className={`attn-item dashboard-attn-item t-${i.tone}`}>
           <Link className="attention-link" to={destination(i)}>
@@ -315,7 +338,15 @@ function AttentionRow({ i, onDecided }: { i: AttentionItem; onDecided: () => voi
             </div>
             <Icon name="chevronLeft" className="faint" size={18} />
           </Link>
-          {decides &&
+          {leaving && !d.verdict ? (
+            <div className="attention-actions">
+              <span className="verdict-pill t-green" role="status">
+                <Icon name="check" size={15} />
+                טופל
+              </span>
+            </div>
+          ) : (
+            decides &&
             (d.verdict ? (
               <div className="attention-actions">
                 <Decided verdict={d.verdict} />
@@ -331,7 +362,8 @@ function AttentionRow({ i, onDecided }: { i: AttentionItem; onDecided: () => voi
                   </button>
                 )}
               </div>
-            ))}
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -497,11 +529,50 @@ function TodayEvents({ data }: { data: DashboardData }) {
   const nowTime = fmtTime(new Date().toISOString());
   const live = nowAndNext(data.todayEvents, today, nowTime);
   const nowMin = Number(nowTime.slice(0, 2)) * 60 + Number(nowTime.slice(3, 5));
-  // folded, the three that matter now: from the one going on (or the next one), or the day's last three once it is over
-  const all = data.todayEvents;
-  const from = all.findIndex((e) => e.id === (live.now ?? live.next)?.id);
-  const start = Math.min(from === -1 ? all.length : from, Math.max(0, all.length - 3));
-  const events = expanded ? all : all.slice(start, start + 3);
+  // what is over is out of the way - one line at the top that opens to it; one that ends while the page is
+  // open goes there (a moment, then folded), as in the schedule (components/Agenda.tsx)
+  const liveNow = live.now?.id;
+  const { over, ahead } = useMemo(() => {
+    const ended = (e: ScheduleEvent) => e.id !== liveNow && endMinutes(e) <= nowMin;
+    return { over: data.todayEvents.filter(ended), ahead: data.todayEvents.filter((e) => !ended(e)) };
+  }, [data.todayEvents, nowMin, liveNow]);
+  const leaving = useLeaving(ahead, (e) => e.id, (id) => over.find((e) => e.id === id));
+  // folded, the three that come next (the one going on first); one leaving stays until it has folded
+  const shown = new Set((expanded ? ahead : ahead.slice(0, 3)).map((e) => e.id));
+  const events = leaving.rows.filter((e) => shown.has(e.id) || leaving.phaseOf(e.id));
+  const row = (e: ScheduleEvent) => {
+    const isNow = live.now?.id === e.id;
+    const isNext = live.next?.id === e.id;
+    const past = !isNow && endMinutes(e) <= nowMin;
+    return (
+      <Link key={e.id} className={`dashboard-event${isNow ? ' is-now' : ''}${past ? ' is-past' : ''}`} to={`/schedule?date=${e.date}&event=${e.id}`}>
+        <span className="dashboard-event-time mono">
+          <b>{e.startTime}</b>
+          {e.endTime && <span>{e.endTime}</span>}
+        </span>
+        <span className="dashboard-event-marker" aria-hidden="true" />
+        <span className="grow">
+          <b>{e.title}</b>
+          {isNow && <span className="badge t-orange dashboard-event-when">עכשיו · {leftMinutes(live.left)}</span>}
+          {isNext && <span className="badge t-blue dashboard-event-when">{inMinutes(live.until)}</span>}
+          {(e.location || e.ownerName) && <span className="dashboard-event-detail">{[e.location, e.ownerName].filter(Boolean).join(' · ')}</span>}
+          {isNow && (
+            <span className="un-bar dashboard-event-bar" aria-hidden="true">
+              <i style={{ inlineSize: `${Math.round(live.progress * 100)}%` }} />
+            </span>
+          )}
+        </span>
+        {e.taskTotal > 0 && (
+          <span className={`badge ${e.taskDone < e.taskTotal ? 't-orange' : 't-green'}`} title="משימות הכנה שהושלמו">
+            <span className="mono">
+              {e.taskDone}/{e.taskTotal}
+            </span>
+            <span className="sr-only"> משימות הכנה שהושלמו</span>
+          </span>
+        )}
+      </Link>
+    );
+  };
   return (
     <section className="card dashboard-schedule" aria-labelledby="today-title">
       <div className="card-head">
@@ -522,43 +593,24 @@ function TodayEvents({ data }: { data: DashboardData }) {
           </Link>
         </div>
       ) : (
-        events.map((e) => {
-          const isNow = live.now?.id === e.id;
-          const isNext = live.next?.id === e.id;
-          const past = !isNow && endMinutes(e) <= nowMin;
-          return (
-          <Link key={e.id} className={`dashboard-event${isNow ? ' is-now' : ''}${past ? ' is-past' : ''}`} to={`/schedule?date=${e.date}&event=${e.id}`}>
-            <span className="dashboard-event-time mono">
-              <b>{e.startTime}</b>
-              {e.endTime && <span>{e.endTime}</span>}
-            </span>
-            <span className="dashboard-event-marker" aria-hidden="true" />
-            <span className="grow">
-              <b>{e.title}</b>
-              {isNow && <span className="badge t-orange dashboard-event-when">עכשיו · {leftMinutes(live.left)}</span>}
-              {isNext && <span className="badge t-blue dashboard-event-when">{inMinutes(live.until)}</span>}
-              {(e.location || e.ownerName) && <span className="dashboard-event-detail">{[e.location, e.ownerName].filter(Boolean).join(' · ')}</span>}
-              {isNow && (
-                <span className="un-bar dashboard-event-bar" aria-hidden="true">
-                  <i style={{ inlineSize: `${Math.round(live.progress * 100)}%` }} />
-                </span>
-              )}
-            </span>
-            {e.taskTotal > 0 && (
-              <span className={`badge ${e.taskDone < e.taskTotal ? 't-orange' : 't-green'}`} title="משימות הכנה שהושלמו">
-                <span className="mono">
-                  {e.taskDone}/{e.taskTotal}
-                </span>
-                <span className="sr-only"> משימות הכנה שהושלמו</span>
-              </span>
-            )}
-          </Link>
-          );
-        })
+        <>
+          <DoneDrawer row id="dashboard-earlier" count={over.length} label="מוקדם יותר היום">
+            {over.map(row)}
+          </DoneDrawer>
+          {events.length === 0 ? (
+            <div className="card-body small muted dashboard-day-over">אין עוד אירועים היום</div>
+          ) : (
+            events.map((e) => (
+              <div key={e.id} className={leaveClass(leaving.phaseOf(e.id))}>
+                {row(e)}
+              </div>
+            ))
+          )}
+        </>
       )}
-      {data.todayEvents.length > 3 && (
+      {ahead.length > 3 && (
         <button className="btn btn-ghost agenda-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-          {expanded ? 'הצג פחות' : `עוד ${data.todayEvents.length - 3} אירועים היום`}
+          {expanded ? 'הצג פחות' : `עוד ${ahead.length - 3} אירועים היום`}
           <Icon name="chevronDown" size={16} />
         </button>
       )}

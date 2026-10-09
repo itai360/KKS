@@ -130,9 +130,10 @@ function itemsOf(actor: UserRow, w: WeekRow): ItemRow[] {
   return db().all<ItemRow>(`${ITEMS} WHERE i.week_id = ? AND (i.kind <> 'point' OR i.created_by = ?) ORDER BY i.created_at, i.id`, w.id, actor.id);
 }
 
-export function weeklyTarget(actor: UserRow): WeeklyTarget & { name: string | null; heldAt: string | null; counts: Record<WeeklyKind, number> & { open: number } } {
+/** the commander's home: what is still open on the coming weekly, by kind - and how many are settled */
+export function weeklyTarget(actor: UserRow): WeeklyTarget & { name: string | null; heldAt: string | null; counts: Record<WeeklyKind, number> & { open: number; settled: number } } {
   const weekId = targetWeekId();
-  const counts = { schedule: 0, closure: 0, topic: 0, point: 0, open: 0 };
+  const counts = { schedule: 0, closure: 0, topic: 0, point: 0, open: 0, settled: 0 };
   let name: string | null = null;
   let heldAt: string | null = null;
   if (weekId) {
@@ -140,8 +141,11 @@ export function weeklyTarget(actor: UserRow): WeeklyTarget & { name: string | nu
     name = w.name;
     heldAt = w.held_at;
     for (const i of itemsOf(actor, w)) {
-      counts[i.kind]++;
-      if (!i.done && (i.kind === 'topic' || i.kind === 'closure')) counts.open++;
+      if (i.done) counts.settled++;
+      else {
+        counts[i.kind]++;
+        if (i.kind === 'topic' || i.kind === 'closure') counts.open++;
+      }
     }
   }
   return { weekId, weeks: allWeeks(), name, heldAt, counts };

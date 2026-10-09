@@ -7,6 +7,7 @@ import { DISCIPLINE_NOTE_LIMIT } from '@shared/constants';
 import type { ActivityEntry, DayEndData, DisciplineLogEntry, DisciplineSummary, LookAheadData, WeeklyReport } from '@shared/types';
 import { CheckMark } from '../components/CheckMark';
 import { ShareButton, useDocNav, type DocLink } from '../components/DocNav';
+import { DoneDrawer, revealDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { GroupTitle, TaskList } from '../components/TaskRow';
@@ -369,37 +370,47 @@ export function DayEndPage() {
                     {data.doneToday} מתוך {data.dueToday}
                   </div>
                   <div className="small muted">
-                    משימות שהיו לביצוע היום · {data.completedToday.length} הושלמו היום בסך הכל
+                    משימות שהיו לביצוע היום · <DoneToday n={data.completedToday.length} />
                   </div>
                 </>
               ) : (
                 <>
                   <div className="strong" style={{ fontSize: 20 }}>לא היו משימות לביצוע היום</div>
-                  <div className="small muted">{data.completedToday.length} משימות הושלמו היום בסך הכל</div>
+                  <div className="small muted">
+                    <DoneToday n={data.completedToday.length} />
+                  </div>
                 </>
               )}
             </div>
           </div>
+          {/* what is left first; what was done today folds into the drawer under it */}
           <div>
             <GroupTitle title="נשאר פתוח" count={data.stillOpen.length} tone={data.stillOpen.length ? 'red' : 'green'} />
             <TaskList tasks={data.stillOpen} showOwner={false} empty={<p className="small muted">הכל נסגר להיום.</p>} />
+            <DoneDrawer id="day-done" count={data.completedToday.length} label="הושלמו היום">
+              <TaskList tasks={data.completedToday} showOwner={false} />
+            </DoneDrawer>
           </div>
           <div>
             <GroupTitle title="למחר" count={data.tomorrow.length} tone="orange" />
             <TaskList tasks={data.tomorrow} showOwner={false} empty={<p className="small muted">אין משימות למחר.</p>} />
           </div>
-          {data.completedToday.length > 0 && (
-            <div>
-              <GroupTitle title="הושלמו היום" count={data.completedToday.length} tone="green" />
-              <TaskList tasks={data.completedToday} showOwner={false} />
-            </div>
-          )}
           <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => navigate('/')}>
             חזרה למשימות
           </button>
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** how many were done today - a press opens them, in the drawer under what is left */
+function DoneToday({ n }: { n: number }) {
+  if (!n) return <>לא הושלמו משימות היום</>;
+  return (
+    <button type="button" className="link-btn" onClick={() => revealDrawer('day-done')}>
+      {n === 1 ? 'משימה אחת הושלמה היום' : `${n} משימות הושלמו היום בסך הכל`}
+    </button>
   );
 }
 

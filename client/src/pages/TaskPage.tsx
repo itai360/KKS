@@ -4,8 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { domainLabel, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
-import type { Task, TaskDetail } from '@shared/types';
+import type { Task, TaskDetail, TaskRequest } from '@shared/types';
 import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
+import { Decided, useDecision } from '../components/Decision';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
@@ -14,7 +15,7 @@ import { OpenTaskList } from '../components/TaskRow';
 import { Bar, ErrorBox, PageError, Loading, Modal } from '../components/ui';
 import { api } from '../lib/api';
 import { haptic } from '../lib/haptics';
-import { leaveClass, useLeaving } from '../lib/leaving';
+import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
@@ -46,7 +47,9 @@ export function TaskPage() {
 
 function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChange: (d: TaskDetail) => void; onDeleted: () => void }) {
   const { task: t } = detail;
-  const pendingRequests = detail.requests.filter((r) => r.status === 'pending');
+  const pendingRequests = useMemo(() => detail.requests.filter((r) => r.status === 'pending'), [detail.requests]);
+  // decided elsewhere meanwhile (the requests page, the bell): it says how, then folds away
+  const requests = useLeaving(pendingRequests, (r) => r.id, (id) => detail.requests.find((r) => r.id === id && r.status !== 'pending'));
   usePageTitle(t.title);
   // a detail's pencil opens the edit dialog on that field
   const [edit, setEdit] = useState<{ field: EditField; n: number } | null>(null);
@@ -145,18 +148,8 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
             <b>בוטלה:</b> {t.cancelReason}
           </div>
         )}
-        {pendingRequests.map((r) => (
-          <div key={r.id} className="update mt-16" style={{ background: 'var(--blue-bg)', borderColor: 'rgba(42,95,158,.3)' }}>
-            <div className="row wrap">
-              <div className="grow small">
-                <b>{REQUEST_TYPE_LABELS[r.type]}</b> של {r.requestedByName} ממתינה להחלטה
-                {r.newDeadline && <> · דד-ליין מבוקש: <span className="mono">{fmtDateTime(r.newDeadline)}</span></>}
-                {r.newOwnerName && <> · אל: {r.newOwnerName}</>}
-                <div className="muted">{r.reason}</div>
-              </div>
-              {detail.permissions.canApprove && <RequestDecision requestId={r.id} />}
-            </div>
-          </div>
+        {requests.rows.map((r) => (
+          <RequestBox key={r.id} r={r} canApprove={detail.permissions.canApprove} gone={requests.phaseOf(r.id)} />
         ))}
         {/* the weekly debrief task: the debrief itself is one press away, and summing it up closes the task */}
         {detail.weeklyDebrief && (
@@ -207,34 +200,57 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
   );
 }
 
-function RequestDecision({ requestId }: { requestId: number }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const decide = async (approve: boolean) => {
-    setBusy(true);
-    try {
-      await api.post(`/api/requests/${requestId}/decide`, { approve });
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+/** a request waiting on the task (a later deadline, another owner): decided here it says so and folds away
+ *  (components/Decision.tsx) - and so does one decided elsewhere (gone) */
+function RequestBox({ r, canApprove, gone }: { r: TaskRequest; canApprove: boolean; gone?: LeavePhase }) {
+  const d = useDecision();
+  const verdict = d.verdict ?? (gone ? (r.status === 'approved' ? 'approved' : 'rejected') : null);
+  const decide = (approve: boolean) =>
+    void d.decide(approve ? 'approved' : 'rejected', () => api.post(`/api/requests/${r.id}/decide`, { approve }), approve ? 'הבקשה אושרה' : 'הבקשה נדחתה');
   return (
-    <div className="row gap-6">
-      <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void decide(true)}>
-        אשר
-      </button>
-      <button className="btn btn-sm" disabled={busy} onClick={() => void decide(false)}>
-        דחה
-      </button>
-      {err && <span className="tiny text-red">{err}</span>}
+    <div className={`task-request${verdict ? ' is-finished' : ''}${d.fold || gone === 'fold' ? ' is-folding' : ''} leave-wrap`}>
+      <div className="update" style={{ background: 'var(--blue-bg)', borderColor: 'rgba(42,95,158,.3)' }}>
+        <div className="row wrap">
+          <div className="grow small">
+            <b>{REQUEST_TYPE_LABELS[r.type]}</b> של {r.requestedByName} {verdict ? '' : 'ממתינה להחלטה'}
+            {r.newDeadline && <> · דד-ליין מבוקש: <span className="mono">{fmtDateTime(r.newDeadline)}</span></>}
+            {r.newOwnerName && <> · אל: {r.newOwnerName}</>}
+            <div className="muted">{r.reason}</div>
+            {d.error && <div className="tiny text-red">{d.error}</div>}
+          </div>
+          {verdict ? (
+            <Decided verdict={verdict} />
+          ) : (
+            canApprove && (
+              <div className="row gap-6">
+                <button className="btn btn-sm btn-primary" onClick={() => decide(true)} aria-label={`אישור ${REQUEST_TYPE_LABELS[r.type]} של ${r.requestedByName}`}>
+                  אשר
+                </button>
+                <button className="btn btn-sm" onClick={() => decide(false)} aria-label={`דחיית ${REQUEST_TYPE_LABELS[r.type]} של ${r.requestedByName}`}>
+                  דחה
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
+/** everyone's copy: who has not done it yet up front; who has, in one line under them - one done while the
+ *  page is open turns green a moment, then narrows away into it */
 function GroupCard({ group, name }: { group: NonNullable<TaskDetail['group']>; name: string | null }) {
   const pct = group.total ? Math.round((group.done / group.total) * 100) : 0;
+  const left = useMemo(() => group.members.filter((m) => m.status !== 'done'), [group.members]);
+  const done = useMemo(() => group.members.filter((m) => m.status === 'done'), [group.members]);
+  const leaving = useLeaving(left, (m) => m.taskId, (id) => done.find((m) => m.taskId === id));
+  const chip = (m: NonNullable<TaskDetail['group']>['members'][number]) => (
+    <Link key={m.taskId} to={`/tasks/${m.taskId}`} className={`chip t-${m.status === 'done' ? 'green' : m.overdue ? 'red' : 'gray'}`}>
+      <span className="dot" />
+      {m.ownerName} · {m.status === 'done' ? 'הושלם' : m.overdue ? 'באיחור' : STATUS_LABELS[m.status]}
+    </Link>
+  );
   return (
     <div className="card card-pad mb-12" style={{ marginBottom: 16 }}>
       <div className="row wrap">
@@ -248,14 +264,22 @@ function GroupCard({ group, name }: { group: NonNullable<TaskDetail['group']>; n
           <Bar value={pct} label="השלימו את המשימה" />
         </div>
       </div>
-      <div className="chips mt-12">
-        {group.members.map((m) => (
-          <Link key={m.taskId} to={`/tasks/${m.taskId}`} className={`chip t-${m.status === 'done' ? 'green' : m.overdue ? 'red' : 'gray'}`}>
-            <span className="dot" />
-            {m.ownerName} · {m.status === 'done' ? 'הושלם' : m.overdue ? 'באיחור' : STATUS_LABELS[m.status]}
-          </Link>
-        ))}
-      </div>
+      {leaving.rows.length > 0 ? (
+        <div className="chips mt-12" role="group" aria-label="מי עוד לא השלים">
+          {leaving.rows.map((m) => (
+            <span key={m.taskId} className={leaveClass(leaving.phaseOf(m.taskId))}>
+              {chip(m)}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="all-done-line small mt-12">
+          <Icon name="check" size={15} /> כולם השלימו
+        </p>
+      )}
+      <DoneDrawer id="group-done" count={done.length} label="השלימו">
+        <div className="chips">{done.map(chip)}</div>
+      </DoneDrawer>
     </div>
   );
 }

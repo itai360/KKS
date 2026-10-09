@@ -8598,6 +8598,20 @@ button.weekly-item-title:hover {
   font-size: 18px;
   color: var(--ink);
 }
+/* nothing open of that kind: there, but quiet */
+.weekly-card-counts .is-zero b {
+  color: var(--muted);
+  font-weight: 500;
+}
+/* what was settled meanwhile: one quiet line, not part of the counts */
+.weekly-card-settled {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.weekly-card-settled svg {
+  color: var(--green-ink);
+}
 .weekly-add-context {
   display: flex;
   align-items: center;
@@ -12145,4 +12159,70 @@ tr.is-finished.is-folding {
 }
 .done-drawer.is-row .done-drawer-inner > :first-child {
   margin-top: 0;
+}
+/* the home's "today" card (pages/DashboardPage.tsx): the row of what is over sits under the head, the
+   events' own lines part it from the rest */
+.dashboard-schedule .done-drawer.is-row .done-drawer-head {
+  padding-inline: 18px;
+  border-bottom: 0;
+}
+.dashboard-day-over {
+  border-top: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+/* a chip that leaves its row (pages/TaskPage.tsx, a group's members): it narrows away, the gap with it */
+.chips > .leave-wrap {
+  grid-template-rows: auto;
+  grid-template-columns: 1fr;
+  transition: grid-template-columns 0.34s var(--spring), opacity 0.22s ease, margin 0.34s var(--spring);
+}
+.chips > .leave-wrap > * {
+  min-width: 0;
+}
+.chips > .leave-wrap.is-folding {
+  grid-template-rows: auto;
+  grid-template-columns: 0fr;
+  margin-inline-end: -6px;
+}
+.chips > .leave-wrap.is-folding > * {
+  overflow: hidden;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chips > .leave-wrap.is-folding {
+    grid-template-columns: 1fr;
+    margin-inline-end: 0;
+  }
+}
+/* a request waiting on the task (pages/TaskPage.tsx): decided, it folds away with the space above it */
+.task-request {
+  margin-top: 16px;
+}
+.task-request.is-folding {
+  margin-top: 0;
+}
+/* a day of the weekly's schedule (pages/WeeklyPage.tsx): its handled notes in a small line at its foot */
+.weekly-day > .done-drawer {
+  margin-top: 2px;
+}
+.weekly-day > .done-drawer .done-drawer-head {
+  min-height: 40px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+.weekly-day > .done-drawer .weekly-notes {
+  margin-inline-start: 0;
+}
+.weekly-item-context {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+/* the briefing's events (pages/BriefingPage.tsx): each in a wrapper of its own, so the lines between them
+   are drawn here */
+#brief-events .leave-wrap > .event-row,
+#brief-events .done-drawer-inner > .event-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+#brief-events > .leave-wrap:last-child > .event-row {
+  border-bottom: none;
 }
