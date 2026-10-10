@@ -6,10 +6,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { addDays, diffDays, shortDate, weekdayName } from '@shared/dates';
-import type { ExternalEvent } from '@shared/types';
+import type { ExternalEvent, Task } from '@shared/types';
 import { WEEKLY_DONE_LABELS, WEEKLY_KIND_LABELS, weeklySummaryText, type WeeklyHoldResult, type WeeklyItem, type WeeklyKind, type WeeklyTarget, type WeeklyView } from '@shared/weekly';
 import { CheckMark } from '../components/CheckMark';
 import { ask } from '../components/Confirm';
+import { useDocNav, type DocLink } from '../components/DocNav';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
@@ -20,13 +21,14 @@ import { TaskList, useLiveFlash } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Select } from '../components/ui';
 import { api } from '../lib/api';
-import { fmtAgo, fmtDateTime, todayKey } from '../lib/format';
+import { endMinutes } from '../lib/agenda';
+import { fmtAgo, fmtDateTime, fmtTime, todayKey } from '../lib/format';
 import { useFresh } from '../lib/fresh';
 import { haptic } from '../lib/haptics';
 import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
-import { useApi } from '../lib/useApi';
+import { prefetch, useApi, useTick } from '../lib/useApi';
 
 /** /weekly: the weekly coming up - the week on now until its weekly is held, then the next */
 export function WeeklyHome() {
@@ -69,6 +71,16 @@ export function WeeklyPage() {
   const toast = useToast();
   const [editing, setEditing] = useState<WeeklyItem | null>(null);
   const [holding, setHolding] = useState(false);
+  // the weekly before and the one after: the arrow keys turn to them, and they are fetched ahead
+  const weeks = data?.weeks ?? [];
+  const at = weeks.findIndex((x) => x.id === Number(weekId));
+  const weekLink = (i: number): DocLink | null => {
+    const x = weeks[i];
+    return x ? { to: `/weekly/${x.id}`, label: `שבוע ${x.number} - ${x.name}`, api: `/api/weekly/${x.id}` } : null;
+  };
+  const prev = at > 0 ? weekLink(at - 1) : null;
+  const next = at >= 0 ? weekLink(at + 1) : null;
+  useDocNav({ prev, next });
   // summed up while the page is open: the banner that says so arrives with a moment's glow
   // (the same week's weekly, not yet held a moment ago: not a page opened on one already held, nor another week)
   const heldWeek = data?.week.id;
@@ -144,13 +156,37 @@ export function WeeklyPage() {
         }
         actions={
           <>
-            <Select value={w.id} onChange={(e) => navigate(`/weekly/${e.target.value}`)} aria-label="מעבר לשבועי של שבוע אחר" className="select weekly-week-pick">
-              {data.weeks.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {`שבוע ${x.number} - ${x.name}${x.heldAt ? ' ✓' : ''}`}
-                </option>
-              ))}
-            </Select>
+            <div className="weekly-week-nav">
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={!prev}
+                onClick={() => prev && navigate(prev.to)}
+                onPointerEnter={() => prev?.api && prefetch(prev.api)}
+                aria-label={prev ? `השבועי הקודם: ${prev.label}` : 'אין שבועי קודם'}
+                title={prev ? `${prev.label} (חץ ימינה)` : undefined}
+              >
+                <Icon name="chevronRight" size={18} />
+              </button>
+              <Select value={w.id} onChange={(e) => navigate(`/weekly/${e.target.value}`)} aria-label="מעבר לשבועי של שבוע אחר" className="select weekly-week-pick">
+                {data.weeks.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {`שבוע ${x.number} - ${x.name}${x.heldAt ? ' ✓' : ''}`}
+                  </option>
+                ))}
+              </Select>
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={!next}
+                onClick={() => next && navigate(next.to)}
+                onPointerEnter={() => next?.api && prefetch(next.api)}
+                aria-label={next ? `השבועי הבא: ${next.label}` : 'אין שבועי הבא'}
+                title={next ? `${next.label} (חץ שמאלה)` : undefined}
+              >
+                <Icon name="chevronLeft" size={18} />
+              </button>
+            </div>
             <button className="btn btn-ghost" onClick={() => void copy()} title="העתקת הסיכום כטקסט, להדבקה בוואטסאפ">
               <Icon name="clip" /> העתקת סיכום
             </button>
@@ -188,34 +224,26 @@ export function WeeklyPage() {
           const items = of(s.kind);
           const open = items.filter((x) => !x.done).length;
           const n = s.kind === 'point' && data.pointsHidden ? null : s.kind === 'schedule' ? data.events.filter((e) => !e.cancelled).length + (external.data?.length ?? 0) : items.length;
+          const settles = s.kind === 'closure' || s.kind === 'topic';
           return (
-            <a
+            <AgendaStep
               key={s.kind}
-              href={`#${s.id}`}
-              className="weekly-step"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-            >
-              <span className="weekly-step-n" aria-hidden="true">
-                {i + 1}
-              </span>
-              <span className="grow">
-                <span className="weekly-step-title">{s.title}</span>
-                <span className="tiny muted">
-                  {n === null
-                    ? 'בסוף השבועי'
-                    : s.kind === 'schedule'
-                      ? `${n} אירועים${items.length ? (open ? ` · ${open === 1 ? 'הערה אחת' : `${open} הערות`}` : ' · ההערות טופלו') : ''}`
-                      : n === 0
-                        ? 'אין עדיין'
-                        : s.kind === 'point'
-                          ? `${n} דגשים`
-                          : `${n} · ${open ? `${open} פתוחים` : `כולם ${s.kind === 'closure' ? 'נסגרו' : 'נדונו'}`}`}
-                </span>
-              </span>
-            </a>
+              n={i + 1}
+              id={s.id}
+              title={s.title}
+              progress={settles && items.length ? (items.length - open) / items.length : null}
+              text={
+                n === null
+                  ? 'בסוף השבועי'
+                  : s.kind === 'schedule'
+                    ? `${n} אירועים${items.length ? (open ? ` · ${open === 1 ? 'הערה אחת' : `${open} הערות`}` : ' · ההערות טופלו') : ''}`
+                    : n === 0
+                      ? 'אין עדיין'
+                      : s.kind === 'point'
+                        ? `${n} דגשים`
+                        : `${n} · ${open ? `${open} פתוחים` : `כולם ${s.kind === 'closure' ? 'נסגרו' : 'נדונו'}`}`
+              }
+            />
           );
         })}
       </nav>
@@ -238,25 +266,7 @@ export function WeeklyPage() {
         <Section n={2} {...SECTIONS[1]} hint="תיאומים מקצועיים שצריך לסגור, ומי סוגר כל אחד." progress={settled(of('closure'))}>
           <Items items={of('closure')} onEdit={setEditing} empty="אין עדיין סגירות מקצועיות לשבוע הזה." settles="closure" />
           {canAdd && <QuickAdd weekId={w.id} kind="closure" placeholder="סגירה מקצועית חדשה - למשל: אישור שטח אש" />}
-          {data.openTasks.length > 0 && (
-            <details className="weekly-tasks">
-              <summary className="small">
-                <Icon name="tasks" size={15} />
-                <span className="grow strong">משימות השבוע שעוד פתוחות</span>
-                <span className="count-pill">{data.openTasks.length}</span>
-                <Icon name="chevronDown" size={15} />
-              </summary>
-              <div className="mt-8">
-                <TaskList tasks={data.openTasks.slice(0, 8)} empty={<p className="small muted">כל משימות השבוע נסגרו.</p>} />
-              </div>
-              {data.openTasks.length > 8 && (
-                <Link to={`/weeks/${w.id}`} className="btn btn-ghost btn-sm mt-8">
-                  לכל משימות השבוע
-                  <Icon name="chevronLeft" size={15} />
-                </Link>
-              )}
-            </details>
-          )}
+          {data.openTasks.length > 0 && <WeekTasks tasks={data.openTasks} weekId={w.id} />}
         </Section>
 
         <Section n={3} {...SECTIONS[2]} hint="מה שעלה במהלך השבוע והמפק״צים רוצים להעלות לשיח. בשבועי מסמנים ״נדון״ וכותבים מה הוחלט." progress={settled(of('topic'))}>
@@ -282,6 +292,73 @@ export function WeeklyPage() {
       {/* the item may go while its dialog is open (deleted, or moved on to the next weekly) */}
       {editingItem && <ItemDialog item={editingItem} weekId={w.id} onClose={() => setEditing(null)} />}
       {holding && <HoldDialog view={data} onClose={() => setHolding(false)} />}
+    </div>
+  );
+}
+
+/**
+ * A step of the meeting's order, a jump to its part. Where its items are settled (closures, topics) a thin
+ * bar fills as they are; once all are, its number turns to a check - with a pop when that happens here.
+ */
+function AgendaStep({ n, id, title, text, progress }: { n: number; id: string; title: string; text: string; progress: number | null }) {
+  const all = progress === 1;
+  const was = useRef(all);
+  const [justAll, setJustAll] = useState(false);
+  useEffect(() => {
+    if (all && !was.current) {
+      setJustAll(true);
+      haptic('success');
+    }
+    was.current = all;
+  }, [all]);
+  return (
+    <a
+      href={`#${id}`}
+      className={`weekly-step${all ? ' is-all' : ''}${justAll ? ' just-cleared' : ''}`}
+      onClick={(e) => {
+        e.preventDefault();
+        document.getElementById(id)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      }}
+    >
+      <span className="weekly-step-n" aria-hidden="true">
+        {all ? <Icon name="check" size={14} /> : n}
+      </span>
+      <span className="grow">
+        <span className="weekly-step-title">{title}</span>
+        <span className="tiny muted">{text}</span>
+        {progress !== null && (
+          <span className="mini-bar weekly-step-bar" aria-hidden="true">
+            <i style={{ width: `${Math.round(progress * 100)}%` }} />
+          </span>
+        )}
+      </span>
+    </a>
+  );
+}
+
+/** the week's tasks not yet done, to go over with the closures: one line that opens smoothly to them */
+function WeekTasks({ tasks, weekId }: { tasks: Task[]; weekId: number }) {
+  const [open, setOpen] = useState(false);
+  const body = `weekly-tasks-${weekId}`;
+  return (
+    <div className={`weekly-tasks${open ? ' is-open' : ''}`}>
+      <button type="button" className="weekly-tasks-head small" aria-expanded={open} aria-controls={body} onClick={() => setOpen(!open)}>
+        <Icon name="tasks" size={15} />
+        <span className="grow strong">משימות השבוע שעוד פתוחות</span>
+        <span className="count-pill">{tasks.length}</span>
+        <Icon name="chevronDown" size={15} className="weekly-tasks-chev" />
+      </button>
+      <div className="weekly-tasks-body" id={body} inert={!open || undefined}>
+        <div className="weekly-tasks-inner">
+          <TaskList tasks={tasks.slice(0, 8)} empty={<p className="small muted">כל משימות השבוע נסגרו.</p>} />
+          {tasks.length > 8 && (
+            <Link to={`/weeks/${weekId}`} className="btn btn-ghost btn-sm">
+              לכל {tasks.length} משימות השבוע
+              <Icon name="chevronLeft" size={15} />
+            </Link>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -348,7 +425,7 @@ function QuickAdd({ weekId, kind, placeholder, eventRef, eventDate, onDone }: { 
         void add();
       }}
     >
-      <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder} aria-label={placeholder} maxLength={300} autoFocus={!!eventRef} onKeyDown={(e) => {
+      <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder} aria-label={placeholder} maxLength={300} autoFocus={!!onDone} onKeyDown={(e) => {
           if (e.key !== 'Escape' || !onDone) return;
           e.stopPropagation();
           onDone();
@@ -506,7 +583,10 @@ function ItemRow({ item: i, onEdit, fresh, leaving, context }: { item: WeeklyIte
 
 interface DayEvent {
   ref: string;
+  /** a course event's id - for one that came in while the page is open */
+  id: number | null;
   time: string;
+  end: string | null;
   title: string;
   location: string;
   cancelled: boolean;
@@ -514,25 +594,72 @@ interface DayEvent {
   source: string | null;
 }
 
-/** the schedule day after day, each event with its notes; a note on an event from the button beside it */
+// the days opened in a week's schedule, kept for this tab: back from an event, the same days are open
+const openKey = (weekId: number) => `kks-weekly-days-${weekId}`;
+function readOpenDays(weekId: number): Set<string> {
+  try {
+    const v: unknown = JSON.parse(sessionStorage.getItem(openKey(weekId)) ?? '[]');
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+function keepOpenDays(weekId: number, days: ReadonlySet<string>): void {
+  try {
+    sessionStorage.setItem(openKey(weekId), JSON.stringify([...days]));
+  } catch {
+    /* this visit only */
+  }
+}
+
+const minutesOf = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+
+/**
+ * The schedule day after day. Each day is closed to one line - its first events, how many, the notes
+ * still open on it, and today what goes on now or comes next - and opens with a press to its events, each
+ * with its notes (a note on an event from the button beside it). The "+" of a day works while it is closed:
+ * it opens it, ready to write.
+ */
 function ScheduleDays({ view, external, canAdd, onEdit }: { view: WeeklyView; external: ExternalEvent[]; canAdd: boolean; onEdit: (i: WeeklyItem) => void }) {
   const [adding, setAdding] = useState<{ ref: string | null; date: string | null } | null>(null);
   const notes = view.items.filter((i) => i.kind === 'schedule');
   const w = view.week;
   const days = useMemo(() => Array.from({ length: Math.max(1, Math.min(14, diffDays(w.endDate, w.startDate) + 1)) }, (_, i) => addDays(w.startDate, i)), [w.startDate, w.endDate]);
   const today = todayKey();
+  useTick(60_000);
+  const now = minutesOf(fmtTime(new Date().toISOString()));
+  const [openDays, setOpenDays] = useState<ReadonlySet<string>>(() => readOpenDays(w.id));
+  const setOpen = (d: string, open: boolean) =>
+    setOpenDays((cur) => {
+      const next = new Set(cur);
+      if (open) next.add(d);
+      else next.delete(d);
+      keepOpenDays(w.id, next);
+      return next;
+    });
+  const allOpen = days.every((d) => openDays.has(d));
+  const toggleAll = () => {
+    const next = allOpen ? new Set<string>() : new Set(days);
+    keepOpenDays(w.id, next);
+    setOpenDays(next);
+  };
+  // an event added to the schedule while the weekly is open comes in with a moment's mark
+  const freshEvent = useFresh(view.events.map((e) => e.id));
   const eventsOf = (d: string): DayEvent[] =>
     [
       ...view.events
         .filter((e) => e.date === d)
-        .map((e) => ({ ref: `e:${e.id}`, time: e.startTime, title: e.title, location: e.location, cancelled: e.cancelled, link: `/schedule?date=${e.date}&event=${e.id}`, source: null })),
+        .map((e) => ({ ref: `e:${e.id}`, id: e.id, time: e.startTime, end: e.endTime, title: e.title, location: e.location, cancelled: e.cancelled, link: `/schedule?date=${e.date}&event=${e.id}`, source: null })),
       ...external
         .filter((e) => e.date === d)
-        .map((e) => ({ ref: `x:${e.id}`.slice(0, 182), time: e.startTime ?? '', title: e.title, location: e.location, cancelled: false, link: null, source: e.sourceName })),
+        .map((e) => ({ ref: `x:${e.id}`.slice(0, 182), id: null, time: e.startTime ?? '', end: e.endTime ?? null, title: e.title, location: e.location, cancelled: false, link: null, source: e.sourceName })),
     ].sort((a, b) => a.time.localeCompare(b.time));
   // a note on no day, or on a day the week no longer has (its dates changed): on the week as a whole
   const general = notes.filter((n) => !n.eventDate || !days.includes(n.eventDate));
   const addHere = (ref: string | null, date: string | null) => adding?.ref === ref && adding?.date === date;
+  const ended = (e: DayEvent) => !!e.time && endMinutes({ startTime: e.time, endTime: e.end }) <= now;
+  const going = (e: DayEvent) => !!e.time && minutesOf(e.time) <= now && !ended(e);
+  const eventCount = days.reduce((n, d) => n + eventsOf(d).filter((e) => !e.cancelled).length, 0);
 
   return (
     <div className="weekly-days">
@@ -551,62 +678,155 @@ function ScheduleDays({ view, external, canAdd, onEdit }: { view: WeeklyView; ex
           <HandledNotes id="weekly-handled-week" notes={general} onEdit={onEdit} />
         </div>
       )}
+      <div className="weekly-days-bar">
+        <span className="tiny muted grow">
+          {days.length} ימים · {eventCount === 1 ? 'אירוע אחד' : `${eventCount} אירועים`}
+        </span>
+        {days.includes(today) && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setOpen(today, true);
+              requestAnimationFrame(() =>
+                document.getElementById(`weekly-d-${today}`)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }),
+              );
+            }}
+          >
+            <Icon name="sun" size={15} /> היום
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={toggleAll} aria-expanded={allOpen}>
+          <Icon name="chevronDown" size={15} className={`weekly-days-all${allOpen ? ' is-open' : ''}`} /> {allOpen ? 'סגירת כל הימים' : 'פתיחת כל הימים'}
+        </button>
+      </div>
       {days.map((d) => {
         const evs = eventsOf(d);
+        const active = evs.filter((e) => !e.cancelled);
         const dayNotes = notes.filter((n) => n.eventDate === d && (!n.eventRef || !evs.some((e) => e.ref === n.eventRef)));
+        const openNotes = notes.filter((n) => n.eventDate === d && !n.done).length;
+        const isToday = d === today;
+        const open = openDays.has(d);
+        const bodyId = `weekly-day-${d}`;
+        // closed, today says what goes on now or comes next; another day, its first events
+        const live = isToday ? active.find(going) : undefined;
+        const coming = isToday && !live ? active.find((e) => !!e.time && minutesOf(e.time) > now) : undefined;
+        const peek = active.length
+          ? `${active
+              .slice(0, 3)
+              .map((e) => `${e.time ? `${e.time} ` : ''}${e.title}`)
+              .join(' · ')}${active.length > 3 ? ` · ועוד ${active.length - 3}` : ''}`
+          : 'אין אירועים בלו"ז';
         // the handled ones of the day: out of their places, in one line under the day - each says what it was on
         const on = (n: WeeklyItem) => {
           const e = n.eventRef ? evs.find((x) => x.ref === n.eventRef) : undefined;
           return e ? `על ${e.time ? `${e.time} ` : ''}${e.title}` : undefined;
         };
         return (
-          <div key={d} className={`weekly-day${d === today ? ' is-today' : ''}`}>
+          <div key={d} id={`weekly-d-${d}`} className={`weekly-day${isToday ? ' is-today' : ''}${d < today ? ' is-past' : ''}${open ? ' is-open' : ''}`}>
             <div className="weekly-day-head">
-              <span className="strong small grow">
-                יום {weekdayName(d)} <span className="mono muted">{shortDate(d)}</span>
-                {d === today && <span className="badge t-blue">היום</span>}
-              </span>
-              {canAdd && !addHere(null, d) && (
-                <button type="button" className="icon-btn" onClick={() => setAdding({ ref: null, date: d })} aria-label={`הערה ליום ${weekdayName(d)}`} title="הערה על היום">
+              <button type="button" className="weekly-day-toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(d, !open)}>
+                <Icon name="chevronDown" size={16} className="weekly-day-chev" />
+                <span className="weekly-day-name">
+                  יום {weekdayName(d)} <span className="mono muted">{shortDate(d)}</span>
+                </span>
+                {isToday && <span className="badge t-blue">היום</span>}
+                <span className="weekly-day-peek">
+                  {live ? (
+                    <span className="badge t-orange">עכשיו · {live.title}</span>
+                  ) : coming ? (
+                    <>
+                      הבא: <b className="mono">{coming.time}</b> {coming.title}
+                    </>
+                  ) : (
+                    peek
+                  )}
+                </span>
+                <span className="weekly-day-counts">
+                  {active.length > 1 && (
+                    <span className="tiny muted weekly-day-n" title={`${active.length} אירועים`}>
+                      <Icon name="calendar" size={12} />
+                      <span className="mono">{active.length}</span>
+                      <span className="sr-only"> אירועים</span>
+                    </span>
+                  )}
+                  <DayNotesBadge n={openNotes} />
+                </span>
+              </button>
+              {canAdd && (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => {
+                    setOpen(d, true);
+                    setAdding({ ref: null, date: d });
+                  }}
+                  aria-label={`הערה ליום ${weekdayName(d)}`}
+                  title="הערה על היום"
+                >
                   <Icon name="plus" size={16} />
                 </button>
               )}
             </div>
-            {evs.length === 0 && !dayNotes.some((n) => !n.done) && !addHere(null, d) && <div className="tiny muted weekly-none">אין אירועים בלו"ז</div>}
-            {evs.map((e) => {
-              const mine = notes.filter((n) => n.eventRef === e.ref);
-              return (
-                <div key={e.ref} className="weekly-event">
-                  <div className={`weekly-event-line${e.cancelled ? ' cancelled' : ''}`}>
-                    <span className="mono tiny weekly-event-time">{e.time || 'כל היום'}</span>
-                    {e.link ? (
-                      <Link to={e.link} className="grow small">
-                        {e.title}
-                      </Link>
-                    ) : (
-                      <span className="grow small">{e.title}</span>
-                    )}
-                    {e.location && <span className="tiny muted hide-mobile">{e.location}</span>}
-                    {e.cancelled && <span className="badge t-red">בוטל</span>}
-                    {e.source && <span className="badge" title={`מיומן ${e.source}`}>{e.source}</span>}
-                    {canAdd && !addHere(e.ref, d) && (
-                      <button type="button" className="icon-btn" onClick={() => setAdding({ ref: e.ref, date: d })} aria-label={`הערה על ${e.title}`} title="הערה על האירוע">
-                        <Icon name="message" size={15} />
-                      </button>
-                    )}
-                  </div>
-                  <NoteList notes={mine} onEdit={onEdit} />
-                  {addHere(e.ref, d) && <QuickAdd weekId={w.id} kind="schedule" placeholder={`הערה על ${e.title}`} eventRef={e.ref} eventDate={d} onDone={() => setAdding(null)} />}
-                </div>
-              );
-            })}
-            <NoteList notes={dayNotes} onEdit={onEdit} />
-            {addHere(null, d) && <QuickAdd weekId={w.id} kind="schedule" placeholder={`הערה על יום ${weekdayName(d)}`} eventDate={d} onDone={() => setAdding(null)} />}
-            <HandledNotes id={`weekly-handled-${d}`} notes={notes.filter((n) => n.eventDate === d)} context={on} onEdit={onEdit} />
+            <div className="weekly-day-body" id={bodyId} inert={!open || undefined}>
+              <div className="weekly-day-inner">
+                {evs.length === 0 && !dayNotes.some((n) => !n.done) && !addHere(null, d) && <div className="tiny muted weekly-none">אין אירועים בלו"ז</div>}
+                {evs.map((e) => {
+                  const mine = notes.filter((n) => n.eventRef === e.ref);
+                  // today: what goes on now is marked, what is over is quieter
+                  const isNow = isToday && !e.cancelled && going(e);
+                  const isOver = isToday && !e.cancelled && ended(e);
+                  return (
+                    <div key={e.ref} className={`weekly-event${e.id !== null && freshEvent(e.id) ? ' is-arrived' : ''}`}>
+                      <div className={`weekly-event-line${e.cancelled ? ' cancelled' : ''}${isNow ? ' is-now' : ''}${isOver ? ' is-past' : ''}`}>
+                        <span className="mono tiny weekly-event-time">{e.time || 'כל היום'}</span>
+                        {e.link ? (
+                          <Link to={e.link} className="grow small">
+                            {e.title}
+                          </Link>
+                        ) : (
+                          <span className="grow small">{e.title}</span>
+                        )}
+                        {isNow && <span className="badge t-orange">עכשיו</span>}
+                        {e.location && <span className="tiny muted hide-mobile">{e.location}</span>}
+                        {e.cancelled && <span className="badge t-red">בוטל</span>}
+                        {e.source && <span className="badge" title={`מיומן ${e.source}`}>{e.source}</span>}
+                        {canAdd && !addHere(e.ref, d) && (
+                          <button type="button" className="icon-btn" onClick={() => setAdding({ ref: e.ref, date: d })} aria-label={`הערה על ${e.title}`} title="הערה על האירוע">
+                            <Icon name="message" size={15} />
+                          </button>
+                        )}
+                      </div>
+                      <NoteList notes={mine} onEdit={onEdit} />
+                      {addHere(e.ref, d) && <QuickAdd weekId={w.id} kind="schedule" placeholder={`הערה על ${e.title}`} eventRef={e.ref} eventDate={d} onDone={() => setAdding(null)} />}
+                    </div>
+                  );
+                })}
+                <NoteList notes={dayNotes} onEdit={onEdit} />
+                {addHere(null, d) && <QuickAdd weekId={w.id} kind="schedule" placeholder={`הערה על יום ${weekdayName(d)}`} eventDate={d} onDone={() => setAdding(null)} />}
+                <HandledNotes id={`weekly-handled-${d}`} notes={notes.filter((n) => n.eventDate === d)} context={on} onEdit={onEdit} />
+              </div>
+            </div>
           </div>
         );
       })}
     </div>
+  );
+}
+
+/** the notes still open on a closed day: one more while on screen, the count hops */
+function DayNotesBadge({ n }: { n: number }) {
+  const was = useRef(n);
+  const [hop, setHop] = useState(0);
+  useEffect(() => {
+    if (n > was.current) setHop((h) => h + 1);
+    was.current = n;
+  }, [n]);
+  if (!n) return null;
+  return (
+    <span key={hop} className={`badge t-yellow weekly-day-notes${hop ? ' is-hop' : ''}`}>
+      {n === 1 ? 'הערה' : `${n} הערות`}
+    </span>
   );
 }
 

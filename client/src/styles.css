@@ -8346,6 +8346,19 @@ label.prev-task {
   font-weight: 700;
   background: var(--rail);
   color: var(--rail-ink);
+  transition: background 0.3s;
+}
+/* all of a part settled: its number turns to a check (popping, when it happened here) */
+.weekly-step.is-all .weekly-step-n {
+  background: var(--green);
+  color: #fff;
+}
+.weekly-step.just-cleared .weekly-step-n {
+  animation: done-pop 0.5s var(--spring);
+}
+.weekly-step-bar {
+  width: auto;
+  margin: 5px 0 0;
 }
 .weekly-section {
   /* under the bar, and the floating strip of steps (SectionRail) */
@@ -8474,29 +8487,56 @@ button.weekly-item-title:hover {
   align-items: center;
   gap: 3px;
 }
-/* moving between the weeklies: as wide as a week's name */
+/* moving between the weeklies: the one before and after on both sides of the list of weeks */
+.weekly-week-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.weekly-week-nav .icon-btn:disabled {
+  opacity: 0.35;
+}
 .weekly-week-pick {
   width: 250px;
   max-width: 100%;
 }
-/* the schedule: day after day, and a slim line on the week as a whole above them */
-.weekly-whole {
-  grid-column: 1 / -1;
-  padding-block: 4px;
-}
+/* the schedule: a slim line on the week as a whole, then the days - each closed to one line that opens
+   to its events (pages/WeeklyPage.tsx) */
 .weekly-days {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.weekly-whole {
+  padding: 4px 10px 10px;
+  gap: 6px;
+}
+.weekly-days-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.weekly-days-all {
+  transition: transform 0.24s var(--spring);
+}
+.weekly-days-all.is-open {
+  transform: rotate(180deg);
 }
 .weekly-day {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 8px 10px 10px;
+  padding: 3px 4px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
   min-width: 0;
+  background: var(--card);
+  transition: border-color 0.15s, box-shadow 0.2s;
+}
+.weekly-day.is-open:not(.is-today) {
+  border-color: var(--line-2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 .weekly-day.is-today {
   border-color: var(--blue);
@@ -8507,6 +8547,121 @@ button.weekly-item-title:hover {
   align-items: center;
   gap: 6px;
   min-height: 30px;
+}
+/* the day's line: a press opens it (the "+" beside it is its own button) */
+.weekly-day-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+@media (hover: hover) {
+  .weekly-day-toggle:hover {
+    background: var(--hover);
+  }
+}
+.weekly-day-toggle:active {
+  transform: scale(0.995);
+}
+.weekly-day-chev {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.24s var(--spring);
+}
+.weekly-day.is-open .weekly-day-chev {
+  transform: rotate(180deg);
+}
+.weekly-day-name {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.weekly-day-name .mono {
+  font-weight: 500;
+}
+.weekly-day-peek {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: opacity 0.2s;
+}
+/* now's mark, on a narrow line: cut with an ellipsis like the rest */
+.weekly-day-peek .badge {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+/* open, the day says it itself */
+.weekly-day.is-open .weekly-day-peek {
+  opacity: 0;
+  visibility: hidden;
+}
+.weekly-day-counts {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+.weekly-day-n {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.weekly-day-notes.is-hop {
+  animation: count-bump 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.5);
+}
+/* a day gone by this week: quieter */
+.weekly-day.is-past .weekly-day-name,
+.weekly-day.is-past .weekly-day-peek {
+  color: var(--muted);
+}
+.weekly-day-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s var(--spring);
+}
+.weekly-day.is-open .weekly-day-body {
+  grid-template-rows: 1fr;
+}
+.weekly-day-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-inline: 8px 6px;
+}
+.weekly-day-inner > :first-child {
+  margin-top: 4px;
+}
+.weekly-day-inner > :last-child {
+  margin-bottom: 8px;
+}
+@media print {
+  .weekly-day-body {
+    grid-template-rows: 1fr;
+  }
+  .weekly-day-chev,
+  .weekly-days-bar {
+    display: none;
+  }
 }
 .weekly-day-head .badge {
   margin-inline-start: 6px;
@@ -8530,6 +8685,17 @@ button.weekly-item-title:hover {
   text-decoration: line-through;
   color: var(--muted);
 }
+/* today: what goes on now marked, what is over quieter */
+.weekly-event-line.is-now {
+  margin-inline: -6px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  background: rgba(232, 163, 12, 0.1);
+}
+.weekly-event-line.is-past > .grow,
+.weekly-event-line.is-past .weekly-event-time {
+  color: var(--muted);
+}
 .weekly-event-time {
   width: 44px;
   flex-shrink: 0;
@@ -8547,29 +8713,65 @@ button.weekly-item-title:hover {
 .weekly-notes .weekly-item {
   padding: 6px 0;
 }
-.weekly-day > .weekly-notes {
+.weekly-day-inner > .weekly-notes,
+.weekly-whole > .weekly-notes {
   margin-inline-start: 0;
 }
 .weekly-day .weekly-quick {
   margin-inline-start: 0;
 }
+/* the week's open tasks under the closures: one line that opens smoothly (pages/WeeklyPage.tsx) */
 .weekly-tasks {
   border-top: 1px solid var(--line);
-  padding-top: 10px;
+  padding-top: 8px;
 }
-.weekly-tasks summary {
+.weekly-tasks-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
   cursor: pointer;
-  list-style: none;
-  min-height: 32px;
 }
-.weekly-tasks summary::-webkit-details-marker {
-  display: none;
+@media (hover: hover) {
+  .weekly-tasks-head:hover {
+    background: var(--hover);
+  }
 }
-.weekly-tasks[open] summary > svg:last-child {
+.weekly-tasks-chev {
+  transition: transform 0.24s var(--spring);
+}
+.weekly-tasks.is-open .weekly-tasks-chev {
   transform: rotate(180deg);
+}
+.weekly-tasks-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s var(--spring);
+}
+.weekly-tasks.is-open .weekly-tasks-body {
+  grid-template-rows: 1fr;
+}
+.weekly-tasks-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.weekly-tasks-inner > :first-child {
+  margin-top: 8px;
+}
+.weekly-tasks-inner > .btn {
+  align-self: flex-start;
 }
 .weekly-locked {
   display: flex;
@@ -8624,11 +8826,12 @@ button.weekly-item-title:hover {
   .weekly-agenda {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .weekly-week-pick {
+  .weekly-week-nav {
     width: 100%;
   }
-  .weekly-days {
-    grid-template-columns: minmax(0, 1fr);
+  .weekly-week-pick {
+    flex: 1;
+    width: auto;
   }
   .weekly-notes {
     margin-inline-start: 0;
@@ -12230,15 +12433,15 @@ tr.is-finished.is-folding {
   margin-top: 0;
 }
 /* a day of the weekly's schedule (pages/WeeklyPage.tsx): its handled notes in a small line at its foot */
-.weekly-day > .done-drawer {
+:is(.weekly-day-inner, .weekly-whole) > .done-drawer {
   margin-top: 2px;
 }
-.weekly-day > .done-drawer .done-drawer-head {
+:is(.weekly-day-inner, .weekly-whole) > .done-drawer .done-drawer-head {
   min-height: 40px;
   padding: 6px 10px;
   font-size: 12.5px;
 }
-.weekly-day > .done-drawer .weekly-notes {
+:is(.weekly-day-inner, .weekly-whole) > .done-drawer .weekly-notes {
   margin-inline-start: 0;
 }
 .weekly-item-context {
