@@ -156,7 +156,8 @@ export function WeeklyPage() {
         }
         actions={
           <>
-            <div className="weekly-week-nav">
+            {/* in sight on a phone too (not in "עוד"): moving between the weeks is what this header is for */}
+            <div className="weekly-week-nav" data-keep>
               <button
                 type="button"
                 className="icon-btn"

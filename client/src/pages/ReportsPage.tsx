@@ -17,7 +17,7 @@ import { haptic } from '../lib/haptics';
 import { api, qs } from '../lib/api';
 import { saveCsv } from '../lib/csv';
 import { useSession } from '../lib/session';
-import { useApi } from '../lib/useApi';
+import { prefetch, useApi } from '../lib/useApi';
 
 /** The discipline records as a spreadsheet: one week, or the whole course. */
 async function exportDiscipline(from?: string, to?: string): Promise<void> {
@@ -119,24 +119,42 @@ export function WeeklyReportPage() {
   const isCurrent = from === startOfWeek(todayKey());
   // a week back or on: the arrows, a swipe on a phone (the one after is fetched ahead)
   const page = useRef<HTMLDivElement>(null);
-  const weekLink = (f: string): DocLink => ({ to: `/reports/weekly?from=${f}`, label: `${shortDate(f)}-${shortDate(addDays(f, 6))}`, api: `/api/reports/weekly?from=${f}` });
-  useDocNav({ prev: weekLink(addDays(from, -7)), next: isCurrent ? null : weekLink(addDays(from, 7)), swipe: page });
+  const range = (f: string) => `${shortDate(f)}-${shortDate(addDays(f, 6))}`;
+  const weekLink = (f: string): DocLink => ({ to: `/reports/weekly?from=${f}`, label: range(f), api: `/api/reports/weekly?from=${f}` });
+  const prev = weekLink(addDays(from, -7));
+  const next = isCurrent ? null : weekLink(addDays(from, 7));
+  useDocNav({ prev, next, swipe: page });
   return (
     <div className="page" ref={page}>
       <PageHead
         eyebrow={isLast ? 'השבוע שהסתיים' : isCurrent ? 'השבוע הנוכחי' : 'תמונת מצב שבועית'}
         title="תמונת מצב שבועית"
-        sub={data ? `${shortDate(data.from)}-${shortDate(data.to)} · ללא משימות שגרה חוזרות` : undefined}
+        // the week's dates are between the arrows on the screen; on paper, here
+        sub={
+          <>
+            <span className="print-only">{range(from)} · </span>ללא משימות שגרה חוזרות
+          </>
+        }
         actions={
           <>
-            <button className="btn" onClick={() => setParams({ from: addDays(from, -7) })}>
-              <Icon name="chevronRight" /> שבוע קודם
-            </button>
-            {!isCurrent && (
-              <button className="btn" onClick={() => setParams({ from: addDays(from, 7) })}>
-                שבוע הבא <Icon name="chevronLeft" />
+            {/* in sight on a phone too (not in "עוד"): moving between the weeks is what this page is read by */}
+            <div className="week-stepper" data-keep role="group" aria-label="מעבר בין שבועות">
+              <button type="button" className="icon-btn" onClick={() => setParams({ from: addDays(from, -7) })} onPointerEnter={() => prev.api && prefetch(prev.api)} aria-label={`שבוע קודם: ${prev.label}`} title={`${prev.label} (חץ ימינה)`}>
+                <Icon name="chevronRight" size={18} />
               </button>
-            )}
+              <span className="week-stepper-label mono">{range(from)}</span>
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={!next}
+                onClick={() => next && setParams({ from: addDays(from, 7) })}
+                onPointerEnter={() => next?.api && prefetch(next.api)}
+                aria-label={next ? `שבוע הבא: ${next.label}` : 'אין שבוע הבא - זה השבוע הנוכחי'}
+                title={next ? `${next.label} (חץ שמאלה)` : undefined}
+              >
+                <Icon name="chevronLeft" size={18} />
+              </button>
+            </div>
             <ShareButton title={`תמונת מצב שבועית ${shortDate(from)}`} />
             <button className="btn" onClick={() => window.print()}>
               <Icon name="print" /> הדפסה

@@ -434,10 +434,16 @@ export function MoreMenu({ children, title = 'עוד פעולות', small }: { c
       <Sheet open={open} title={title} onClose={() => setOpen(false)} back={more} className="page-more-sheet">
         <div
           className="pick-sheet-body page-more-list"
-          // after the choice has done its part (a file chooser keeps the sheet open)
+          // a choice made closes it: one of its rows pressed, or something chosen in a list that a field here
+          // opens (that list's sheet is put outside this one, yet its presses come up here). A file chooser,
+          // a field, a field opening its list, and that list's search, months or own close do not
           onClick={(e) => {
             const t = e.target as HTMLElement;
-            if (t.closest('label, input, select, textarea')) return;
+            if (t.closest('[role="option"], [data-day]')) {
+              setOpen(false);
+              return;
+            }
+            if (!e.currentTarget.contains(t) || t.closest('label, input, select, textarea, [role="combobox"], [aria-haspopup]')) return;
             if (t.closest('button, a')) setOpen(false);
           }}
         >

@@ -8501,6 +8501,34 @@ button.weekly-item-title:hover {
   width: 250px;
   max-width: 100%;
 }
+/* a week back or on, with the week's dates between the arrows (the weekly report) */
+.week-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+/* as tall as the buttons beside it */
+.week-stepper .icon-btn {
+  width: 34px;
+  height: 32px;
+}
+.week-stepper .icon-btn:disabled {
+  opacity: 0.35;
+}
+.week-stepper-label {
+  flex: 1;
+  min-width: 96px;
+  padding-inline: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 /* the schedule: a slim line on the week as a whole, then the days - each closed to one line that opens
    to its events (pages/WeeklyPage.tsx) */
 .weekly-days {
@@ -8826,8 +8854,14 @@ button.weekly-item-title:hover {
   .weekly-agenda {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .weekly-week-nav {
+  .weekly-week-nav,
+  .week-stepper {
     width: 100%;
+  }
+  /* a row of its own on a phone: the arrows as big as a thumb */
+  .week-stepper .icon-btn {
+    width: 48px;
+    height: 38px;
   }
   .weekly-week-pick {
     flex: 1;
@@ -9150,12 +9184,10 @@ tr.flash > td {
   transition: all 0.12s, transform 0.1s ease-out;
 }
 .kind-card,
-.nav-menu-toggle,
 .plus-menu button {
   transition: background 0.15s, border-color 0.15s, transform 0.34s var(--spring);
 }
-.kind-card:active,
-.nav-menu-toggle:active:not(:disabled) {
+.kind-card:active {
   transform: scale(0.98);
   transition: background 0.15s, border-color 0.15s, transform 0.1s ease-out;
 }
@@ -9411,200 +9443,211 @@ html {
   transition: transform 0.32s var(--spring), opacity 0.2s;
 }
 
+/* ---------------- every screen in one place (components/NavMenu.tsx): the sheet from the course's name on a
+   phone, and the "כל המסכים" page - a search, the most used, then each group as a grid of icons in its
+   own colour, all in sight, one press away; the person at the foot ---------------- */
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
   outline: none;
 }
-.nav-menu-me {
+.nav-search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  height: 46px;
+  padding-inline: 14px 6px;
   border-radius: 14px;
-  background: var(--card-2);
-  border: 1px solid var(--line);
+  background: var(--paper-2);
+  color: var(--muted);
+  transition: box-shadow 0.2s, background 0.2s;
 }
-.nav-menu-sections {
+.nav-search:focus-within {
+  background: var(--field);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.nav-search .input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  outline: none;
+  font-size: 16px;
+}
+.nav-search-status {
+  margin: -12px 4px 0;
+}
+.nav-sections {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 22px;
 }
-/* a group of the menu: its title opens it, the tiles slide down under it */
-.nav-menu-group {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--card);
+/* every group sits in as much as the tray of the most used: the icons stand in the same columns all the
+   way down, the tray's among them */
+.nav-section {
+  padding-inline: 10px;
 }
-.nav-menu-head {
-  margin: 0;
-  font-size: inherit;
-}
-.nav-menu-toggle {
+.nav-caption {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 54px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 15px;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: 15px;
+  gap: 7px;
+  margin: 0 2px 12px;
+  color: var(--ink-2);
+  font-size: 13px;
   font-weight: 700;
-  text-align: start;
-  cursor: pointer;
-  transition: background 0.15s;
 }
-.nav-menu-toggle:active {
-  background: var(--hover);
-}
-.nav-menu-toggle:disabled {
-  cursor: default;
-  opacity: 1;
-}
-.nav-menu-toggle-icon {
+.nav-caption-mark {
   display: grid;
   place-items: center;
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--paper-2);
-  color: var(--ink-2);
-  transition: background 0.2s, color 0.2s;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--tone-bg, var(--paper-2));
+  color: var(--tone-ink, var(--ink-2));
 }
-.nav-menu-group.is-open .nav-menu-toggle-icon {
-  background: var(--ink);
-  color: var(--paper);
+.nav-caption-wait {
+  margin-inline-start: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--red-bg);
+  color: var(--red-ink);
+  font-size: 11.5px;
+  font-weight: 700;
 }
-.nav-menu-chev {
-  flex-shrink: 0;
+/* the most used: a soft tray of their own on top */
+.nav-quick {
+  padding: 12px 10px 10px;
+  border-radius: 18px;
+  background: var(--card-2);
+}
+.nav-quick .nav-caption {
+  margin-bottom: 10px;
   color: var(--muted);
-  transition: transform 0.24s var(--spring);
 }
-.nav-menu-group.is-open .nav-menu-chev {
-  transform: rotate(180deg);
-}
-/* the settings: one row of their own, a link rather than a group */
-.nav-menu-single .nav-menu-toggle {
-  color: var(--ink);
-  text-decoration: none;
-}
-.nav-menu-here {
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ink);
-}
-.menu-tile-count.is-inline {
-  position: static;
-}
-.nav-menu-body {
+/* four in a row on a phone, five where there is room (NavMenu asks for as many of the most used) */
+.nav-grid {
   display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.26s var(--spring);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px 4px;
 }
-.nav-menu-group.is-open .nav-menu-body {
-  grid-template-rows: 1fr;
-}
-.nav-menu-inner {
-  min-height: 0;
-  overflow: hidden;
-}
-.nav-menu-group .menu-tiles {
-  padding: 2px 10px 12px;
-}
-/* the three screens this person uses most (frequent.ts), one row on top */
-.nav-menu-caption {
-  margin: 0 4px 8px;
-}
-.menu-tiles.is-frequent {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.menu-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
-  gap: 8px;
-}
-.menu-tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 88px;
-  padding: 12px 6px 10px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--ink);
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.25;
-  transition: transform 0.34s var(--spring), border-color 0.15s, background 0.15s;
-}
-/* the tiles come in one after another - on opening the menu, and on opening a group */
-.nav-menu-section.is-open .menu-tile {
-  animation: tile-in 0.32s var(--spring) backwards;
-  animation-delay: calc(var(--i, 0) * 18ms);
-}
-.menu-tile:active {
-  transform: scale(0.95);
-  transition: transform 0.1s ease-out, border-color 0.15s, background 0.15s;
-}
-@media (hover: hover) {
-  .menu-tile:hover {
-    border-color: var(--line-2);
-    background: var(--card-2);
+@media (min-width: 560px) {
+  .nav-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
-.menu-tile-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
+.nav-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 2px;
+  border-radius: 14px;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  animation: tile-in 0.36s var(--spring) backwards;
+  animation-delay: calc(var(--i, 0) * 14ms);
+}
+.nav-tile-icon {
+  position: relative;
   display: grid;
   place-items: center;
-  background: var(--paper-2);
-  color: var(--ink-2);
-  transition: background 0.15s, color 0.15s;
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+  transition: transform 0.34s var(--spring), background 0.2s, color 0.2s, box-shadow 0.25s;
 }
-.menu-tile-label {
+/* pressed: the icon gives under the finger, and springs back */
+.nav-tile:active .nav-tile-icon {
+  transform: scale(0.88);
+  transition: transform 0.1s ease-out, background 0.2s, color 0.2s;
+}
+@media (hover: hover) {
+  .nav-tile:hover .nav-tile-icon {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--tone) 60%, transparent);
+  }
+}
+.nav-tile:focus-visible {
+  outline: none;
+}
+.nav-tile:focus-visible .nav-tile-icon {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.nav-tile-label {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
-/* the screen on show */
-.menu-tile.is-here {
-  border-color: var(--ink);
+/* the screen on show: its icon filled with its colour */
+.nav-tile.is-here .nav-tile-icon {
+  background: var(--tone);
+  color: #fff;
+  box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--tone) 75%, transparent);
 }
-.menu-tile.is-here .menu-tile-icon {
-  background: var(--ink);
-  color: var(--paper);
+.nav-tile.is-here .nav-tile-label {
+  font-weight: 800;
 }
+/* what waits there: a count on the icon's corner */
 .menu-tile-count {
   position: absolute;
-  top: 7px;
-  inset-inline-end: 7px;
-  min-width: 20px;
-  height: 20px;
+  top: -6px;
+  inset-inline-end: -7px;
+  min-width: 21px;
+  height: 21px;
   padding: 0 6px;
-  border-radius: 10px;
+  border: 2px solid var(--card);
+  border-radius: 11px;
   background: var(--red);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
-  line-height: 20px;
+  line-height: 17px;
+  text-align: center;
 }
 @keyframes tile-in {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.96);
+    transform: translateY(10px) scale(0.94);
   }
+}
+/* the person, at the foot: the settings, light or dark, and leaving */
+.nav-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 18px;
+  background: var(--card-2);
+}
+.nav-account-who {
+  min-width: 0;
+}
+.nav-account-who .strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nav-account-btn.is-here {
+  background: var(--ink);
+  color: var(--paper);
+}
+.nav-account-out {
+  flex-shrink: 0;
 }
 /* the sheet: the menu fills it, with room to scroll */
 .modal.menu-sheet {
@@ -9620,12 +9663,8 @@ html {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .nav-menu-section.is-open .menu-tile {
+  .nav-tile {
     animation: none;
-  }
-  .nav-menu-body,
-  .nav-menu-chev {
-    transition: none;
   }
 }
 
