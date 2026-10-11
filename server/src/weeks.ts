@@ -12,6 +12,7 @@ import { changed, logActivity, notify } from './journal';
 import { listEvents } from './schedule';
 import { listExperiences } from './cadets';
 import { listDebriefs } from './debriefs';
+import { STAFF_PREP_WEEKS, staffPrepWeeks, type StaffPrep } from './staffPrep';
 import { isCommander, mustTaskRow, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime } from './taskService';
 import { applyTemplate, listTemplates } from './templates';
@@ -47,7 +48,8 @@ LEFT JOIN users u ON u.id = w.lead_id
 LEFT JOIN users a ON a.id = w.approved_by
 `;
 
-function toWeek(r: WeekRow): Week {
+function toWeek(r: WeekRow, prep: Map<number, StaffPrep>): Week {
+  const p = prep.get(r.id);
   return {
     id: r.id,
     number: r.number,
@@ -66,13 +68,14 @@ function toWeek(r: WeekRow): Week {
     doneTasks: r.done_tasks,
     overdueTasks: r.overdue_tasks,
     readiness: readinessPct(r.done_tasks, r.total_tasks),
+    staffPrep: p ? { index: p.index, of: STAFF_PREP_WEEKS } : null,
   };
 }
 
 export function listWeeks(where = '1=1', ...params: (string | number)[]): Week[] {
-  return db()
-    .all<WeekRow>(`${WEEK_BASE} WHERE ${where} ORDER BY w.start_date, w.number`, nowIso(), ...params)
-    .map(toWeek);
+  const rows = db().all<WeekRow>(`${WEEK_BASE} WHERE ${where} ORDER BY w.start_date, w.number`, nowIso(), ...params);
+  const prep = rows.length ? staffPrepWeeks() : new Map<number, StaffPrep>();
+  return rows.map((r) => toWeek(r, prep));
 }
 
 export function getWeek(id: number): Week {

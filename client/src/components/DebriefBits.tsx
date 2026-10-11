@@ -1,18 +1,19 @@
 // Small debrief pieces other screens show: the kind of a debrief, and the lessons bank
 // where it is needed - what an earlier cycle wrote for this week or this event, and what
-// was decided about each lesson here (a task, applied, not relevant).
+// was decided about each lesson here (a task, applied, not relevant). In the staff's
+// preparation weeks after the closing week: the whole bank, by the week or event it is for.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { STATUS_LABELS } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
-import { LESSON_DECISION_LABELS, type DebriefKind, type LessonDecision } from '@shared/debriefForms';
-import type { BankLesson } from '@shared/types';
+import { isWeekDebrief, LESSON_DECISION_LABELS, type DebriefKind, type LessonDecision } from '@shared/debriefForms';
+import type { BankLesson, Week } from '@shared/types';
 import { DoneDrawer } from './DoneDrawer';
 import { Icon } from './Icon';
 import { DateTimeInputs } from './NewTask';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal, Select } from './ui';
+import { Bar, ErrorBox, Field, Modal, Select } from './ui';
 import { api } from '../lib/api';
 import { isoAt, todayKey } from '../lib/format';
 import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
@@ -32,9 +33,23 @@ export interface LessonContext {
 
 const DECISION_TONES: Record<LessonDecision, string> = { task: 't-blue', applied: 't-green', skip: 't-gray' };
 
-export function PriorLessons({ title, context, card = true, onOpen }: { title: string; context: LessonContext; card?: boolean; onOpen?: () => void }) {
+export function PriorLessons({
+  title,
+  context,
+  card = true,
+  onOpen,
+  prep,
+}: {
+  title: string;
+  context: LessonContext;
+  card?: boolean;
+  onOpen?: () => void;
+  /** a week of the staff's preparation: the whole bank, by what each lesson is for, and how much is decided */
+  prep?: Week['staffPrep'];
+}) {
   const query = context.weekId ? `week=${context.weekId}` : `event=${context.eventId}`;
-  const { data, setData } = useApi<BankLesson[]>(`/api/lessons?${query}`, ['debriefs', 'tasks']);
+  // which weeks are the preparation follows the weeks (a week renamed "שבוע סיום")
+  const { data, setData } = useApi<BankLesson[]>(`/api/lessons?${query}`, ['debriefs', 'tasks', 'weeks']);
   const toast = useToast();
   const location = useLocation();
   const [asTask, setAsTask] = useState<BankLesson | null>(null);
@@ -114,8 +129,28 @@ export function PriorLessons({ title, context, card = true, onOpen }: { title: s
   );
   const list = (
     <>
+      {prep && (
+        <div className="prior-prep">
+          <p className="small muted">
+            שבוע {prep.index} מתוך {prep.of} של הכנת הסגל, אחרי שבוע הסיום: כל הלקחים שהתחקירים שמרו למחזור הבא - לכל השבועות והפעילויות. מה שמוחלט כאן נשמר לכל שבועות ההכנה.
+          </p>
+          <div className="row gap-6">
+            <div className="grow">
+              {/* progress, not a warning: blue on the way, green once every lesson is decided */}
+              <Bar value={Math.round((decided.length / data.length) * 100)} tone={decided.length === data.length ? 'green' : 'blue'} label="לקחים שהוחלט עליהם" />
+            </div>
+            <span className="mono tiny muted">
+              {decided.length}/{data.length} הוחלטו
+            </span>
+          </div>
+        </div>
+      )}
       {leaving.rows.length > 0 ? (
-        <ul className="prior-lessons">{leaving.rows.map((l) => item(l, leaving.phaseOf(l.id)))}</ul>
+        prep ? (
+          <LessonGroups rows={leaving.rows} item={(l) => item(l, leaving.phaseOf(l.id))} />
+        ) : (
+          <ul className="prior-lessons">{leaving.rows.map((l) => item(l, leaving.phaseOf(l.id)))}</ul>
+        )
       ) : (
         <p className="small prior-all-decided">
           <Icon name="check" size={15} /> על כל הלקחים הוחלט.
@@ -147,6 +182,26 @@ export function PriorLessons({ title, context, card = true, onOpen }: { title: s
       </div>
       <div className="card-body">{list}</div>
       {dialog}
+    </div>
+  );
+}
+
+/** the bank by what each lesson is for - the weeks in their order, then the events by name */
+function LessonGroups({ rows, item }: { rows: BankLesson[]; item: (l: BankLesson) => ReactNode }) {
+  const groups = new Map<string, BankLesson[]>();
+  for (const l of [...rows].sort((a, b) => (a.targetWeek ?? 999) - (b.targetWeek ?? 999) || a.target.localeCompare(b.target, 'he'))) groups.set(l.target, [...(groups.get(l.target) ?? []), l]);
+  return (
+    <div className="prior-groups">
+      {[...groups].map(([target, list]) => (
+        <section key={target} className="prior-group" aria-label={target || 'כללי'}>
+          <h4 className="prior-group-head">
+            <Icon name={isWeekDebrief(list[0].debriefKind) ? 'calendar' : 'zap'} size={14} />
+            <span className="grow">{target || 'כללי'}</span>
+            <span className="mono tiny muted">{list.length}</span>
+          </h4>
+          <ul className="prior-lessons">{list.map(item)}</ul>
+        </section>
+      ))}
     </div>
   );
 }

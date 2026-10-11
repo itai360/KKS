@@ -81,7 +81,7 @@ function WeekOrder({ data }: { data: WeekDetail }) {
   const { settings } = useSession();
   const navigate = useNavigate();
   const w = data.week;
-  const lessons = useApi<BankLesson[]>(`/api/lessons?week=${w.id}`, ['debriefs']).data ?? [];
+  const lessons = useApi<BankLesson[]>(`/api/lessons?week=${w.id}`, ['debriefs', 'weeks']).data ?? [];
   const absences = useApi<Absence[]>(`/api/absences?from=${w.startDate}&to=${w.endDate}`, ['users']).data ?? [];
   useTick(60_000);
 
@@ -276,7 +276,9 @@ function WeekOrder({ data }: { data: WeekDetail }) {
 
         {lessons.length > 0 && (
           <section id="wo-lessons">
-            <h2>{absences.length > 0 ? 5 : 4}. לקחים מהמחזור הקודם</h2>
+            <h2>
+              {absences.length > 0 ? 5 : 4}. {w.staffPrep ? 'כל הלקחים שנשמרו למחזור הבא' : 'לקחים מהמחזור הקודם'}
+            </h2>
             <ul className="doc-list">
               {lessons.map((l) => (
                 <li key={l.id}>

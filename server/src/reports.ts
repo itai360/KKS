@@ -184,11 +184,13 @@ export function dashboard(actor: UserRow): DashboardData {
     });
   }
   for (const w of pendingPriorLessons(c.today)) {
+    const n = w.pending === 1 ? 'לקח אחד' : `${w.pending} לקחים`;
     attention.push({
       kind: 'lessons',
       tone: 'blue',
-      title: `${w.name}: ${w.pending === 1 ? 'לקח אחד' : `${w.pending} לקחים`} מהמחזור הקודם`,
-      subtitle: `ממתינים להחלטה - משימה, יושם או לא רלוונטי · מתחיל ב-${shortDate(w.startDate)}`,
+      // the staff's preparation after the closing week: every lesson kept for the next cycle
+      title: w.staffPrep ? `הכנת סגל: ${n} למחזור הבא` : `${w.name}: ${n} מהמחזור הקודם`,
+      subtitle: `ממתינים להחלטה - משימה, יושם או לא רלוונטי · ${w.staffPrep ? w.name : `מתחיל ב-${shortDate(w.startDate)}`}`,
       weekId: w.weekId,
       ownerName: w.leadName ?? undefined,
       link: `/weeks/${w.weekId}#prior`,

@@ -29,6 +29,7 @@ import { badRequest, forbidden, getSettings, notFound, nowIso, patchSchema, tz }
 import { db } from './db';
 import { changed, finishNotifications, firstTime as once, logActivity, notify } from './journal';
 import { recurringSchema, saveRule } from './recurring';
+import { staffPrepOf, staffPrepSiblings, staffPrepWeeks } from './staffPrep';
 import { isCommander, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime, weekForDate } from './taskService';
 import { getTemplate, saveTemplate } from './templates';
@@ -559,8 +560,13 @@ function bankRows(): BankRow[] {
   );
 }
 
-/** for a week: what an earlier cycle wrote for a week of the same number or name - not this week's own */
-function forWeek(rows: BankRow[], w: { id: number; number: number; name: string }): BankRow[] {
+/**
+ * For a week: what an earlier cycle wrote for a week of the same number or name - not this week's own.
+ * In the staff's preparation weeks after the closing week: every lesson kept for the next cycle, from
+ * the debriefs held before them, whatever week or event it was written for.
+ */
+function forWeek(rows: BankRow[], w: { id: number; number: number; name: string }, prep = staffPrepOf(w.id)): BankRow[] {
+  if (prep) return rows.filter((r) => r.week_id !== w.id && r.occurred_on < prep.before);
   const key = searchKey(w.name);
   return rows.filter((r) => r.week_id !== w.id && (r.target_week === w.number || (!!r.target_key && r.target_key === key)));
 }
@@ -571,7 +577,8 @@ function forEvent(rows: BankRow[], e: { id: number; title: string }): BankRow[] 
   return rows.filter((r) => r.event_id !== e.id && r.target_week === null && !!r.target_key && !!key && (key.includes(r.target_key) || r.target_key.includes(key)));
 }
 
-const contextKey = (f: { weekId?: number; eventId?: number }) => (f.weekId ? `w:${f.weekId}` : `e:${f.eventId}`);
+// the preparation weeks decide a lesson once, for all of them: on the first of them
+const contextKey = (f: { weekId?: number; eventId?: number }) => (f.weekId ? `w:${staffPrepOf(f.weekId)?.anchorId ?? f.weekId}` : `e:${f.eventId}`);
 
 function reviewsFor(context: string): Map<number, LessonReview> {
   const out = new Map<number, LessonReview>();
@@ -698,25 +705,43 @@ function settleLessonReminders(f: { weekId?: number; eventId?: number }): void {
   const lessons = f.weekId ? forWeek(rows, weekRow(f.weekId)) : forEvent(rows, eventRow(f.eventId!));
   const reviews = reviewsFor(contextKey(f));
   const waiting = lessons.some((l) => !reviews.has(l.id));
-  if (f.weekId) finishNotifications(!waiting, "type = 'lessons' AND link = ?", `/weeks/${f.weekId}#prior`);
-  else finishNotifications(!waiting, "type = 'lessons' AND link LIKE ?", `/schedule?date=%&event=${f.eventId}`);
+  if (f.weekId) {
+    // a reminder of the preparation went out on whichever of its weeks was on then
+    const prep = staffPrepOf(f.weekId);
+    const ids = prep ? staffPrepSiblings(prep.anchorId) : [f.weekId];
+    finishNotifications(!waiting, `type = 'lessons' AND link IN (${ids.map(() => '?').join(', ')})`, ...ids.map((id) => `/weeks/${id}#prior`));
+  } else finishNotifications(!waiting, "type = 'lessons' AND link LIKE ?", `/schedule?date=%&event=${f.eventId}`);
 }
 
-/** the weeks ahead whose earlier-cycle lessons are still waiting for a decision */
-export function pendingPriorLessons(today: string, days = 14): { weekId: number; name: string; leadId: number | null; leadName: string | null; startDate: string; pending: number }[] {
+/**
+ * The weeks ahead whose earlier-cycle lessons are still waiting for a decision. The staff's preparation
+ * counts once, while it lasts: on the week of it that is on now, or next.
+ */
+export function pendingPriorLessons(
+  today: string,
+  days = 14,
+): { weekId: number; name: string; leadId: number | null; leadName: string | null; startDate: string; pending: number; staffPrep: boolean }[] {
   const rows = bankRows();
   if (!rows.length) return [];
+  const prep = staffPrepWeeks();
   const weeks = db().all<{ id: number; number: number; name: string; lead_id: number | null; lead_name: string | null; start_date: string }>(
-    "SELECT w.id, w.number, w.name, w.lead_id, u.display_name AS lead_name, w.start_date FROM weeks w LEFT JOIN users u ON u.id = w.lead_id WHERE w.status <> 'closed' AND w.start_date >= ? AND w.start_date <= ? ORDER BY w.start_date",
+    "SELECT w.id, w.number, w.name, w.lead_id, u.display_name AS lead_name, w.start_date FROM weeks w LEFT JOIN users u ON u.id = w.lead_id WHERE w.status <> 'closed' AND w.end_date >= ? AND w.start_date <= ? ORDER BY w.start_date, w.id",
     today,
     addDays(today, days),
   );
-  return weeks
-    .map((w) => {
-      const reviews = reviewsFor(`w:${w.id}`);
-      return { weekId: w.id, name: w.name, leadId: w.lead_id, leadName: w.lead_name, startDate: w.start_date, pending: forWeek(rows, w).filter((r) => !reviews.has(r.id)).length };
-    })
-    .filter((w) => w.pending > 0);
+  const seen = new Set<number>();
+  const out: ReturnType<typeof pendingPriorLessons> = [];
+  for (const w of weeks) {
+    const p = prep.get(w.id) ?? null;
+    if (p) {
+      if (seen.has(p.anchorId)) continue;
+      seen.add(p.anchorId);
+    } else if (w.start_date < today) continue;
+    const reviews = reviewsFor(`w:${p?.anchorId ?? w.id}`);
+    const pending = forWeek(rows, w, p).filter((r) => !reviews.has(r.id)).length;
+    if (pending > 0) out.push({ weekId: w.id, name: w.name, leadId: w.lead_id, leadName: w.lead_name, startDate: w.start_date, pending, staffPrep: !!p });
+  }
+  return out;
 }
 
 /** weeks that ended in the last days without a weekly debrief */
@@ -759,11 +784,12 @@ export function learningReminders(now: Date): number {
 
   for (const w of pendingPriorLessons(today)) {
     if (!once(`lessons:w:${w.weekId}`)) continue;
+    const n = w.pending === 1 ? 'לקח אחד' : `${w.pending} לקחים`;
     notify(to(w.leadId), {
       type: 'lessons',
       category: 'action',
-      title: `${w.pending === 1 ? 'לקח אחד' : `${w.pending} לקחים`} מהמחזור הקודם ל${w.name}`,
-      body: 'לפני שהשבוע מתחיל: לכל לקח - משימה, יושם או לא רלוונטי',
+      title: w.staffPrep ? `הכנת סגל: ${n} למחזור הבא מחכים להחלטה` : `${n} מהמחזור הקודם ל${w.name}`,
+      body: w.staffPrep ? `${w.name} - כל הלקחים שהתחקירים שמרו למחזור הבא: לכל לקח - משימה, יושם או לא רלוונטי` : 'לפני שהשבוע מתחיל: לכל לקח - משימה, יושם או לא רלוונטי',
       link: `/weeks/${w.weekId}#prior`,
     });
     sent++;

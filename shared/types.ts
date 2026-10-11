@@ -231,6 +231,9 @@ export interface Week {
   doneTasks: number;
   overdueTasks: number;
   readiness: number;
+  /** one of the staff's preparation weeks right after the closing week (שבועות הכנת סגל): which of them -
+   * every lesson kept for the next cycle is shown there */
+  staffPrep: { index: number; of: number } | null;
 }
 
 export interface Lesson {

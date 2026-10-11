@@ -5929,6 +5929,35 @@ button.fab-missing {
   margin-top: 4px;
 }
 
+/* the staff's preparation weeks: the whole bank - how much is decided, then by the week or event each
+   lesson is for, side by side where there is room */
+.prior-prep {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.prior-prep p {
+  margin: 0;
+}
+.prior-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  align-items: start;
+  gap: 16px 28px;
+}
+.prior-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
 #prior {
   scroll-margin-top: calc(var(--top-h) + 16px);
 }

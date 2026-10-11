@@ -129,6 +129,7 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
                     {current && <span className="badge t-orange">השבוע</span>}
                     <span className={`badge${w.status === 'closed' ? ' t-green' : w.status === 'open' ? ' t-blue' : ''}`}>{WEEK_STATUS_LABELS[w.status]}</span>
                     {w.approvedAt && <span className="badge t-green">אושר</span>}
+                    {w.staffPrep && <PrepBadge prep={w.staffPrep} />}
                   </div>
                   <div className="strong mt-8" style={{ fontSize: 19 }}>
                     {w.name}
@@ -167,6 +168,15 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
           })}
         </div>
     </>
+  );
+}
+
+/** one of the staff's preparation weeks after the closing week */
+function PrepBadge({ prep }: { prep: NonNullable<Week['staffPrep']> }) {
+  return (
+    <span className="badge t-purple" title="שבוע הכנת סגל אחרי שבוע הסיום - כל הלקחים למחזור הבא מוצגים בו">
+      הכנת סגל {prep.index}/{prep.of}
+    </span>
   );
 }
 
@@ -472,6 +482,7 @@ export function WeekPage() {
           </Link>
         }
         title={w.name}
+        tags={w.staffPrep ? <PrepBadge prep={w.staffPrep} /> : undefined}
         sub={
           <>
             <span className="mono">
@@ -557,6 +568,13 @@ export function WeekPage() {
         </div>
       </div>
 
+      {/* a week of the staff's preparation after the closing week: every lesson kept for the next cycle, before the tasks */}
+      {w.staffPrep && (
+        <div className="mt-16">
+          <PriorLessons title="כל הלקחים למחזור הבא" prep={w.staffPrep} context={{ weekId: w.id, canDecide: isCommander || w.leadId === user.id, owner: w.leadId, due: w.endDate < today ? today : w.endDate }} />
+        </div>
+      )}
+
       <div className="split mt-16">
         <div>
           <div className="row wrap">
@@ -578,7 +596,7 @@ export function WeekPage() {
         </div>
         <div className="col gap-16 sticky-side">
           <LeadWorkflow week={w} />
-          <PriorLessons title="לקחים מהמחזור הקודם לשבוע הזה" context={{ weekId: w.id, canDecide: isCommander || w.leadId === user.id, owner: w.leadId, due: addDays(w.startDate, -2) }} />
+          {!w.staffPrep && <PriorLessons title="לקחים מהמחזור הקודם לשבוע הזה" context={{ weekId: w.id, canDecide: isCommander || w.leadId === user.id, owner: w.leadId, due: addDays(w.startDate, -2) }} />}
           <PreviousCycle week={w} canCopy={canManage} />
           {(w.topic || w.goals) && (
             <div className="card card-pad">

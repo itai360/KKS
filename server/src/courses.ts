@@ -23,6 +23,7 @@ import { db, Db, migrate, withDb } from './db';
 import { changed } from './journal';
 import type { Topic } from './realtime';
 import { fetchSnapshot, takeSnapshot } from './snapshots';
+import { keepPrepForNextCourse, prepForNextCourse } from './staffPrep';
 import { createTasks } from './taskService';
 
 export const COURSE_COOKIE = 'kks_course';
@@ -139,6 +140,8 @@ export async function startNewCourse(actor: UserRow, raw: unknown): Promise<Cour
   const p = newCourseSchema.parse(raw);
   const range = courseRange();
   const stats = courseStats();
+  // the closing week stays behind: the next course is told where it ended, for its preparation weeks
+  const prep = prepForNextCourse();
   let snapshotId: string;
   try {
     snapshotId = await takeSnapshot('archive');
@@ -158,6 +161,7 @@ export async function startNewCourse(actor: UserRow, raw: unknown): Promise<Cour
       nowIso(),
     ).id;
     clearCourse();
+    keepPrepForNextCourse(prep);
     updateSettings({ courseName: p.name, ...(p.symbol ? { courseSymbol: p.symbol } : {}), startDate: p.startDate, endDate: p.endDate });
     return archiveId;
   });

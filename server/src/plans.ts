@@ -240,7 +240,8 @@ function draftAchievements(f: Facts): string[] {
   const learning = ofKind(f.all, 'learning');
   if (learning.length) out.push(`הצוערים יודעים להסביר וליישם את ${joinHe(unique(learning.map((e) => subject(e.title))).slice(0, 2))} - נבדק בתרגול או בבוחן קצר`);
   if (f.week.totalTasks) out.push(`כל משימות ההכנה לשבוע הושלמו לפני תחילתו (${f.week.doneTasks}/${f.week.totalTasks} כרגע)`);
-  if (f.lessons.length) out.push(`כל ${f.lessons.length === 1 ? 'הלקח' : `${f.lessons.length} הלקחים`} מהמחזור הקודם לשבוע הזה ${f.lessons.length === 1 ? 'קיבל החלטה ויושם' : 'קיבלו החלטה ויושמו'}`);
+  // in the staff's preparation weeks: every lesson kept for the next cycle, not this week's alone
+  if (f.lessons.length) out.push(`כל ${f.lessons.length === 1 ? 'הלקח' : `${f.lessons.length} הלקחים`} ${f.week.staffPrep ? 'שנשמרו למחזור הבא' : 'מהמחזור הקודם לשבוע הזה'} ${f.lessons.length === 1 ? 'קיבל החלטה ויושם' : 'קיבלו החלטה ויושמו'}`);
   out.push('תחקיר שבועי מסוכם, עם לקחים, אחראים ומועדים');
   return unique(out).slice(0, 7);
 }
@@ -308,7 +309,7 @@ function findRisks(week: Week, all: PlanEvent[], absences: Absence[], lessons: B
   }
   if (week.overdueTasks) out.push({ level: week.overdueTasks >= 3 ? 'high' : 'medium', text: `${count(week.overdueTasks, 'משימה אחת', 'משימות')} של השבוע באיחור`, answer: 'לסגור או לדחות בהחלטה מפורשת' });
   const undecided = lessons.filter((l) => !l.review).length;
-  if (undecided) out.push({ level: 'medium', text: `${count(undecided, 'לקח אחד', 'לקחים')} מהמחזור הקודם לשבוע הזה עוד בלי החלטה`, answer: undecided === 1 ? 'להחליט: משימה, יושם, או לא רלוונטי' : 'להחליט על כל אחד: משימה, יושם, או לא רלוונטי' });
+  if (undecided) out.push({ level: 'medium', text: `${count(undecided, 'לקח אחד', 'לקחים')} ${week.staffPrep ? 'למחזור הבא' : 'מהמחזור הקודם לשבוע הזה'} עוד בלי החלטה`, answer: undecided === 1 ? 'להחליט: משימה, יושם, או לא רלוונטי' : 'להחליט על כל אחד: משימה, יושם, או לא רלוונטי' });
   if (cadets.risk) out.push({ level: 'high', text: `${cadetsCount(cadets.risk)} בסיכון לפי תיקי ההערכה`, answer: 'ליווי צמוד של מפקד הצוות ושיחת מפקד קורס' });
   return out.slice(0, 8);
 }

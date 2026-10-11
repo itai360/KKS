@@ -684,7 +684,8 @@ export function PlanPage() {
 
         {doc.lessons.length > 0 && (
           <section id="plan-lessons">
-            <h2>9. לקחים מהמחזור הקודם לשבוע הזה</h2>
+            {/* a week of the staff's preparation after the closing week: every lesson kept for the next cycle */}
+            <h2>{w.staffPrep ? '9. כל הלקחים שנשמרו למחזור הבא' : '9. לקחים מהמחזור הקודם לשבוע הזה'}</h2>
             <ul className="doc-list">
               {doc.lessons.map((l) => (
                 <li key={l.id}>
