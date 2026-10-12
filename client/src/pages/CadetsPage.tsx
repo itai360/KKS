@@ -15,6 +15,7 @@ import {
   DISCIPLINE_NOTE_LIMIT,
   DISCIPLINE_SEVERITIES,
   EVALUATION_CRITERIA,
+  MANAGER_RECORD_KINDS,
   RECORD_KIND_LABELS,
   RECORD_KINDS,
   RESTRICTED_RECORD_KINDS,
@@ -24,7 +25,7 @@ import {
 } from '@shared/constants';
 import { shortDate } from '@shared/dates';
 import { sortHe } from '@shared/sort';
-import type { AttendanceHistory, Cadet, CadetDetail, CadetRecord, Exemption, Experience, Team } from '@shared/types';
+import type { AttendanceHistory, Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
 import { ContactButtons } from '../components/ContactButtons';
@@ -52,7 +53,7 @@ import { TalkDialog, TalkHighlights, TalkView } from '../components/Talks';
 import { SocioCard } from '../components/SocioCard';
 
 export function CadetsPage() {
-  const { isCommander, user } = useSession();
+  const { isCommander, user, viewing } = useSession();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const team = params.get('team') ?? '';
@@ -128,7 +129,7 @@ export function CadetsPage() {
             >
               <Icon name="download" /> ייצוא
             </button>
-            {canAdd && (
+            {!viewing && (
               <button className="btn" onClick={() => setDialog('discipline')} title="רישום משמעת לצוער, בלי לפתוח את התיק">
                 <Icon name="shield" /> רישום משמעת
               </button>
@@ -292,7 +293,8 @@ function useCadetMenuItems(c: Cadet, onExempt: () => void): RowMenuItem[] {
   const navigate = useNavigate();
   const { viewing } = useSession();
   const write = (kind: RecordKind) => navigate(`/cadets/${c.id}?add=${kind}`);
-  const may = (kind: RecordKind) => !viewing && (c.canManage || !RESTRICTED_RECORD_KINDS.includes(kind));
+  // a talk is the team commander's (or the course commander's); a note, discipline or an evaluation anyone's
+  const may = (kind: RecordKind) => !viewing && (c.canManage || !MANAGER_RECORD_KINDS.includes(kind));
   const tel = telHref(c.phone);
   const wa = waHref(c.phone);
   return [
@@ -983,7 +985,8 @@ export function QuickDiscipline({ onClose }: { onClose: () => void }) {
   const [picked, setPicked] = useState<number | null>(null);
   const detail = useApi<CadetDetail>(picked ? `/api/cadets/${picked}` : null, ['cadets', 'tasks']);
   const term = q.trim();
-  const mine = (cadets.data ?? []).filter((c) => c.canManage);
+  // any cadet of the course - those of the user's own teams first
+  const mine = [...(cadets.data ?? [])].sort((a, b) => Number(b.canManage) - Number(a.canManage));
   const matches = mine.filter((c) => matchesSearch(term, c.fullName, c.personalNumber, c.teamName));
   const d = picked && detail.data?.cadet.id === picked ? detail.data : undefined;
   return (
@@ -1004,7 +1007,7 @@ export function QuickDiscipline({ onClose }: { onClose: () => void }) {
           />
           <ErrorBox error={cadets.error} />
           {cadets.loading && !cadets.data && <Loading rows={3} />}
-          {cadets.data && !mine.length && <p className="small muted">אין צוערים פעילים בצוותים שלך.</p>}
+          {cadets.data && !mine.length && <p className="small muted">אין עדיין צוערים בקורס.</p>}
           {matches.length > 0 && (
             <div className="pick-list">
               {matches.slice(0, 40).map((c) => (
@@ -1063,8 +1066,9 @@ function RecordForm({
 }) {
   const toast = useToast();
   const { user, users, settings, isCommander } = useSession();
-  const guide = useGuide(cadet.canManage);
-  const kinds = only ? [only] : RECORD_KINDS.filter((k) => cadet.canManage || !RESTRICTED_RECORD_KINDS.includes(k));
+  // every staff member records discipline: the enforcement ladder for all
+  const guide = useGuide();
+  const kinds = only ? [only] : RECORD_KINDS.filter((k) => cadet.canManage || !MANAGER_RECORD_KINDS.includes(k));
   const [kind, setKind] = useState<RecordKind>(only ?? (start && kinds.includes(start) ? start : 'note'));
   const text = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -1096,7 +1100,13 @@ function RecordForm({
   const letters = guide.data?.letters ?? [];
   const chosen = offenses.find((o) => o.key === offense) ?? null;
   const prior = offense ? records.filter((r) => r.kind === 'discipline' && r.offense === offense) : [];
-  const occurrence = prior.length + 1;
+  // the cadet's discipline is seen by the team commander and the course commander; anyone else recording it
+  // is told by the server what the record shows once saved: which time this is, and the notes so far
+  const preview = useApi<DisciplinePreview>(kind === 'discipline' && !cadet.canManage ? `/api/cadets/${cadet.id}/discipline-preview${qs({ offense })}` : null, ['cadets']).data;
+  const occurrence = cadet.canManage ? prior.length + 1 : (preview?.occurrence ?? 1);
+  const notesSoFar = cadet.canManage ? cadet.disciplineNotes : preview?.notes;
+  // a discipline note now sends the cadet to an evaluation committee
+  const toCommittee = cadet.canManage ? cadet.status === 'active' && cadet.disciplineNotes + 1 >= DISCIPLINE_NOTE_LIMIT && cadet.notesCommittee?.decision !== null : !!preview?.refers;
   /** what the ladder says for this time; past its last step, the last step */
   const stepFor = (o: typeof chosen, n: number) => (o ? (o.steps[n - 1] ?? (n > o.steps.length ? ([...o.steps].reverse().find(Boolean) ?? null) : null)) : null);
   const step = stepFor(chosen, occurrence);
@@ -1127,11 +1137,11 @@ function RecordForm({
   };
   const submit = async () => {
     const note = kind === 'discipline' && formal;
-    const refers = note && cadet.status === 'active' && cadet.disciplineNotes + 1 >= DISCIPLINE_NOTE_LIMIT && cadet.notesCommittee?.decision !== null;
+    const refers = note && toCommittee;
     if (
       refers &&
       !(await ask({
-        title: `זו הערת המשמעת ה-${cadet.disciplineNotes + 1} של ${cadet.fullName}`,
+        title: `זו הערת המשמעת ה-${(notesSoFar ?? 0) + 1} של ${cadet.fullName}`,
         body: `לפי הנוהל הוא עולה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}: הוועדה תיפתח בתיק ההערכה שלו, עם התיק כפי שהוא עכשיו, ומפקד הקורס יקבל התראה.\nאם ההערה תימחק לפני החלטת הוועדה, ההעברה תבוטל.`,
         confirm: `שמירה והעברה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`,
       }))
@@ -1152,8 +1162,9 @@ function RecordForm({
         occurredOn: date,
         followUpTask: withTask ? { title: taskTitle.trim() || `המשך: ${cadet.fullName}`, deadline: isoAt(taskDate, taskTime), ownerId: cadet.canManage ? taskOwner : user.id } : undefined,
       });
-      const n = res.cadet.disciplineNotes;
-      if (refers && res.cadet.notesCommittee?.decision === null) toast({ title: `${cadet.fullName} עלה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`, body: `הערת משמעת ${n} מתוך ${DISCIPLINE_NOTE_LIMIT}`, tone: 'red' });
+      // what this person may know of the count: the file's, or what it was told before saving, and this note
+      const n = cadet.canManage ? res.cadet.disciplineNotes : (notesSoFar ?? 0) + 1;
+      if (refers && (!cadet.canManage || res.cadet.notesCommittee?.decision === null)) toast({ title: `${cadet.fullName} עלה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`, body: `הערת משמעת ${n} מתוך ${DISCIPLINE_NOTE_LIMIT}`, tone: 'red' });
       else if (note) toast({ title: `הערת משמעת נשמרה בתיק (${n} מתוך ${DISCIPLINE_NOTE_LIMIT})`, tone: 'green' });
       else toast({ title: `${RECORD_KIND_LABELS[kind]} נשמרה בתיק`, tone: 'green' });
       reset();
@@ -1220,7 +1231,8 @@ function RecordForm({
               עולה לוועדת הערכה · <Link to={`/evaluations/${cadet.id}`}>לתיק ההערכה</Link>
             </div>
           )}
-          {prior.length > 0 && <div className="tiny muted">קודם: {prior.map((r) => shortDate(r.occurredOn)).join(', ')}</div>}
+          {cadet.canManage && prior.length > 0 && <div className="tiny muted">קודם: {prior.map((r) => shortDate(r.occurredOn)).join(', ')}</div>}
+          {!cadet.canManage && occurrence > 1 && <div className="tiny muted">נרשם כבר {occurrence === 2 ? 'פעם אחת' : `${occurrence - 1} פעמים`} קודם</div>}
           {exempted && (
             <div className="strong" style={{ color: 'var(--blue)' }}>
               שימו לב: ל{cadet.firstName} יש פטור בנושא {exempted} - כדאי לבדוק בכרטיס הפטורים לפני שרושמים.
@@ -1233,10 +1245,12 @@ function RecordForm({
           <input type="checkbox" checked={formal} onChange={(e) => setFormalSet(e.target.checked)} />
           <span>
             <b>הערת משמעת</b>{' '}
-            <span className="small muted">
-              · עד עכשיו {cadet.disciplineNotes} מתוך {DISCIPLINE_NOTE_LIMIT}
-              {cadet.status === 'active' && cadet.disciplineNotes === DISCIPLINE_NOTE_LIMIT - 1 && ` - הערה נוספת תעלה אותו ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`}
-            </span>
+            {notesSoFar !== undefined && (
+              <span className="small muted">
+                · עד עכשיו {notesSoFar} מתוך {DISCIPLINE_NOTE_LIMIT}
+                {toCommittee && ` - הערה נוספת תעלה אותו ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`}
+              </span>
+            )}
           </span>
         </label>
       )}

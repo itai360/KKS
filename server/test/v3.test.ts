@@ -82,6 +82,36 @@ describe('cadets and teams (section 31)', () => {
     expect(notificationsOf(c.ids.s1).some((n) => n.type === 'cadet_record')).toBe(true);
   });
 
+  it('every staff member records discipline about any cadet - seen only by them and the commanders, the team commander told', async () => {
+    const { a } = await teamWithCadets();
+    // s2 is not the commander of the cadet's team: a note, an evaluation and discipline - not a personal talk
+    expect((await c.s2.post(`/api/cadets/${a}/records`, { kind: 'discipline', category: 'קלה', body: 'איחור למסדר' })).status).toBe(200);
+    expect((await c.s2.post(`/api/cadets/${a}/records`, { kind: 'talk', body: 'x' })).status).toBe(403);
+    const kinds = async (agent: typeof c.s1) => ((await agent.get(`/api/cadets/${a}`)).body.records as { kind: string }[]).map((r) => r.kind);
+    expect(await kinds(c.s2)).toEqual(['discipline']);
+    expect(await kinds(c.s1)).toEqual(['discipline']);
+    expect(await kinds(c.cmd)).toEqual(['discipline']);
+    expect(await kinds(c.s3)).toEqual([]);
+    expect(notificationsOf(c.ids.s1).map((n) => n.title)).toContain('מפק"צ 2 הוסיף רישום משמעת על דניאל כהן');
+
+    // a discipline note from another team's staff counts toward the limit, and the commanders hear of it
+    await c.s2.post(`/api/cadets/${a}/records`, { kind: 'discipline', body: 'הגיע ללא ציוד', formal: true });
+    expect((await c.cmd.get(`/api/cadets/${a}`)).body.cadet.disciplineNotes).toBe(1);
+    for (const id of [c.ids.cmd, c.ids.s1]) expect(notificationsOf(id).map((n) => n.title)).toContain('מפק"צ 2 נתן הערת משמעת לדניאל כהן (1 מתוך 3)');
+  });
+
+  it('tells whoever records discipline without seeing the rest which time it is and the notes so far - not the records', async () => {
+    const { a } = await teamWithCadets();
+    const offense = 'זמנים · איחור למסדר';
+    const preview = async () => (await c.s2.get(`/api/cadets/${a}/discipline-preview?offense=${encodeURIComponent(offense)}`)).body;
+    expect(await preview()).toEqual({ occurrence: 1, notes: 0, refers: false });
+    // the team commander recorded it twice, both discipline notes: the next note would go to a committee
+    await c.s1.post(`/api/cadets/${a}/records`, { kind: 'discipline', offense, body: 'פעם ראשונה', formal: true });
+    await c.s1.post(`/api/cadets/${a}/records`, { kind: 'discipline', offense, body: 'פעם שנייה', formal: true });
+    expect(await preview()).toEqual({ occurrence: 3, notes: 2, refers: true });
+    expect((await c.s2.get(`/api/cadets/${a}`)).body.records).toEqual([]);
+  });
+
   it('a talk can open a private follow-up task linked to the cadet', async () => {
     const { a } = await teamWithCadets();
     const res = await c.s1.post(`/api/cadets/${a}/records`, {

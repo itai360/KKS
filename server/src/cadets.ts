@@ -8,6 +8,7 @@ import {
   committeeTo,
   DISCIPLINE_COMMITTEE_KIND,
   DISCIPLINE_NOTE_LIMIT,
+  MANAGER_RECORD_KINDS,
   RECORD_KINDS,
   RESTRICTED_RECORD_KINDS,
   type CadetStatus,
@@ -17,7 +18,7 @@ import {
 import { isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import { byHe, byTeamAndName } from '../../shared/sort';
 import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, SPAN_SHORT, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
-import type { Cadet, CadetDetail, CadetRecord, Exemption, Experience, Team } from '../../shared/types';
+import type { Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
@@ -495,7 +496,7 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
   const c = cadetRow(cadetId);
   const r = recordSchema.parse(raw);
   const manage = canManageCadet(actor, c);
-  if (RESTRICTED_RECORD_KINDS.includes(r.kind) && !manage) throw forbidden('שיחות אישיות ומשמעת נרשמות על ידי מפקד הצוות או מפקד הקורס');
+  if (MANAGER_RECORD_KINDS.includes(r.kind) && !manage) throw forbidden('שיחות אישיות נרשמות על ידי מפקד הצוות או מפקד הקורס');
   const occurredOn = r.occurredOn ?? today();
   const name = `${c.first_name} ${c.last_name}`.trim();
   const discipline = r.kind === 'discipline';
@@ -543,12 +544,10 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
       talk?.form ?? null,
     ).id;
     if (formal) disciplineNoteGiven(actor, c, name, id);
-    if (c.team_commander_id && c.team_commander_id !== actor.id && (r.kind === 'evaluation' || r.kind === 'note')) {
-      notify(
-        [c.team_commander_id],
-        { type: 'cadet_record', category: 'info', title: `${actor.display_name} הוסיף ${r.kind === 'evaluation' ? 'הערכה' : 'הערה'} על ${name}`, link: `/cadets/${cadetId}` },
-        actor.id,
-      );
+    // someone else wrote in the file of a cadet of the team: its commander hears (a discipline note, above, already)
+    const told = r.kind === 'evaluation' ? 'הערכה' : r.kind === 'note' ? 'הערה' : discipline && !formal ? 'רישום משמעת' : null;
+    if (told && c.team_commander_id && c.team_commander_id !== actor.id) {
+      notify([c.team_commander_id], { type: 'cadet_record', category: 'info', title: `${actor.display_name} הוסיף ${told} על ${name}`, link: `/cadets/${cadetId}` }, actor.id);
     }
   });
   changed('cadets');
@@ -613,6 +612,19 @@ export function deleteRecord(actor: UserRow, id: number): void {
     }
   });
   changed('cadets');
+}
+
+/**
+ * Discipline is recorded by any staff member, but seen only by its writer, the team commander and the course
+ * commander. Whoever records it without seeing the rest is told what the record shows once saved: which
+ * time the offense is, and the discipline notes so far (and whether a note now goes to a committee).
+ */
+export function disciplinePreview(cadetId: number, offense: string): DisciplinePreview {
+  const c = cadetRow(cadetId);
+  const prior = offense ? db().get<{ n: number }>("SELECT count(*) AS n FROM cadet_records WHERE cadet_id = ? AND kind = 'discipline' AND offense = ?", cadetId, offense)!.n : 0;
+  const notes = formalNotes(cadetId);
+  const open = !!db().get('SELECT 1 FROM committees WHERE cadet_id = ? AND decision IS NULL', cadetId);
+  return { occurrence: prior + 1, notes, refers: c.status === 'active' && notes + 1 >= DISCIPLINE_NOTE_LIMIT && !open };
 }
 
 export function cadetDetail(actor: UserRow, id: number): CadetDetail {

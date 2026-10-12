@@ -150,6 +150,9 @@ export const RECORD_KIND_LABELS: Record<RecordKind, string> = {
 };
 /** Personal talks and discipline are always restricted to the author, the team commander and the course commander. */
 export const RESTRICTED_RECORD_KINDS: readonly RecordKind[] = ['talk', 'discipline'];
+/** Written only by the team commander or the course commander: a personal talk. A note, an evaluation and
+ * discipline every staff member records about any cadet (discipline still seen only as above). */
+export const MANAGER_RECORD_KINDS: readonly RecordKind[] = ['talk'];
 
 export const EVALUATION_CRITERIA = ['יוזמה', 'כושר גופני', 'מקצועיות', 'עבודת צוות', 'ערכים ודוגמה אישית', 'פיקוד והובלה'] as const;
 export const DISCIPLINE_SEVERITIES = ['קלה', 'בינונית', 'חמורה'] as const;

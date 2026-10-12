@@ -1061,6 +1061,19 @@ export interface Exemption {
   canDelete: boolean;
 }
 
+/**
+ * Before discipline is recorded by someone who does not see the cadet's discipline (anyone may record it):
+ * what the record shows once saved, so the enforcement ladder gives the right step - not the records.
+ */
+export interface DisciplinePreview {
+  /** which time this offense is for the cadet (1 = the first) */
+  occurrence: number;
+  /** the cadet's discipline notes so far */
+  notes: number;
+  /** a discipline note now sends the cadet to an evaluation committee */
+  refers: boolean;
+}
+
 export interface CadetDetail {
   cadet: Cadet;
   exemptions: Exemption[];

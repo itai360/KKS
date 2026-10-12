@@ -151,7 +151,6 @@ describe('discipline notes', () => {
   const detail = async (agent = c.cmd) => (await agent.get(`/api/cadets/${cadet}`)).body as CadetDetail;
 
   it('counts each offense, and the third note sends the cadet to an evaluation committee', async () => {
-    expect((await c.s2.post(`/api/cadets/${cadet}/records`, record({ formal: true }))).status).toBe(403);
     // the same offense twice: the second time, by date
     await c.s1.post(`/api/cadets/${cadet}/records`, record({ offense: 'זמנים · איחור למסדר', body: '', occurredOn: '2026-09-29' }));
     await c.s1.post(`/api/cadets/${cadet}/records`, record({ offense: 'זמנים · איחור למסדר', occurredOn: '2026-09-27' }));
