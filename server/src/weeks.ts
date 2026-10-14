@@ -289,6 +289,7 @@ export function weekDetail(actor: UserRow, id: number): WeekDetail {
       .map((r) => r.template_id),
     nextWeek: next ? { id: next.id, name: next.name, startDate: next.startDate } : null,
     debriefs: listDebriefs(actor, { weekId: id }),
+    debriefNotesWaiting: db().get<{ n: number }>('SELECT count(*) AS n FROM debrief_contributions WHERE week_id = ?', id)!.n,
     experiences: listExperiences(actor, { weekId: id }),
   };
 }

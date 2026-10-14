@@ -34,6 +34,7 @@ import { badRequest, clock, config, notFound, tz } from './core';
 import { db } from './db';
 import {
   addItem,
+  addWeekNote,
   companyPresenter,
   createDebrief,
   debriefDetail,
@@ -47,6 +48,7 @@ import {
   listDebriefs,
   updateDebrief,
   updateItem,
+  weekNoteTarget,
 } from './debriefs';
 import {
   addDynamics,
@@ -374,6 +376,9 @@ export function v3Router(): Router {
     if (!date || !isDateKey(date)) throw badRequest('תאריך לא תקין');
     res.json(companyPresenter(date));
   });
+  // on the way: a note for the week's weekly debrief (the bottom bar's "+")
+  r.get('/debriefs/week-notes', (_req, res) => res.json(weekNoteTarget()));
+  r.post('/debriefs/week-notes', (req, res) => res.json(addWeekNote(me(req), req.body)));
   r.get('/debriefs/:id', (req, res) => res.json(debriefDetail(me(req), id(req.params.id))));
   r.patch('/debriefs/:id', (req, res) => {
     updateDebrief(me(req), id(req.params.id), req.body);

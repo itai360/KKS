@@ -21,11 +21,13 @@ import {
   type DebriefKind,
   type LessonDecision,
   type LessonHorizon,
+  WEEK_NOTE_PARTS,
+  type WeekNotePart,
 } from '../../shared/debriefForms';
 import { searchKey } from '../../shared/search';
-import type { BankLesson, Debrief, DebriefDetail, DebriefItem, LessonReview } from '../../shared/types';
+import type { BankLesson, Debrief, DebriefDetail, DebriefItem, LessonReview, WeekNoteWeek } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
-import { badRequest, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
+import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
 import { changed, finishNotifications, firstTime as once, logActivity, notify } from './journal';
 import { recurringSchema, saveRule } from './recurring';
@@ -200,23 +202,28 @@ export function createDebrief(actor: UserRow, raw: z.input<typeof debriefSchema>
   // the company debrief: brought by the training officer of that day, unless another cadet was chosen
   if (d.kind === 'company' && answers.presenterId === undefined) answers = { ...answers, presenterId: companyPresenter(d.occurredOn)?.cadetId ?? null };
   const at = nowIso();
-  const id = db().run(
-    `INSERT INTO debriefs(kind, answers, title, occurred_on, event_id, activity, week_id, facilitator_id, participants, summary, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    d.kind,
-    JSON.stringify(answers),
-    d.title,
-    d.occurredOn,
-    d.eventId,
-    d.eventId ? '' : d.activity,
-    week ? week.id : weekForDate(d.occurredOn),
-    d.facilitatorId ?? actor.id,
-    d.participants,
-    d.summary,
-    actor.id,
-    at,
-    at,
-  ).id;
+  const id = db().tx(() => {
+    const newId = db().run(
+      `INSERT INTO debriefs(kind, answers, title, occurred_on, event_id, activity, week_id, facilitator_id, participants, summary, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      d.kind,
+      JSON.stringify(answers),
+      d.title,
+      d.occurredOn,
+      d.eventId,
+      d.eventId ? '' : d.activity,
+      week ? week.id : weekForDate(d.occurredOn),
+      d.facilitatorId ?? actor.id,
+      d.participants,
+      d.summary,
+      actor.id,
+      at,
+      at,
+    ).id;
+    // what the staff added on the way, waiting for the week's weekly debrief
+    if (d.kind === 'weekly' && week) takeWaitingNotes(debriefRow(newId));
+    return newId;
+  });
   logActivity({ userId: actor.id, eventId: d.eventId, action: 'debrief', text: `${actor.display_name} פתח תחקיר: ${d.title}` });
   changed('debriefs');
   return id;
@@ -398,16 +405,23 @@ export function addItem(actor: UserRow, debriefId: number, raw: z.input<typeof i
   if (!canEditDebrief(actor, d)) throw forbidden();
   const it = itemSchema.parse(raw);
   if (it.ownerId && !getUserRow(it.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
+  const id = insertItem(d, it, actor.id);
+  changed('debriefs');
+  return id;
+}
+
+/** an item at the end of the debrief, written by `by` (a lesson for the next cycle keeps what it is for) */
+function insertItem(d: DebriefRow, it: Pick<DebriefItem, 'kind' | 'body' | 'horizon' | 'ownerId' | 'dueDate'>, by: number | null, at = nowIso()): number {
   const t = it.horizon === 'next' ? lessonTarget(d) : { target: '', key: '', week: null };
-  const sort = (db().get<{ n: number | null }>('SELECT max(sort) AS n FROM debrief_items WHERE debrief_id = ?', debriefId)?.n ?? 0) + 1;
+  const sort = (db().get<{ n: number | null }>('SELECT max(sort) AS n FROM debrief_items WHERE debrief_id = ?', d.id)?.n ?? 0) + 1;
   const id = db().run(
     'INSERT INTO debrief_items(debrief_id, kind, body, sort, created_by, created_at, horizon, owner_id, due_date, target, target_key, target_week) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    debriefId,
+    d.id,
     it.kind,
     it.body,
     sort,
-    actor.id,
-    nowIso(),
+    by,
+    at,
     it.horizon,
     it.ownerId,
     it.dueDate,
@@ -415,9 +429,103 @@ export function addItem(actor: UserRow, debriefId: number, raw: z.input<typeof i
     t.key,
     t.week,
   ).id;
-  db().run('UPDATE debriefs SET updated_at = ? WHERE id = ?', nowIso(), debriefId);
-  changed('debriefs');
+  db().run('UPDATE debriefs SET updated_at = ? WHERE id = ?', nowIso(), d.id);
   return id;
+}
+
+// ---------------- on the way: a note for the week's debrief (the bottom bar's "+") ----------------
+
+export const weekNoteSchema = z.object({
+  weekId: z.number().int().positive(),
+  part: z.enum(WEEK_NOTE_PARTS),
+  body: z.string().trim().min(1, 'כתבו מה להוסיף').max(3000),
+  ownerId: z.number().int().positive().nullable().optional().default(null),
+  dueDate: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional().default(null),
+});
+
+interface WeekNote {
+  part: WeekNotePart;
+  body: string;
+  ownerId: number | null;
+  dueDate: string | null;
+  createdBy: number | null;
+  createdAt: string;
+}
+
+/** the week's weekly debrief - the first one opened for it */
+const weeklyDebriefOf = (weekId: number) => db().get<DebriefRow>(`${BASE} WHERE d.week_id = ? AND d.kind = 'weekly' ORDER BY d.id LIMIT 1`, weekId);
+
+const waitingNotes = (weekId: number) => db().get<{ n: number }>('SELECT count(*) AS n FROM debrief_contributions WHERE week_id = ?', weekId)!.n;
+
+/** into the debrief (the caller's transaction): a line at the end of its list, or a lesson of whoever wrote it */
+function putWeekNote(d: DebriefRow, n: WeekNote): void {
+  if (n.part === 'sustain' || n.part === 'improve') {
+    // read again here: two people adding at once both keep their line
+    const answers = parseAnswers(db().get<{ answers: string }>('SELECT answers FROM debriefs WHERE id = ?', d.id)!.answers);
+    const list = (Array.isArray(answers[n.part]) ? (answers[n.part] as unknown[]) : []).filter((x): x is string => typeof x === 'string');
+    // the empty line the form keeps at the end to type into gives way to the new one
+    while (list.length && !list[list.length - 1].trim()) list.pop();
+    answers[n.part] = [...list, n.body];
+    db().run('UPDATE debriefs SET answers = ?, updated_at = ? WHERE id = ?', JSON.stringify(answers), nowIso(), d.id);
+    return;
+  }
+  insertItem(d, { kind: 'lesson', body: n.body, horizon: n.part, ownerId: n.part === 'now' ? n.ownerId : null, dueDate: n.part === 'now' ? n.dueDate : null }, n.createdBy, n.createdAt);
+}
+
+/**
+ * Something for the week's weekly debrief, added on the way by any staff member: a line to keep or to
+ * improve, or a lesson for the rest of the cycle or for this week in the next one. It goes into the
+ * week's debrief while it is open; with none opened yet it waits for it - the debrief stays its lead's
+ * to open, and the reminder to hold it still comes. A debrief summed up takes no more.
+ */
+export function addWeekNote(actor: UserRow, raw: z.input<typeof weekNoteSchema>): { debriefId: number | null; waiting: number } {
+  const p = weekNoteSchema.parse(raw);
+  const w = weekRow(p.weekId);
+  if (p.ownerId && !getUserRow(p.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
+  const d = weeklyDebriefOf(w.id);
+  if (d?.status === 'final') throw badRequest(`התחקיר השבועי של ${w.name} כבר סוכם - אפשר לפתוח אותו מהתחקירים`);
+  const note: WeekNote = { part: p.part, body: p.body, ownerId: p.ownerId, dueDate: p.dueDate, createdBy: actor.id, createdAt: nowIso() };
+  db().tx(() => {
+    if (d) putWeekNote(d, note);
+    else
+      db().run(
+        'INSERT INTO debrief_contributions(week_id, part, body, owner_id, due_date, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        w.id,
+        note.part,
+        note.body,
+        note.part === 'now' ? note.ownerId : null,
+        note.part === 'now' ? note.dueDate : null,
+        note.createdBy,
+        note.createdAt,
+      );
+  });
+  changed('debriefs', 'weeks');
+  return { debriefId: d?.id ?? null, waiting: d ? 0 : waitingNotes(w.id) };
+}
+
+/** the week's notes that waited for its debrief, into it as it is opened (the caller's transaction) */
+function takeWaitingNotes(d: DebriefRow): void {
+  if (!d.week_id) return;
+  const rows = db().all<{ part: WeekNotePart; body: string; owner_id: number | null; due_date: string | null; created_by: number | null; created_at: string }>(
+    'SELECT part, body, owner_id, due_date, created_by, created_at FROM debrief_contributions WHERE week_id = ? ORDER BY id',
+    d.week_id,
+  );
+  for (const r of rows) putWeekNote(d, { part: r.part, body: r.body, ownerId: r.owner_id, dueDate: r.due_date, createdBy: r.created_by, createdAt: r.created_at });
+  db().run('DELETE FROM debrief_contributions WHERE week_id = ?', d.week_id);
+}
+
+/** the weeks the "+" offers: the week on now (or the last one that started) first, and the one before it */
+export function weekNoteTarget(): { weekId: number | null; weeks: WeekNoteWeek[] } {
+  const today = localDateKey(clock.now(), tz());
+  const started = db().all<{ id: number; number: number; name: string; start_date: string; end_date: string }>(
+    'SELECT id, number, name, start_date, end_date FROM weeks WHERE start_date <= ? ORDER BY start_date DESC, id DESC LIMIT 2',
+    today,
+  );
+  const weeks = started.map((w) => {
+    const d = weeklyDebriefOf(w.id);
+    return { id: w.id, number: w.number, name: w.name, startDate: w.start_date, endDate: w.end_date, debriefId: d?.id ?? null, summedUp: d?.status === 'final', waiting: d ? 0 : waitingNotes(w.id) };
+  });
+  return { weekId: weeks.find((w) => !w.summedUp)?.id ?? null, weeks };
 }
 
 export const itemPatchSchema = z.object({

@@ -645,6 +645,12 @@ export function WeekPage() {
                   <Icon name="calendar" /> פתיחת תחקיר שבועי
                 </Link>
                 <div className="tiny muted mt-8">מה הושג, מה לשמר ומה לשפר - ולקחים עם אחראי, להמשך המחזור ולשבוע הזה במחזור הבא.</div>
+                {/* what the staff added on the way (the "+"): it goes in once the debrief is opened */}
+                {data.debriefNotesWaiting > 0 && (
+                  <div className="week-notes-waiting small mt-8">
+                    <Icon name="lightbulb" size={14} /> {data.debriefNotesWaiting === 1 ? 'פריט אחד מחכה' : `${data.debriefNotesWaiting} פריטים מחכים`} לתחקיר - ייכנסו אליו כשייפתח
+                  </div>
+                )}
               </div>
             )}
             {data.debriefs.length === 0 && <div className="card-body small muted">לא נפתחו תחקירים בשבוע זה.</div>}

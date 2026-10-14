@@ -2,6 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout';
 import { NewTaskProvider } from './components/NewTask';
+import { WeekDebriefAddHost } from './components/WeekDebriefAdd';
 import { WeeklyAddHost } from './components/WeeklyAdd';
 import { ToastProvider } from './components/Toasts';
 import { Empty, Loading } from './components/ui';
@@ -147,6 +148,7 @@ function AuthedRoutes() {
           </Suspense>
         </Layout>
         <WeeklyAddHost />
+        <WeekDebriefAddHost />
       </NewTaskProvider>
     </ToastProvider>
   );

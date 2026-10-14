@@ -11,6 +11,7 @@ import { slideTabIndicators } from '../lib/tabIndicator';
 import { Count } from './Count';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
+import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
 import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
@@ -742,7 +743,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </nav>
       {menuOpen && (
         <Modal title="כל המסכים" onClose={() => setMenuOpen(false)} className="menu-sheet">
-          <NavMenu sections={sections} onNavigate={() => setMenuOpen(false)} />
+          <NavMenu sections={sections} onNavigate={() => setMenuOpen(false)} tabs />
         </Modal>
       )}
       {plus.mounted && (
@@ -756,6 +757,10 @@ export function Layout({ children }: { children: ReactNode }) {
           onWeekly={() => {
             setPlusOpen(false);
             addToWeekly();
+          }}
+          onDebrief={() => {
+            setPlusOpen(false);
+            addToWeekDebrief();
           }}
           onEvent={
             canEvent
@@ -772,7 +777,21 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 /** the phone bar's "+": the things one adds on the move, rising above it */
-function PlusMenu({ onClose, onTask, onWeekly, onEvent, leaving }: { onClose: () => void; onTask: () => void; onWeekly: () => void; onEvent?: () => void; leaving: boolean }) {
+function PlusMenu({
+  onClose,
+  onTask,
+  onWeekly,
+  onDebrief,
+  onEvent,
+  leaving,
+}: {
+  onClose: () => void;
+  onTask: () => void;
+  onWeekly: () => void;
+  onDebrief: () => void;
+  onEvent?: () => void;
+  leaving: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus();
@@ -831,6 +850,15 @@ function PlusMenu({ onClose, onTask, onWeekly, onEvent, leaving }: { onClose: ()
           <span className="grow">
             <span className="plus-menu-title">שבועי</span>
             <span className="plus-menu-sub">נושא, סגירה מקצועית או הערה לשבועי הקרוב</span>
+          </span>
+        </button>
+        <button type="button" role="menuitem" onClick={onDebrief}>
+          <span className="plus-menu-icon">
+            <Icon name="lightbulb" />
+          </span>
+          <span className="grow">
+            <span className="plus-menu-title">לתחקיר השבוע</span>
+            <span className="plus-menu-sub">לשימור, לשיפור או לקח - לתחקיר השבועי של השבוע הזה</span>
           </span>
         </button>
       </div>

@@ -244,6 +244,19 @@ export const LESSON_HORIZON_LABELS: Record<DebriefKind, Record<LessonHorizon, { 
   },
 };
 
+/**
+ * What anyone adds to the week's weekly debrief on the way (the bottom bar's "+"): a line to keep or to
+ * improve, or a lesson - for the rest of the cycle, or for this week in the next cycle.
+ */
+export const WEEK_NOTE_PARTS = ['sustain', 'improve', 'now', 'next'] as const;
+export type WeekNotePart = (typeof WEEK_NOTE_PARTS)[number];
+export const WEEK_NOTE_PART_LABELS: Record<WeekNotePart, string> = {
+  sustain: 'לשימור',
+  improve: 'לשיפור',
+  now: 'לקח להמשך המחזור',
+  next: 'לקח לשבוע הזה במחזור הבא',
+};
+
 /** has a question been answered (for the form's progress, and the check before summing up) */
 export function answered(q: DebriefQuestion, a: DebriefAnswers): boolean {
   const v = a[q.id];

@@ -578,6 +578,8 @@ export interface WeekDetail {
   appliedTemplateIds: number[];
   nextWeek: Pick<Week, 'id' | 'name' | 'startDate'> | null;
   debriefs: Debrief[];
+  /** notes the staff added on the way, waiting for the week's weekly debrief to be opened */
+  debriefNotesWaiting: number;
   experiences: Experience[];
 }
 
@@ -1102,6 +1104,20 @@ export interface DebriefItem {
   dueDate: string | null;
   /** next cycle: the week or the event it is for */
   target: string;
+}
+
+/** a week the bottom bar's "+" offers for a note to its weekly debrief */
+export interface WeekNoteWeek {
+  id: number;
+  number: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  /** its weekly debrief, once opened */
+  debriefId: number | null;
+  summedUp: boolean;
+  /** notes waiting for the debrief to be opened */
+  waiting: number;
 }
 
 /** a lesson kept for the next cycle, shown when its week or event comes round again */
