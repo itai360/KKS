@@ -71,7 +71,7 @@ export function MyTasksPage() {
             <div>
               {total === 0 && (
                 <Empty
-                  title="אין משימות פתוחות"
+                  title="אין לך משימות פתוחות"
                   text={
                     <>
                       כל הכבוד. משימות חדשות יופיעו כאן ברגע שייפתחו.
