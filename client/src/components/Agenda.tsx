@@ -684,7 +684,7 @@ export function CourseEventRow({
             {now && <span className="badge t-orange">עכשיו</span>}
             {until != null && <span className="badge t-blue">{inMinutes(until)}</span>}
           </div>
-          <div className="task-meta">
+          <div className="task-meta dotted">
             {e.location && (
               <span>
                 <Icon name="pin" size={13} /> {e.location}
@@ -724,7 +724,7 @@ export function ExternalRow({ x, past, onOpen }: { x: ExternalEvent; past?: bool
       </div>
       <div style={{ minWidth: 0 }}>
         <div className="event-title">{x.title}</div>
-        <div className="task-meta">
+        <div className="task-meta dotted">
           <span>{x.sourceName}</span>
           {x.location && (
             <span className="sep">
@@ -748,7 +748,7 @@ function DeadlineRow({ t, time, onOpen }: { t: Task; time: string; onOpen: () =>
       </div>
       <div style={{ minWidth: 0 }}>
         <div className="event-title">{t.title}</div>
-        <div className="task-meta">
+        <div className="task-meta dotted">
           <span>דד-ליין</span>
           {t.ownerName && <span className="sep">{t.ownerName}</span>}
         </div>

@@ -188,11 +188,11 @@ export function BulkScope({
 }
 
 /** The button that starts and ends selecting. */
-export function BulkToggle({ label = 'בחירה' }: { label?: string }) {
+export function BulkToggle({ label = 'בחירה', className = '' }: { label?: string; className?: string }) {
   const b = useBulk();
   if (!b) return null;
   return (
-    <button className={`btn${b.active ? ' btn-primary' : ''}`} onClick={() => b.setActive(!b.active)} aria-pressed={b.active}>
+    <button className={`btn${b.active ? ' btn-primary' : ''}${className ? ` ${className}` : ''}`} onClick={() => b.setActive(!b.active)} aria-pressed={b.active}>
       <Icon name="check" /> {b.active ? 'סיום בחירה' : label}
     </button>
   );

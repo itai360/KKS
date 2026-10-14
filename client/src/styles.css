@@ -1850,7 +1850,8 @@ input::-webkit-date-and-time-value {
 .time-input {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  /* where the dates and every other field's words sit: the right, in a right-to-left form */
+  text-align: right;
   min-width: 84px;
 }
 .time-input::placeholder {
@@ -2598,6 +2599,36 @@ input::-webkit-date-and-time-value {
   color: var(--faint);
 }
 
+/* A line of separate facts (a row's owner, deadline, area, week...): a dot between each two, and none at the
+   start of a line when it wraps on a phone. Each fact carries its dot before it, and the line starts a dot's
+   width past its own edge, which is clipped - so the dot of whatever comes first on a line is never seen */
+.task-meta.dotted {
+  column-gap: 0;
+  margin-inline-start: -28px;
+  /* the start edge: the right, in this right-to-left site */
+  clip-path: inset(-6px 28px -6px -6px);
+}
+
+[dir='ltr'] .task-meta.dotted {
+  clip-path: inset(-6px -6px -6px 28px);
+}
+
+.task-meta.dotted > * {
+  position: relative;
+  padding-inline-start: 28px;
+}
+
+.task-meta.dotted > *::before,
+.task-meta.dotted > .sep::before {
+  content: '·';
+  position: absolute;
+  inset-inline-start: 0;
+  width: 28px;
+  margin: 0;
+  text-align: center;
+  color: var(--faint);
+}
+
 /* the group a task went to - "סגל", "מפק"צים" - in its own column, instead of a row for each person (taskGroups.ts) */
 .group-tag {
   display: inline-flex;
@@ -2757,6 +2788,49 @@ input::-webkit-date-and-time-value {
   min-width: 0;
 }
 
+/* a list's scopes in one line - and on a phone, beside them, its filters and selecting */
+.list-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.list-tools > .chips {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-tools > .btn {
+  flex: none;
+}
+
+/* a filter in use: its button says so */
+.list-tools > .btn.is-set {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+@media (max-width: 860px) {
+  /* the scopes run to the buttons, not past the screen's edge, and fade there: there are more to scroll to */
+  .list-tools > .chips-scroll {
+    margin-inline-end: 0;
+    padding-inline-end: 18px;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 18px);
+    mask-image: linear-gradient(to right, transparent, #000 18px);
+  }
+  [dir='ltr'] .list-tools > .chips-scroll {
+    -webkit-mask-image: linear-gradient(to left, transparent, #000 18px);
+    mask-image: linear-gradient(to left, transparent, #000 18px);
+  }
+}
+
+/* a list's heading beside how it is grouped: the heading keeps its one line, and on a phone the grouping
+   goes under it */
+.list-head > .section-title {
+  flex: 1 0 auto;
+}
+
 .gap-4 {
   gap: 4px;
 }
@@ -2876,6 +2950,26 @@ input::-webkit-date-and-time-value {
   height: 26px;
   color: var(--orange);
   flex: none;
+}
+
+/* the words keep a readable width: on a phone the buttons go under them, not beside them */
+.setup-nudge > .grow {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.setup-nudge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  /* under the words, from where they start */
+  .setup-nudge-actions {
+    flex-basis: 100%;
+    padding-inline-start: 40px;
+  }
 }
 
 .load-more {
@@ -3655,6 +3749,17 @@ input::-webkit-date-and-time-value {
   padding: 11px 14px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
+}
+
+/* all the tasks as a table: the title is what is read, so it keeps a width of its own, and the cells are
+   a little closer so the columns still fit beside it */
+.tasks-table :is(th, td) {
+  padding-inline: 8px;
+}
+
+.tasks-table .tasks-table-title {
+  min-width: 180px;
+  max-width: 340px;
 }
 
 .table-wrap {
@@ -11415,6 +11520,19 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   background: var(--yellow);
 }
 
+/* ---------------- a debrief's item, its edit and delete beside it (pages/DebriefsPage.tsx) ---------------- */
+.debrief-item-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.item-tools {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  margin-block: -3px;
+}
+
 /* ---------------- requests: a decision answers at once, then the row folds away (pages/RequestsPage.tsx) ---------------- */
 .decision {
   border-radius: 0;
@@ -11424,6 +11542,23 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 }
 .decision:last-child > .swipe-row > .attn-item {
   border-bottom: none;
+}
+@media (max-width: 560px) {
+  /* on a phone the request keeps the width for its words, and the answers go under them */
+  .decision > .swipe-row > .attn-item {
+    grid-template-columns: 10px minmax(0, 1fr);
+    row-gap: 10px;
+  }
+  .decision > .swipe-row > .attn-item > .attn-bar {
+    grid-row: 1 / span 2;
+  }
+  .decision .request-actions {
+    grid-column: 2;
+  }
+  .decision .request-actions .btn {
+    min-height: 44px;
+    min-width: 68px;
+  }
 }
 .verdict-pill {
   display: inline-flex;

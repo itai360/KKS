@@ -106,7 +106,8 @@ export function TasksPage() {
         sub={data ? `${rows.length} משימות` : undefined}
         actions={
           <>
-            <BulkToggle />
+            {/* on a phone: beside the scopes below */}
+            <BulkToggle className="hide-mobile" />
             <Seg
               value={view}
               onChange={changeView}
@@ -130,16 +131,20 @@ export function TasksPage() {
           </>
         }
       />
-      <div className="chips chips-scroll mb-12">
-        {SCOPES.map(([v, l]) => (
-          <button key={v} className={`chip${f.scope === v ? ' on' : ''}${v === 'overdue' && f.scope === v ? ' t-red' : ''}`} onClick={() => set('scope', v === 'open' ? '' : v)}>
-            {l}
-          </button>
-        ))}
+      {/* the scopes, and on a phone the filters and selecting beside them: one line before the tasks */}
+      <div className="list-tools mb-12">
+        <div className="chips chips-scroll">
+          {SCOPES.map(([v, l]) => (
+            <button key={v} className={`chip${f.scope === v ? ' on' : ''}${v === 'overdue' && f.scope === v ? ' t-red' : ''}`} onClick={() => set('scope', v === 'open' ? '' : v)}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <button className={`btn btn-sm only-mobile${active ? ' is-set' : ''}`} onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen} aria-label={active ? `סינון - ${active} פעילים` : 'סינון'}>
+          <Icon name="filter" /> {active ? active : 'סינון'}
+        </button>
+        <BulkToggle className="btn-sm only-mobile" />
       </div>
-      <button className="btn btn-sm only-mobile mb-12" onClick={() => setFiltersOpen(!filtersOpen)}>
-        <Icon name="filter" /> סינון{active ? ` (${active})` : ''}
-      </button>
       <div className={`filters${filtersOpen ? '' : ' mobile-collapsed'}`}>
         <input className="input" placeholder="מילת מפתח..." value={f.q} onChange={(e) => set('q', e.target.value)} aria-label="חיפוש במשימות" />
         <Select className="select" value={f.owner} onChange={(e) => set('owner', e.target.value)} aria-label="איש סגל">
@@ -247,7 +252,7 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
   );
   return (
     <div className="card" style={{ overflowX: 'auto' }}>
-      <table className="table">
+      <table className="table tasks-table">
         <thead>
           <tr>
             <th style={{ width: 6, padding: 0 }} />
@@ -289,7 +294,7 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
       onFocus={() => prefetchTask(t.id)}
     >
       <td style={{ padding: 0, width: 6, background: 'var(--tone)' }} />
-      <td style={{ maxWidth: 340 }}>
+      <td className="tasks-table-title">
         <div className="strong row gap-6" style={{ textDecoration: tick.done ? 'line-through' : undefined }}>
           {bulk?.active ? <BulkCheck id={t.id} /> : <TaskCheck task={t} tick={tick} small />}
           <span>{t.title}</span>
@@ -313,7 +318,7 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
       </td>
       <td className="small muted nowrap">{t.createdByName}</td>
       <td className="small nowrap">{t.domain || <span className="faint">-</span>}</td>
-      <td className="small nowrap">{t.weekName || <span className="faint">-</span>}</td>
+      <td className="small">{t.weekName || <span className="faint">-</span>}</td>
       <td style={{ whiteSpace: 'nowrap' }}>
         <span className="task-meta" style={{ marginTop: 0 }}>
           <DeadlineText task={t} />
@@ -323,7 +328,9 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
         <PriorityBadge priority={t.priority} hideNormal={false} />
       </td>
       <td style={{ whiteSpace: 'nowrap' }}>
-        <StatusBadge status={tick.done ? 'done' : t.status} overdue={!tick.done && t.overdue} />
+        <span className="row gap-4">
+          <StatusBadge status={tick.done ? 'done' : t.status} overdue={!tick.done && t.overdue} />
+        </span>
       </td>
       {menu.menu}
     </tr>
@@ -441,7 +448,7 @@ function BoardCard({ t, folded }: { t: Task; folded: boolean }) {
         {bulk?.active ? <BulkCheck id={t.id} /> : <TaskCheck task={t} tick={tick} small />}
         <span style={{ textDecoration: tick.done ? 'line-through' : undefined }}>{t.title}</span>
       </div>
-      <div className="task-meta">
+      <div className="task-meta dotted">
         {!folded && <span>{t.ownerName}</span>}
         {tag && <GroupTag label={tag} className={folded ? '' : 'sep'} />}
         <span className="sep">

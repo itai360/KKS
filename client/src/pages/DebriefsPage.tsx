@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { DEBRIEF_ITEM_KINDS, DEBRIEF_ITEM_LABELS, PRIORITIES, PRIORITY_LABELS, STATUS_LABELS, WEEKDAY_NAMES, type DebriefItemKind, type Priority } from '@shared/constants';
 import { sortHe } from '@shared/sort';
-import { addDays, shortDate } from '@shared/dates';
+import { addDays, daysWord, shortDate } from '@shared/dates';
 import { answered, DEBRIEF_KIND_HINTS, DEBRIEF_KIND_LABELS, DEBRIEF_KINDS, formFor, isWeekDebrief, proposalRows, type DebriefKind } from '@shared/debriefForms';
 import { matchesSearch } from '@shared/search';
 import type { BankLesson, Cadet, Debrief, DebriefDetail, DebriefItem, EventDetail, ExternalEvent, ScheduleEvent, Template, Week } from '@shared/types';
@@ -84,7 +84,7 @@ export function DebriefsPage() {
       <BulkCheck id={d.id} />
       <div className="task-main">
         <div className="task-title">{d.title}</div>
-        <div className="task-meta">
+        <div className="task-meta dotted">
           <span className="mono">{shortDate(d.occurredOn)}</span>
           {!isWeekDebrief(d.kind) && d.eventTitle && <span className="sep">{d.eventTitle}</span>}
           {d.weekName && <span className="sep">{d.weekName}</span>}
@@ -665,6 +665,24 @@ function ItemColumn({
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
   const actionable = kind === 'conclusion' || kind === 'lesson';
+  const tools = (i: DebriefItem) => (
+    <span className="item-tools">
+      <button
+        className="icon-btn"
+        style={{ width: 28, height: 28 }}
+        aria-label="עריכה"
+        onClick={() => {
+          setEditing(i.id);
+          setDraft(i.body);
+        }}
+      >
+        <Icon name="edit" size={14} />
+      </button>
+      <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label="מחיקה" onClick={async () => (await ask({ title: 'למחוק את הפריט?', confirm: 'מחיקה', danger: true })) && void onDelete(i)}>
+        <Icon name="trash" size={14} />
+      </button>
+    </span>
+  );
   return (
     <div className="card">
       <div className="card-head">
@@ -690,8 +708,12 @@ function ItemColumn({
               </div>
             ) : (
               <>
-                <div className="update-body" style={{ fontSize: 14.5 }}>
-                  {i.body}
+                {/* its edit and delete beside it, not on a line of their own */}
+                <div className="debrief-item-line">
+                  <div className="update-body grow" style={{ fontSize: 14.5 }}>
+                    {i.body}
+                  </div>
+                  {canEdit && tools(i)}
                 </div>
                 {(i.taskId || i.recurringRuleId) && (
                   <div className="row wrap gap-6 mt-8">
@@ -707,14 +729,12 @@ function ItemColumn({
                     )}
                   </div>
                 )}
-                {canEdit && (
+                {canEdit && actionable && (
                   <div className="row wrap gap-6 mt-8">
-                    {actionable && (
-                      <button className="btn btn-sm" onClick={() => onConvert(i, 'task')}>
-                        <Icon name="plus" /> משימה
-                      </button>
-                    )}
-                    {actionable && isCommander && (
+                    <button className="btn btn-sm" onClick={() => onConvert(i, 'task')}>
+                      <Icon name="plus" /> משימה
+                    </button>
+                    {isCommander && (
                       <>
                         <button className="btn btn-sm" onClick={() => onConvert(i, 'recurring')}>
                           <Icon name="repeat" /> משימה חוזרת
@@ -724,21 +744,6 @@ function ItemColumn({
                         </button>
                       </>
                     )}
-                    <span className="grow" />
-                    <button
-                      className="icon-btn"
-                      style={{ width: 28, height: 28 }}
-                      aria-label="עריכה"
-                      onClick={() => {
-                        setEditing(i.id);
-                        setDraft(i.body);
-                      }}
-                    >
-                      <Icon name="edit" size={14} />
-                    </button>
-                    <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label="מחיקה" onClick={async () => (await ask({ title: 'למחוק את הפריט?', confirm: 'מחיקה', danger: true })) && void onDelete(i)}>
-                      <Icon name="trash" size={14} />
-                    </button>
                   </div>
                 )}
               </>
@@ -753,8 +758,8 @@ function ItemColumn({
               if (text.trim()) void onAdd(text.trim()).then(() => setText(''));
             }}
           >
-            <input className="input grow" value={text} onChange={(e) => setText(e.target.value)} placeholder={ADD_PLACEHOLDER[kind]} />
-            <button className="btn btn-sm" disabled={!text.trim()}>
+            <input className="input grow" value={text} onChange={(e) => setText(e.target.value)} placeholder={ADD_PLACEHOLDER[kind]} aria-label={ADD_PLACEHOLDER[kind].replace('...', '')} />
+            <button className="btn btn-sm" disabled={!text.trim()} aria-label={ADD_PLACEHOLDER[kind].replace('...', '')}>
               <Icon name="plus" />
             </button>
           </form>
@@ -953,7 +958,7 @@ function ItemToTemplate({ item, onClose, onDone }: { item: DebriefItem; onClose:
             <Field label="שם השלב">
               <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} data-autofocus />
             </Field>
-            <Field label={`מתי? (ימים ביחס ל${tpl?.kind === 'activity' ? 'פעילות' : 'תחילת השבוע'})`} hint={offset < 0 ? `${-offset} ימים לפני` : offset === 0 ? 'באותו יום' : `${offset} ימים אחרי`}>
+            <Field label={`מתי? (ימים ביחס ל${tpl?.kind === 'activity' ? 'פעילות' : 'תחילת השבוע'})`} hint={offset < 0 ? `${daysWord(offset)} לפני` : offset === 0 ? 'באותו יום' : `${daysWord(offset)} אחרי`}>
               <input className="input" type="number" value={offset} min={-60} max={60} onChange={(e) => setOffset(Number(e.target.value))} style={{ maxWidth: 120 }} />
             </Field>
           </>

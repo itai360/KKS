@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  daysWord,
   diffDays,
   formatDeadline,
   localDateKey,
@@ -81,5 +82,11 @@ describe('a date as typed', () => {
       '06.10.2',
       '06.10.2026',
     ]);
+  });
+});
+
+describe('a number of days in words', () => {
+  it('says one and two as they are said, before or after alike', () => {
+    expect([1, 2, 3, 10, -1, -2, -7].map(daysWord)).toEqual(['יום', 'יומיים', '3 ימים', '10 ימים', 'יום', 'יומיים', '7 ימים']);
   });
 });

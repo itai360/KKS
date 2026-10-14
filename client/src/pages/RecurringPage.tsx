@@ -171,7 +171,7 @@ function RuleRow({ r, onEdit, onCopy }: { r: RecurringRule; onEdit: () => void; 
           {r.domain && ` · ${r.domain}`}
         </div>
         <div className="rule-when">
-          <span className="rule-days" aria-label={r.frequency === 'daily' ? 'כל יום' : `בימים ${r.weekdays.map((d) => WEEKDAY_NAMES[d]).join(', ')}`}>
+          <span className="rule-days" role="img" aria-label={r.frequency === 'daily' ? 'כל יום' : `בימים ${r.weekdays.map((d) => WEEKDAY_NAMES[d]).join(', ')}`}>
             {DAY_LETTERS.map((l, i) => (
               <i key={l} className={`${days.includes(i) ? 'on' : ''}${next && weekdayOf(next) === i ? ' next' : ''}`} aria-hidden="true">
                 {l}

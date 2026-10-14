@@ -168,7 +168,7 @@ export function AttendancePage() {
           )}
         </div>
         {data && data.teams.length > 1 && (
-          <div className="chips" role="group" aria-label="צוות">
+          <div className="chips chips-scroll" role="group" aria-label="צוות">
             <button className={`chip chip-sm${!team ? ' on' : ''}`} aria-pressed={!team} onClick={() => set({ team: '' })}>
               כל הצוותים
             </button>

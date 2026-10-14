@@ -139,9 +139,11 @@ function ApprovalRow({ task: t, onDecided }: { task: Task; onDecided: () => void
             {d.error && <div className="tiny text-red">{d.error}</div>}
           </div>
           {d.verdict ? (
-            <Decided verdict={d.verdict} />
+            <div className="request-actions">
+              <Decided verdict={d.verdict} />
+            </div>
           ) : (
-            <div className="row gap-6">
+            <div className="row gap-6 request-actions">
               <button className="btn btn-sm btn-primary" onClick={() => void d.decide('approved', () => api.post(`/api/tasks/${t.id}/transition`, { action: 'approve' }), 'המשימה אושרה ונסגרה')}>
                 אשר
               </button>
@@ -234,9 +236,11 @@ function RequestRow({ request: r, onDecided }: { request: TaskRequest; onDecided
             {d.error && <div className="tiny text-red">{d.error}</div>}
           </div>
           {d.verdict ? (
-            <Decided verdict={d.verdict} />
+            <div className="request-actions">
+              <Decided verdict={d.verdict} />
+            </div>
           ) : (
-            <div className="row gap-6">
+            <div className="row gap-6 request-actions">
               <button className="btn btn-sm btn-primary" onClick={() => void d.decide('approved', () => api.post(`/api/requests/${r.id}/decide`, { approve: true }), 'הבקשה אושרה')}>
                 אשר
               </button>

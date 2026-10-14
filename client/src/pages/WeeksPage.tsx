@@ -11,7 +11,7 @@ import { CalendarWeeksModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker, useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, SwipeRow, useBulk } from '../components/Bulk';
-import { byOpenStatus, GroupedTaskList, TaskBulkScope } from '../components/TaskRow';
+import { byOpenStatus, GroupedTaskList, TaskBulkScope, TaskRowsAround } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Bar, DateInput, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, readinessTone, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
@@ -577,7 +577,7 @@ export function WeekPage() {
 
       <div className="split mt-16">
         <div>
-          <div className="row wrap">
+          <div className="row wrap list-head">
             <div className="section-title grow" style={{ margin: '6px 0' }}>
               <h2>משימות השבוע</h2>
               <span className="count-pill">{data.tasks.length}</span>
@@ -592,7 +592,9 @@ export function WeekPage() {
               ]}
             />
           </div>
-          <GroupedTasks tasks={data.tasks} by={groupBy} />
+          <TaskRowsAround weekId={w.id}>
+            <GroupedTasks tasks={data.tasks} by={groupBy} />
+          </TaskRowsAround>
         </div>
         <div className="col gap-16 sticky-side">
           <LeadWorkflow week={w} />

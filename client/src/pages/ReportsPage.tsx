@@ -290,8 +290,12 @@ export function LookAheadPage() {
               <span className="tiny muted">
                 <span className="dot" style={{ background: 'var(--orange)' }} /> עדיפות גבוהה/קריטית
               </span>
+              <span className="tiny muted">
+                <span className="dot" style={{ background: 'var(--line-2)' }} /> סוף שבוע
+              </span>
             </div>
-            <div className="bars bars-grow" style={{ height: 190 }}>
+            {/* on a phone the fourteen days scroll sideways - with the keyboard too */}
+            <div className="bars bars-grow" style={{ height: 190 }} role="group" tabIndex={0} aria-label="משימות פתוחות לפי יום">
               {data.days.map((d, i) => {
                 const wd = weekdayOf(d.date);
                 const body = (

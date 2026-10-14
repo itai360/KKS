@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { PRIORITIES, PRIORITY_LABELS, type Priority } from '@shared/constants';
-import { addDays, shortDate, weekdayName } from '@shared/dates';
+import { addDays, daysWord, shortDate, weekdayName } from '@shared/dates';
 import type { Template, TemplateItem } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
 import { Icon } from '../components/Icon';
@@ -57,7 +57,7 @@ export function TemplatesPage() {
                   <h3>{t.name}</h3>
                   <div className="tiny muted">
                     {KIND_LABELS[t.kind]} · {t.items.length} סעיפים
-                    {t.autoApplyDaysBefore !== null && ` · נפתחת אוטומטית ${t.autoApplyDaysBefore} ימים לפני כל שבוע`}
+                    {t.autoApplyDaysBefore !== null && ` · נפתחת אוטומטית ${daysWord(t.autoApplyDaysBefore)} לפני כל שבוע`}
                   </div>
                 </div>
                 {(isCommander || leadsAWeek) && (
@@ -88,7 +88,7 @@ export function TemplatesPage() {
   );
 }
 
-const offsetLabel = (o: number) => (o === 0 ? 'ביום' : o < 0 ? `${-o} ימים לפני` : `${o} ימים אחרי`);
+const offsetLabel = (o: number) => (o === 0 ? 'ביום' : o < 0 ? `${daysWord(o)} לפני` : `${daysWord(o)} אחרי`);
 const DAY_LABELS: Record<Template['kind'], string> = { week: 'תחילת השבוע', activity: 'יום הפעילות', general: 'היום' };
 
 /**
@@ -267,7 +267,7 @@ function TemplateEditor({ template, onClose }: { template: Template | null; onCl
                     ))}
                   </Select>
                   {kind === 'activity' && <input className="input" style={{ width: 130, height: 34 }} value={it.stage ?? ''} onChange={(e) => upd(i, { stage: e.target.value })} placeholder="שלב (תיאומים...)" />}
-                  <span className="tiny muted">{it.offsetDays === 0 ? 'ביום עצמו' : it.offsetDays < 0 ? `${-it.offsetDays} ימים לפני` : `${it.offsetDays} ימים אחרי`}</span>
+                  <span className="tiny muted">{it.offsetDays === 0 ? 'ביום עצמו' : it.offsetDays < 0 ? `${daysWord(it.offsetDays)} לפני` : `${daysWord(it.offsetDays)} אחרי`}</span>
                 </div>
               </div>
             ))}

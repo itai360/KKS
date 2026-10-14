@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { domainLabel, isOpenStatus, PRIORITIES, PRIORITY_LABELS } from '@shared/constants';
 import type { Task } from '@shared/types';
@@ -119,6 +119,31 @@ export function useLiveFlash(signature: string): boolean {
 /** the task's page, fetched while the pointer rests on its row - so it opens at once */
 export const prefetchTask = (id: number) => prefetch(`/api/tasks/${id}`);
 
+/**
+ * What the screen around the rows already says, and so each row does not say again: the week or the track whose
+ * page it is, and the heading the rows are under (an area, a person, a week).
+ */
+interface Around {
+  weekId?: number;
+  trackId?: number;
+  heading?: string;
+}
+const AroundContext = createContext<Around>({});
+
+/** rows inside it leave out the week (or the track) of the page they are on */
+export function TaskRowsAround({ weekId, trackId, children }: { weekId?: number; trackId?: number; children: ReactNode }) {
+  const outer = useContext(AroundContext);
+  const value = useMemo(() => ({ ...outer, weekId: weekId ?? outer.weekId, trackId: trackId ?? outer.trackId }), [outer, weekId, trackId]);
+  return <AroundContext.Provider value={value}>{children}</AroundContext.Provider>;
+}
+
+/** rows under a heading leave out what the heading says */
+function UnderHeading({ title, children }: { title: string; children: ReactNode }) {
+  const outer = useContext(AroundContext);
+  const value = useMemo(() => ({ ...outer, heading: title }), [outer, title]);
+  return <AroundContext.Provider value={value}>{children}</AroundContext.Provider>;
+}
+
 /** who a task went to, beside its owner: its group's name ("סגל"), or the names of people who are not one group */
 export function useGroupTag(task: Task, ownerShown: boolean): string {
   const { userName } = useSession();
@@ -181,6 +206,8 @@ export function TaskRow({
   const tick = useTaskTick(task, readOnly || folded);
   const ownerShown = showOwner && !folded;
   const tag = useGroupTag(task, ownerShown);
+  const around = useContext(AroundContext);
+  const area = task.domain ? domainLabel(task.domain, task.domainNote) : '';
   const { done, open } = tick;
   const flash = useLiveFlash(`${task.status}|${task.deadline}|${task.ownerId}|${task.title}|${task.priority}|${task.overdue}`);
   // on a phone, swiped toward its leading side it is done (the round button stays for everyone else),
@@ -201,23 +228,23 @@ export function TaskRow({
       {bulk?.active ? <BulkCheck id={task.id} /> : <TaskCheck task={task} tick={tick} />}
       <div className="task-main">
         <div className="task-title">{task.title}</div>
-        <div className="task-meta">
-          {ownerShown && <span>{task.ownerName}</span>}
-          {tag && <GroupTag label={tag} className={ownerShown ? 'sep' : ''} />}
-          <span className={ownerShown || tag ? 'sep' : ''}>
+        <div className="task-meta dotted">
+          {ownerShown && task.ownerName !== around.heading && <span>{task.ownerName}</span>}
+          {tag && <GroupTag label={tag} />}
+          <span>
             <DeadlineText task={task} />
           </span>
-          {task.domain && <span className="sep">{domainLabel(task.domain, task.domainNote)}</span>}
-          {task.weekName && <span className="sep">{task.weekName}</span>}
-          {task.trackName && task.trackName !== task.domain && <span className="sep">ציר {task.trackName}</span>}
+          {area && area !== around.heading && <span>{area}</span>}
+          {task.weekName && task.weekId !== around.weekId && task.weekName !== around.heading && <span>{task.weekName}</span>}
+          {task.trackName && task.trackName !== task.domain && task.trackId !== around.trackId && <span>ציר {task.trackName}</span>}
           {task.subtaskTotal > 0 && (
-            <span className="sep mono">
+            <span className="mono">
               {task.subtaskDone}/{task.subtaskTotal} משנה
             </span>
           )}
-          {task.status === 'waiting' && task.blockReason && <span className="sep">חסם: {task.blockReason}</span>}
-          {task.stale && open && <span className="sep text-orange">לא עודכן</span>}
-          {task.openDependencies > 0 && open && <span className="sep">תלויה ב-{task.openDependencies}</span>}
+          {task.status === 'waiting' && task.blockReason && <span>חסם: {task.blockReason}</span>}
+          {task.stale && open && <span className="text-orange">לא עודכן</span>}
+          {task.openDependencies > 0 && open && <span>תלויה ב-{task.openDependencies}</span>}
         </div>
       </div>
       <div className="task-side">
@@ -307,7 +334,9 @@ export function TaskSection({ title, id, tone, tasks, showOwner = true, collapse
   return (
     <>
       <GroupTitle id={id} title={title} count={tasks.length} tone={tone} />
-      <Rows leaving={leaving} showOwner={showOwner} />
+      <UnderHeading title={title}>
+        <Rows leaving={leaving} showOwner={showOwner} />
+      </UnderHeading>
     </>
   );
 }

@@ -128,7 +128,7 @@ export function EvaluationsPage() {
         </div>
       )}
       <div className="filters">
-        <input className="input" placeholder="חיפוש לפי שם או מספר אישי" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" placeholder="שם או מספר אישי" value={q} onChange={(e) => setQ(e.target.value)} aria-label="חיפוש לפי שם או מספר אישי" />
         <Select className="select" value={view} onChange={(e) => set('view', e.target.value)} aria-label="תצוגה">
           <option value="">כל הצוערים</option>
           <option value="committee">בדרך לוועדה ({all.filter((c) => c.committee && !c.committee.decision).length})</option>

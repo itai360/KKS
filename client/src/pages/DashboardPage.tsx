@@ -672,12 +672,14 @@ function TwoStepNudge() {
         <div className="strong">אימות דו-שלבי לחשבון מפקד הקורס</div>
         <div className="small muted">החשבון שלך פותח את כל נתוני הקורס. עם קוד מאפליקציה בטלפון, גם מי שיודע את הסיסמה לא ייכנס. לוקח דקה.</div>
       </div>
-      <button className="btn btn-primary" onClick={() => navigate('/settings#security')}>
-        הפעלה
-      </button>
-      <button className="btn btn-ghost" onClick={wait}>
-        בשבוע הבא
-      </button>
+      <div className="setup-nudge-actions">
+        <button className="btn btn-primary" onClick={() => navigate('/settings#security')}>
+          הפעלה
+        </button>
+        <button className="btn btn-ghost" onClick={wait}>
+          בשבוע הבא
+        </button>
+      </div>
     </div>
   );
 }
@@ -702,9 +704,11 @@ function SetupNudge() {
         </div>
         <div className="small muted">הצעד הבא: {next.label}. אחרי ההקמה המערכת מתחילה לעבוד בשבילך - משימות, לו"ז ותמונת מצב.</div>
       </div>
-      <button className="btn btn-primary" onClick={() => navigate('/settings')}>
-        להמשך ההקמה
-      </button>
+      <div className="setup-nudge-actions">
+        <button className="btn btn-primary" onClick={() => navigate('/settings')}>
+          להמשך ההקמה
+        </button>
+      </div>
     </div>
   );
 }

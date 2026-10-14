@@ -179,6 +179,12 @@ export function formatAgo(iso: string, now: Date = new Date()): string {
   return d === 1 ? 'אתמול' : d === 2 ? 'לפני יומיים' : `לפני ${d} ימים`;
 }
 
+/** a number of days in words, as said: יום, יומיים, 3 ימים */
+export function daysWord(n: number): string {
+  const a = Math.abs(n);
+  return a === 1 ? 'יום' : a === 2 ? 'יומיים' : `${a} ימים`;
+}
+
 export function daysSince(iso: string, now: Date = new Date()): number {
   return Math.floor((now.getTime() - new Date(iso).getTime()) / DAY);
 }

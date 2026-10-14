@@ -10,7 +10,7 @@ import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
 import { UserPicker, useNewTask } from '../components/NewTask';
 import { unlessHeld, useRowMenu } from '../components/RowMenu';
-import { byOpenStatus, GroupedTaskList, TaskBulkScope } from '../components/TaskRow';
+import { byOpenStatus, GroupedTaskList, TaskBulkScope, TaskRowsAround } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { Bar, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
@@ -79,24 +79,30 @@ function TrackCard({ t }: { t: Track }) {
     ],
   });
   return (
-            <div className={`card week-card track-card holdable${menu.lifted ? ' is-lifted' : ''}`} {...openable(unlessHeld(menu, () => navigate(`/tracks/${t.id}`)))} {...menu.bind}>
+            <div className={`card week-card track-card holdable${t.totalTasks === 0 ? ' is-empty' : ''}${menu.lifted ? ' is-lifted' : ''}`} {...openable(unlessHeld(menu, () => navigate(`/tracks/${t.id}`)))} {...menu.bind}>
               <div>
                 <div className="strong" style={{ fontSize: 19 }}>
                   {t.name}
                 </div>
-                <div className="small mt-8">{t.leadName ? `אחראי: ${t.leadName}` : <span className="text-orange">ללא אחראי</span>}</div>
-              </div>
-              <div className="row">
-                <div className="grow">
-                  <div className="tiny muted">
-                    {t.totalTasks === 0 ? 'אין עדיין משימות' : `${t.doneTasks}/${t.totalTasks} משימות`}
-                    {t.overdueTasks > 0 && <span className="text-red strong"> · {t.overdueTasks} באיחור</span>}
-                    {t.blockedTasks > 0 && <span className="text-orange"> · {t.blockedTasks} חסומות</span>}
-                  </div>
-                  {t.nextDeadline && <div className="tiny muted mt-8">הבא: {fmtDeadline(t.nextDeadline)}</div>}
+                <div className="small mt-8">
+                  {t.leadName ? `אחראי: ${t.leadName}` : <span className="text-orange">ללא אחראי</span>}
+                  {/* nothing in it yet: said in the same line - no empty ring of 0% */}
+                  {t.totalTasks === 0 && <span className="muted"> · אין עדיין משימות</span>}
                 </div>
-                <Ring value={t.readiness} size={64} tone={t.totalTasks === 0 ? 'gray' : undefined} />
               </div>
+              {t.totalTasks > 0 && (
+                <div className="row">
+                  <div className="grow">
+                    <div className="tiny muted">
+                      {t.doneTasks}/{t.totalTasks} משימות
+                      {t.overdueTasks > 0 && <span className="text-red strong"> · {t.overdueTasks} באיחור</span>}
+                      {t.blockedTasks > 0 && <span className="text-orange"> · {t.blockedTasks} חסומות</span>}
+                    </div>
+                    {t.nextDeadline && <div className="tiny muted mt-8">הבא: {fmtDeadline(t.nextDeadline)}</div>}
+                  </div>
+                  <Ring value={t.readiness} size={64} />
+                </div>
+              )}
               {menu.menu}
             </div>
   );
@@ -342,7 +348,7 @@ export function TrackPage() {
 
         <div className="split mt-16">
           <div>
-            <div className="row wrap">
+            <div className="row wrap list-head">
               <div className="section-title grow" style={{ margin: '6px 0' }}>
                 <h2>משימות הציר</h2>
                 <span className="count-pill">{data.tasks.length}</span>
@@ -357,7 +363,9 @@ export function TrackPage() {
                 ]}
               />
             </div>
-            <Grouped tasks={data.tasks} by={groupBy} pointed={pointed} />
+            <TaskRowsAround trackId={t.id}>
+              <Grouped tasks={data.tasks} by={groupBy} pointed={pointed} />
+            </TaskRowsAround>
           </div>
           <div className="col gap-16 sticky-side">
             <div className="card card-pad">
