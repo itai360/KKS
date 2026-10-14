@@ -26,14 +26,17 @@ export function applyTheme(pref: ThemePref = themePref()): void {
  */
 export function syncBrowserBar(): void {
   if (typeof document === 'undefined') return;
-  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (!meta) {
-    meta = document.createElement('meta');
+  const metas = [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')];
+  if (!metas.length) {
+    const meta = document.createElement('meta');
     meta.name = 'theme-color';
     document.head.appendChild(meta);
+    metas.push(meta);
   }
+  // the page has one for a light device and one for a dark one (index.html): a theme chosen here, whatever
+  // the device is set to, is the colour of both
   const paper = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
-  if (paper) meta.content = paper;
+  if (paper) for (const meta of metas) meta.content = paper;
 }
 
 const CHANGED = 'kks-theme';

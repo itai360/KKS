@@ -20,7 +20,8 @@ self.addEventListener('push', (event) => {
       dir: 'rtl',
       lang: 'he',
       icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      // the small icon in an Android phone's status bar: Android reads only its shape, so it is white on clear
+      badge: '/badge-96.png',
       requireInteraction: data.category === 'exception',
       data: { link: data.link || '/' },
     }),

@@ -11,6 +11,7 @@ import { Decided, useDecision } from '../components/Decision';
 import { DisciplineCard } from '../components/DisciplineCard';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
+import { InstallNudge } from '../components/InstallApp';
 import { WeeklyCard } from '../components/WeeklyCard';
 import { useNewTask } from '../components/NewTask';
 import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
@@ -63,6 +64,8 @@ export function DashboardPage() {
           </>
         }
       />
+      {/* on a phone still in its browser: the app for its home screen */}
+      <InstallNudge />
       <ErrorBox error={error} />
       {error && (
         <button className="btn mb-12" onClick={() => void reload()}>

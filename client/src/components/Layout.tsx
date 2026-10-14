@@ -329,6 +329,18 @@ export function Layout({ children }: { children: ReactNode }) {
     if (updateReady()) window.location.reload();
     else void checkForUpdate();
   }, [location.pathname]);
+  // the app's shortcuts on the phone's home screen (a long press on its icon - manifest.webmanifest) open
+  // with ?new=task or ?new=weeknote: the form comes up over the screen, and the address is left clean
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const kind = params.get('new');
+    const open = kind === 'task' ? () => newTask() : kind === 'weeknote' ? addToWeekDebrief : null;
+    if (!open) return;
+    params.delete('new');
+    const search = params.toString();
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : '', hash: location.hash }, { replace: true });
+    if (!viewing) open();
+  }, [location.search, location.pathname, location.hash, navigate, newTask, viewing]);
   // each screen entered counts toward the menu's "בשימוש גבוה" (frequent.ts) - not the home page, which the logo is
   const lastScreen = useRef<string | null>(null);
   useEffect(() => {

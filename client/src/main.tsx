@@ -10,11 +10,14 @@ import '@fontsource/ibm-plex-mono/600.css';
 import './styles.css';
 import { App } from './App';
 import { reportIssue } from './lib/api';
+import { watchInstall } from './lib/install';
 import { dropUnusedServiceWorker } from './lib/push';
 import { watchForUpdates } from './lib/update';
 import { applyTheme, onThemeChange, syncBrowserBar } from './lib/theme';
 
 applyTheme();
+// Chrome offers to install the app once, early - kept for the app's own install button (lib/install.ts)
+watchInstall();
 // with a touch listener on the page, iPhone shows a pressed look the moment a finger lands (not after)
 document.addEventListener('touchstart', () => undefined, { passive: true });
 // the device switched between light and dark while following it: the browser's bar follows too

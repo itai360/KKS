@@ -1,29 +1,100 @@
 {
+  "id": "/",
   "name": "ניהול קורס קק\"ס",
   "short_name": "קק\"ס",
-  "description": "משימות, אחריות, דד-ליינים ותמונת מצב של הקורס",
+  "description": "משימות, אחריות, דד-ליינים ותמונת מצב של הקורס - לכל הסגל, בטלפון ובמחשב",
   "lang": "he",
   "dir": "rtl",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f2efe6",
-  "theme_color": "#161a15",
+  "theme_color": "#f2efe6",
+  "categories": ["productivity", "education"],
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/badge-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "monochrome"
     },
     {
       "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "משימה חדשה",
+      "url": "/my?new=task",
+      "icons": [{ "src": "/shortcuts/task.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "לתחקיר השבוע",
+      "description": "לשימור, לשיפור או לקח - לתחקיר השבועי של השבוע הזה",
+      "url": "/?new=weeknote",
+      "icons": [{ "src": "/shortcuts/weeknote.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "המשימות שלי",
+      "url": "/my",
+      "icons": [{ "src": "/shortcuts/my.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "לו\"ז",
+      "url": "/schedule",
+      "icons": [{ "src": "/shortcuts/schedule.png", "sizes": "96x96", "type": "image/png" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/week.jpg",
+      "sizes": "618x1338",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "שבוע בקורס: מוכנות, תחומים ומשימות"
+    },
+    {
+      "src": "/screenshots/schedule.jpg",
+      "sizes": "618x1338",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "הלו\"ז יום אחרי יום"
+    },
+    {
+      "src": "/screenshots/menu.jpg",
+      "sizes": "618x1338",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "כל המסכים במקום אחד"
     }
   ],
   "share_target": {

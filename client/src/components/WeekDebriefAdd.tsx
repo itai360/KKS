@@ -14,16 +14,23 @@ import { useToast } from './Toasts';
 import { DateInput, ErrorBox, Field, Loading, Modal, Seg, Select } from './ui';
 
 let openHost: (() => void) | null = null;
+/** asked for before the host was up - the app just opened on its home-screen shortcut: it opens as the host mounts */
+let asked = false;
 
 /** Opens the dialog (the host is mounted once, beside the screens) */
 export function addToWeekDebrief(): void {
-  openHost?.();
+  if (openHost) openHost();
+  else asked = true;
 }
 
 export function WeekDebriefAddHost() {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     openHost = () => setOpen(true);
+    if (asked) {
+      asked = false;
+      setOpen(true);
+    }
     return () => {
       openHost = null;
     };

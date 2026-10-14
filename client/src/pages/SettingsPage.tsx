@@ -11,6 +11,7 @@ import { GuideImportCard } from '../components/Discipline';
 import { AbsencesCard } from '../components/Absences';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
+import { InstallCard } from '../components/InstallApp';
 import { SectionRail, type RailItem } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
 import { DateInput, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
@@ -49,6 +50,7 @@ export function SettingsPage() {
     { key: 'contact', label: 'פרטי קשר', node: <ContactCard /> },
     { key: 'absences', label: 'היעדרויות', node: <AbsencesCard userId={user.id} mine canEdit /> },
     { key: 'appearance', label: 'מראה', node: <AppearanceCard /> },
+    ...(IS_DEMO ? [] : [{ key: 'app', label: 'אפליקציה בטלפון', node: <InstallCard /> }]),
     { key: 'push', label: 'התראות', node: <BrowserNotificationsCard /> },
     { key: 'password', label: 'סיסמה', node: <PasswordCard /> },
     { key: 'twofactor', label: 'אימות דו-שלבי', node: <TwoFactorSettings /> },
@@ -717,7 +719,9 @@ function BrowserNotificationsCard() {
         ) : !supported ? (
           <p className="small muted">הדפדפן הזה לא תומך בהתראות. התראות ימשיכו להופיע בתוך המערכת.</p>
         ) : needsHomeScreen() ? (
-          <div className="info-box">באייפון: פתחו את האתר בספארי, לחצו על כפתור השיתוף ואז "הוסף למסך הבית". פתחו את האפליקציה מהמסך הראשי והפעילו כאן את ההתראות.</div>
+          <div className="info-box">
+            באייפון ההתראות מגיעות רק לאפליקציה שבמסך הבית: מתקינים אותה (ב<a href="#part-app">"אפליקציה בטלפון"</a> כאן למעלה), פותחים מהאייקון ומפעילים כאן את ההתראות.
+          </div>
         ) : state === 'denied' ? (
           <p className="small text-red">ההתראות חסומות בדפדפן. אפשרו אותן בהגדרות האתר (סמל המנעול ליד הכתובת) ונסו שוב.</p>
         ) : (

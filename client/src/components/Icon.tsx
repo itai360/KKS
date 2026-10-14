@@ -56,6 +56,11 @@ const paths: Record<string, string> = {
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
+  // a phone's own controls, for saying how to install the app: Safari's Share, "הוספה למסך הבית", Chrome's menu
+  share: 'M12 3v12M8 7l4-4 4 4M7 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-1',
+  addSquare: 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM12 8v8M8 12h8',
+  moreVertical: 'M12 5h.01M12 12h.01M12 19h.01',
+  smartphone: 'M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2',
   hand: 'M8 11V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v8a7 7 0 0 1-7 7H9.5a6 6 0 0 1-4.6-2.2L2.5 16a1.6 1.6 0 0 1 2.3-2.2L8 16V9',
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01',
   arrowUp: 'M12 19V5M5 12l7-7 7 7',

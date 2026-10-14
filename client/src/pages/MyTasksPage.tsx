@@ -8,6 +8,7 @@ import { UpNext } from '../components/Agenda';
 import { DisciplineCard } from '../components/DisciplineCard';
 import { PendingAnnouncements } from '../components/Announcements';
 import { Icon } from '../components/Icon';
+import { InstallNudge } from '../components/InstallApp';
 import { useNewTask } from '../components/NewTask';
 import { BulkToggle } from '../components/Bulk';
 import { DoneDrawer, revealDrawer } from '../components/DoneDrawer';
@@ -49,6 +50,8 @@ export function MyTasksPage() {
           </>
         }
       />
+      {/* on a phone still in its browser: the app for its home screen */}
+      <InstallNudge />
       <ErrorBox error={error} />
       {loading && !data ? (
         <Loading rows={5} />
