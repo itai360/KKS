@@ -88,7 +88,7 @@ import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { isDateKey, localDateKey } from '../../shared/dates';
-import { approvePlan, planDocument, plansOverview, savePlan } from './plans';
+import { approvePlan, approveThreeWeek, planDocument, plansOverview, savePlan, saveThreeWeek, threeWeekPlan } from './plans';
 
 const id = (v: unknown): number => {
   const n = Number(v);
@@ -549,6 +549,17 @@ export function v3Router(): Router {
   r.post('/plans/:weekId/approve', requireCommander, async (req, res) => {
     await approvePlan(me(req), id(req.params.weekId), req.body);
     res.json(await planDocument(id(req.params.weekId)));
+  });
+  // the three-week plan: the week now and the three after it (or from a given week)
+  r.get('/three-week', requireCommander, async (_req, res) => res.json(await threeWeekPlan(null)));
+  r.get('/three-week/:weekId', requireCommander, async (req, res) => res.json(await threeWeekPlan(id(req.params.weekId))));
+  r.patch('/three-week/:weekId', requireCommander, async (req, res) => {
+    saveThreeWeek(me(req), id(req.params.weekId), req.body);
+    res.json(await threeWeekPlan(id(req.params.weekId)));
+  });
+  r.post('/three-week/:weekId/approve', requireCommander, async (req, res) => {
+    await approveThreeWeek(me(req), id(req.params.weekId), req.body);
+    res.json(await threeWeekPlan(id(req.params.weekId)));
   });
 
   // ---------------- backup ----------------

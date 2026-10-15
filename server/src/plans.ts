@@ -9,9 +9,9 @@
 import { z } from 'zod';
 import { addDays, diffDays, isDateKey, localDateKey, shortDate, weekdayName } from '../../shared/dates';
 import { goalsFromText } from '../../shared/debriefForms';
-import type { Absence, BankLesson, ExternalEvent, PlanDocument, PlanEvent, PlanEventKind, PlanHorizonWeek, PlanListItem, PlanRisk, PlanSection, PlanSectionKey, PlansOverview, PlanStatus, ScheduleEvent, Week } from '../../shared/types';
+import type { Absence, BankLesson, ExternalEvent, PlanDocument, PlanEvent, PlanEventKind, PlanHorizonWeek, PlanListItem, PlanRisk, PlanSection, PlanSectionKey, PlansOverview, PlanStatus, ScheduleEvent, ThreeWeekPlan, Week } from '../../shared/types';
 import type { UserRow } from './auth';
-import { badRequest, clock, getSettings, nowIso, tz } from './core';
+import { badRequest, clock, getSettings, notFound, nowIso, tz } from './core';
 import { db } from './db';
 import { listAbsences } from './absences';
 import { externalEvents } from './calendar';
@@ -310,7 +310,7 @@ function findRisks(week: Week, all: PlanEvent[], absences: Absence[], lessons: B
   if (week.overdueTasks) out.push({ level: week.overdueTasks >= 3 ? 'high' : 'medium', text: `${count(week.overdueTasks, 'משימה אחת', 'משימות')} של השבוע באיחור`, answer: 'לסגור או לדחות בהחלטה מפורשת' });
   const undecided = lessons.filter((l) => !l.review).length;
   if (undecided) out.push({ level: 'medium', text: `${count(undecided, 'לקח אחד', 'לקחים')} ${week.staffPrep ? 'למחזור הבא' : 'מהמחזור הקודם לשבוע הזה'} עוד בלי החלטה`, answer: undecided === 1 ? 'להחליט: משימה, יושם, או לא רלוונטי' : 'להחליט על כל אחד: משימה, יושם, או לא רלוונטי' });
-  if (cadets.risk) out.push({ level: 'high', text: `${cadetsCount(cadets.risk)} בסיכון לפי תיקי ההערכה`, answer: 'ליווי צמוד של מפקד הצוות ושיחת מפקד קורס' });
+  if (cadets.risk) out.push({ level: 'high', text: `${cadetsCount(cadets.risk)} בסיכון לפי תיקי ההערכה`, answer: 'ליווי צמוד של מפקד הצוות ושיחת מפקד קורס', course: true });
   return out.slice(0, 8);
 }
 
@@ -396,19 +396,26 @@ export function changesSince(approved: Approved[], now: PlanEvent[]): string[] {
   return out;
 }
 
-function horizonWeeks(week: Week): Week[] {
-  return [week, ...listWeeks('w.start_date > ?', week.startDate).slice(0, 3)];
-}
+/** a week and the three after it */
+const horizonWeeks = (week: Week, weeks: Week[]): Week[] => [week, ...weeks.filter((w) => w.startDate > week.startDate).slice(0, 3)];
 
 const today = () => localDateKey(clock.now(), tz());
 
 export async function planDocument(weekId: number): Promise<PlanDocument> {
-  const week = getWeek(weekId);
-  const weeks = listWeeks();
+  return planOf(getWeek(weekId), listWeeks());
+}
+
+/** a week's document: the schedule of the week and the three after it, read for it */
+async function planOf(week: Week, weeks: Week[]): Promise<PlanDocument> {
+  const span = horizonWeeks(week, weeks);
+  return composePlan(week, weeks, await eventsBetween(week.startDate, span[span.length - 1].endDate));
+}
+
+/** a week's document from the activities of its four weeks */
+function composePlan(week: Week, weeks: Week[], events: PlanEvent[]): PlanDocument {
   const index = weeks.findIndex((w) => w.id === week.id) + 1;
   const total = weeks.length;
-  const span = horizonWeeks(week);
-  const events = await eventsBetween(week.startDate, span[span.length - 1].endDate);
+  const span = horizonWeeks(week, weeks);
 
   const ahead: PlanHorizonWeek[] = span.map((w) => {
     const mine = events.filter((e) => inWeek(e, w));
@@ -472,11 +479,15 @@ export async function planDocument(weekId: number): Promise<PlanDocument> {
   };
 }
 
+/** the week now: the one today falls in, else the next to come, else the last */
+const currentWeek = (weeks: Week[], now: string): Week | undefined =>
+  weeks.find((w) => w.startDate <= now && w.endDate >= now) ?? weeks.find((w) => w.startDate > now) ?? weeks[weeks.length - 1];
+
 export async function plansOverview(): Promise<PlansOverview> {
   const weeks = listWeeks();
   const rows = new Map(db().all<DocRow>('SELECT d.*, NULL AS updated_by_name FROM plan_docs d').map((r) => [r.week_id, r]));
   const now = today();
-  const current = weeks.find((w) => w.startDate <= now && w.endDate >= now) ?? weeks.find((w) => w.startDate > now) ?? weeks[weeks.length - 1];
+  const current = currentWeek(weeks, now);
   const out: PlanListItem[] = [];
   for (const week of weeks) {
     const row = rows.get(week.id);
@@ -549,6 +560,192 @@ export async function approvePlan(actor: UserRow, weekId: number, raw: unknown):
     ensureRow(weekId, actor);
     db().run(
       "UPDATE plan_docs SET status = 'approved', approved_by = ?, approved_on = ?, approval_notes = ?, approved_events = ?, updated_at = ?, updated_by = ? WHERE week_id = ?",
+      p.by,
+      p.on,
+      p.notes,
+      JSON.stringify(approved),
+      nowIso(),
+      actor.id,
+      weekId,
+    );
+  });
+  changed('plans');
+}
+
+// ---------------- the three-week plan (אישור תוכניות תלת שבועי) ----------------
+// The week now and the three after it in one document, to present the coming weeks at once: day by
+// day, the milestones and how ready they are, each week's goals and where its own plan stands, the
+// risks, the staff, the cadets, what is asked of the commander above - and the approval of the whole,
+// with what changed since in its key activities. Each week's part comes from that week's own document
+// (the commander's wording where there is one); the window keeps only its bottom line and approval.
+
+/** from this weight an activity is a milestone: an exam, a ceremony, a field exercise, a navigation, a range */
+const MILESTONE_WEIGHT = 4;
+
+interface WindowRow {
+  week_id: number;
+  bluf: string | null;
+  status: PlanStatus;
+  approved_by: string;
+  approved_on: string | null;
+  approval_notes: string;
+  approved_events: string | null;
+  updated_at: string;
+  updated_by_name: string | null;
+}
+
+const windowRow = (weekId: number) =>
+  db().get<WindowRow>('SELECT p.*, u.display_name AS updated_by_name FROM plan_windows p LEFT JOIN users u ON u.id = p.updated_by WHERE p.week_id = ?', weekId);
+
+const byDate = (list: PlanEvent[]) => [...list].sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? ''));
+
+/** what is asked of the commander above for the four weeks; a week's own wording, where written, first */
+function windowRequests(key: PlanEvent[], risks: PlanRisk[], cadets: PlanDocument['cadets'], written: string[]): string[] {
+  const out: string[] = [];
+  const approve = ofKind(key, 'field', 'range', 'navigation');
+  if (approve.length) out.push(`אישור תוכניות האימון: ${joinHe(byDate(approve).slice(0, 4).map((e) => e.title))}`);
+  for (const e of byDate(ofKind(key, 'ceremony')).slice(0, 2)) out.push(`הזמנה ל${e.title} (${whenLabel(e)}) - נשמח לנוכחותך`);
+  const gap = risks.find((r) => r.text.includes('בהיעדרות'));
+  if (gap) out.push(`סיוע בתגבור סגל: ${gap.text}`);
+  if (cadets.committees) out.push(`עדכון על ${cadetsCount(cadets.committees)} בוועדת הערכה ושיתוף בהחלטה`);
+  if (cadets.risk) out.push(`שיתוף: ${cadetsCount(cadets.risk)} בסיכון והמענה שניתן`);
+  return unique([...written, ...out]).slice(0, 8);
+}
+
+/** "2 מבחנים, פעילות שטח אחת וטקס אחד" */
+function periodLine(key: PlanEvent[]): string {
+  const n = (kinds: PlanEventKind[]) => key.filter((e) => kinds.includes(e.kind)).length;
+  return joinHe(
+    [
+      n(['exam']) && count(n(['exam']), 'מבחן אחד', 'מבחנים'),
+      n(['field', 'navigation', 'range']) && count(n(['field', 'navigation', 'range']), 'פעילות שטח אחת', 'פעילויות שטח'),
+      n(['ceremony']) && count(n(['ceremony']), 'טקס אחד', 'טקסים'),
+      key.filter((e) => e.night).length && count(key.filter((e) => e.night).length, 'פעילות לילה אחת', 'פעילויות לילה'),
+    ].filter((s): s is string => !!s),
+  );
+}
+
+export async function threeWeekPlan(startWeekId: number | null): Promise<ThreeWeekPlan> {
+  const weeks = listWeeks();
+  const now = today();
+  const start = startWeekId ? getWeek(startWeekId) : currentWeek(weeks, now);
+  if (!start) throw notFound('אין עדיין שבועות בקורס');
+  const span = horizonWeeks(start, weeks);
+  const last = span[span.length - 1];
+  const events = await eventsBetween(start.startDate, last.endDate);
+  // each week as its own document has it - one after the other, so a connected calendar is read once
+  // and kept for the rest
+  const plans: PlanDocument[] = [];
+  for (const w of span) plans.push(await planOf(w, weeks));
+
+  // a week holds its own days and those up to the next one: a weekend between weeks is not left out
+  const holder = (e: PlanEvent) => [...span].reverse().find((w) => w.startDate <= e.date) ?? span[0];
+  const parts = span.map((w, i) => {
+    const plan = plans[i];
+    const mine = events.filter((e) => holder(e) === w);
+    const key = mine.filter(isKey);
+    const rest: Record<string, number> = {};
+    for (const e of mine) if (!isKey(e)) rest[e.date] = (rest[e.date] ?? 0) + 1;
+    return { w, plan, key, rest };
+  });
+  const key = parts.flatMap((p) => p.key);
+  const cadets = parts[0].plan.cadets;
+  // a week's risks with its number; what is the course's (the cadets at risk) said once
+  const seen = new Set<string>();
+  const risks: ThreeWeekPlan['risks'] = [];
+  for (const { w, plan } of parts) {
+    for (const r of plan.risks) {
+      const id = r.course ? r.text : `${w.id}|${r.text}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      risks.push({ ...r, weekNumber: r.course ? null : w.number });
+    }
+  }
+  risks.sort((a, b) => (a.level === b.level ? 0 : a.level === 'high' ? -1 : 1));
+  const readiness = span.reduce((s, w) => ({ done: s.done + w.doneTasks, total: s.total + w.totalTasks, overdue: s.overdue + w.overdueTasks }), { done: 0, total: 0, overdue: 0 });
+  const written = parts.filter((p) => p.plan.sections.requests.edited).flatMap((p) => p.plan.sections.requests.items);
+  const approvedWeeks = parts.filter((p) => p.plan.status === 'approved').length;
+
+  const index = weeks.findIndex((w) => w.id === start.id) + 1;
+  const endDate = getSettings().endDate;
+  const highs = risks.filter((r) => r.level === 'high').length;
+  const period = periodLine(key);
+  const autoBluf = [
+    `${span.length === 1 ? `שבוע ${index}` : `שבועות ${index}-${index + span.length - 1}`} מתוך ${weeks.length} בקורס: ${joinHe(span.map((w) => w.name))}.`,
+    key.length ? `במוקד: ${titles(byWeight(key), 3)}.` : 'עדיין אין אירועי מפתח בלו"ז.',
+    period ? `בתקופה: ${period}.` : '',
+    readiness.total ? `מוכנות ${Math.round((readiness.done / readiness.total) * 100)}% (${readiness.done}/${readiness.total} משימות הכנה)${readiness.overdue ? `, ${readiness.overdue} באיחור` : ''}.` : '',
+    highs ? `${highs === 1 ? 'נקודה אחת דורשת' : `${highs} נקודות דורשות`} מענה.` : '',
+    `${approvedWeeks === span.length ? (span.length === 1 ? 'התוכנית השבועית אושרה' : `כל ${span.length} התוכניות השבועיות אושרו`) : `${approvedWeeks} מתוך ${span.length} התוכניות השבועיות אושרו`}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const row = windowRow(start.id);
+  const approved = row?.status === 'approved' ? (JSON.parse(row.approved_events ?? '[]') as Approved[]) : null;
+  return {
+    startWeekId: start.id,
+    current: currentWeek(weeks, now)?.id === start.id,
+    position: { first: index, last: index + span.length - 1, total: weeks.length, daysLeft: endDate && isDateKey(endDate) ? Math.max(0, diffDays(endDate, now)) : null },
+    bluf: { text: row?.bluf ?? autoBluf, auto: autoBluf, edited: row?.bluf != null },
+    weeks: parts.map(({ w, plan, key: mine, rest }) => ({
+      week: w,
+      plan: { status: plan.status, approval: plan.approval ? { by: plan.approval.by, on: plan.approval.on } : null, changed: plan.changes.length > 0 },
+      goals: plan.sections.goals,
+      key: mine,
+      rest,
+      lessons: { total: plan.lessons.length, open: plan.lessons.filter((l) => !l.review).length, items: plan.lessons.slice(0, 3).map((l) => l.body) },
+    })),
+    milestones: key.filter((e) => e.weight >= MILESTONE_WEIGHT),
+    readiness,
+    risks: risks.slice(0, 12),
+    absences: listAbsences({ from: start.startDate, to: last.endDate }),
+    cadets,
+    requests: windowRequests(key, risks, cadets, written),
+    visit: bestVisit(key),
+    status: row?.status ?? 'draft',
+    approval: row?.status === 'approved' && row.approved_on ? { by: row.approved_by, on: row.approved_on, notes: row.approval_notes } : null,
+    changes: approved ? changesSince(approved, key) : [],
+    updatedAt: row?.updated_at ?? null,
+    updatedByName: row?.updated_by_name ?? null,
+  };
+}
+
+const windowSchema = z.object({
+  bluf: z.string().trim().min(1).max(1500).nullable().optional(),
+  status: z.enum(['draft', 'ready']).optional(),
+});
+
+function ensureWindow(weekId: number, actor: UserRow): void {
+  db().run('INSERT INTO plan_windows(week_id, updated_at, updated_by) VALUES (?, ?, ?) ON CONFLICT(week_id) DO NOTHING', weekId, nowIso(), actor.id);
+}
+
+/** the window's bottom line in the commander's words (null: back to the draft), or ready / a draft again */
+export function saveThreeWeek(actor: UserRow, weekId: number, raw: unknown): void {
+  getWeek(weekId);
+  const p = windowSchema.parse(raw);
+  db().tx(() => {
+    ensureWindow(weekId, actor);
+    if (p.bluf !== undefined) db().run('UPDATE plan_windows SET bluf = ? WHERE week_id = ?', p.bluf, weekId);
+    if (p.status) db().run("UPDATE plan_windows SET status = ?, approved_by = '', approved_on = NULL, approval_notes = '', approved_events = NULL WHERE week_id = ?", p.status, weekId);
+    db().run('UPDATE plan_windows SET updated_at = ?, updated_by = ? WHERE week_id = ?', nowIso(), actor.id, weekId);
+  });
+  changed('plans');
+}
+
+/** the commander above approved the four weeks: who, when, what they said - and what the weeks held then */
+export async function approveThreeWeek(actor: UserRow, weekId: number, raw: unknown): Promise<void> {
+  const start = getWeek(weekId);
+  const p = approveSchema.parse(raw);
+  if (p.on > addDays(today(), 1)) throw badRequest('תאריך האישור עוד לא הגיע');
+  const span = horizonWeeks(start, listWeeks());
+  const last = span[span.length - 1];
+  const key = (await eventsBetween(start.startDate, last.endDate)).filter(isKey);
+  const approved: Approved[] = key.map((e) => ({ key: e.key, title: e.title, date: e.date, startTime: e.startTime }));
+  db().tx(() => {
+    ensureWindow(weekId, actor);
+    db().run(
+      "UPDATE plan_windows SET status = 'approved', approved_by = ?, approved_on = ?, approval_notes = ?, approved_events = ?, updated_at = ?, updated_by = ? WHERE week_id = ?",
       p.by,
       p.on,
       p.notes,

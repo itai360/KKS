@@ -153,6 +153,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
           { to: '/weekly', label: 'שבועי', icon: 'weekly' },
           { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
           { to: '/plans', label: 'אישור תוכניות', icon: 'stamp' },
+          { to: '/three-week', label: 'אישור תוכניות תלת שבועי', icon: 'threeWeeks', keywords: 'תלת שבועי תלת-שבועי שלושה שבועות ארבעה שבועות תוכנית' },
         ],
       },
       {

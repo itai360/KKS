@@ -12854,3 +12854,221 @@ tr.is-finished.is-folding {
 #brief-events > .leave-wrap:last-child > .event-row {
   border-bottom: none;
 }
+
+/* ---------------- the three-week plan: four weeks in one document (pages/ThreeWeekPage.tsx) ---------------- */
+/* a week at a glance: its name leads to the week, its lead and readiness in two short lines */
+.tw-week {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tw-week-name {
+  margin-top: 6px;
+  font-size: 16px;
+  color: inherit;
+}
+.tw-week-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+/* how far a week's preparation is: a short bar, the numbers, what is late */
+.tw-ready {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tw-ready .bar {
+  width: 46px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.tw-ready .bar span {
+  display: block;
+  height: 100%;
+  background: var(--orange);
+}
+.tw-ready .bar span.ok {
+  background: var(--green);
+}
+.tw-ready .bar span.low {
+  background: var(--red);
+}
+.tw-ready-list {
+  margin-bottom: 6px;
+}
+
+/* day by day: every week a row of its days, each day its key activities - today framed */
+.tw-block + .tw-block {
+  margin-top: 16px;
+}
+.tw-block h3 {
+  margin: 6px 0 8px;
+}
+.tw-days {
+  display: grid;
+  grid-template-columns: repeat(var(--days, 5), minmax(0, 1fr));
+  gap: 6px;
+}
+.tw-day {
+  min-width: 0;
+  min-height: 86px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.tw-day.is-today {
+  border: 2px solid var(--orange);
+}
+.tw-day.is-empty {
+  background: var(--gray-bg);
+}
+/* a day after the course week's end, before the next (a weekend): there, but outside the week */
+.tw-day.is-off {
+  border-style: dashed;
+  background: none;
+}
+.tw-day-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tw-day-head b {
+  color: var(--ink);
+}
+.tw-day ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+.tw-time {
+  margin-inline-end: 4px;
+  color: var(--muted);
+}
+.tw-act {
+  font-weight: 600;
+}
+/* a narrow day has no room for the place; the list on a phone has */
+.tw-where {
+  display: none;
+}
+/* a risk of one week says which */
+.tw-risk-week {
+  display: inline-block;
+  margin-inline-end: 4px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+  border-radius: 4px;
+  background: var(--gray-bg);
+  white-space: nowrap;
+}
+.tw-goals + .tw-goals {
+  margin-top: 12px;
+}
+.tw-goals .plan-h2 {
+  margin-bottom: 6px;
+}
+.tw-goals h3 {
+  margin: 0;
+}
+
+/* days in a row with nothing on them: one line on a phone (below), every day in the grid elsewhere */
+.tw-run {
+  display: none;
+}
+
+/* a screen only: printed on A4 the page is as narrow as a phone, and the paper keeps the grid */
+@media screen and (max-width: 760px) {
+  /* a phone: a week's days one under the other, the day beside its activities */
+  .tw-days {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .tw-day {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 3px 10px;
+    min-height: 0;
+    padding: 8px 0;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    font-size: 13.5px;
+  }
+  .tw-day > :not(.tw-day-head) {
+    grid-column: 2;
+  }
+  .tw-day-head {
+    grid-row: 1 / span 3;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 0;
+    margin: 0;
+  }
+  .tw-day.is-empty {
+    padding: 5px 0;
+    background: none;
+  }
+  .tw-day.is-today {
+    border: none;
+    border-bottom: 1px solid var(--line);
+    border-inline-start: 3px solid var(--orange);
+    padding-inline-start: 8px;
+  }
+  .tw-where {
+    display: inline;
+  }
+  .tw-run {
+    display: grid;
+  }
+  .tw-day.in-run {
+    display: none;
+  }
+  /* the folded days on one line across: "ראשון-חמישי 27.9-1.10" */
+  .tw-run .tw-day-head {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .tw-run > :not(.tw-day-head) {
+    display: none;
+  }
+}
+
+@media print {
+  .tw-days {
+    grid-template-columns: repeat(var(--days, 5), minmax(0, 1fr));
+  }
+  .tw-block,
+  .tw-week,
+  .tw-goals {
+    break-inside: avoid;
+  }
+  .tw-day {
+    min-height: 0;
+    font-size: 9pt;
+  }
+  .tw-day.is-empty {
+    background: none;
+  }
+  .tw-day.is-today {
+    border: 1px solid #000;
+  }
+}

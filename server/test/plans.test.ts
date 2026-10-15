@@ -2,7 +2,7 @@
 // rewritten by the commander, approved by the commander above - and what changed since.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { PlanDocument, PlansOverview } from '../../shared/types';
+import type { PlanDocument, PlansOverview, ThreeWeekPlan } from '../../shared/types';
 import { classify, joinHe, readEvents } from '../src/plans';
 import { at, newTask, setup, type Ctx } from './helpers';
 
@@ -134,5 +134,87 @@ describe('plan approval', () => {
     // back to ready: the approval no longer stands
     const back = (await c.cmd.patch(`/api/plans/${weekIds[0]}`, { status: 'ready' })).body as PlanDocument;
     expect(back).toMatchObject({ status: 'ready', approval: null, changes: [] });
+  });
+});
+
+describe('the three-week plan', () => {
+  const tw = async (path = '') => (await c.cmd.get(`/api/three-week${path}`)).body as ThreeWeekPlan;
+
+  it("is the commander's only", async () => {
+    expect((await c.s1.get('/api/three-week')).status).toBe(403);
+    expect((await c.s1.get(`/api/three-week/${weekIds[0]}`)).status).toBe(403);
+    expect((await c.s1.patch(`/api/three-week/${weekIds[0]}`, { bluf: 'x' })).status).toBe(403);
+    expect((await c.s1.post(`/api/three-week/${weekIds[0]}/approve`, { by: 'מח"ט', on: '2026-10-01' })).status).toBe(403);
+  });
+
+  it('shows the week now and the three after it: day by day, the milestones, readiness, the risks with their week', async () => {
+    const d = await tw();
+    // today is 1.10, before the course: the week to come is the week now
+    expect(d).toMatchObject({ startWeekId: weekIds[0], current: true, position: { first: 1, last: 4, total: 5 } });
+    expect(d.weeks.map((w) => w.week.name)).toEqual(['שבוע התקפה', 'שבוע הגנה', 'שבוע שטח', 'שבוע מבחנים']);
+    expect(d.weeks[0].key.map((e) => e.title)).toEqual(['ניווט לילה', 'מטווח הפעלת כוח', 'תרגיל התקפה', 'מבחן עקרונות']);
+    // the lesson that morning is counted, the physical training every morning and lunch are the routine
+    expect(d.weeks[0].rest).toEqual({ '2026-10-04': 1 });
+    expect(d.weeks[2].key.map((e) => e.title)).toEqual(['טקס אמצע קורס']);
+    expect(d.milestones.map((e) => e.title)).toEqual(['ניווט לילה', 'מטווח הפעלת כוח', 'תרגיל התקפה', 'מבחן עקרונות', 'טקס אמצע קורס', 'מבחן מסכם']);
+    expect(d.weeks[0].plan).toEqual({ status: 'draft', approval: null, changed: false });
+    expect(d.weeks[0].goals.items.join('\n')).toContain('להקנות ולתרגל: התקפה בשטח פתוח');
+
+    const risks = d.risks.map((r) => `${r.weekNumber ?? '-'} ${r.level}: ${r.text}`);
+    expect(risks).toContain('1 high: מפק"צ 3, האחראי על תרגיל התקפה, בהיעדרות ב-7.10');
+    expect(risks).toContain('1 medium: למבחן עקרונות אין אחראי');
+    expect(risks).toContain('2 medium: אין עדיין אירועי מפתח בלו"ז השבוע');
+    expect(d.risks[0].level).toBe('high');
+    expect(d.absences.map((a) => a.userName)).toEqual(['מפק"צ 3']);
+
+    expect(d.requests).toContain('אישור תוכניות האימון: ניווט לילה, מטווח הפעלת כוח ותרגיל התקפה');
+    expect(d.requests.join('\n')).toContain('הזמנה לטקס אמצע קורס');
+    expect(d.visit?.title).toBe('טקס אמצע קורס');
+    expect(d.bluf.text).toContain('שבועות 1-4 מתוך 5 בקורס: שבוע התקפה, שבוע הגנה, שבוע שטח ושבוע מבחנים.');
+    expect(d.bluf.text).toContain('בתקופה: 2 מבחנים, 3 פעילויות שטח, טקס אחד ופעילות לילה אחת.');
+    expect(d.bluf.text).toContain('0 מתוך 4 התוכניות השבועיות אושרו.');
+    expect(d.status).toBe('draft');
+  });
+
+  it("does not leave out a weekend between weeks: it is the week before's", async () => {
+    await event('תרגיל סוף שבוע', '2026-10-10', '06:00', '20:00', c.ids.s3);
+    const d = await tw();
+    expect(d.weeks[0].key.map((e) => e.title)).toContain('תרגיל סוף שבוע');
+    expect(d.weeks[1].key.map((e) => e.title)).not.toContain('תרגיל סוף שבוע');
+    expect(d.milestones.map((e) => e.title)).toContain('תרגיל סוף שבוע');
+  });
+
+  it('starts at any week; at the end of the course it holds fewer weeks', async () => {
+    const d = await tw(`/${weekIds[3]}`);
+    expect(d).toMatchObject({ current: false, position: { first: 4, last: 5, total: 5 } });
+    expect(d.weeks.map((w) => w.week.name)).toEqual(['שבוע מבחנים', 'שבוע סיום']);
+    expect((await c.cmd.get('/api/three-week/9999')).status).toBe(404);
+  });
+
+  it("says where each week's own plan stands, and the commander rewrites the bottom line", async () => {
+    await c.cmd.post(`/api/plans/${weekIds[1]}/approve`, { by: 'מח"ט', on: '2026-10-01' });
+    let d = await tw();
+    expect(d.weeks[1].plan).toMatchObject({ status: 'approved', approval: { by: 'מח"ט', on: '2026-10-01' } });
+    expect(d.bluf.text).toContain('1 מתוך 4 התוכניות השבועיות אושרו.');
+    d = (await c.cmd.patch(`/api/three-week/${weekIds[0]}`, { bluf: 'שורה תחתונה לארבעת השבועות' })).body as ThreeWeekPlan;
+    expect(d.bluf).toMatchObject({ text: 'שורה תחתונה לארבעת השבועות', edited: true });
+    d = (await c.cmd.patch(`/api/three-week/${weekIds[0]}`, { bluf: null })).body as ThreeWeekPlan;
+    expect(d.bluf.edited).toBe(false);
+    // a week's own wording of what it asks comes first
+    await c.cmd.patch(`/api/plans/${weekIds[2]}`, { requests: ['רכב נוסף לטקס'] });
+    expect((await tw()).requests[0]).toBe('רכב נוסף לטקס');
+  });
+
+  it('records the approval of the four weeks, and shows what changed in them since', async () => {
+    expect((await c.cmd.post(`/api/three-week/${weekIds[0]}/approve`, { by: 'מח"ט', on: '2026-10-09' })).status).toBe(400); // not yet
+    let d = (await c.cmd.post(`/api/three-week/${weekIds[0]}/approve`, { by: 'אל"ם ישראלי', on: '2026-10-01', notes: 'לתאם את הטקס מול ההורים' })).body as ThreeWeekPlan;
+    expect(d).toMatchObject({ status: 'approved', approval: { by: 'אל"ם ישראלי', on: '2026-10-01', notes: 'לתאם את הטקס מול ההורים' }, changes: [] });
+    expect((await c.cmd.patch(`/api/events/${eventIds['טקס אמצע קורס']}`, { date: '2026-10-21' })).status).toBe(200);
+    d = await tw();
+    expect(d.changes).toEqual(['הוזז: טקס אמצע קורס - משלישי 20.10 18:00 לרביעי 21.10 18:00']);
+    // the four weeks from the next week are a document of their own
+    expect((await tw(`/${weekIds[1]}`)).status).toBe('draft');
+    d = (await c.cmd.patch(`/api/three-week/${weekIds[0]}`, { status: 'ready' })).body as ThreeWeekPlan;
+    expect(d).toMatchObject({ status: 'ready', approval: null, changes: [] });
   });
 });

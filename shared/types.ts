@@ -1404,6 +1404,8 @@ export interface PlanRisk {
   level: 'high' | 'medium';
   text: string;
   answer: string;
+  /** the course's as a whole (the cadets at risk), not one week's: said once across several weeks */
+  course?: boolean;
 }
 
 export interface PlanDocument {
@@ -1439,4 +1441,50 @@ export interface PlanListItem {
 export interface PlansOverview {
   weeks: PlanListItem[];
   currentWeekId: number | null;
+}
+
+/** one week of the three-week plan: as its own plan document has it */
+export interface ThreeWeekWeek {
+  week: Week;
+  /** where the week's own plan document stands */
+  plan: { status: PlanStatus; approval: { by: string; on: string } | null; changed: boolean };
+  /** the week's goals: the commander's wording, or the draft */
+  goals: PlanSection;
+  /** every key activity of the week - and of the days after it, up to the next week - by date */
+  key: PlanEvent[];
+  /** the lesser activities of each day, counted: date -> how many */
+  rest: Record<string, number>;
+  /** the previous cycle's lessons for the week: how many, how many still without a decision, the first few */
+  lessons: { total: number; open: number; items: string[] };
+}
+
+/** the three-week plan (אישור תוכניות תלת שבועי): the week now and the three after it, in one document */
+export interface ThreeWeekPlan {
+  /** its first week - the document's address */
+  startWeekId: number;
+  /** whether it starts at the week now */
+  current: boolean;
+  /** which weeks of the course, of how many; days to its end */
+  position: { first: number; last: number; total: number; daysLeft: number | null };
+  bluf: { text: string; auto: string; edited: boolean };
+  /** four weeks - fewer at the end of the course */
+  weeks: ThreeWeekWeek[];
+  /** the weightiest activities - exams, ceremonies, exercises, navigations, ranges - by date */
+  milestones: PlanEvent[];
+  /** the preparation tasks of the four weeks */
+  readiness: { done: number; total: number; overdue: number };
+  /** the high ones first: a week's own with its number, the course's once (no number) */
+  risks: (PlanRisk & { weekNumber: number | null })[];
+  absences: Absence[];
+  cadets: PlanDocument['cadets'];
+  /** what is asked of the commander above */
+  requests: string[];
+  /** the moment that shows the course best, for the commander above to come and see */
+  visit: PlanEvent | null;
+  status: PlanStatus;
+  approval: { by: string; on: string; notes: string } | null;
+  /** what changed in the four weeks' key activities since they were approved */
+  changes: string[];
+  updatedAt: string | null;
+  updatedByName: string | null;
 }
