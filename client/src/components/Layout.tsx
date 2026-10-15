@@ -33,6 +33,8 @@ interface NavItem {
   icon: string;
   count?: number;
   end?: boolean;
+  /** other words people look for it by, in the menu's search and Ctrl+K */
+  keywords?: string;
 }
 
 /** each group of the menu, by its title - shown alone when the menu is folded to icons */
@@ -141,7 +143,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
           { to: '/my', label: 'המשימות שלי', icon: 'my' },
           { to: '/tasks', label: 'כל המשימות', icon: 'tasks' },
           { to: '/schedule', label: 'לו"ז', icon: 'calendar' },
-          { to: '/team', label: 'הסגל', icon: 'users' },
+          { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס' },
         ],
       },
       {

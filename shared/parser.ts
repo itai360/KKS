@@ -190,6 +190,8 @@ const COMMAND_WORDS = new Set([
 
 const DOMAIN_KEYWORDS: [RegExp, string][] = [
   [/לו"?ז/, 'לו"ז'],
+  // before the training's words: "שבצ"ק מדריכים" is about who is on duty
+  [/כוח אדם|כ"א|שבצ"ק|איוש/, 'כוח אדם'],
   [/בטיחות|מטווח|ירי/, 'בטיחות'],
   [/תיאום|לתאם/, 'תיאומים'],
   [/ציוד|הסע|לוגיסט|תחמושת|אפסנא/, 'לוגיסטיקה'],

@@ -8,7 +8,7 @@ describe('areas of responsibility', () => {
     const c = await setup();
     const domains = (await c.s1.get('/api/auth/me')).body.settings.domains as string[];
     expect(domains).toEqual(DEFAULT_DOMAINS);
-    for (const d of ['חינוך', 'אקדמיה', 'אימון גופני', 'שטח', 'ניווטים', 'דת', 'רכב']) expect(domains).toContain(d);
+    for (const d of ['חינוך', 'אקדמיה', 'אימון גופני', 'שטח', 'ניווטים', 'דת', 'רכב', 'כוח אדם']) expect(domains).toContain(d);
     expect(domains.at(-1)).toBe('אחר');
   });
 
@@ -19,6 +19,19 @@ describe('areas of responsibility', () => {
     migrate(old);
     const list = JSON.parse(old.get<{ value: string }>("SELECT value FROM settings WHERE key = 'domains'")!.value) as string[];
     expect(list).toEqual(['הדרכה', 'שטח', 'מבצעים', ...ADDED_DOMAINS.filter((d) => d !== 'שטח'), 'אחר']);
+    old.close();
+  });
+
+  it('a course already past the first added areas gets כוח אדם before "אחר" - and only it, so an area taken out stays out', () => {
+    const old = new Db(':memory:');
+    migrate(old, 37);
+    // its own list, the earlier areas in it but "דת", which the commander took out
+    const own = ['בטיחות', 'הדרכה', 'חינוך', 'אקדמיה', 'אימון גופני', 'שטח', 'ניווטים', 'רכב', 'אחר'];
+    old.run("INSERT INTO settings(key, value) VALUES ('domains', ?)", JSON.stringify(own));
+    migrate(old);
+    const list = JSON.parse(old.get<{ value: string }>("SELECT value FROM settings WHERE key = 'domains'")!.value) as string[];
+    expect(list).toEqual([...own.slice(0, -1), 'כוח אדם', 'אחר']);
+    expect(list).not.toContain('דת');
     old.close();
   });
 

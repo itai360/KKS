@@ -24,12 +24,14 @@ interface Item {
   sub?: string;
   icon: string;
   hint?: string;
+  /** other words it is found by (a screen's, from the menu) */
+  keywords?: string;
   run: () => void;
 }
 
 export const OPEN_PALETTE = 'kks:palette';
 
-export function CommandPalette({ pages }: { pages: { to: string; label: string; icon: string }[] }) {
+export function CommandPalette({ pages }: { pages: { to: string; label: string; icon: string; keywords?: string }[] }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -52,7 +54,7 @@ export function CommandPalette({ pages }: { pages: { to: string; label: string; 
   return <Palette pages={pages} onClose={() => setOpen(false)} />;
 }
 
-function Palette({ pages, onClose }: { pages: { to: string; label: string; icon: string }[]; onClose: () => void }) {
+function Palette({ pages, onClose }: { pages: { to: string; label: string; icon: string; keywords?: string }[]; onClose: () => void }) {
   const { isCommander, weeks } = useSession();
   const navigate = useNavigate();
   const newTask = useNewTask();
@@ -117,8 +119,8 @@ function Palette({ pages, onClose }: { pages: { to: string; label: string; icon:
       { id: 'a:dark', group: 'פעולות', label: 'מצב כהה', icon: 'moon', run: () => setThemePref('dark') },
       { id: 'a:light', group: 'פעולות', label: 'מצב בהיר', icon: 'sun', run: () => setThemePref('light') },
     ];
-    const screens: Item[] = pages.map((p) => ({ id: `p:${p.to}`, group: 'מסכים', label: p.label, icon: p.icon, run: go(p.to) }));
-    const local = [...actions, ...screens].filter((i) => !q.trim() || matchesSearch(q, i.label));
+    const screens: Item[] = pages.map((p) => ({ id: `p:${p.to}`, group: 'מסכים', label: p.label, icon: p.icon, keywords: p.keywords, run: go(p.to) }));
+    const local = [...actions, ...screens].filter((i) => !q.trim() || matchesSearch(q, i.label, i.keywords));
     if (!found) return local;
     const fromSearch: Item[] = [
       // the open ones first (the search puts them there); one already closed says so instead of its deadline

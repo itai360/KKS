@@ -352,6 +352,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
                 </span>
               ))}
               {deadlineIso && <span className="badge t-green">דד-ליין: {fmtDeadline(deadlineIso)}</span>}
+              {domain && <span className="badge t-purple">תחום: {domain}</span>}
               {priority !== 'normal' && <span className="badge t-orange">עדיפות: {PRIORITY_LABELS[priority]}</span>}
               {missing.map((m) => (
                 <span key={m} className="badge t-red">

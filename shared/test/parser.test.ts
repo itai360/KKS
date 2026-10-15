@@ -101,4 +101,15 @@ describe('parseTaskText', () => {
     expect(r.title).toBe('סגירת מטווח');
     expect(r.missing).toEqual(['owner', 'deadline']);
   });
+
+  it('knows a manpower task by its words - before the training words around it, and only with its quote', () => {
+    const area = (text: string) => parseTaskText(text, ctx).domain;
+    expect(area('מפק"צ 2 שבצ"ק מדריכים לשבוע הבא עד מחר')).toBe('כוח אדם');
+    expect(area('מפק"צ 2 בקשת תגבור כ״א למארס עד מחר')).toBe('כוח אדם');
+    expect(area('מפק"צ 2 איוש עמדות בתרגיל עד מחר')).toBe('כוח אדם');
+    expect(area('מפק"צ 2 לסגור כוח אדם לשבוע הגנה עד מחר')).toBe('כוח אדם');
+    // "כאן" is not כ"א; a course without the area does not get it
+    expect(area('מפק"צ 2 להכין שיעור כאן עד מחר')).toBe('הדרכה');
+    expect(parseTaskText('מפק"צ 2 שבצ"ק לשיעור עד מחר', { ...ctx, domains: ['הדרכה'] }).domain).toBe('הדרכה');
+  });
 });

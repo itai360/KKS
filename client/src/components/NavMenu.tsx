@@ -25,7 +25,7 @@ export interface MenuSection {
   items: MenuItem[];
 }
 
-type MenuItem = { to: string; label: string; icon: string; count?: number; end?: boolean };
+type MenuItem = { to: string; label: string; icon: string; count?: number; end?: boolean; keywords?: string };
 
 /** each group's own mark and colour */
 const SECTION_ICONS: Record<string, string> = { ראשי: 'home', 'תכנון הקורס': 'plan', צוערים: 'cap', בקרה: 'pulse', כלים: 'wrench', חשבון: 'settings' };
@@ -83,7 +83,7 @@ export function NavMenu({
   const frequent = top.map((to) => everything.find((it) => it.to === to)).filter((it): it is MenuItem => !!it);
   // searching, the person's own place is one of the groups too
   const groups = [...all, ...(searching ? [{ title: 'חשבון', items: [SETTINGS_ITEM] }] : [])];
-  const sections = groups.map((s) => ({ ...s, items: s.items.filter((it) => matchesSearch(query, it.label, s.title ?? '')) })).filter((s) => s.items.length);
+  const sections = groups.map((s) => ({ ...s, items: s.items.filter((it) => matchesSearch(query, it.label, s.title ?? '', it.keywords)) })).filter((s) => s.items.length);
   const found = sections.flatMap((s) => s.items);
   const here = (to: string, end?: boolean) => (end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`));
   const clear = () => {
