@@ -450,9 +450,9 @@ export function Layout({ children }: { children: ReactNode }) {
     }
   };
 
-  // the phone's bar steps aside while reading down, and returns on scrolling up,
-  // at the end of the page, or on moving to another screen
-  const [barAway, setBarAway] = useState(false);
+  // the phone's bar grows small while reading down - a short capsule of its symbols, every tab still one press
+  // away - and is whole again on scrolling up, at the end of the page, or on moving to another screen
+  const [barSmall, setBarSmall] = useState(false);
   useEffect(() => {
     let last = window.scrollY;
     let frame = 0;
@@ -464,8 +464,8 @@ export function Layout({ children }: { children: ReactNode }) {
         // the top bar shows its edge only while content passes under it
         document.documentElement.toggleAttribute('data-scrolled', y > 2);
         const atEnd = y + window.innerHeight >= document.documentElement.scrollHeight - 8;
-        if (atEnd || y < 60) setBarAway(false);
-        else if (Math.abs(y - last) > 6) setBarAway(y > last);
+        if (atEnd || y < 60) setBarSmall(false);
+        else if (Math.abs(y - last) > 6) setBarSmall(y > last);
         last = y;
       });
     };
@@ -476,7 +476,7 @@ export function Layout({ children }: { children: ReactNode }) {
     };
   }, []);
   useEffect(() => {
-    setBarAway(false);
+    setBarSmall(false);
   }, [location.pathname]);
   // the line under a chosen tab slides to the next one, on every screen
   useEffect(() => {
@@ -508,8 +508,8 @@ export function Layout({ children }: { children: ReactNode }) {
     setPlusOpen(false);
   }, [location.pathname]);
   useEffect(() => {
-    if (barAway) setPlusOpen(false);
-  }, [barAway]);
+    if (barSmall) setPlusOpen(false);
+  }, [barSmall]);
   const path = location.pathname;
   // the phone's bar, right to left: tasks, cadets, "+", weeks, schedule; on any other screen no tab is marked
   // (everything else is in the menu under the course mark at the top)
@@ -721,21 +721,30 @@ export function Layout({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      <nav className={`bottom-nav${barAway || typingField ? ' away' : ''}${barIdx < 0 ? ' no-tab' : ''}`} aria-label="ניווט" style={{ ['--idx' as string]: Math.max(0, barIdx) }}>
+      <nav
+        className={`bottom-nav${typingField ? ' away' : barSmall ? ' compact' : ''}${barIdx < 0 ? ' no-tab' : ''}`}
+        aria-label="ניווט"
+        style={{ ['--idx' as string]: Math.max(0, barIdx) }}
+      >
         {/* slides to the current tab */}
         <span className="nav-ind" aria-hidden />
         <NavLink to={tasksHome} end={tasksHome === '/'} className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
           <Icon name="tasks" />
-          משימות
+          <span className="nav-label">משימות</span>
         </NavLink>
         <NavLink to="/cadets" className={() => (barIdx === 1 ? 'active' : '')} aria-current={barIdx === 1 ? 'page' : undefined}>
           <Icon name="cap" />
-          צוערים
+          <span className="nav-label">צוערים</span>
         </NavLink>
         <button
           id="plus-button"
           className={plusOpen ? 'plus-open' : ''}
-          onClick={() => !viewing && setPlusOpen((o) => !o)}
+          onClick={() => {
+            if (viewing) return;
+            setPlusOpen((o) => !o);
+            // its menu opens over the whole bar
+            setBarSmall(false);
+          }}
           aria-label={viewing ? 'קורס קודם - לקריאה בלבד' : canEvent ? 'הוספה: משימה, אירוע בלו"ז או שבועי' : 'הוספה: משימה או שבועי'}
           aria-disabled={viewing ? 'true' : undefined}
           aria-haspopup="menu"
@@ -748,11 +757,11 @@ export function Layout({ children }: { children: ReactNode }) {
         </button>
         <NavLink to="/weeks" className={() => (barIdx === 3 ? 'active' : '')} aria-current={barIdx === 3 ? 'page' : undefined}>
           <Icon name="layers" />
-          שבועות
+          <span className="nav-label">שבועות</span>
         </NavLink>
         <NavLink to="/schedule" className={() => (barIdx === 4 ? 'active' : '')} aria-current={barIdx === 4 ? 'page' : undefined}>
           <Icon name="calendar" />
-          לו"ז
+          <span className="nav-label">לו"ז</span>
         </NavLink>
       </nav>
       {menuOpen && (
