@@ -114,7 +114,8 @@ export function NavMenu({
       /* not kept: the group of the screen on show next time */
     }
   };
-  // a swipe across the group moves to the one beside it: the finger moving left brings the next (right to left)
+  // a swipe across the group moves to the one beside it, as a page turns: the finger moving right brings the
+  // next group - the one on its left (right to left) - in from the side it goes to, as the schedule's days do
   const swipe = useRef<{ x: number; y: number; id: number } | null>(null);
   // as tall as the biggest group, whichever is on show: the sheet does not jump between groups
   const rows = Math.ceil(Math.max(1, ...sections.map((s) => s.items.length)) / (wide() ? 5 : 4));
@@ -233,7 +234,7 @@ export function NavMenu({
                 if (!s0 || s0.id !== e.pointerId) return;
                 const dx = e.clientX - s0.x;
                 if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(e.clientY - s0.y) * 1.5) return;
-                choose(at + (dx < 0 ? 1 : -1));
+                choose(at + (dx > 0 ? 1 : -1));
               }}
               onPointerCancel={() => (swipe.current = null)}
             >
