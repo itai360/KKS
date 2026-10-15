@@ -509,7 +509,7 @@ export function PlanPage() {
       <article className="doc plan-doc" aria-label={`אישור תוכנית - ${w.name}`}>
         <header className="doc-head">
           <div className="doc-kicker">{settings.courseName}</div>
-          <h1>אישור תוכנית</h1>
+          <h1 data-bar-title={`אישור תוכנית - שבוע ${w.number}`}>אישור תוכנית</h1>
           <div className="doc-title">
             שבוע {w.number} · {w.name}
           </div>

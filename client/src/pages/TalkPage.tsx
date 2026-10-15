@@ -78,7 +78,7 @@ export function TalkPage() {
       <article className="doc talk-doc" aria-label={`${record.category} - ${c.fullName}`}>
         <header className="doc-head">
           <div className="doc-kicker">{settings.courseName} · אישי - למפקדי הצוער בלבד</div>
-          <h1>{record.category}</h1>
+          <h1 data-bar-title={`${record.category} - ${c.fullName}`}>{record.category}</h1>
           <div className="doc-title">{c.fullName}</div>
           <table className="doc-meta">
             <tbody>

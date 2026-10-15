@@ -37,7 +37,9 @@ export function BriefingPage() {
           <div className="label-caps">
             {settings.courseName} · תדריך בוקר
           </div>
-          <div className="brief-title">{data ? fmtLongDate(data.date) : 'תדריך בוקר'}</div>
+          <div className="brief-title" data-bar-title="תדריך בוקר">
+            {data ? fmtLongDate(data.date) : 'תדריך בוקר'}
+          </div>
         </div>
         {data && (
           <div className="brief-nums">

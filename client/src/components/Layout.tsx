@@ -263,26 +263,38 @@ export function Layout({ children }: { children: ReactNode }) {
   const newTask = useNewTask();
   const navigate = useNavigate();
   const location = useLocation();
-  // the screen's big title, once it has gone under the top bar: its name shows in the bar
+  // the screen's big title - a page's heading, a task's own title, a document's - once it has gone under the
+  // top bar: its name shows in the bar (data-bar-title names it where the heading alone says too little)
   const [barTitle, setBarTitle] = useState<string | null>(null);
   useEffect(() => {
     setBarTitle(null);
     let io: IntersectionObserver | null = null;
     let seen: HTMLElement | null = null;
+    let under = false;
+    // read again on every change: a title edited in place shows at once
+    const show = () => setBarTitle(under ? (seen?.dataset.barTitle ?? seen?.textContent ?? '').trim() || null : null);
     const watch = () => {
-      const h1 = document.querySelector<HTMLElement>('#main .page-title');
-      if (h1 === seen) return;
+      const h1 = document.querySelector<HTMLElement>('#main [data-bar-title], #main h1');
+      if (h1 === seen) return show();
       io?.disconnect();
       seen = h1;
-      if (!h1) return setBarTitle(null);
+      under = false;
+      show();
+      if (!h1) return;
       const bar = document.querySelector('.topbar')?.getBoundingClientRect().height ?? 56;
-      io = new IntersectionObserver(([e]) => setBarTitle(e.isIntersecting ? null : (h1.textContent ?? '').trim() || null), { rootMargin: `-${Math.round(bar)}px 0px 0px 0px` });
+      io = new IntersectionObserver(
+        ([e]) => {
+          under = !e.isIntersecting;
+          show();
+        },
+        { rootMargin: `-${Math.round(bar)}px 0px 0px 0px` },
+      );
       io.observe(h1);
     };
     watch();
     const main = document.getElementById('main');
     const mo = new MutationObserver(watch);
-    if (main) mo.observe(main, { childList: true, subtree: true });
+    if (main) mo.observe(main, { childList: true, subtree: true, characterData: true, attributeFilter: ['data-bar-title'] });
     return () => {
       io?.disconnect();
       mo.disconnect();
