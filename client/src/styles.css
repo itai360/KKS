@@ -12965,6 +12965,32 @@ tr.is-finished.is-folding {
 .tw-where {
   display: none;
 }
+/* the lesser activities of a day: plain, under the key ones */
+.tw-act.is-minor {
+  font-weight: 400;
+}
+/* where the activities come from: the course's schedule and the Google calendars, by their names */
+.tw-sources {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 860px;
+  margin: 0 auto 12px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  background: var(--blue-bg);
+  border-radius: var(--radius-sm);
+}
+.tw-sources > svg {
+  flex: none;
+}
+.tw-sources.has-error {
+  background: var(--yellow-bg);
+}
+.tw-sources .btn {
+  flex: none;
+}
 /* a risk of one week says which */
 .tw-risk-week {
   display: inline-block;

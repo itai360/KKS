@@ -314,6 +314,8 @@ export interface ExternalEvent {
 export interface CalendarSource {
   id: number;
   name: string;
+  /** the name the calendar has in Google Calendar, once it was read */
+  calendarName: string | null;
   /** the calendar's address; only the commander sees it */
   url: string | null;
   error: string | null;
@@ -1452,8 +1454,8 @@ export interface ThreeWeekWeek {
   goals: PlanSection;
   /** every key activity of the week - and of the days after it, up to the next week - by date */
   key: PlanEvent[];
-  /** the lesser activities of each day, counted: date -> how many */
-  rest: Record<string, number>;
+  /** the week's other activities (the routine left out), by date */
+  other: PlanEvent[];
   /** the previous cycle's lessons for the week: how many, how many still without a decision, the first few */
   lessons: { total: number; open: number; items: string[] };
 }
@@ -1481,6 +1483,9 @@ export interface ThreeWeekPlan {
   requests: string[];
   /** the moment that shows the course best, for the commander above to come and see */
   visit: PlanEvent | null;
+  /** the Google calendars read with the course's schedule: by their names, how many activities each held for the
+   * period, and whether it could be read - connected to the schedule, or the one the weeks were imported from */
+  calendars: { name: string; origin: 'schedule' | 'weeks'; count: number; error: string | null }[];
   status: PlanStatus;
   approval: { by: string; on: string; notes: string } | null;
   /** what changed in the four weeks' key activities since they were approved */

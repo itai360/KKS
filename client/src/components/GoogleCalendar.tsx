@@ -26,7 +26,7 @@ export function GoogleCalendarModal({ onClose }: { onClose: () => void }) {
       <div className="col gap-16">
         <MyFeed />
         <div className="divider" style={{ margin: 0 }} />
-        <Sources />
+        <CalendarSources />
       </div>
     </Modal>
   );
@@ -95,8 +95,8 @@ function MyFeed() {
   );
 }
 
-/** Google calendars whose events appear in the schedule. */
-function Sources() {
+/** Google calendars whose events appear in the schedule - and in the plan documents (the weekly and the three-week). */
+export function CalendarSources() {
   const { isCommander } = useSession();
   const toast = useToast();
   const sources = useApi<CalendarSource[]>('/api/calendar/sources', ['events']);
@@ -135,13 +135,15 @@ function Sources() {
   return (
     <section className="col gap-6">
       <h3>יומני Google בתוך הלו"ז</h3>
-      <div className="small muted">אירועים מיומן Google מופיעים בלו"ז לכל הסגל, לקריאה בלבד, ומתעדכנים כל כמה דקות.</div>
+      <div className="small muted">אירועים מיומן Google מופיעים בלו"ז לכל הסגל, לקריאה בלבד, ומתעדכנים כל כמה דקות. הם נכנסים גם לאישור התוכניות - השבועי והתלת שבועי.</div>
       <ErrorBox error={error ?? sources.error} />
       {list.map((s) => (
         <div key={s.id} className="row gap-6">
           <Icon name="calendar" />
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="strong">{s.name}</div>
+            {/* the name it has in Google, where it was connected by another */}
+            {s.calendarName && s.calendarName !== s.name && <div className="small muted">ב-Google: {s.calendarName}</div>}
             {s.error && <div className="small text-red">{s.error}</div>}
           </div>
           {isCommander && (
@@ -154,8 +156,8 @@ function Sources() {
       {!isCommander && list.length === 0 && <div className="small muted">עדיין לא חובר יומן. מפקד הקורס יכול לחבר אותו מכאן.</div>}
       {isCommander && (
         <div className="info-box col gap-6">
-          <Field label="שם היומן">
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder='לדוגמה: יומן הגדוד' maxLength={60} />
+          <Field label="שם היומן" hint="אפשר להשאיר ריק - השם יילקח מהיומן ב-Google.">
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="השם שלו ב-Google" maxLength={60} />
           </Field>
           <Field
             label="הכתובת הסודית של היומן בפורמט iCal"

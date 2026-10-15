@@ -10,11 +10,12 @@ import { ABSENCE_REASON_LABELS } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName } from '@shared/dates';
 import type { PlanEvent, ThreeWeekPlan, ThreeWeekWeek, Week } from '@shared/types';
 import { DocPager, ShareButton, useDocNav, type DocLink } from '../components/DocNav';
+import { CalendarSources } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { ApproveDialog, dateRange, EditButton, EditDialog, KIND_LABELS, PLAN_STATUS, Prep, StatusSteps, whenOf, Wording } from '../components/PlanParts';
 import { SectionRail, type RailItem } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
-import { Empty, Loading, PageError, PageHead } from '../components/ui';
+import { Empty, Loading, Modal, PageError, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
@@ -106,25 +107,29 @@ function WeekCard({ part, today }: { part: ThreeWeekWeek; today: string }) {
   );
 }
 
-/** an activity on a day: its hour, name and kind - a later day of one over several days says it goes on */
-function Activity({ e, day }: { e: PlanEvent; day: string }) {
+/** an activity on a day: its hour, name and kind (a key one) - a later day of one over several days says it goes on */
+function Activity({ e, day, minor }: { e: PlanEvent; day: string; minor?: boolean }) {
   const goesOn = day !== e.date;
   return (
     <>
       {e.startTime && !goesOn && <span className="mono tiny tw-time">{e.startTime}</span>}
-      <span className="tw-act">{e.title}</span>
-      {goesOn ? <span className="tiny muted"> (המשך)</span> : <span className={`plan-kind k-${e.kind}`}>{KIND_LABELS[e.kind]}</span>}
-      {e.night && !goesOn && <span className="plan-kind k-night">לילה</span>}
+      <span className={`tw-act${minor ? ' is-minor' : ''}`}>{e.title}</span>
+      {goesOn ? <span className="tiny muted"> (המשך)</span> : !minor && <span className={`plan-kind k-${e.kind}`}>{KIND_LABELS[e.kind]}</span>}
+      {e.night && !goesOn && !minor && <span className="plan-kind k-night">לילה</span>}
       {e.location && !goesOn && <span className="tiny muted tw-where"> · {e.location}</span>}
     </>
   );
 }
 
-/** one week, day by day: the key activities of each day (one that began the week before goes on in it), the rest counted */
-function WeekDays({ part, next, all, today }: { part: ThreeWeekWeek; next: Week | undefined; all: PlanEvent[]; today: string }) {
-  const { week: w, rest } = part;
-  const days = daysOf(w, next).map((d) => ({ d, on: all.filter((e) => e.date <= d && e.endDate >= d), more: rest[d] ?? 0 }));
-  const empty = (i: number) => !!days[i] && !days[i].on.length && !days[i].more && days[i].d !== today;
+/** a day shows this many activities, then says how many more */
+const DAY_LINES = 6;
+
+/** one week, day by day: every activity of each day, the key ones first (one that began the week before goes on in it) */
+function WeekDays({ part, next, all, others, today }: { part: ThreeWeekWeek; next: Week | undefined; all: PlanEvent[]; others: PlanEvent[]; today: string }) {
+  const { week: w } = part;
+  const on = (list: PlanEvent[], d: string) => list.filter((e) => e.date <= d && e.endDate >= d);
+  const days = daysOf(w, next).map((d) => ({ d, key: on(all, d), minor: on(others, d) }));
+  const empty = (i: number) => !!days[i] && !days[i].key.length && !days[i].minor.length && days[i].d !== today;
   // a phone lists the days one under the other: days in a row with nothing on them fold into one line there
   const runEnd = (i: number) => {
     let j = i;
@@ -137,7 +142,7 @@ function WeekDays({ part, next, all, today }: { part: ThreeWeekWeek; next: Week 
         שבוע {w.number} · {w.name} <span className="tiny muted mono">{dateRange(w.startDate, w.endDate)}</span>
       </h3>
       <div className="tw-days" style={{ '--days': days.length } as CSSProperties}>
-        {days.map(({ d, on, more }, i) => {
+        {days.map(({ d, key, minor }, i) => {
           const starts = empty(i) && !empty(i - 1) && runEnd(i) > i;
           const inRun = empty(i) && (empty(i - 1) || runEnd(i) > i);
           const run = starts ? days[runEnd(i)].d : null;
@@ -155,24 +160,29 @@ function WeekDays({ part, next, all, today }: { part: ThreeWeekWeek; next: Week 
                 </div>
               )}
               <div
-                className={`tw-day${d === today ? ' is-today' : ''}${on.length || more ? '' : ' is-empty'}${d > w.endDate ? ' is-off' : ''}${inRun ? ' in-run' : ''}`}
+                className={`tw-day${d === today ? ' is-today' : ''}${key.length || minor.length ? '' : ' is-empty'}${d > w.endDate ? ' is-off' : ''}${inRun ? ' in-run' : ''}`}
                 aria-current={d === today ? 'date' : undefined}
                 title={d > w.endDate ? 'אחרי סוף השבוע בקורס' : undefined}
               >
                 <div className="tw-day-head">
                   <b>{weekdayName(d)}</b> <span className="mono">{shortDate(d)}</span>
                 </div>
-                {on.length > 0 && (
+                {key.length + minor.length > 0 && (
                   <ul>
-                    {on.map((e) => (
+                    {key.slice(0, DAY_LINES).map((e) => (
                       <li key={e.key}>
                         <Activity e={e} day={d} />
                       </li>
                     ))}
+                    {minor.slice(0, Math.max(0, DAY_LINES - key.length)).map((e) => (
+                      <li key={e.key}>
+                        <Activity e={e} day={d} minor />
+                      </li>
+                    ))}
                   </ul>
                 )}
-                {more > 0 && <div className="tiny muted">{on.length ? 'ועוד ' : ''}{more === 1 ? 'פעילות אחת' : `${more} פעילויות`}</div>}
-                {!on.length && !more && <div className="tiny muted">-</div>}
+                {key.length + minor.length > DAY_LINES && <div className="tiny muted">ועוד {key.length + minor.length - DAY_LINES === 1 ? 'פעילות אחת' : `${key.length + minor.length - DAY_LINES} פעילויות`}</div>}
+                {!key.length && !minor.length && <div className="tiny muted">-</div>}
               </div>
             </Fragment>
           );
@@ -189,6 +199,7 @@ export function ThreeWeekPage() {
   const { data: doc, error, status, loading, setData } = useApi<ThreeWeekPlan>(weeks.length ? (weekId ? `/api/three-week/${weekId}` : '/api/three-week') : null, TOPICS);
   const [editing, setEditing] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [calendars, setCalendars] = useState(false);
   // the approval just recorded: its line at the foot of the document comes in, stamped
   const [justApproved, setJustApproved] = useState(false);
   useEffect(() => {
@@ -247,6 +258,7 @@ export function ThreeWeekPage() {
   const approvedWeeks = doc.weeks.filter((p) => p.plan.status === 'approved').length;
   const ready = doc.readiness;
   const allKey = doc.weeks.flatMap((p) => p.key);
+  const allOther = doc.weeks.flatMap((p) => p.other);
   const weekOf = (date: string) => doc.weeks.find((p) => p.week.startDate <= date && p.week.endDate >= date)?.week;
   const lessons = doc.weeks.filter((p) => p.lessons.total > 0);
 
@@ -308,6 +320,35 @@ export function ThreeWeekPage() {
         <button className="btn btn-primary" onClick={() => window.print()}>
           <Icon name="print" /> הדפסה / PDF
         </button>
+      </div>
+
+      {/* where the activities come from: the course's schedule and each Google calendar, by the name it has there */}
+      <div className={`tw-sources no-print${doc.calendars.some((c) => c.error) ? ' has-error' : ''}`} role="note">
+        <Icon name="calendar" size={16} />
+        <span className="grow">
+          {doc.calendars.length ? (
+            <>
+              הנתונים נמשכים מהלו"ז של הקורס ומיומן Google:{' '}
+              {doc.calendars.map((c, i) => (
+                <span key={i}>
+                  {i > 0 && ', '}
+                  <b>{c.name}</b>{' '}
+                  <span className="muted">
+                    ({c.count === 1 ? 'פעילות אחת' : `${c.count} פעילויות`} בתקופה{c.origin === 'weeks' ? ', היומן שממנו נמשכו השבועות' : ''})
+                  </span>
+                  {c.error && <span className="text-red"> - {c.error}</span>}
+                </span>
+              ))}
+            </>
+          ) : (
+            <>הנתונים נמשכים מהלו"ז של הקורס בלבד. כדי למשוך גם את האירועים מיומן Google - חברו אותו.</>
+          )}
+        </span>
+        {canEdit && (
+          <button type="button" className={`btn btn-sm${doc.calendars.length ? ' btn-ghost' : ''}`} onClick={() => setCalendars(true)}>
+            {doc.calendars.length ? 'יומני Google' : 'חיבור יומן Google'}
+          </button>
+        )}
       </div>
 
       <SectionRail label="חלקי המסמך" items={parts} />
@@ -391,10 +432,10 @@ export function ThreeWeekPage() {
         <section id="tw-days">
           <h2>{n('tw-days')}. לו"ז מפתח - יום אחר יום</h2>
           {doc.weeks.map((p, i) => (
-            <WeekDays key={p.week.id} part={p} next={doc.weeks[i + 1]?.week} all={allKey} today={today} />
+            <WeekDays key={p.week.id} part={p} next={doc.weeks[i + 1]?.week} all={allKey} others={allOther} today={today} />
           ))}
           <p className="tiny muted no-print">
-            אירועי המפתח מהלו"ז ומהיומנים המחוברים; שגרה (ארוחות, מסדרים) לא מוצגת, ושאר הפעילויות נספרות. <Link to="/schedule">ללו"ז המלא</Link>
+            כל הפעילויות מהלו"ז של הקורס ומיומני Google - אירועי המפתח מודגשים ראשונים, ושגרה (ארוחות, מסדרים) לא מוצגת. <Link to="/schedule">ללו"ז המלא</Link>
           </p>
         </section>
 
@@ -642,7 +683,7 @@ export function ThreeWeekPage() {
             </div>
           )}
           <div className="tiny muted">
-            הופק ב-{shortDate(today)} ממערכת ניהול הקורס
+            הופק ב-{shortDate(today)} ממערכת ניהול הקורס{doc.calendars.length > 0 && `, מהלו"ז ומיומן Google: ${doc.calendars.map((c) => c.name).join(', ')}`}
             {doc.updatedByName && doc.updatedAt && ` · נערך לאחרונה ע"י ${doc.updatedByName}`}
           </div>
         </footer>
@@ -658,6 +699,19 @@ export function ThreeWeekPage() {
           onSave={(value) => save({ bluf: value === null ? null : value.trim() })}
           onClose={() => setEditing(false)}
         />
+      )}
+      {calendars && (
+        <Modal
+          title="יומני Google בתוכנית"
+          onClose={() => setCalendars(false)}
+          footer={
+            <button type="button" className="btn btn-ghost" onClick={() => setCalendars(false)}>
+              סגירה
+            </button>
+          }
+        >
+          <CalendarSources />
+        </Modal>
       )}
       {approving && (
         <ApproveDialog<ThreeWeekPlan>

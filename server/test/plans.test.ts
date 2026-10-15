@@ -4,6 +4,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { PlanDocument, PlansOverview, ThreeWeekPlan } from '../../shared/types';
 import { classify, joinHe, readEvents } from '../src/plans';
+import { setCalendarFetcher } from '../src/calendar';
+import { db } from '../src/db';
 import { at, newTask, setup, type Ctx } from './helpers';
 
 let c: Ctx;
@@ -153,8 +155,9 @@ describe('the three-week plan', () => {
     expect(d).toMatchObject({ startWeekId: weekIds[0], current: true, position: { first: 1, last: 4, total: 5 } });
     expect(d.weeks.map((w) => w.week.name)).toEqual(['שבוע התקפה', 'שבוע הגנה', 'שבוע שטח', 'שבוע מבחנים']);
     expect(d.weeks[0].key.map((e) => e.title)).toEqual(['ניווט לילה', 'מטווח הפעלת כוח', 'תרגיל התקפה', 'מבחן עקרונות']);
-    // the lesson that morning is counted, the physical training every morning and lunch are the routine
-    expect(d.weeks[0].rest).toEqual({ '2026-10-04': 1 });
+    // the lesson that morning is there too; the physical training every morning and lunch are the routine
+    expect(d.weeks[0].other.map((e) => e.title)).toEqual(['שיעור: עקרונות התקפה']);
+    expect(d.calendars).toEqual([]);
     expect(d.weeks[2].key.map((e) => e.title)).toEqual(['טקס אמצע קורס']);
     expect(d.milestones.map((e) => e.title)).toEqual(['ניווט לילה', 'מטווח הפעלת כוח', 'תרגיל התקפה', 'מבחן עקרונות', 'טקס אמצע קורס', 'מבחן מסכם']);
     expect(d.weeks[0].plan).toEqual({ status: 'draft', approval: null, changed: false });
@@ -182,6 +185,64 @@ describe('the three-week plan', () => {
     expect(d.weeks[0].key.map((e) => e.title)).toContain('תרגיל סוף שבוע');
     expect(d.weeks[1].key.map((e) => e.title)).not.toContain('תרגיל סוף שבוע');
     expect(d.milestones.map((e) => e.title)).toContain('תרגיל סוף שבוע');
+  });
+
+  it('reads the calendar the weeks were imported from, by the name it has in Google - also when not shown in the schedule', async () => {
+    const url = 'https://calendar.google.com/calendar/ical/company%40group.calendar.google.com/private-x/basic.ics';
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Google Inc//Google Calendar 70.9054//EN',
+      'X-WR-CALNAME:יומן הפלוגה',
+      // a one-day marker naming the week is not an activity
+      'BEGIN:VEVENT',
+      'DTSTART;VALUE=DATE:20261011',
+      'DTEND;VALUE=DATE:20261012',
+      'UID:w2@google.com',
+      'SUMMARY:שבוע 2 - הגנה',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'DTSTART:20261012T060000Z',
+      'DTEND:20261012T090000Z',
+      'UID:a1@google.com',
+      'SUMMARY:תרגיל הגנה בשטח',
+      'LOCATION:שטח צפוני',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'DTSTART:20261013T070000Z',
+      'DTEND:20261013T080000Z',
+      'UID:a2@google.com',
+      'SUMMARY:שיעור: עקרונות הגנה',
+      'END:VEVENT',
+      // the routine is neither shown nor counted
+      'BEGIN:VEVENT',
+      'DTSTART:20261011T033000Z',
+      'DTEND:20261011T040000Z',
+      'RRULE:FREQ=DAILY;COUNT=5',
+      'UID:r1@google.com',
+      'SUMMARY:מסדר בוקר',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    setCalendarFetcher(async () => ics);
+    try {
+      db().run("INSERT INTO meta(key, value) VALUES ('weeks_calendar_url', ?)", url);
+      let d = await tw();
+      expect(d.calendars).toEqual([{ name: 'יומן הפלוגה', origin: 'weeks', count: 2, error: null }]);
+      expect(d.weeks[1].key.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח']);
+      expect(d.weeks[1].key[0]).toMatchObject({ date: '2026-10-12', startTime: '09:00', location: 'שטח צפוני', source: 'calendar' });
+      expect(d.weeks[1].other.map((e) => e.title)).toEqual(['שיעור: עקרונות הגנה']);
+      expect(d.milestones.map((e) => e.title)).toContain('תרגיל הגנה בשטח');
+      // the week's own document reads it too
+      expect((await doc(1)).horizon[0].events.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח']);
+      // shown in the schedule as well: read once, as one of the schedule's calendars
+      expect((await c.cmd.post('/api/calendar/sources', { name: '', url })).status).toBe(200);
+      d = await tw();
+      expect(d.calendars).toEqual([{ name: 'יומן הפלוגה', origin: 'schedule', count: 2, error: null }]);
+      expect(d.weeks[1].key.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח']);
+    } finally {
+      setCalendarFetcher(async () => '');
+    }
   });
 
   it('starts at any week; at the end of the course it holds fewer weeks', async () => {

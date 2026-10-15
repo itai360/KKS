@@ -133,7 +133,7 @@ describe('Google calendars in the schedule', () => {
     expect((await c.s1.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL })).status).toBe(403);
     const added = await c.cmd.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL.replace('https://', 'webcal://') });
     expect(added.status).toBe(200);
-    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', url: GOOGLE_URL, error: null }]);
+    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', url: GOOGLE_URL, error: null }]);
     expect(asked).toEqual([GOOGLE_URL]);
 
     const events = (await c.s1.get('/api/calendar/external?from=2026-09-28&to=2026-10-18')).body;
@@ -155,10 +155,17 @@ describe('Google calendars in the schedule', () => {
     expect(asked).toHaveLength(1); // fetched once, kept for a few minutes
 
     // staff see which calendars are shown, not their secret addresses
-    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', url: null, error: null }]);
+    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', url: null, error: null }]);
 
     expect((await c.cmd.del(`/api/calendar/sources/${added.body[0].id}`)).body).toEqual([]);
     expect((await c.s1.get('/api/calendar/external?from=2026-09-28&to=2026-10-18')).body).toEqual([]);
+  });
+
+  it('a calendar connected without a name takes the one it has in Google', async () => {
+    setCalendarFetcher(async () => GOOGLE_ICS);
+    const added = await c.cmd.post('/api/calendar/sources', { name: '', url: GOOGLE_URL });
+    expect(added.status).toBe(200);
+    expect(added.body[0]).toMatchObject({ name: 'סגל', calendarName: 'סגל' });
   });
 
   it('refuses local addresses and files that are not calendars', async () => {

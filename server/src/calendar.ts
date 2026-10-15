@@ -143,6 +143,8 @@ interface Cached {
   at: number;
   root: ICAL.Component | null;
   error: string | null;
+  /** the name the calendar has in Google Calendar (X-WR-CALNAME) */
+  name: string | null;
 }
 const cache = new Map<string, Cached>(); // by address; each server instance keeps its own
 
@@ -179,11 +181,12 @@ async function loadSource(url: string, force = false): Promise<Cached> {
   if (hit && !force && Date.now() - hit.at < REFRESH_MS) return hit;
   let entry: Cached;
   try {
-    entry = { at: Date.now(), root: parseCalendar(await fetcher(url)), error: null };
+    const root = parseCalendar(await fetcher(url));
+    entry = { at: Date.now(), root, error: null, name: String(root.getFirstPropertyValue('x-wr-calname') ?? '').trim().slice(0, 80) || null };
   } catch (e) {
     const message = e instanceof Error && /[֐-׿]/.test(e.message) ? e.message : 'לא ניתן לקרוא את היומן כרגע';
     // keep showing the last good copy while the calendar cannot be reached
-    entry = { at: Date.now(), root: hit?.root ?? null, error: message };
+    entry = { at: Date.now(), root: hit?.root ?? null, error: message, name: hit?.name ?? null };
   }
   cache.set(url, entry);
   return entry;
@@ -278,7 +281,7 @@ function expand(source: SourceRow, root: ICAL.Component, from: string, to: strin
 export function listCalendarSources(asCommander: boolean): CalendarSource[] {
   return db()
     .all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id')
-    .map((r) => ({ id: r.id, name: r.name, url: asCommander ? r.url : null, error: cache.get(r.url)?.error ?? null }));
+    .map((r) => ({ id: r.id, name: r.name, calendarName: cache.get(r.url)?.name ?? null, url: asCommander ? r.url : null, error: cache.get(r.url)?.error ?? null }));
 }
 
 /** Checks the address right away, so a wrong one is reported while adding it. */
@@ -288,7 +291,8 @@ export async function addCalendarSource(actor: UserRow, name: string, rawUrl: st
   if (db().get('SELECT 1 FROM calendar_sources WHERE url = ?', url)) throw badRequest('היומן הזה כבר מחובר');
   const loaded = await loadSource(url, true);
   if (!loaded.root) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
-  db().run('INSERT INTO calendar_sources(name, url, created_by, created_at) VALUES (?, ?, ?, ?)', name.trim() || 'יומן Google', url, actor.id, nowIso());
+  // no name given: the one the calendar has in Google
+  db().run('INSERT INTO calendar_sources(name, url, created_by, created_at) VALUES (?, ?, ?, ?)', name.trim() || loaded.name || 'יומן Google', url, actor.id, nowIso());
 }
 
 export function removeCalendarSource(id: number): void {
@@ -307,6 +311,39 @@ export async function externalEvents(from: string, to: string): Promise<External
   return loaded
     .flatMap(({ s, c }) => (c.root ? expand(s, c.root, from, to, zone) : []))
     .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? ''));
+}
+
+/** a calendar a plan reads, as read for some days */
+export interface CalendarRead {
+  /** its name in Google Calendar, else the name it was connected by */
+  name: string;
+  /** connected to the schedule, or only the one the course weeks were imported from */
+  origin: 'schedule' | 'weeks';
+  error: string | null;
+  events: ExternalEvent[];
+}
+
+/**
+ * What the plan documents read: every calendar connected to the schedule, and the calendar the course
+ * weeks were imported from when it is not one of them - the course's own calendar, whose activities
+ * belong in its plans even if it was never shown in the schedule. One after the other: a calendar read
+ * once is kept for the next.
+ */
+export async function readPlanCalendars(from: string, to: string): Promise<CalendarRead[]> {
+  if (diffDays(to, from) > 62) to = addDays(from, 62);
+  const zone = tz();
+  const rows: (SourceRow & { origin: CalendarRead['origin'] })[] = db()
+    .all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id')
+    .map((r) => ({ ...r, origin: 'schedule' as const }));
+  const weeks = weeksCalendarUrl();
+  if (weeks && !rows.some((r) => r.url === weeks)) rows.push({ id: 0, name: 'היומן שממנו נמשכו השבועות', url: weeks, origin: 'weeks' });
+  const out: CalendarRead[] = [];
+  for (const r of rows) {
+    const c = await loadSource(r.url);
+    const source = { ...r, name: c.name ?? r.name };
+    out.push({ name: source.name, origin: r.origin, error: c.error, events: c.root ? expand(source, c.root, from, to, zone) : [] });
+  }
+  return out;
 }
 
 // ---------------- course weeks from a calendar ----------------
