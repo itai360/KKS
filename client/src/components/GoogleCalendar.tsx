@@ -1,6 +1,6 @@
 // The schedule and Google Calendar, both ways (see server/src/calendar.ts).
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { shortDate } from '@shared/dates';
 import type { CalendarFeed, CalendarSource, CalendarWeeksPreview, PlanCalendars as PlanCalendarList } from '@shared/types';
 import { api } from '../lib/api';
@@ -95,6 +95,32 @@ function MyFeed() {
   );
 }
 
+/**
+ * While a big Google calendar is still on its way (the server reads it in the background), ask again
+ * every few seconds - for up to two minutes. `data` is what was last fetched: each answer that is still
+ * loading sets the next ask.
+ */
+export function useReloadWhileLoading(loading: boolean, reload: () => Promise<void>, data: unknown): void {
+  const tries = useRef(0);
+  const again = useRef(reload);
+  again.current = reload;
+  useEffect(() => {
+    if (!loading) {
+      tries.current = 0;
+      return;
+    }
+    if (tries.current >= 30) return;
+    const t = setTimeout(() => {
+      tries.current++;
+      void again.current();
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [loading, data]);
+}
+
+/** what a calendar still loading says, under its name */
+const STILL_LOADING = 'Google שולח את היומן - יומן גדול לוקח עד דקה. הוא יופיע כאן מעצמו.';
+
 /** Google calendars whose events appear in the schedule - and in the plan documents (the weekly and the three-week). */
 export function CalendarSources() {
   const { isCommander } = useSession();
@@ -104,16 +130,19 @@ export function CalendarSources() {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useReloadWhileLoading(!!sources.data?.some((s) => s.loading), sources.reload, sources.data);
 
   const add = async () => {
     setError(null);
     setBusy(true);
     try {
-      sources.setData(await api.post<CalendarSource[]>('/api/calendar/sources', { name, url }));
+      const next = await api.post<CalendarSource[]>('/api/calendar/sources', { name, url });
+      sources.setData(next);
       setName('');
       setUrl('');
       emitLocalChange('events');
-      toast({ title: 'היומן חובר - האירועים שלו מופיעים בלו"ז', tone: 'green' });
+      const loading = next.some((s) => s.loading);
+      toast({ title: loading ? 'היומן חובר - Google עוד שולח אותו, והאירועים יופיעו בלו"ז בעוד רגע' : 'היומן חובר - האירועים שלו מופיעים בלו"ז', tone: 'green' });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -144,6 +173,7 @@ export function CalendarSources() {
             <div className="strong">{s.name}</div>
             {/* the name it has in Google, where it was connected by another */}
             {s.calendarName && s.calendarName !== s.name && <div className="small muted">ב-Google: {s.calendarName}</div>}
+            {s.loading && <div className="small muted">{STILL_LOADING}</div>}
             {s.error && <div className="small text-red">{s.error}</div>}
           </div>
           {isCommander && (
@@ -184,16 +214,25 @@ export function PlanCalendars() {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loading = !!list.data?.calendars.some((c) => c.loading);
+  useReloadWhileLoading(loading, list.reload, list.data);
+  // the calendar has come in from Google: the plan documents read it again
+  const wasLoading = useRef(false);
+  useEffect(() => {
+    if (wasLoading.current && !loading) emitLocalChange('plans');
+    wasLoading.current = loading;
+  }, [loading]);
 
   const add = async () => {
     setError(null);
     setBusy(true);
     try {
-      list.setData(await api.post<PlanCalendarList>('/api/plan-calendars', { name, url }));
+      const next = await api.post<PlanCalendarList>('/api/plan-calendars', { name, url });
+      list.setData(next);
       setName('');
       setUrl('');
       emitLocalChange('plans');
-      toast({ title: 'היומן נבחר לאישור התוכניות', tone: 'green' });
+      toast({ title: next.calendars.some((c) => c.loading) ? 'היומן נבחר - Google עוד שולח אותו, והלבנות יופיעו בעוד רגע' : 'היומן נבחר לאישור התוכניות', tone: 'green' });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -226,6 +265,7 @@ export function PlanCalendars() {
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="strong">{c.name}</div>
             {list.data?.fromServer && <div className="small muted">הוגדר בשרת</div>}
+            {c.loading && <div className="small muted">{STILL_LOADING}</div>}
             {c.error && <div className="small text-red">{c.error}</div>}
           </div>
           <button className="btn btn-ghost btn-sm" onClick={() => void remove(c.index, c.name)}>
@@ -245,7 +285,7 @@ export function PlanCalendars() {
         </Field>
         <div>
           <button className="btn btn-primary btn-sm" disabled={busy || !url.trim()} onClick={() => void add()}>
-            {busy ? 'בודק את היומן...' : chosen.length ? 'הוספת יומן לתוכנית' : 'בחירת היומן לתוכנית'}
+            {busy ? 'קורא את היומן מ-Google...' : chosen.length ? 'הוספת יומן לתוכנית' : 'בחירת היומן לתוכנית'}
           </button>
         </div>
       </div>

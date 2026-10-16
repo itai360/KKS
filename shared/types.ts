@@ -319,11 +319,14 @@ export interface CalendarSource {
   /** the calendar's address; only the commander sees it */
   url: string | null;
   error: string | null;
+  /** read for the first time, Google still sending it */
+  loading: boolean;
 }
 
 /** the Google calendars the plan documents read (server/src/calendar.ts) */
 export interface PlanCalendars {
-  calendars: { index: number; name: string; error: string | null }[];
+  /** loading: read for the first time, Google still sending it */
+  calendars: { index: number; name: string; error: string | null; loading: boolean }[];
   /** not chosen in the app yet: the one the server was set up with */
   fromServer: boolean;
 }
@@ -1499,7 +1502,7 @@ export interface ThreeWeekPlan {
   visit: PlanEvent | null;
   /** the Google calendars read with the course's schedule: by their names, how many of the period's main blocks
    * each held, and whether it could be read */
-  calendars: { name: string; count: number; error: string | null }[];
+  calendars: { name: string; count: number; error: string | null; loading: boolean }[];
   /** chosen for the plans ("יומן התוכנית"), or - none chosen - the ones connected to the schedule */
   calendarsFrom: 'plan' | 'schedule';
   status: PlanStatus;

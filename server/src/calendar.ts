@@ -5,7 +5,8 @@
 //   the calendar's settings, "Secret address in iCal format"), and its events
 //   appear in the schedule, read-only.
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import ICAL from 'ical.js';
 import type { CalendarFeed, CalendarSource, CalendarWeek, CalendarWeeksPreview, ExternalEvent, PlanCalendars, ScheduleEvent, Week } from '../../shared/types';
 import { addDays, diffDays, localDateKey, localTime, zonedToUtc } from '../../shared/dates';
@@ -13,6 +14,7 @@ import type { UserRow } from './auth';
 import { badRequest, clock, getSettings, notFound, nowIso, tz, updateSettings } from './core';
 import { readLimited, safeFetch } from './netguard';
 import { db } from './db';
+import { getFile, putFile, removeFile } from './files';
 import { listEvents } from './schedule';
 import { createWeek, inferWeekNumber, listWeeks, updateWeek } from './weeks';
 
@@ -113,7 +115,22 @@ export function scheduleIcs(origin: string): string {
 
 const MAX_SOURCES = 8;
 const REFRESH_MS = 10 * 60_000;
-const MAX_BYTES = 5_000_000;
+/** a calendar that could not be read is tried again sooner */
+const RETRY_MS = 60_000;
+/** a big calendar (a company's, years of events) can take Google a good while to put together */
+const MAX_BYTES = 20_000_000;
+const FETCH_TIMEOUT_MS = 45_000;
+/** how long a page waits for a calendar never read before, before it shows without it (it keeps loading) */
+let PAGE_WAIT_MS = 2_500;
+/** choosing a calendar: long enough for a wrong address to be reported on the spot */
+let CHOOSE_WAIT_MS = 5_000;
+let CHECK_WAIT_MS = 8_000;
+
+/** Tests wait less. */
+export function setCalendarWaits(page: number, choose: number): void {
+  PAGE_WAIT_MS = page;
+  CHOOSE_WAIT_MS = CHECK_WAIT_MS = choose;
+}
 
 interface SourceRow {
   id: number;
@@ -145,21 +162,46 @@ interface Cached {
   error: string | null;
   /** the name the calendar has in Google Calendar (X-WR-CALNAME) */
   name: string | null;
+  /** read for the first time, not there yet: it keeps loading in the background */
+  loading?: boolean;
+  /** brought by a reading the commander's last try stopped waiting for: the next try takes it */
+  waited?: boolean;
 }
 const cache = new Map<string, Cached>(); // by address; each server instance keeps its own
+/** the readings from Google under way, one per address */
+const reading = new Map<string, Promise<Cached>>();
+/** when this instance last looked for an address in the shared store */
+const sharedLooked = new Map<string, number>();
+/** readings under way that a try of the commander's stopped waiting for */
+const awaited = new Set<string>();
 
 let fetcher = async (url: string): Promise<string> => {
   // an address the commander pasted: it may not lead into the server's own network, redirects included
-  const res = await safeFetch(url, { headers: { Accept: 'text/calendar' }, signal: AbortSignal.timeout(6000) });
+  const res = await safeFetch(url, { headers: { Accept: 'text/calendar' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(res.status === 404 ? 'היומן לא נמצא בכתובת הזו' : `שרת היומן החזיר שגיאה ${res.status}`);
   return (await readLimited(res, MAX_BYTES, () => new Error('היומן גדול מדי'))).toString('utf8');
 };
 
+/** tests: each network of their own keeps its shared copies apart from the others' (other runs included) */
+let generation = '';
+
 /** Tests replace the network. */
 export function setCalendarFetcher(fn: typeof fetcher): void {
   fetcher = fn;
-  cache.clear();
+  generation = randomBytes(6).toString('hex');
+  reading.clear();
+  awaited.clear();
+  forgetCalendarCopies();
 }
+
+/** tests: this instance forgets what it read, as a cold one would (the shared copies stay) */
+export function forgetCalendarCopies(): void {
+  cache.clear();
+  sharedLooked.clear();
+}
+
+/** the readings still running when a request ends - the serverless platform keeps the instance up for them */
+export const calendarReadsSettled = (): Promise<unknown> => Promise.allSettled([...reading.values()]);
 
 function parseCalendar(text: string): ICAL.Component {
   let root: ICAL.Component;
@@ -176,20 +218,99 @@ function parseCalendar(text: string): ICAL.Component {
   return root;
 }
 
-async function loadSource(url: string, force = false): Promise<Cached> {
-  const hit = cache.get(url);
-  if (hit && !force && Date.now() - hit.at < REFRESH_MS) return hit;
-  let entry: Cached;
+const nameOf = (root: ICAL.Component) => String(root.getFirstPropertyValue('x-wr-calname') ?? '').trim().slice(0, 80) || null;
+
+function readError(e: unknown): string {
+  if (e instanceof Error && /[֐-׿]/.test(e.message)) return e.message;
+  if ((e as Error)?.name === 'TimeoutError' || (e as Error)?.name === 'AbortError') return 'Google לא סיים לשלוח את היומן בזמן. נסו שוב בעוד כמה דקות';
+  return 'לא ניתן לקרוא את היומן כרגע';
+}
+
+// The last good copy of each calendar is also kept in the shared file store (compressed), so a server
+// instance that starts cold has it at once instead of waiting for Google.
+const sharedName = (url: string) => `calendar-${createHash('sha256').update(generation ? `${generation} ${url}` : url).digest('hex').slice(0, 32)}.ics.gz`;
+
+async function keepShared(url: string, at: number, text: string, waited: boolean): Promise<void> {
   try {
-    const root = parseCalendar(await fetcher(url));
-    entry = { at: Date.now(), root, error: null, name: String(root.getFirstPropertyValue('x-wr-calname') ?? '').trim().slice(0, 80) || null };
-  } catch (e) {
-    const message = e instanceof Error && /[֐-׿]/.test(e.message) ? e.message : 'לא ניתן לקרוא את היומן כרגע';
-    // keep showing the last good copy while the calendar cannot be reached
-    entry = { at: Date.now(), root: hit?.root ?? null, error: message, name: hit?.name ?? null };
+    await putFile(sharedName(url), gzipSync(Buffer.from(`${at}${waited ? ' waited' : ''}\n${text}`, 'utf8')));
+  } catch {
+    /* only a head start for other instances */
   }
-  cache.set(url, entry);
-  return entry;
+}
+
+async function sharedCopy(url: string): Promise<Cached | null> {
+  if (Date.now() - (sharedLooked.get(url) ?? 0) < RETRY_MS) return null;
+  sharedLooked.set(url, Date.now());
+  try {
+    const raw = await getFile(sharedName(url));
+    if (!raw) return null;
+    const text = gunzipSync(raw).toString('utf8');
+    const nl = text.indexOf('\n');
+    const [at, mark] = text.slice(0, nl).split(' ');
+    const root = parseCalendar(text.slice(nl + 1));
+    const entry: Cached = { at: Number(at) || 0, root, error: null, name: nameOf(root), waited: mark === 'waited' };
+    cache.set(url, entry);
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+/** a calendar no longer used anywhere: its shared copy goes too */
+function dropShared(url: string): void {
+  const used = db().get('SELECT 1 FROM calendar_sources WHERE url = ?', url) || chosenPlanRows().some((r) => r.url === url) || weeksCalendarUrl() === url;
+  if (used) return;
+  cache.delete(url);
+  void removeFile(sharedName(url));
+}
+
+/** One reading from Google at a time for each address; what it brings is kept here and in the shared store. */
+function readFromGoogle(url: string): Promise<Cached> {
+  const running = reading.get(url);
+  if (running) return running;
+  const p = (async (): Promise<Cached> => {
+    let entry: Cached;
+    try {
+      const text = await fetcher(url);
+      const root = parseCalendar(text);
+      entry = { at: Date.now(), root, error: null, name: nameOf(root), waited: awaited.has(url) };
+      await keepShared(url, entry.at, text, !!entry.waited);
+    } catch (e) {
+      // keep showing the last good copy while the calendar cannot be reached
+      const hit = cache.get(url);
+      entry = { at: Date.now(), root: hit?.root ?? null, error: readError(e), name: hit?.name ?? null };
+    }
+    cache.set(url, entry);
+    return entry;
+  })().finally(() => (reading.delete(url), awaited.delete(url)));
+  reading.set(url, p);
+  return p;
+}
+
+/**
+ * A calendar as it can be shown now. For a page, a copy older than a few minutes is shown as is while a
+ * fresh one is read in the background. The commander's own action (choosing a calendar, checking it for
+ * weeks) reads it afresh. Either way, waiting is short (`wait`): if Google is still putting a big
+ * calendar together it comes back as loading, the reading goes on, and the next request has it.
+ */
+async function loadSource(url: string, { explicit = false, wait = PAGE_WAIT_MS }: { explicit?: boolean; wait?: number } = {}): Promise<Cached> {
+  let copy = cache.get(url);
+  if (!copy?.root) copy = (await sharedCopy(url)) ?? copy;
+  if (explicit) {
+    // what a reading the last try stopped waiting for brought: this try takes it instead of starting over
+    if (copy?.root && copy.waited && Date.now() - copy.at < REFRESH_MS) {
+      copy.waited = false;
+      return copy;
+    }
+  } else if (copy && Date.now() - copy.at < (copy.error ? RETRY_MS : REFRESH_MS)) return copy;
+  const read = readFromGoogle(url);
+  if (copy?.root && !explicit) return copy;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((r) => (timer = setTimeout(() => r(null), wait)));
+  const done = await Promise.race([read, late]).finally(() => clearTimeout(timer));
+  if (done) return done;
+  if (explicit) awaited.add(url);
+  return { at: copy?.at ?? 0, root: copy?.root ?? null, error: null, name: copy?.name ?? null, loading: true };
 }
 
 const validZones = new Map<string, boolean>();
@@ -281,7 +402,7 @@ function expand(source: SourceRow, root: ICAL.Component, from: string, to: strin
 export function listCalendarSources(asCommander: boolean): CalendarSource[] {
   return db()
     .all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id')
-    .map((r) => ({ id: r.id, name: r.name, calendarName: cache.get(r.url)?.name ?? null, url: asCommander ? r.url : null, error: cache.get(r.url)?.error ?? null }));
+    .map((r) => ({ id: r.id, name: r.name, calendarName: cache.get(r.url)?.name ?? null, url: asCommander ? r.url : null, error: cache.get(r.url)?.error ?? null, loading: reading.has(r.url) && !cache.get(r.url)?.root }));
 }
 
 /** Checks the address right away, so a wrong one is reported while adding it. */
@@ -289,8 +410,9 @@ export async function addCalendarSource(actor: UserRow, name: string, rawUrl: st
   const url = normalizeCalendarUrl(rawUrl);
   if (db().get<{ n: number }>('SELECT count(*) AS n FROM calendar_sources')!.n >= MAX_SOURCES) throw badRequest(`אפשר לחבר עד ${MAX_SOURCES} יומנים`);
   if (db().get('SELECT 1 FROM calendar_sources WHERE url = ?', url)) throw badRequest('היומן הזה כבר מחובר');
-  const loaded = await loadSource(url, true);
-  if (!loaded.root) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
+  const loaded = await loadSource(url, { explicit: true, wait: CHOOSE_WAIT_MS });
+  // still loading (a big calendar): connected, and its events come in when Google has sent it
+  if (!loaded.root && !loaded.loading) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
   // no name given: the one the calendar has in Google
   db().run('INSERT INTO calendar_sources(name, url, created_by, created_at) VALUES (?, ?, ?, ?)', name.trim() || loaded.name || 'יומן Google', url, actor.id, nowIso());
 }
@@ -299,7 +421,7 @@ export function removeCalendarSource(id: number): void {
   const row = db().get<SourceRow>('SELECT id, name, url FROM calendar_sources WHERE id = ?', id);
   if (!row) throw notFound('היומן לא נמצא');
   db().run('DELETE FROM calendar_sources WHERE id = ?', id);
-  cache.delete(row.url);
+  dropShared(row.url);
 }
 
 /** Events of the connected calendars between two dates (up to two months). */
@@ -356,13 +478,18 @@ const chosenPlanRows = (): PlanRow[] => storedPlanRows() ?? serverPlanRows();
 const savePlanRows = (rows: PlanRow[]) =>
   db().run('INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', PLAN_KEY, JSON.stringify(rows));
 
-/** each by its name and whether it can be read - read here (or kept from a recent reading), as a server instance may not have read it yet */
-export async function listPlanCalendars(): Promise<PlanCalendars> {
-  const calendars: PlanCalendars['calendars'] = [];
-  for (const [index, r] of chosenPlanRows().entries()) {
-    const c = await loadSource(r.url);
-    calendars.push({ index, name: r.name || c.name || 'יומן Google', error: c.error });
-  }
+/**
+ * Each by its name and whether it can be read - read here (or kept from a recent reading), as a server
+ * instance may not have read it yet. `wait`: how long to wait for one never read (0 right after choosing
+ * it, which already waited).
+ */
+export async function listPlanCalendars(wait = PAGE_WAIT_MS): Promise<PlanCalendars> {
+  const calendars = await Promise.all(
+    chosenPlanRows().map(async (r, index) => {
+      const c = await loadSource(r.url, { wait });
+      return { index, name: r.name || c.name || 'יומן Google', error: c.error, loading: !!c.loading };
+    }),
+  );
   return { calendars, fromServer: storedPlanRows() === null && serverPlanRows().length > 0 };
 }
 
@@ -372,8 +499,9 @@ export async function addPlanCalendar(name: string, rawUrl: string): Promise<voi
   const rows = chosenPlanRows();
   if (rows.some((r) => r.url === url)) throw badRequest('היומן הזה כבר נבחר לתוכנית');
   if (rows.length >= MAX_PLAN_CALENDARS) throw badRequest(`אפשר לבחור עד ${MAX_PLAN_CALENDARS} יומנים לתוכנית`);
-  const loaded = await loadSource(url, true);
-  if (!loaded.root) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
+  const loaded = await loadSource(url, { explicit: true, wait: CHOOSE_WAIT_MS });
+  // still loading (a big calendar): chosen, and its blocks come in when Google has sent it
+  if (!loaded.root && !loaded.loading) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
   savePlanRows([...rows, { url, name: name.trim().slice(0, 60) }]);
 }
 
@@ -381,6 +509,7 @@ export function removePlanCalendar(index: number): void {
   const rows = chosenPlanRows();
   if (!rows[index]) throw notFound('היומן לא נמצא');
   savePlanRows(rows.filter((_, i) => i !== index));
+  dropShared(rows[index].url);
 }
 
 /** a calendar a plan reads, as read for some days */
@@ -388,6 +517,8 @@ export interface CalendarRead {
   /** the name it was chosen by, else the one it has in Google */
   name: string;
   error: string | null;
+  /** read for the first time and not there yet */
+  loading: boolean;
   events: ExternalEvent[];
 }
 
@@ -397,12 +528,13 @@ export async function readPlanCalendars(from: string, to: string): Promise<{ rea
   const zone = tz();
   const chosen = chosenPlanRows();
   const rows: SourceRow[] = chosen.length ? chosen.map((r, i) => ({ id: -1 - i, name: r.name, url: r.url })) : db().all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id');
-  const reads: CalendarRead[] = [];
-  for (const r of rows) {
-    const c = await loadSource(r.url);
-    const source = { ...r, name: r.name || c.name || 'יומן Google' };
-    reads.push({ name: source.name, error: c.error, events: c.root ? expand(source, c.root, from, to, zone) : [] });
-  }
+  const reads = await Promise.all(
+    rows.map(async (r): Promise<CalendarRead> => {
+      const c = await loadSource(r.url);
+      const source = { ...r, name: r.name || c.name || 'יומן Google' };
+      return { name: source.name, error: c.error, loading: !!c.loading, events: c.root ? expand(source, c.root, from, to, zone) : [] };
+    }),
+  );
   return { reads, from: chosen.length ? 'plan' : 'schedule' };
 }
 
@@ -521,7 +653,8 @@ export function weeksCalendarUrl(): string | null {
 
 export async function previewCalendarWeeks(rawUrl: string): Promise<CalendarWeeksPreview> {
   const url = normalizeCalendarUrl(rawUrl);
-  const loaded = await loadSource(url, true);
+  const loaded = await loadSource(url, { explicit: true, wait: CHECK_WAIT_MS });
+  if (loaded.loading) throw badRequest('Google עדיין שולח את היומן (יומן גדול). לחצו שוב על "בדיקת היומן" בעוד דקה');
   if (!loaded.root) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
   const { found, total } = weekCandidates(loaded.root, tz());
   return { weeks: matchWeeks(found), ignored: total - found.length };

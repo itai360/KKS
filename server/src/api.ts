@@ -901,12 +901,12 @@ export function apiRouter(): Router {
     const { name, url } = z.object({ name: z.string().trim().max(60).default(''), url: z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000) }).parse(req.body);
     await addPlanCalendar(name, url);
     changed('plans');
-    res.json(await listPlanCalendars());
+    res.json(await listPlanCalendars(0));
   });
   r.delete('/plan-calendars/:index', requireCommander, async (req, res) => {
     removePlanCalendar(Number(req.params.index));
     changed('plans');
-    res.json(await listPlanCalendars());
+    res.json(await listPlanCalendars(0));
   });
   r.get('/calendar/external', async (req, res) => {
     const today = localDateKey(clock.now(), tz());

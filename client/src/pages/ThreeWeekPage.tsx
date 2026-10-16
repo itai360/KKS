@@ -10,7 +10,7 @@ import { ABSENCE_REASON_LABELS } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName } from '@shared/dates';
 import type { PlanEvent, ThreeWeekPlan, ThreeWeekWeek, Week } from '@shared/types';
 import { DocPager, ShareButton, useDocNav, type DocLink } from '../components/DocNav';
-import { PlanCalendars } from '../components/GoogleCalendar';
+import { PlanCalendars, useReloadWhileLoading } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { ApproveDialog, dateRange, EditButton, EditDialog, KIND_LABELS, PLAN_STATUS, Prep, StatusSteps, whenOf, Wording } from '../components/PlanParts';
 import { SectionRail, type RailItem } from '../components/SectionRail';
@@ -190,7 +190,9 @@ export function ThreeWeekPage() {
   const { weekId } = useParams();
   const toast = useToast();
   const { settings, weeks, viewing } = useSession();
-  const { data: doc, error, status, loading, setData } = useApi<ThreeWeekPlan>(weeks.length ? (weekId ? `/api/three-week/${weekId}` : '/api/three-week') : null, TOPICS);
+  const { data: doc, error, status, loading, setData, reload } = useApi<ThreeWeekPlan>(weeks.length ? (weekId ? `/api/three-week/${weekId}` : '/api/three-week') : null, TOPICS);
+  // a big Google calendar still on its way: the document asks again until its blocks are in
+  useReloadWhileLoading(!!doc?.calendars.some((c) => c.loading), reload, doc);
   const [editing, setEditing] = useState(false);
   const [approving, setApproving] = useState(false);
   const [calendars, setCalendars] = useState(false);
@@ -325,7 +327,8 @@ export function ThreeWeekPage() {
               {doc.calendars.map((c, i) => (
                 <span key={i}>
                   {i > 0 && ', '}
-                  <b>{c.name}</b> <span className="muted">({c.count === 1 ? 'לבנה אחת' : `${c.count} לבנות`} בתקופה)</span>
+                  <b>{c.name}</b>{' '}
+                  <span className="muted">{c.loading ? '(Google עוד שולח את היומן - הלבנות שלו יופיעו בעוד רגע)' : `(${c.count === 1 ? 'לבנה אחת' : `${c.count} לבנות`} בתקופה)`}</span>
                   {c.error && <span className="text-red"> - {c.error}</span>}
                 </span>
               ))}

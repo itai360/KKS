@@ -3,7 +3,7 @@
 
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { setCalendarFetcher } from '../src/calendar';
+import { calendarReadsSettled, setCalendarFetcher, setCalendarWaits } from '../src/calendar';
 import { db } from '../src/db';
 import { setup, type Ctx } from './helpers';
 
@@ -133,7 +133,7 @@ describe('Google calendars in the schedule', () => {
     expect((await c.s1.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL })).status).toBe(403);
     const added = await c.cmd.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL.replace('https://', 'webcal://') });
     expect(added.status).toBe(200);
-    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', url: GOOGLE_URL, error: null }]);
+    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', url: GOOGLE_URL, error: null, loading: false }]);
     expect(asked).toEqual([GOOGLE_URL]);
 
     const events = (await c.s1.get('/api/calendar/external?from=2026-09-28&to=2026-10-18')).body;
@@ -155,7 +155,7 @@ describe('Google calendars in the schedule', () => {
     expect(asked).toHaveLength(1); // fetched once, kept for a few minutes
 
     // staff see which calendars are shown, not their secret addresses
-    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', url: null, error: null }]);
+    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', url: null, error: null, loading: false }]);
 
     expect((await c.cmd.del(`/api/calendar/sources/${added.body[0].id}`)).body).toEqual([]);
     expect((await c.s1.get('/api/calendar/external?from=2026-09-28&to=2026-10-18')).body).toEqual([]);
@@ -303,5 +303,28 @@ describe('course weeks from a Google calendar', () => {
     const after = (await c.cmd.get('/api/weeks')).body;
     expect(after).toHaveLength(3);
     expect(after[0]).toMatchObject({ id: applied.body[0].id, name: 'שבוע 1 - פתיחה', startDate: '2026-10-05', endDate: '2026-10-09' });
+  });
+
+  it('a big calendar still on its way: checked again a moment later, it takes what came in meanwhile', async () => {
+    let send: (t: string) => void = () => undefined;
+    let slow = true;
+    let ics = weeksIcs({ start: '20261004', end: '20261009', name: 'שבוע 1 - הכרות' });
+    setCalendarFetcher(() => (slow ? new Promise<string>((r) => (send = r)) : Promise.resolve(ics)));
+    setCalendarWaits(20, 40);
+    try {
+      const first = await c.cmd.post('/api/weeks/calendar/preview', { url: GOOGLE_URL });
+      expect(first.status).toBe(400);
+      expect(first.body.error).toContain('Google עדיין שולח את היומן');
+      send(ics);
+      await calendarReadsSettled();
+      // the reading the last check stopped waiting for is taken, not started over
+      slow = false;
+      ics = weeksIcs({ start: '20261004', end: '20261009', name: 'שבוע 1 - שונה' });
+      expect((await c.cmd.post('/api/weeks/calendar/preview', { url: GOOGLE_URL })).body.weeks[0].name).toBe('שבוע 1 - הכרות');
+      // after that, each check reads it afresh
+      expect((await c.cmd.post('/api/weeks/calendar/preview', { url: GOOGLE_URL })).body.weeks[0].name).toBe('שבוע 1 - שונה');
+    } finally {
+      setCalendarWaits(2_500, 5_000);
+    }
   });
 });

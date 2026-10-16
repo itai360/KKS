@@ -34,7 +34,8 @@ writeFileSync(
       handler: 'index.js',
       launcherType: 'Nodejs',
       shouldAddHelpers: false,
-      maxDuration: 30,
+      // a big Google calendar is read in the background after the request (calendar.ts)
+      maxDuration: 60,
       memory: 1024,
       regions: ['fra1'],
     },

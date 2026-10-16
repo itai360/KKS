@@ -21,6 +21,7 @@ import { createUser, sessionToken, userForToken } from './auth';
 import { runAutomation } from './automation';
 import { clock, config, nowIso } from './core';
 import { db, openDb } from './db';
+import { calendarReadsSettled } from './calendar';
 import { setFileStore } from './files';
 import { NOTIFICATION_ROWS, toNotification, unreadCount } from './journal';
 import { pushesSettled } from './push';
@@ -329,7 +330,8 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
   if (total > 1500) console.warn(`[slow] ${req.method} ${req.url} ${res.statusCode} ${total}ms (queued ${started ? started - arrived : total}ms, storage ${storageMs}ms)`);
   try {
     const { waitUntil } = await import('@vercel/functions');
-    waitUntil(pushesSettled());
+    // web pushes still going out, and big Google calendars still being read in the background
+    waitUntil(Promise.all([pushesSettled(), calendarReadsSettled()]));
   } catch {
     /* not on Vercel */
   }

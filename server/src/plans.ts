@@ -707,7 +707,7 @@ export async function threeWeekPlan(startWeekId: number | null): Promise<ThreeWe
     requests: windowRequests(key, risks, cadets, written),
     visit: bestVisit(key),
     // where the activities came from: each Google calendar by its name, how many of the main blocks it held
-    calendars: reads.map((r) => ({ name: r.name, count: readEvents(r.events.map(fromCalendar).filter((e): e is RawEvent => !!e)).filter(isKey).length, error: r.error })),
+    calendars: reads.map((r) => ({ name: r.name, count: readEvents(r.events.map(fromCalendar).filter((e): e is RawEvent => !!e)).filter(isKey).length, error: r.error, loading: r.loading })),
     calendarsFrom,
     status: row?.status ?? 'draft',
     approval: row?.status === 'approved' && row.approved_on ? { by: row.approved_by, on: row.approved_on, notes: row.approval_notes } : null,

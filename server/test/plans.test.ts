@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { PlanDocument, PlansOverview, ThreeWeekPlan } from '../../shared/types';
 import { classify, joinHe, readEvents } from '../src/plans';
-import { setCalendarFetcher } from '../src/calendar';
+import { calendarReadsSettled, forgetCalendarCopies, setCalendarFetcher, setCalendarWaits } from '../src/calendar';
 import { db } from '../src/db';
 import { at, newTask, setup, type Ctx } from './helpers';
 
@@ -231,17 +231,61 @@ describe('the three-week plan', () => {
 
       // the commander's to see and change
       expect((await c.s1.get('/api/plan-calendars')).status).toBe(403);
-      expect((await c.cmd.get('/api/plan-calendars')).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null }], fromServer: true });
+      expect((await c.cmd.get('/api/plan-calendars')).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null, loading: false }], fromServer: true });
       expect((await c.cmd.post('/api/plan-calendars', { url: company })).status).toBe(400); // already chosen
       // none chosen: back to the schedule's calendars
       expect((await c.cmd.del('/api/plan-calendars/0')).body).toEqual({ calendars: [], fromServer: false });
       expect((await tw()).calendarsFrom).toBe('schedule');
       // chosen in the app, with no name: the one it has in Google
-      expect((await c.cmd.post('/api/plan-calendars', { name: '', url: company })).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null }], fromServer: false });
-      expect((await tw()).calendars).toEqual([{ name: 'יומן הפלוגה', count: 2, error: null }]);
+      expect((await c.cmd.post('/api/plan-calendars', { name: '', url: company })).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null, loading: false }], fromServer: false });
+      expect((await tw()).calendars).toEqual([{ name: 'יומן הפלוגה', count: 2, error: null, loading: false }]);
     } finally {
       delete process.env.PLAN_CALENDAR_URL;
       setCalendarFetcher(async () => '');
+    }
+  });
+
+  it('a big calendar Google is slow to send: chosen at once, loading meanwhile, then kept for every instance', async () => {
+    const company = 'https://calendar.google.com/calendar/ical/big%40group.calendar.google.com/private-b/basic.ics';
+    const text = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'X-WR-CALNAME:יומן גדול',
+      ...['20261012', '20261013'].flatMap((d, i) => ['BEGIN:VEVENT', `UID:big-${i}@google.com`, `DTSTART:${d}T060000Z`, `DTEND:${d}T090000Z`, `SUMMARY:תרגיל ${i + 1}`, 'END:VEVENT']),
+      'END:VCALENDAR',
+    ].join('\r\n');
+    let send: (t: string) => void = () => undefined;
+    let mode: 'slow' | 'hang' | 'timeout' = 'slow';
+    setCalendarFetcher((url) => {
+      if (mode === 'timeout') return Promise.reject(Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }));
+      if (mode === 'hang' || url !== company) return new Promise<string>(() => undefined);
+      return new Promise<string>((r) => (send = r));
+    });
+    setCalendarWaits(20, 40);
+    try {
+      // Google has not sent it yet: chosen all the same, and said to be on its way
+      const chosen = await c.cmd.post('/api/plan-calendars', { name: '', url: company });
+      expect(chosen.status).toBe(200);
+      expect(chosen.body.calendars).toEqual([{ index: 0, name: 'יומן Google', error: null, loading: true }]);
+      expect((await tw()).calendars).toEqual([{ name: 'יומן Google', count: 0, error: null, loading: true }]);
+      // it comes in: its name and its blocks
+      send(text);
+      await calendarReadsSettled();
+      expect((await c.cmd.get('/api/plan-calendars')).body.calendars).toEqual([{ index: 0, name: 'יומן גדול', error: null, loading: false }]);
+      expect((await tw()).calendars).toEqual([{ name: 'יומן גדול', count: 2, error: null, loading: false }]);
+      // an instance starting cold has the shared copy at once, while Google would keep it waiting
+      mode = 'hang';
+      forgetCalendarCopies();
+      expect((await tw()).calendars).toEqual([{ name: 'יומן גדול', count: 2, error: null, loading: false }]);
+      // Google not sending a calendar in time: said in words
+      mode = 'timeout';
+      const late = await c.cmd.post('/api/plan-calendars', { name: '', url: 'https://calendar.google.com/calendar/ical/late%40group.calendar.google.com/private-l/basic.ics' });
+      expect(late.status).toBe(400);
+      expect(late.body.error).toContain('Google לא סיים לשלוח את היומן בזמן');
+    } finally {
+      setCalendarWaits(2_500, 5_000);
+      setCalendarFetcher(async () => '');
+      await c.cmd.del('/api/plan-calendars/0');
     }
   });
 
