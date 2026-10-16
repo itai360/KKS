@@ -117,9 +117,19 @@ const MAX_SOURCES = 8;
 const REFRESH_MS = 10 * 60_000;
 /** a calendar that could not be read is tried again sooner */
 const RETRY_MS = 60_000;
+/** how often an instance looks again in the shared store for a calendar it found no copy of */
+const SHARED_LOOK_MS = 10_000;
 /** a big calendar (a company's, years of events) can take Google a good while to put together */
 const MAX_BYTES = 20_000_000;
 const FETCH_TIMEOUT_MS = 45_000;
+/**
+ * What is parsed of it: the events of about a year back and a year ahead (see trimCalendar). Parsed
+ * whole, a calendar of many years ran a server instance out of memory.
+ */
+const KEEP_DAYS = 400;
+const MAX_PARSE_BYTES = 3_000_000;
+/** the time one calendar's events of some days may take to work out */
+const EXPAND_BUDGET_MS = 2_000;
 /** how long a page waits for a calendar never read before, before it shows without it (it keeps loading) */
 let PAGE_WAIT_MS = 2_500;
 /** choosing a calendar: long enough for a wrong address to be reported on the spot */
@@ -218,6 +228,118 @@ function parseCalendar(text: string): ICAL.Component {
   return root;
 }
 
+/** an event of the file kept for parsing: within the days kept, or repeating into them */
+function keepEvent(block: string, lo: string, hi: string): boolean {
+  const start = /\nDTSTART[^:\r\n]*:(\d{8})/.exec(block)?.[1];
+  if (!start) return true;
+  if (start > hi) return false;
+  if (/\nRRULE:/.test(block)) {
+    const until = /\nRRULE:[^\r\n]*UNTIL=(\d{8})/.exec(block)?.[1];
+    return !until || until >= lo;
+  }
+  const end = /\nDTEND[^:\r\n]*:(\d{8})/.exec(block)?.[1] ?? start;
+  return end >= lo;
+}
+
+/** what the app reads of an event; descriptions, guests, reminders and the like are left out */
+const EVENT_PROPS = new Set(['BEGIN', 'END', 'UID', 'DTSTART', 'DTEND', 'DURATION', 'RRULE', 'RDATE', 'EXDATE', 'EXRULE', 'RECURRENCE-ID', 'SUMMARY', 'LOCATION', 'STATUS']);
+
+/** an event's text with only those properties (folded lines follow theirs; inner blocks such as reminders go) */
+function slimEvent(block: string): string {
+  const out: string[] = [];
+  let keep = false;
+  let depth = 0;
+  for (const raw of block.split('\n')) {
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    if (!line) {
+      out.push(raw);
+      continue;
+    }
+    if (line[0] === ' ' || line[0] === '\t') {
+      if (keep) out.push(raw);
+      continue;
+    }
+    keep = false;
+    if (line.startsWith('BEGIN:') && line !== 'BEGIN:VEVENT') depth++;
+    else if (line.startsWith('END:') && line !== 'END:VEVENT') depth--;
+    else if (depth === 0) {
+      keep = EVENT_PROPS.has((/^[A-Za-z0-9-]+/.exec(line)?.[0] ?? '').toUpperCase());
+      if (keep) out.push(raw);
+    }
+  }
+  return out.join('\n');
+}
+
+/**
+ * A calendar's text with only the events of about a year back and a year ahead of `today` (and every
+ * repeating one that may still repeat then), each with only what the app reads - straight from the
+ * text, before anything is parsed. A company's calendar holds years of events; parsing them all filled
+ * a server's memory.
+ */
+export function trimCalendar(text: string, today: string): string {
+  const lo = addDays(today, -KEEP_DAYS).replace(/-/g, '');
+  const hi = addDays(today, KEEP_DAYS).replace(/-/g, '');
+  const out: string[] = [];
+  let pos = 0;
+  for (;;) {
+    const begin = text.indexOf('\nBEGIN:VEVENT', pos);
+    if (begin < 0) break;
+    const end = text.indexOf('\nEND:VEVENT', begin);
+    if (end < 0) break;
+    const lineEnd = text.indexOf('\n', end + 1);
+    const stop = lineEnd < 0 ? text.length : lineEnd;
+    out.push(text.slice(pos, begin));
+    const block = text.slice(begin, stop);
+    if (keepEvent(block, lo, hi)) out.push(slimEvent(block));
+    pos = stop;
+  }
+  out.push(text.slice(pos));
+  return out.join('');
+}
+
+/**
+ * A daily or weekly event repeating since long ago starts, as read, from about a year before today: moved
+ * forward by whole weeks of its interval, so every occurrence falls where it did - only the years before
+ * (never shown) are not walked through again on every page. Not one counted by COUNT, nor BYSETPOS.
+ */
+function fastForward(root: ICAL.Component, today: string): void {
+  const lo = addDays(today, -KEEP_DAYS);
+  for (const ve of root.getAllSubcomponents('vevent')) {
+    try {
+      const rule = ve.getFirstPropertyValue('rrule') as ICAL.Recur | null;
+      if (!rule || ve.hasProperty('recurrence-id') || rule.count || (rule.freq !== 'DAILY' && rule.freq !== 'WEEKLY') || rule.parts.BYSETPOS) continue;
+      // its time zone must stay as written: one the file does not describe is left as it is
+      const tzid = ve.getFirstProperty('dtstart')?.getParameter('tzid');
+      if (typeof tzid === 'string' && !ICAL.TimezoneService.has(tzid)) continue;
+      const ev = new ICAL.Event(ve, { exceptions: [] });
+      const step = 7 * (rule.interval || 1);
+      const behind = diffDays(lo, keyOf(ev.startDate));
+      if (behind < step) continue;
+      const days = Math.floor(behind / step) * step;
+      const start = ev.startDate.clone();
+      start.adjust(days, 0, 0, 0);
+      if (ve.hasProperty('dtend')) {
+        const end = ev.endDate.clone();
+        end.adjust(days, 0, 0, 0);
+        ev.endDate = end;
+      }
+      ev.startDate = start;
+    } catch {
+      /* read as it is */
+    }
+  }
+}
+
+/** the text as parsed: trimmed, and refused when even that is too much */
+function parseTrimmed(text: string): { root: ICAL.Component; text: string } {
+  const today = localDateKey(clock.now(), tz());
+  const trimmed = trimCalendar(text, today);
+  if (trimmed.length > MAX_PARSE_BYTES) throw new Error('היומן גדול מדי - גם האירועים של השנה האחרונה והשנה הבאה לבדם הם יותר מדי');
+  const root = parseCalendar(trimmed);
+  fastForward(root, today);
+  return { root, text: trimmed };
+}
+
 const nameOf = (root: ICAL.Component) => String(root.getFirstPropertyValue('x-wr-calname') ?? '').trim().slice(0, 80) || null;
 
 function readError(e: unknown): string {
@@ -228,18 +350,27 @@ function readError(e: unknown): string {
 
 // The last good copy of each calendar is also kept in the shared file store (compressed), so a server
 // instance that starts cold has it at once instead of waiting for Google.
-const sharedName = (url: string) => `calendar-${createHash('sha256').update(generation ? `${generation} ${url}` : url).digest('hex').slice(0, 32)}.ics.gz`;
+// ("calendar2-": trimmed. A "calendar-" copy is the whole calendar, kept for a short while before
+// trimming existed - never read, and removed.)
+const hashOf = (url: string) => createHash('sha256').update(generation ? `${generation} ${url}` : url).digest('hex').slice(0, 32);
+const sharedName = (url: string) => `calendar2-${hashOf(url)}.ics.gz`;
+const untrimmedRemoved = new Set<string>();
 
 async function keepShared(url: string, at: number, text: string, waited: boolean): Promise<void> {
   try {
     await putFile(sharedName(url), gzipSync(Buffer.from(`${at}${waited ? ' waited' : ''}\n${text}`, 'utf8')));
+    if (!untrimmedRemoved.has(url)) {
+      untrimmedRemoved.add(url);
+      await removeFile(`calendar-${hashOf(url)}.ics.gz`);
+    }
   } catch {
     /* only a head start for other instances */
   }
 }
 
 async function sharedCopy(url: string): Promise<Cached | null> {
-  if (Date.now() - (sharedLooked.get(url) ?? 0) < RETRY_MS) return null;
+  // not there a moment ago: another instance may be reading it now - look again soon
+  if (Date.now() - (sharedLooked.get(url) ?? 0) < SHARED_LOOK_MS) return null;
   sharedLooked.set(url, Date.now());
   try {
     const raw = await getFile(sharedName(url));
@@ -247,7 +378,7 @@ async function sharedCopy(url: string): Promise<Cached | null> {
     const text = gunzipSync(raw).toString('utf8');
     const nl = text.indexOf('\n');
     const [at, mark] = text.slice(0, nl).split(' ');
-    const root = parseCalendar(text.slice(nl + 1));
+    const { root } = parseTrimmed(text.slice(nl + 1));
     const entry: Cached = { at: Number(at) || 0, root, error: null, name: nameOf(root), waited: mark === 'waited' };
     cache.set(url, entry);
     return entry;
@@ -271,8 +402,7 @@ function readFromGoogle(url: string): Promise<Cached> {
   const p = (async (): Promise<Cached> => {
     let entry: Cached;
     try {
-      const text = await fetcher(url);
-      const root = parseCalendar(text);
+      const { root, text } = parseTrimmed(await fetcher(url));
       entry = { at: Date.now(), root, error: null, name: nameOf(root), waited: awaited.has(url) };
       await keepShared(url, entry.at, text, !!entry.waited);
     } catch (e) {
@@ -339,6 +469,39 @@ function instant(t: ICAL.Time, fallbackZone: string): Date {
   return zonedToUtc(keyOf(t), `${pad(t.hour)}:${pad(t.minute)}`, zone);
 }
 
+/**
+ * An event, with its exceptions given (none) rather than found by ical.js: on its own, every new event
+ * looks through the whole calendar and takes every moved occurrence in it as its own, whatever its UID.
+ * On a calendar of thousands of events that is millions of objects - it ran a server out of memory.
+ */
+const eventOf = (ve: ICAL.Component) => new ICAL.Event(ve, { strictExceptions: true, exceptions: [] });
+
+/** each calendar's events of some days, worked out once per reading of it (a page asks for the same days again and again) */
+const expanded = new WeakMap<ICAL.Component, Map<string, ExternalEvent[]>>();
+
+function expandCached(source: SourceRow, root: ICAL.Component, from: string, to: string, zone: string): ExternalEvent[] {
+  let byKey = expanded.get(root);
+  if (!byKey) expanded.set(root, (byKey = new Map()));
+  const prefix = `${source.id}|${source.name}|${zone}|`;
+  const key = `${prefix}${from}|${to}`;
+  let hit = byKey.get(key);
+  if (!hit) {
+    // days inside ones already worked out (a week of the three-week plan): taken from them
+    for (const [k, list] of byKey) {
+      if (!k.startsWith(prefix)) continue;
+      const [f, t] = k.slice(prefix.length).split('|');
+      if (f <= from && t >= to) {
+        hit = list.filter((e) => e.date >= from && e.date <= to);
+        break;
+      }
+    }
+    hit ??= expand(source, root, from, to, zone);
+    if (byKey.size >= 24) byKey.delete(byKey.keys().next().value!);
+    byKey.set(key, hit);
+  }
+  return [...hit];
+}
+
 function expand(source: SourceRow, root: ICAL.Component, from: string, to: string, zone: string): ExternalEvent[] {
   const out: ExternalEvent[] = [];
   const windowStart = zonedToUtc(from, '00:00', zone);
@@ -347,12 +510,13 @@ function expand(source: SourceRow, root: ICAL.Component, from: string, to: strin
   const exceptions: ICAL.Component[] = [];
   for (const ve of root.getAllSubcomponents('vevent')) {
     if (ve.hasProperty('recurrence-id')) exceptions.push(ve);
-    else masters.set(String(ve.getFirstPropertyValue('uid') ?? `noid-${masters.size}`), new ICAL.Event(ve));
+    else masters.set(String(ve.getFirstPropertyValue('uid') ?? `noid-${masters.size}`), eventOf(ve));
   }
+  // each moved occurrence to its own repeating event, by its UID
   for (const ex of exceptions) {
     const master = masters.get(String(ex.getFirstPropertyValue('uid') ?? ''));
-    if (master) master.relateException(ex);
-    else masters.set(`orphan-${masters.size}`, new ICAL.Event(ex));
+    if (master) master.relateException(eventOf(ex));
+    else masters.set(`orphan-${masters.size}`, eventOf(ex));
   }
 
   const emit = (ev: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null) => {
@@ -380,15 +544,26 @@ function expand(source: SourceRow, root: ICAL.Component, from: string, to: strin
     });
   };
 
+  // a calendar full of repeating events must not hold the server: past the budget, the rest is left out
+  const deadline = Date.now() + EXPAND_BUDGET_MS;
   for (const ev of masters.values()) {
+    if (Date.now() > deadline) {
+      console.warn(`[calendar] "${source.name}": expanding took over ${EXPAND_BUDGET_MS}ms, the rest left out`);
+      break;
+    }
     try {
       if (!ev.isRecurring()) {
         emit(ev, ev.startDate, ev.endDate);
         continue;
       }
       const it = ev.iterator();
+      // an occurrence long before the days asked for (more than a block's 62 days) shows nothing, unless moved
+      const early = windowStart.getTime() - 63 * 864e5;
+      const moved = Object.keys(ev.exceptions).length > 0 || ev.rangeExceptions.length > 0;
       for (let next = it.next(), n = 0; next && n < 20_000; next = it.next(), n++) {
-        if (instant(next, zone) >= windowEnd) break;
+        const at = instant(next, zone);
+        if (at >= windowEnd || ((n & 255) === 255 && Date.now() > deadline)) break;
+        if (!moved && at.getTime() < early) continue;
         const d = ev.getOccurrenceDetails(next);
         emit(d.item, d.startDate, d.endDate);
       }
@@ -431,7 +606,7 @@ export async function externalEvents(from: string, to: string): Promise<External
   const sources = db().all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id');
   const loaded = await Promise.all(sources.map(async (s) => ({ s, c: await loadSource(s.url) })));
   return loaded
-    .flatMap(({ s, c }) => (c.root ? expand(s, c.root, from, to, zone) : []))
+    .flatMap(({ s, c }) => (c.root ? expandCached(s, c.root, from, to, zone) : []))
     .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? ''));
 }
 
@@ -532,7 +707,7 @@ export async function readPlanCalendars(from: string, to: string): Promise<{ rea
     rows.map(async (r): Promise<CalendarRead> => {
       const c = await loadSource(r.url);
       const source = { ...r, name: r.name || c.name || 'יומן Google' };
-      return { name: source.name, error: c.error, loading: !!c.loading, events: c.root ? expand(source, c.root, from, to, zone) : [] };
+      return { name: source.name, error: c.error, loading: !!c.loading, events: c.root ? expandCached(source, c.root, from, to, zone) : [] };
     }),
   );
   return { reads, from: chosen.length ? 'plan' : 'schedule' };
@@ -564,7 +739,7 @@ function weekCandidates(root: ICAL.Component, zone: string): { found: Candidate[
     total++;
     if (ve.hasProperty('rrule') || String(ve.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED') continue;
     try {
-      const ev = new ICAL.Event(ve);
+      const ev = eventOf(ve);
       const name = ev.summary?.trim() ?? '';
       if (!name || !ev.startDate) continue;
       let start: string;

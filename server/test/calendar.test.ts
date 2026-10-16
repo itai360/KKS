@@ -2,8 +2,9 @@
 // calendars shown in the schedule.
 
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { calendarReadsSettled, setCalendarFetcher, setCalendarWaits } from '../src/calendar';
+import ICAL from 'ical.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { calendarReadsSettled, setCalendarFetcher, setCalendarWaits, trimCalendar } from '../src/calendar';
 import { db } from '../src/db';
 import { setup, type Ctx } from './helpers';
 
@@ -325,6 +326,76 @@ describe('course weeks from a Google calendar', () => {
       expect((await c.cmd.post('/api/weeks/calendar/preview', { url: GOOGLE_URL })).body.weeks[0].name).toBe('שבוע 1 - שונה');
     } finally {
       setCalendarWaits(2_500, 5_000);
+    }
+  });
+});
+
+describe('a calendar of many years', () => {
+  it('is trimmed before parsing to about a year back and a year ahead, keeping what still repeats', () => {
+    const ev = (uid: string, lines: string[]) => ['BEGIN:VEVENT', `UID:${uid}`, ...lines, 'END:VEVENT'];
+    const old: string[] = [];
+    // years of a company's past: 20,000 events
+    for (let i = 0; i < 20000; i++) old.push(...ev(`old-${i}`, [`DTSTART:2019${String((i % 12) + 1).padStart(2, '0')}10T080000Z`, 'DTEND:20190110T090000Z', `SUMMARY:אירוע ישן ${i}`]));
+    const text = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'X-WR-CALNAME:יומן הפלוגה',
+      'BEGIN:VTIMEZONE',
+      'TZID:Asia/Jerusalem',
+      'END:VTIMEZONE',
+      ...old,
+      ...ev('now', ['DTSTART;TZID=Asia/Jerusalem:20261012T090000', 'DTEND;TZID=Asia/Jerusalem:20261012T100000', 'SUMMARY:תרגיל השבוע']),
+      ...ev('block', ['DTSTART;VALUE=DATE:20250901', 'DTEND;VALUE=DATE:20261231', 'SUMMARY:קורס ארוך']),
+      ...ev('weekly', ['DTSTART:20180107T060000Z', 'RRULE:FREQ=WEEKLY;BYDAY=SU', 'SUMMARY:מסדר שבועי']),
+      ...ev('ended', ['DTSTART:20180107T060000Z', 'RRULE:FREQ=WEEKLY;UNTIL=20200101T000000Z', 'SUMMARY:נגמר מזמן']),
+      ...ev('far', ['DTSTART:20290101T060000Z', 'SUMMARY:רחוק מדי']),
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const trimmed = trimCalendar(text, '2026-10-16');
+    expect(text.length).toBeGreaterThan(2_000_000);
+    expect(trimmed.length).toBeLessThan(2000);
+    for (const kept of ['UID:now', 'UID:block', 'UID:weekly', 'X-WR-CALNAME:יומן הפלוגה', 'TZID:Asia/Jerusalem', 'END:VCALENDAR']) expect(trimmed).toContain(kept);
+    for (const gone of ['UID:old-', 'UID:ended', 'UID:far']) expect(trimmed).not.toContain(gone);
+    // still a calendar, line by line
+    expect(trimmed.split('\r\n').filter((l) => l === 'BEGIN:VEVENT').length).toBe(3);
+    expect(trimmed).not.toMatch(/\n\n|\r\r/);
+  });
+
+  it('a big one read from Google: only its recent part is kept and shown', async () => {
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'X-WR-CALNAME:גדול'];
+    for (let i = 0; i < 20000; i++) lines.push('BEGIN:VEVENT', `UID:o${i}`, 'DTSTART:20190310T080000Z', 'SUMMARY:ישן', 'END:VEVENT');
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    lines.push('BEGIN:VEVENT', 'UID:fresh', `DTSTART:${today}T080000Z`, `DTEND:${today}T090000Z`, 'SUMMARY:אירוע של היום', 'END:VEVENT', 'END:VCALENDAR');
+    setCalendarFetcher(async () => lines.join('\r\n'));
+    expect((await c.cmd.post('/api/calendar/sources', { name: '', url: GOOGLE_URL })).body[0]).toMatchObject({ calendarName: 'גדול', error: null });
+    const d = new Date().toISOString().slice(0, 10);
+    const events = (await c.s1.get(`/api/calendar/external?from=${d}&to=${d}`)).body;
+    expect(events.map((e: { title: string }) => e.title)).toEqual(['אירוע של היום']);
+  });
+
+  it('thousands of events with moved occurrences: each moved one stays with its own event', async () => {
+    const day = (n: number) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'X-WR-CALNAME:הרבה'];
+    for (let i = 0; i < 3000; i++) lines.push('BEGIN:VEVENT', `UID:s${i}`, `DTSTART:${day(0)}T0${i % 10}0000Z`, `DTEND:${day(0)}T0${i % 10}3000Z`, `SUMMARY:אירוע ${i}`, 'END:VEVENT');
+    // two weekly events at the same hour, each with today's occurrence moved: ical.js on its own lets every
+    // event take every moved occurrence in the calendar as its own (and look through the whole calendar for it)
+    for (const name of ['אלף', 'בית']) {
+      lines.push('BEGIN:VEVENT', `UID:${name}`, `DTSTART:${day(-7)}T060000Z`, `DTEND:${day(-7)}T070000Z`, 'RRULE:FREQ=WEEKLY', `SUMMARY:${name}`, 'END:VEVENT');
+      lines.push('BEGIN:VEVENT', `UID:${name}`, `RECURRENCE-ID:${day(0)}T060000Z`, `DTSTART:${day(0)}T080000Z`, `DTEND:${day(0)}T090000Z`, `SUMMARY:${name} - הוזז`, 'END:VEVENT');
+    }
+    lines.push('END:VCALENDAR');
+    setCalendarFetcher(async () => lines.join('\r\n'));
+    expect((await c.cmd.post('/api/calendar/sources', { name: '', url: GOOGLE_URL })).status).toBe(200);
+    const d = new Date().toISOString().slice(0, 10);
+    const related = vi.spyOn(ICAL.Event.prototype, 'relateException');
+    try {
+      const events = (await c.s1.get(`/api/calendar/external?from=${d}&to=${d}`)).body as { title: string }[];
+      expect(events.filter((e) => e.title.startsWith('אירוע')).length).toBe(3000);
+      expect(events.map((e) => e.title).filter((t) => t.endsWith('הוזז')).sort()).toEqual(['אלף - הוזז', 'בית - הוזז']);
+      // each moved occurrence related once, to its own event - not to each of the 3,002 events
+      expect(related.mock.calls.length).toBe(2);
+    } finally {
+      related.mockRestore();
     }
   });
 });
