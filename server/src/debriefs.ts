@@ -17,6 +17,7 @@ import {
   LESSON_HORIZONS,
   LESSON_REQUIRED,
   needsAPoint,
+  tidyAnswers,
   type DebriefAnswers,
   type DebriefKind,
   type LessonDecision,
@@ -25,7 +26,7 @@ import {
   type WeekNotePart,
 } from '../../shared/debriefForms';
 import { searchKey } from '../../shared/search';
-import type { BankLesson, Debrief, DebriefDetail, DebriefItem, LessonReview, WeekNoteWeek } from '../../shared/types';
+import type { BankLesson, BroadHolder, Debrief, DebriefDetail, DebriefItem, LessonReview, WeekNoteWeek } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
@@ -105,6 +106,24 @@ export function companyPresenter(date: string): { cadetId: number; cadetName: st
   );
   const r = rows.find((x) => searchKey(x.role) === searchKey(COMPANY_DEBRIEF_ROLE));
   return r ? { cadetId: r.cadet_id, cadetName: r.name, mentorId: r.mentor_id } : null;
+}
+
+/**
+ * The broad staff (סגל רוחב) a company debrief can put a topic on: the cadets holding a broad role on the
+ * day it takes place, or during the week it is about - one row per cadet and role.
+ */
+function broadStaff(d: Pick<DebriefRow, 'kind' | 'occurred_on' | 'week_id'>): BroadHolder[] {
+  if (d.kind !== 'company') return [];
+  const w = d.week_id ? db().get<{ start_date: string; end_date: string }>('SELECT start_date, end_date FROM weeks WHERE id = ?', d.week_id) : null;
+  const rows = db().all<{ cadet_id: number; role: string; name: string }>(
+    `SELECT DISTINCT x.cadet_id, x.role, trim(c.first_name || ' ' || c.last_name) AS name FROM experiences x JOIN cadets c ON c.id = x.cadet_id
+     WHERE x.kind = 'broad' AND c.status = 'active' AND ((x.start_date <= ? AND x.end_date >= ?) OR (x.start_date <= ? AND x.end_date >= ?))`,
+    d.occurred_on,
+    d.occurred_on,
+    w?.end_date ?? '',
+    w?.start_date ?? '9999',
+  );
+  return rows.map((r) => ({ cadetId: r.cadet_id, name: r.name, role: r.role.trim() })).sort((a, b) => a.role.localeCompare(b.role, 'he') || a.name.localeCompare(b.name, 'he'));
 }
 
 function presenterOf(kind: DebriefKind, a: DebriefAnswers): number | null {
@@ -196,7 +215,7 @@ export function createDebrief(actor: UserRow, raw: z.input<typeof debriefSchema>
   const week = isWeekDebrief(d.kind) && d.weekId ? weekRow(d.weekId) : null;
   if (isWeekDebrief(d.kind) && !week) throw badRequest('בחרו את השבוע שהתחקיר עוסק בו');
   checkPresenter(d.answers);
-  let answers = d.answers;
+  let answers = tidyAnswers(d.kind, d.answers);
   // a weekly debrief starts from the goals its week set
   if (d.kind === 'weekly' && week && !answers.goals) answers = { ...answers, goals: goalsFromText(week.goals) };
   // the company debrief: brought by the training officer of that day, unless another cadet was chosen
@@ -238,7 +257,7 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
   if (p.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', p.eventId)) throw badRequest('הפעילות לא נמצאה');
   // answers come per question: two people filling different parts of the form both keep theirs
   if (p.answers) checkPresenter(p.answers);
-  const answers = p.answers ? { ...parseAnswers(cur.answers), ...p.answers } : parseAnswers(cur.answers);
+  const answers = p.answers ? { ...parseAnswers(cur.answers), ...tidyAnswers(cur.kind, p.answers) } : parseAnswers(cur.answers);
   if (JSON.stringify(answers).length > 40000) throw badRequest('התחקיר ארוך מדי');
   const weekId = isWeekDebrief(cur.kind) ? (p.weekId ? weekRow(p.weekId).id : cur.week_id) : weekForDate(occurredOn);
   const summingUp = p.status === 'final' && cur.status !== 'final';
@@ -934,6 +953,7 @@ export function debriefDetail(actor: UserRow, id: number): DebriefDetail {
   const d = debriefRow(id);
   return {
     week: isWeekDebrief(d.kind) && d.week_id ? weekRow(d.week_id) : null,
+    broadStaff: broadStaff(d),
     debrief: toDebrief(actor, d),
     items: db()
       .all<ItemRow>(`${ITEM_BASE} WHERE i.debrief_id = ? ORDER BY i.sort, i.id`, id)

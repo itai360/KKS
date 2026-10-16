@@ -1189,6 +1189,15 @@ export interface DebriefDetail {
   tasks: Task[];
   /** a weekly (or company) debrief: the week it is about */
   week: { id: number; number: number; name: string; goals: string } | null;
+  /** a company debrief: the cadets holding a broad role then, whom a topic can be put on */
+  broadStaff: BroadHolder[];
+}
+
+/** a cadet holding a broad role (סגל רוחב) */
+export interface BroadHolder {
+  cadetId: number;
+  name: string;
+  role: string;
 }
 
 export interface CourseDocument {

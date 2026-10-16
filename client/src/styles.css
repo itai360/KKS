@@ -5840,12 +5840,15 @@ button.stat:disabled {
   padding-inline-start: 12px;
   border-inline-start: 2px solid var(--line-2);
 }
-.dq-proposal > .input {
+.dq-proposal > .input,
+.dq-proposal > .dq-owner-pick {
   flex: 1;
   min-width: 0;
 }
 .dq-proposal-tag {
   flex-shrink: 0;
+  /* "הצעה" and "באחריות" the same width: the fields under a topic line up */
+  min-width: 4em;
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;

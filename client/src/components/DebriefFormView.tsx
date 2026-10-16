@@ -3,9 +3,9 @@
 // and a date, and one button that sums it up - this cycle's lessons become tasks, the next
 // cycle's are kept in the lessons bank for the same week or event.
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { STATUS_LABELS } from '@shared/constants';
+import { ROLE_LABELS, STATUS_LABELS } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
 import {
   answered,
@@ -18,14 +18,16 @@ import {
   LESSON_REQUIRED,
   needsAPoint,
   proposalRows,
+  type OwnerPool,
   type ProposalAnswer,
+  type ProposalOwner,
   type DebriefAnswers,
   type DebriefQuestion,
   type DebriefSection,
   type GoalAnswer,
   type LessonHorizon,
 } from '@shared/debriefForms';
-import type { DebriefDetail, DebriefItem } from '@shared/types';
+import type { Cadet, DebriefDetail, DebriefItem } from '@shared/types';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
 import { SectionRail, useCurrentSection, type RailItem } from './SectionRail';
@@ -38,6 +40,8 @@ import { todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
+import { useApi } from '../lib/useApi';
+import { sortHe } from '@shared/sort';
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -112,6 +116,55 @@ function useAnswers(id: number, server: DebriefAnswers, onSaved: (d: DebriefDeta
 
 const ANCHOR = (s: string) => `dsec-${s}`;
 
+/** someone a topic can be put on, as a choice in the list */
+interface OwnerChoice {
+  key: string;
+  label: string;
+  owner: ProposalOwner;
+}
+interface OwnerPools {
+  staff: OwnerChoice[];
+  broadStaff: OwnerChoice[];
+  cadets: OwnerChoice[];
+}
+const OwnersContext = createContext<OwnerPools>({ staff: [], broadStaff: [], cadets: [] });
+const ownerKey = (o: Pick<ProposalOwner, 'kind' | 'id'>) => `${o.kind === 'user' ? 'u' : 'c'}:${o.id}`;
+
+/**
+ * Whom the company debrief can put a topic on: the staff (the commander first), the cadets holding a
+ * broad role then (one row each, with their roles), and - while it is filled in - every cadet.
+ */
+function useOwnerPools(data: DebriefDetail, editable: boolean): OwnerPools {
+  const { users } = useSession();
+  const company = data.debrief.kind === 'company';
+  const cadets = useApi<Cadet[]>(company && editable ? '/api/cadets' : null, ['cadets']).data;
+  const holders = data.broadStaff;
+  return useMemo(() => {
+    if (!company) return { staff: [], broadStaff: [], cadets: [] };
+    const staff = [...users.filter((u) => u.role === 'commander'), ...users.filter((u) => u.role !== 'commander')].map((u) => {
+      const title = u.title || (u.role === 'commander' ? ROLE_LABELS.commander : '');
+      return { key: ownerKey({ kind: 'user', id: u.id }), label: title ? `${u.displayName} · ${title}` : u.displayName, owner: { kind: 'user' as const, id: u.id, name: u.displayName } };
+    });
+    const roles = new Map<number, { name: string; roles: string[] }>();
+    for (const h of holders ?? []) {
+      const r = roles.get(h.cadetId) ?? { name: h.name, roles: [] };
+      if (h.role && !r.roles.includes(h.role)) r.roles.push(h.role);
+      roles.set(h.cadetId, r);
+    }
+    const broadStaff = [...roles].map(([id, r]) => ({
+      key: ownerKey({ kind: 'cadet', id }),
+      label: r.roles.length ? `${r.name} · ${r.roles.join(', ')}` : r.name,
+      owner: { kind: 'cadet' as const, id, name: r.name },
+    }));
+    const rest = sortHe((cadets ?? []).filter((c) => !roles.has(c.id)), (c) => c.fullName).map((c) => ({
+      key: ownerKey({ kind: 'cadet', id: c.id }),
+      label: c.teamName ? `${c.fullName} · ${c.teamName}` : c.fullName,
+      owner: { kind: 'cadet' as const, id: c.id, name: c.fullName },
+    }));
+    return { staff, broadStaff, cadets: rest };
+  }, [company, users, holders, cadets]);
+}
+
 export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail; setData: (d: DebriefDetail) => void; onEdit: () => void }) {
   const d = data.debrief;
   const toast = useToast();
@@ -121,6 +174,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
   const editable = d.canEdit && d.status === 'draft';
   const { isCommander } = useSession();
   const [busy, setBusy] = useState(false);
+  const owners = useOwnerPools(data, editable);
 
   const lessons = data.items.filter((i) => i.kind === 'lesson');
   const ofHorizon = (h: LessonHorizon) => lessons.filter((l) => (l.horizon ?? 'now') === h);
@@ -310,9 +364,11 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
             />
           )}
 
-          {sections.map((s, i) => (
-            <Section key={s.id} section={s} n={i + 1} answers={all} editable={editable} onChange={set} onDone={() => void flush()} />
-          ))}
+          <OwnersContext.Provider value={owners}>
+            {sections.map((s, i) => (
+              <Section key={s.id} section={s} n={i + 1} answers={all} editable={editable} onChange={set} onDone={() => void flush()} />
+            ))}
+          </OwnersContext.Provider>
 
           {(['now', 'next'] as const).map((h, i) => (
             <LessonsCard key={h} n={sections.length + i + 1} horizon={h} data={data} items={ofHorizon(h)} editable={editable} run={run} />
@@ -453,7 +509,7 @@ function Question({ q, value, editable, onChange, onDone, alert }: { q: DebriefQ
     <div className="dq" role="group" aria-labelledby={`${id}-l`}>
       {head}
       {q.type === 'list' && <ListInput value={Array.isArray(value) ? (value as string[]) : []} editable={editable} onChange={onChange} onDone={onDone} label={q.label} />}
-      {q.type === 'proposals' && <ProposalsInput value={proposalRows(value)} editable={editable} onChange={onChange} onDone={onDone} label={q.label} />}
+      {q.type === 'proposals' && <ProposalsInput value={proposalRows(value)} editable={editable} onChange={onChange} onDone={onDone} label={q.label} pool={q.owners} />}
       {q.type === 'rating' && <Rating value={typeof value === 'number' ? value : 0} editable={editable} onChange={(v) => (onChange(v), onDone())} />}
       {q.type === 'goals' && <Goals value={Array.isArray(value) ? (value as GoalAnswer[]) : []} editable={editable} onChange={onChange} onDone={onDone} />}
       {q.type === 'numbers' && <Numbers fields={q.fields ?? []} value={value && typeof value === 'object' ? (value as Record<string, number>) : {}} editable={editable} onChange={onChange} onDone={onDone} />}
@@ -573,8 +629,69 @@ function ListInput({ value, editable, onChange, onDone, label }: { value: string
   );
 }
 
-/** topics raised, each with what is proposed for it (the company debrief) */
-function ProposalsInput({ value, editable, onChange, onDone, label }: { value: ProposalAnswer[]; editable: boolean; onChange: (v: ProposalAnswer[]) => void; onDone: () => void; label: string }) {
+/** the choices of a pool, in groups when it has more than one kind of people */
+function useOwnerGroups(pool: OwnerPool): { label: string; list: OwnerChoice[] }[] {
+  const p = useContext(OwnersContext);
+  if (pool === 'staff') return [{ label: 'הסגל', list: p.staff }];
+  if (pool === 'broadStaff') return [{ label: 'סגל רוחב', list: p.broadStaff }];
+  return [
+    { label: 'סגל רוחב', list: p.broadStaff },
+    { label: 'צוערים', list: p.cadets },
+  ];
+}
+
+/** who a topic is on, as the list names them now (with a broad role) - or as it was when chosen */
+function OwnerName({ owner }: { owner: ProposalOwner }) {
+  const p = useContext(OwnersContext);
+  const key = ownerKey(owner);
+  const found = [...p.staff, ...p.broadStaff, ...p.cadets].find((o) => o.key === key);
+  return <>{found?.label ?? owner.name}</>;
+}
+
+/** who a topic is put on: before the staff - the staff and the commander; before the broad staff - its role holders */
+function OwnerPick({ pool, value, onChange, label }: { pool: OwnerPool; value: ProposalOwner | null | undefined; onChange: (o: ProposalOwner | null) => void; label: string }) {
+  const groups = useOwnerGroups(pool);
+  const all = groups.flatMap((g) => g.list);
+  const current = value ? ownerKey(value) : '';
+  // chosen earlier and no longer in the list (a role that ended): kept as it was
+  const gone = value && !all.some((o) => o.key === current);
+  const shown = groups.filter((g) => g.list.length);
+  return (
+    <Select
+      className="select dq-owner-pick"
+      value={current}
+      aria-label={label}
+      searchable={all.length > 6}
+      onChange={(e) => onChange(e.target.value ? (all.find((o) => o.key === e.target.value)?.owner ?? value ?? null) : null)}
+    >
+      <option value="">לא נקבע</option>
+      {gone && <option value={current}>{value.name}</option>}
+      {pool === 'broadStaff' && !all.length && (
+        <option value="none" disabled>
+          אין צוערים בהתנסות רוחב בשבוע הזה
+        </option>
+      )}
+      {shown.length > 1
+        ? shown.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.list.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+          ))
+        : all.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+    </Select>
+  );
+}
+
+/** topics raised, each with what is proposed for it and who it is on (the company debrief) */
+function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { value: ProposalAnswer[]; editable: boolean; onChange: (v: ProposalAnswer[]) => void; onDone: () => void; label: string; pool?: OwnerPool }) {
   const box = useRef<HTMLDivElement>(null);
   if (!editable) {
     const items = value.filter((r) => r.topic.trim() || r.proposal.trim());
@@ -589,6 +706,12 @@ function ProposalsInput({ value, editable, onChange, onDone, label }: { value: P
                 {r.proposal}
               </div>
             )}
+            {r.owner && (
+              <div className="small dq-proposal-read">
+                <span className="strong">באחריות: </span>
+                <OwnerName owner={r.owner} />
+              </div>
+            )}
           </li>
         ))}
       </ol>
@@ -596,7 +719,7 @@ function ProposalsInput({ value, editable, onChange, onDone, label }: { value: P
       <p className="muted">-</p>
     );
   }
-  const rows = [...value, { topic: '', proposal: '' }];
+  const rows: ProposalAnswer[] = [...value, { topic: '', proposal: '', owner: null }];
   const focus = (i: number, part: 'topic' | 'proposal') =>
     requestAnimationFrame(() => box.current?.querySelector<HTMLInputElement>(`[data-row="${i}"][data-part="${part}"]`)?.focus());
   const set = (i: number, patch: Partial<ProposalAnswer>) => {
@@ -660,6 +783,14 @@ function ProposalsInput({ value, editable, onChange, onDone, label }: { value: P
                   onBlur={tidy}
                 />
               </label>
+            )}
+            {i < value.length && pool && (
+              <div className="dq-proposal">
+                <span className="dq-proposal-tag" aria-hidden="true">
+                  באחריות
+                </span>
+                <OwnerPick pool={pool} value={r.owner} label={`${label} - באחריות מי, נושא ${i + 1}`} onChange={(o) => (set(i, { owner: o }), onDone())} />
+              </div>
             )}
           </div>
           {i < value.length && (

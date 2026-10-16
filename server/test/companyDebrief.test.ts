@@ -78,6 +78,35 @@ describe('company debrief (תחק"ש פלוגתי)', () => {
     expect(task.description).toContain('תחק"ש פלוגתי');
   });
 
+  it('puts each topic on someone: the staff, the broad role holders of its week, or a cadet', async () => {
+    const { first, second, other, weekId } = await course();
+    const created = await c.s2.post('/api/debriefs', { kind: 'company', weekId, title: 'תחק"ש פלוגתי', occurredOn: '2026-10-08' });
+    // the broad staff then, by role: the security officer and the first half's training officer - not the second half's
+    expect(created.body.broadStaff).toEqual([
+      { cadetId: other, name: 'עידו נחום', role: 'קב"ט' },
+      { cadetId: first, name: 'רועי אלון', role: 'קה"ד' },
+    ]);
+    expect(created.body.broadStaff.some((b: { cadetId: number }) => b.cadetId === second)).toBe(false);
+    const id = created.body.debrief.id;
+    const saved = await c.s2.patch(`/api/debriefs/${id}`, {
+      answers: {
+        staffWeek: [{ topic: 'הלו"ז השתנה בלי הודעה', proposal: 'שינויים עד 20:00', owner: { kind: 'user', id: c.ids.cmd, name: 'מפקד' } }],
+        broadStaff: [{ topic: 'תורנויות', proposal: '', owner: { kind: 'cadet', id: other, name: 'עידו נחום' } }],
+        // an owner in another shape is not kept
+        company: [{ topic: 'ניקיון', proposal: 'סבב', owner: { kind: 'boss', id: 1 } }, { topic: 'שקט בלילה', owner: { kind: 'cadet', id: first, name: 'x'.repeat(300) } }],
+      },
+    });
+    expect(saved.status).toBe(200);
+    const a = saved.body.debrief.answers;
+    expect(a.staffWeek[0].owner).toEqual({ kind: 'user', id: c.ids.cmd, name: 'מפקד' });
+    expect(a.broadStaff[0].owner).toEqual({ kind: 'cadet', id: other, name: 'עידו נחום' });
+    expect(a.company[0]).toEqual({ topic: 'ניקיון', proposal: 'סבב', owner: null });
+    expect(a.company[1].owner.name).toHaveLength(120);
+    expect((await c.s2.patch(`/api/debriefs/${id}`, { status: 'final' })).status).toBe(200);
+    // a debrief of another kind has no broad staff to choose from
+    expect((await c.s1.post('/api/debriefs', { kind: 'weekly', weekId, title: 'תחקיר שבועי', occurredOn: '2026-10-08' })).body.broadStaff).toEqual([]);
+  });
+
   it('keeps its next-cycle lessons for its week, beside the weekly debrief\'s', async () => {
     const { weekId } = await course();
     const id = (await c.s2.post('/api/debriefs', { kind: 'company', weekId, title: 'תחק"ש פלוגתי', occurredOn: '2026-10-08' })).body.debrief.id;

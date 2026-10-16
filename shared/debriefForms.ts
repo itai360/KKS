@@ -18,7 +18,7 @@ export const DEBRIEF_KIND_HINTS: Record<DebriefKind, string> = {
   weekly: 'בסוף כל שבוע: מה הושג, מה לשמר ומה לשפר - ולקחים עם אחראי לשבוע הבא ולאותו שבוע במחזור הבא.',
   event: 'אחרי מופע עצים (מארס, תרגיל מסכם, ניווט לילה): מטרות, ציר זמן, בטיחות, לוגיסטיקה וכוח אדם - ולקחים למופע הבא.',
   general: 'עובדות, ממצאים, מסקנות ולקחים - לכל פעילות אחרת.',
-  company: 'הקה"ד הרוחבי מעביר את התחקיר מול הצוערים: נושאים מול הסגל (על השבוע שעבר, על תרגיל העצים וכללי), מול סגל הרוחב ומול הפלוגה - ולכל נושא הצעה.',
+  company: 'הקה"ד הרוחבי מעביר את התחקיר מול הצוערים: נושאים מול הסגל (על השבוע שעבר, על תרגיל העצים וכללי), מול סגל הרוחב ומול הפלוגה - ולכל נושא הצעה ובאחריות מי.',
 };
 
 /** the broad experience whose cadet brings the company debrief */
@@ -41,7 +41,16 @@ export interface DebriefQuestion {
   fields?: { id: string; label: string }[];
   /** the form can't be summed up while this is empty */
   required?: boolean;
+  /** proposals: who a topic can be put on (the company debrief) */
+  owners?: OwnerPool;
 }
+
+/**
+ * Who a topic of the company debrief can be put on: before the staff - every staff member, the
+ * commander too; before the broad staff - the cadets holding a broad role then; before the
+ * company - those, or any cadet.
+ */
+export type OwnerPool = 'staff' | 'broadStaff' | 'company';
 
 export interface DebriefSection {
   id: string;
@@ -59,10 +68,24 @@ export interface GoalAnswer {
   note: string;
 }
 
-/** a topic raised, and what is proposed for it (the company debrief) */
+/** who a topic is put on: a staff member or a cadet, with the name as it was when chosen */
+export interface ProposalOwner {
+  kind: 'user' | 'cadet';
+  id: number;
+  name: string;
+}
+
+/** a topic raised, what is proposed for it, and who it is on (the company debrief) */
 export interface ProposalAnswer {
   topic: string;
   proposal: string;
+  owner?: ProposalOwner | null;
+}
+
+function ownerOf(v: unknown): ProposalOwner | null {
+  const o = v as Partial<ProposalOwner> | null | undefined;
+  if (!o || (o.kind !== 'user' && o.kind !== 'cadet') || !Number.isInteger(o.id) || (o.id as number) <= 0) return null;
+  return { kind: o.kind, id: o.id as number, name: typeof o.name === 'string' ? o.name.slice(0, 120) : '' };
 }
 
 /** a proposals answer as rows - also one written before proposals existed, as topics alone */
@@ -70,9 +93,16 @@ export function proposalRows(v: unknown): ProposalAnswer[] {
   if (!Array.isArray(v)) return [];
   return v.map((x) =>
     typeof x === 'string'
-      ? { topic: x, proposal: '' }
-      : { topic: typeof x?.topic === 'string' ? x.topic : '', proposal: typeof x?.proposal === 'string' ? x.proposal : '' },
+      ? { topic: x, proposal: '', owner: null }
+      : { topic: typeof x?.topic === 'string' ? x.topic : '', proposal: typeof x?.proposal === 'string' ? x.proposal : '', owner: ownerOf(x?.owner) },
   );
+}
+
+/** the answers as kept: each topic's owner in its known shape */
+export function tidyAnswers(kind: DebriefKind, a: DebriefAnswers): DebriefAnswers {
+  const out = { ...a };
+  for (const s of formFor(kind)) for (const q of s.questions) if (q.type === 'proposals' && q.id in out) out[q.id] = proposalRows(out[q.id]);
+  return out;
 }
 
 export const GOAL_STATUS_LABELS: Record<Exclude<GoalAnswer['status'], ''>, string> = {
@@ -194,20 +224,20 @@ export const COMPANY_FORM: DebriefSection[] = [
     id: 'staff',
     title: 'מול הסגל',
     questions: [
-      { id: 'staffWeek', label: 'על השבוע שעבר', type: 'proposals' },
-      { id: 'staffWoods', label: 'על תרגיל העצים', hint: 'אם היה תרגיל עצים', type: 'proposals' },
-      { id: 'staffGeneral', label: 'כללי', type: 'proposals' },
+      { id: 'staffWeek', label: 'על השבוע שעבר', type: 'proposals', owners: 'staff' },
+      { id: 'staffWoods', label: 'על תרגיל העצים', hint: 'אם היה תרגיל עצים', type: 'proposals', owners: 'staff' },
+      { id: 'staffGeneral', label: 'כללי', type: 'proposals', owners: 'staff' },
     ],
   },
   {
     id: 'broadStaff',
     title: 'מול סגל רוחב',
-    questions: [{ id: 'broadStaff', label: 'נושאים מול סגל הרוחב', type: 'proposals' }],
+    questions: [{ id: 'broadStaff', label: 'נושאים מול סגל הרוחב', type: 'proposals', owners: 'broadStaff' }],
   },
   {
     id: 'company',
     title: 'מול הפלוגה',
-    questions: [{ id: 'company', label: 'נושאים מול הפלוגה', type: 'proposals' }],
+    questions: [{ id: 'company', label: 'נושאים מול הפלוגה', type: 'proposals', owners: 'company' }],
   },
 ];
 
