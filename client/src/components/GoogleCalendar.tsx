@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { shortDate } from '@shared/dates';
-import type { CalendarFeed, CalendarSource, CalendarWeeksPreview } from '@shared/types';
+import type { CalendarFeed, CalendarSource, CalendarWeeksPreview, PlanCalendars as PlanCalendarList } from '@shared/types';
 import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -135,7 +135,7 @@ export function CalendarSources() {
   return (
     <section className="col gap-6">
       <h3>יומני Google בתוך הלו"ז</h3>
-      <div className="small muted">אירועים מיומן Google מופיעים בלו"ז לכל הסגל, לקריאה בלבד, ומתעדכנים כל כמה דקות. הם נכנסים גם לאישור התוכניות - השבועי והתלת שבועי.</div>
+      <div className="small muted">אירועים מיומן Google מופיעים בלו"ז לכל הסגל, לקריאה בלבד, ומתעדכנים כל כמה דקות. כל עוד לא נבחר יומן לאישור התוכניות, הם משמשים גם אותו.</div>
       <ErrorBox error={error ?? sources.error} />
       {list.map((s) => (
         <div key={s.id} className="row gap-6">
@@ -172,6 +172,83 @@ export function CalendarSources() {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/** The calendar the plan documents read ("יומן התוכנית"): its main blocks enter them; it is not shown in the schedule. */
+export function PlanCalendars() {
+  const toast = useToast();
+  const list = useApi<PlanCalendarList>('/api/plan-calendars', ['plans']);
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const add = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      list.setData(await api.post<PlanCalendarList>('/api/plan-calendars', { name, url }));
+      setName('');
+      setUrl('');
+      emitLocalChange('plans');
+      toast({ title: 'היומן נבחר לאישור התוכניות', tone: 'green' });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (index: number, label: string) => {
+    if (!(await ask({ title: `להפסיק למשוך את "${label}" לאישור התוכניות?`, body: 'אירועי המפתח שלו לא ייכנסו עוד לתוכניות. אפשר לבחור אותו שוב בכל עת.', confirm: 'הפסקה', danger: true }))) return;
+    try {
+      list.setData(await api.del<PlanCalendarList>(`/api/plan-calendars/${index}`));
+      emitLocalChange('plans');
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const chosen = list.data?.calendars ?? [];
+  return (
+    <section className="col gap-6">
+      <h3>יומן התוכנית</h3>
+      <div className="small muted">
+        היומן שממנו נמשכות הלבנות העיקריות לאישור התוכניות - השבועי והתלת שבועי: מבחנים, טקסים, תרגילים, ניווטים, מטווחים, ביקורים ובלוקים של כמה ימים. שיעורים ושגרה לא נכנסים, והיומן לא מוצג בלו"ז.
+        {!chosen.length && list.data && ' כל עוד לא נבחר יומן, נמשכים היומנים שמחוברים ללו"ז.'}
+      </div>
+      {list.loading && !list.data && <Loading rows={1} />}
+      <ErrorBox error={error ?? list.error} />
+      {chosen.map((c) => (
+        <div key={c.index} className="row gap-6">
+          <Icon name="calendar" />
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="strong">{c.name}</div>
+            {list.data?.fromServer && <div className="small muted">הוגדר בשרת</div>}
+            {c.error && <div className="small text-red">{c.error}</div>}
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => void remove(c.index, c.name)}>
+            הסרה
+          </button>
+        </div>
+      ))}
+      <div className="info-box col gap-6">
+        <Field label="שם היומן" hint="אפשר להשאיר ריק - השם יילקח מהיומן ב-Google.">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="השם שלו ב-Google" maxLength={60} />
+        </Field>
+        <Field
+          label="הכתובת הסודית של היומן בפורמט iCal"
+          hint={'ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "שילוב היומן" ← "כתובת סודית בפורמט iCal".'}
+        >
+          <input className="input mono" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" />
+        </Field>
+        <div>
+          <button className="btn btn-primary btn-sm" disabled={busy || !url.trim()} onClick={() => void add()}>
+            {busy ? 'בודק את היומן...' : chosen.length ? 'הוספת יומן לתוכנית' : 'בחירת היומן לתוכנית'}
+          </button>
+        </div>
+      </div>
     </section>
   );
 }

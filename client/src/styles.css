@@ -12965,10 +12965,6 @@ tr.is-finished.is-folding {
 .tw-where {
   display: none;
 }
-/* the lesser activities of a day: plain, under the key ones */
-.tw-act.is-minor {
-  font-weight: 400;
-}
 /* where the activities come from: the course's schedule and the Google calendars, by their names */
 .tw-sources {
   display: flex;

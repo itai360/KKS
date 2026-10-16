@@ -123,8 +123,9 @@ export function readEvents(raw: RawEvent[]): PlanEvent[] {
       const kind = classify(title, first.notes);
       if (kind === 'routine') continue;
       const days = diffDays(last.date, first.date) + 1;
-      // every day of the week: routine, unless it is an activity that carries weight
-      if (days >= 3 && BASE_WEIGHT[kind] <= 2) continue;
+      // at the same hour every day of the week: routine, unless it carries weight. A block of whole days
+      // (a calendar's all-day event over several days) is one of the main blocks, not the routine
+      if (days >= 3 && BASE_WEIGHT[kind] <= 2 && first.startTime) continue;
       const crosses = !!(first.startTime && first.endTime && first.endTime < first.startTime);
       // hours a day: a long day carries weight; the same short slot two days running does not
       const daily = first.startTime && first.endTime ? (minutes(first.endTime) - minutes(first.startTime) + (crosses ? 1440 : 0)) / 60 : first.startTime ? 0 : 24;
@@ -150,18 +151,18 @@ export function readEvents(raw: RawEvent[]): PlanEvent[] {
 }
 
 /** the activities of some days - the course's schedule and the Google calendars - and how each calendar was read */
-async function readBetween(from: string, to: string, withCalendars = true): Promise<{ events: PlanEvent[]; reads: CalendarRead[] }> {
+async function readBetween(from: string, to: string, withCalendars = true): Promise<{ events: PlanEvent[]; reads: CalendarRead[]; from: 'plan' | 'schedule' }> {
   const course = listEvents(from, to, false).map(fromCourse);
-  let reads: CalendarRead[] = [];
+  let read: Awaited<ReturnType<typeof readPlanCalendars>> = { reads: [], from: 'schedule' };
   if (withCalendars) {
     try {
-      reads = await readPlanCalendars(from, to);
+      read = await readPlanCalendars(from, to);
     } catch {
       /* a calendar that cannot be read leaves only the course's own schedule */
     }
   }
-  const calendar = reads.flatMap((r) => r.events.map(fromCalendar).filter((e): e is RawEvent => !!e));
-  return { events: readEvents([...course, ...calendar]), reads };
+  const calendar = read.reads.flatMap((r) => r.events.map(fromCalendar).filter((e): e is RawEvent => !!e));
+  return { events: readEvents([...course, ...calendar]), reads: read.reads, from: read.from };
 }
 
 async function eventsBetween(from: string, to: string, withCalendars = true): Promise<PlanEvent[]> {
@@ -638,7 +639,7 @@ export async function threeWeekPlan(startWeekId: number | null): Promise<ThreeWe
   if (!start) throw notFound('אין עדיין שבועות בקורס');
   const span = horizonWeeks(start, weeks);
   const last = span[span.length - 1];
-  const { events, reads } = await readBetween(start.startDate, last.endDate);
+  const { events, reads, from: calendarsFrom } = await readBetween(start.startDate, last.endDate);
   // each week as its own document has it - one after the other, so a connected calendar is read once
   // and kept for the rest
   const plans: PlanDocument[] = [];
@@ -649,7 +650,7 @@ export async function threeWeekPlan(startWeekId: number | null): Promise<ThreeWe
   const parts = span.map((w, i) => {
     const plan = plans[i];
     const mine = events.filter((e) => holder(e) === w);
-    return { w, plan, key: mine.filter(isKey), other: mine.filter((e) => !isKey(e)) };
+    return { w, plan, key: mine.filter(isKey) };
   });
   const key = parts.flatMap((p) => p.key);
   const cadets = parts[0].plan.cadets;
@@ -691,12 +692,11 @@ export async function threeWeekPlan(startWeekId: number | null): Promise<ThreeWe
     current: currentWeek(weeks, now)?.id === start.id,
     position: { first: index, last: index + span.length - 1, total: weeks.length, daysLeft: endDate && isDateKey(endDate) ? Math.max(0, diffDays(endDate, now)) : null },
     bluf: { text: row?.bluf ?? autoBluf, auto: autoBluf, edited: row?.bluf != null },
-    weeks: parts.map(({ w, plan, key: mine, other }) => ({
+    weeks: parts.map(({ w, plan, key: mine }) => ({
       week: w,
       plan: { status: plan.status, approval: plan.approval ? { by: plan.approval.by, on: plan.approval.on } : null, changed: plan.changes.length > 0 },
       goals: plan.sections.goals,
       key: mine,
-      other,
       lessons: { total: plan.lessons.length, open: plan.lessons.filter((l) => !l.review).length, items: plan.lessons.slice(0, 3).map((l) => l.body) },
     })),
     milestones: key.filter((e) => e.weight >= MILESTONE_WEIGHT),
@@ -706,8 +706,9 @@ export async function threeWeekPlan(startWeekId: number | null): Promise<ThreeWe
     cadets,
     requests: windowRequests(key, risks, cadets, written),
     visit: bestVisit(key),
-    // where the activities came from: each Google calendar by its name, how many it held for the period
-    calendars: reads.map((r) => ({ name: r.name, origin: r.origin, count: r.events.filter((e) => fromCalendar(e) && classify(e.title) !== 'routine').length, error: r.error })),
+    // where the activities came from: each Google calendar by its name, how many of the main blocks it held
+    calendars: reads.map((r) => ({ name: r.name, count: readEvents(r.events.map(fromCalendar).filter((e): e is RawEvent => !!e)).filter(isKey).length, error: r.error })),
+    calendarsFrom,
     status: row?.status ?? 'draft',
     approval: row?.status === 'approved' && row.approved_on ? { by: row.approved_by, on: row.approved_on, notes: row.approval_notes } : null,
     changes: approved ? changesSince(approved, key) : [],

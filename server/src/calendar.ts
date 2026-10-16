@@ -7,7 +7,7 @@
 
 import { randomBytes } from 'node:crypto';
 import ICAL from 'ical.js';
-import type { CalendarFeed, CalendarSource, CalendarWeek, CalendarWeeksPreview, ExternalEvent, ScheduleEvent, Week } from '../../shared/types';
+import type { CalendarFeed, CalendarSource, CalendarWeek, CalendarWeeksPreview, ExternalEvent, PlanCalendars, ScheduleEvent, Week } from '../../shared/types';
 import { addDays, diffDays, localDateKey, localTime, zonedToUtc } from '../../shared/dates';
 import type { UserRow } from './auth';
 import { badRequest, clock, getSettings, notFound, nowIso, tz, updateSettings } from './core';
@@ -313,37 +313,97 @@ export async function externalEvents(from: string, to: string): Promise<External
     .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? ''));
 }
 
+// ---------------- the plan's calendar ----------------
+// The plan documents (plans.ts) read the course's own calendar - the one the commander chose for them
+// ("יומן התוכנית"), or before any choice the one the server was set up with (PLAN_CALENDAR_URL, kept
+// out of the code); with neither, the calendars connected to the schedule. A chosen calendar is not
+// shown in the schedule: only its main blocks enter the plans.
+
+const PLAN_KEY = 'plan_calendars';
+const MAX_PLAN_CALENDARS = 4;
+
+interface PlanRow {
+  url: string;
+  /** the name it was chosen by; empty: the one it has in Google */
+  name: string;
+}
+
+/** the commander's choice: null before any (an empty list: chosen to have none) */
+function storedPlanRows(): PlanRow[] | null {
+  const raw = db().get<{ value: string }>('SELECT value FROM meta WHERE key = ?', PLAN_KEY)?.value;
+  if (raw === undefined) return null;
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? v.filter((x): x is PlanRow => !!x && typeof x.url === 'string').map((x) => ({ url: x.url, name: typeof x.name === 'string' ? x.name : '' })) : [];
+  } catch {
+    return [];
+  }
+}
+
+function serverPlanRows(): PlanRow[] {
+  const raw = process.env.PLAN_CALENDAR_URL?.trim();
+  if (!raw) return [];
+  try {
+    return [{ url: normalizeCalendarUrl(raw), name: '' }];
+  } catch {
+    return [];
+  }
+}
+
+/** the calendars chosen for the plans - by the commander, else the server's */
+const chosenPlanRows = (): PlanRow[] => storedPlanRows() ?? serverPlanRows();
+
+const savePlanRows = (rows: PlanRow[]) =>
+  db().run('INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', PLAN_KEY, JSON.stringify(rows));
+
+/** each by its name and whether it can be read - read here (or kept from a recent reading), as a server instance may not have read it yet */
+export async function listPlanCalendars(): Promise<PlanCalendars> {
+  const calendars: PlanCalendars['calendars'] = [];
+  for (const [index, r] of chosenPlanRows().entries()) {
+    const c = await loadSource(r.url);
+    calendars.push({ index, name: r.name || c.name || 'יומן Google', error: c.error });
+  }
+  return { calendars, fromServer: storedPlanRows() === null && serverPlanRows().length > 0 };
+}
+
+/** Checks the address right away, so a wrong one is reported while choosing it. */
+export async function addPlanCalendar(name: string, rawUrl: string): Promise<void> {
+  const url = normalizeCalendarUrl(rawUrl);
+  const rows = chosenPlanRows();
+  if (rows.some((r) => r.url === url)) throw badRequest('היומן הזה כבר נבחר לתוכנית');
+  if (rows.length >= MAX_PLAN_CALENDARS) throw badRequest(`אפשר לבחור עד ${MAX_PLAN_CALENDARS} יומנים לתוכנית`);
+  const loaded = await loadSource(url, true);
+  if (!loaded.root) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
+  savePlanRows([...rows, { url, name: name.trim().slice(0, 60) }]);
+}
+
+export function removePlanCalendar(index: number): void {
+  const rows = chosenPlanRows();
+  if (!rows[index]) throw notFound('היומן לא נמצא');
+  savePlanRows(rows.filter((_, i) => i !== index));
+}
+
 /** a calendar a plan reads, as read for some days */
 export interface CalendarRead {
-  /** its name in Google Calendar, else the name it was connected by */
+  /** the name it was chosen by, else the one it has in Google */
   name: string;
-  /** connected to the schedule, or only the one the course weeks were imported from */
-  origin: 'schedule' | 'weeks';
   error: string | null;
   events: ExternalEvent[];
 }
 
-/**
- * What the plan documents read: every calendar connected to the schedule, and the calendar the course
- * weeks were imported from when it is not one of them - the course's own calendar, whose activities
- * belong in its plans even if it was never shown in the schedule. One after the other: a calendar read
- * once is kept for the next.
- */
-export async function readPlanCalendars(from: string, to: string): Promise<CalendarRead[]> {
+/** What the plan documents read: the calendars chosen for them, else the schedule's. One after the other: a calendar read once is kept for the next. */
+export async function readPlanCalendars(from: string, to: string): Promise<{ reads: CalendarRead[]; from: 'plan' | 'schedule' }> {
   if (diffDays(to, from) > 62) to = addDays(from, 62);
   const zone = tz();
-  const rows: (SourceRow & { origin: CalendarRead['origin'] })[] = db()
-    .all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id')
-    .map((r) => ({ ...r, origin: 'schedule' as const }));
-  const weeks = weeksCalendarUrl();
-  if (weeks && !rows.some((r) => r.url === weeks)) rows.push({ id: 0, name: 'היומן שממנו נמשכו השבועות', url: weeks, origin: 'weeks' });
-  const out: CalendarRead[] = [];
+  const chosen = chosenPlanRows();
+  const rows: SourceRow[] = chosen.length ? chosen.map((r, i) => ({ id: -1 - i, name: r.name, url: r.url })) : db().all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id');
+  const reads: CalendarRead[] = [];
   for (const r of rows) {
     const c = await loadSource(r.url);
-    const source = { ...r, name: c.name ?? r.name };
-    out.push({ name: source.name, origin: r.origin, error: c.error, events: c.root ? expand(source, c.root, from, to, zone) : [] });
+    const source = { ...r, name: r.name || c.name || 'יומן Google' };
+    reads.push({ name: source.name, error: c.error, events: c.root ? expand(source, c.root, from, to, zone) : [] });
   }
-  return out;
+  return { reads, from: chosen.length ? 'plan' : 'schedule' };
 }
 
 // ---------------- course weeks from a calendar ----------------

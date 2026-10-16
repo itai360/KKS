@@ -321,6 +321,13 @@ export interface CalendarSource {
   error: string | null;
 }
 
+/** the Google calendars the plan documents read (server/src/calendar.ts) */
+export interface PlanCalendars {
+  calendars: { index: number; name: string; error: string | null }[];
+  /** not chosen in the app yet: the one the server was set up with */
+  fromServer: boolean;
+}
+
 /** A course week found in a Google calendar, and what importing it would do. */
 export interface CalendarWeek {
   uid: string;
@@ -1452,10 +1459,8 @@ export interface ThreeWeekWeek {
   plan: { status: PlanStatus; approval: { by: string; on: string } | null; changed: boolean };
   /** the week's goals: the commander's wording, or the draft */
   goals: PlanSection;
-  /** every key activity of the week - and of the days after it, up to the next week - by date */
+  /** the week's main blocks - and those of the days after it, up to the next week - by date */
   key: PlanEvent[];
-  /** the week's other activities (the routine left out), by date */
-  other: PlanEvent[];
   /** the previous cycle's lessons for the week: how many, how many still without a decision, the first few */
   lessons: { total: number; open: number; items: string[] };
 }
@@ -1483,9 +1488,11 @@ export interface ThreeWeekPlan {
   requests: string[];
   /** the moment that shows the course best, for the commander above to come and see */
   visit: PlanEvent | null;
-  /** the Google calendars read with the course's schedule: by their names, how many activities each held for the
-   * period, and whether it could be read - connected to the schedule, or the one the weeks were imported from */
-  calendars: { name: string; origin: 'schedule' | 'weeks'; count: number; error: string | null }[];
+  /** the Google calendars read with the course's schedule: by their names, how many of the period's main blocks
+   * each held, and whether it could be read */
+  calendars: { name: string; count: number; error: string | null }[];
+  /** chosen for the plans ("יומן התוכנית"), or - none chosen - the ones connected to the schedule */
+  calendarsFrom: 'plan' | 'schedule';
   status: PlanStatus;
   approval: { by: string; on: string; notes: string } | null;
   /** what changed in the four weeks' key activities since they were approved */

@@ -155,9 +155,9 @@ describe('the three-week plan', () => {
     expect(d).toMatchObject({ startWeekId: weekIds[0], current: true, position: { first: 1, last: 4, total: 5 } });
     expect(d.weeks.map((w) => w.week.name)).toEqual(['שבוע התקפה', 'שבוע הגנה', 'שבוע שטח', 'שבוע מבחנים']);
     expect(d.weeks[0].key.map((e) => e.title)).toEqual(['ניווט לילה', 'מטווח הפעלת כוח', 'תרגיל התקפה', 'מבחן עקרונות']);
-    // the lesson that morning is there too; the physical training every morning and lunch are the routine
-    expect(d.weeks[0].other.map((e) => e.title)).toEqual(['שיעור: עקרונות התקפה']);
-    expect(d.calendars).toEqual([]);
+    // the main blocks only: not the lesson that morning, nor the routine (the physical training every morning, lunch)
+    expect(d.weeks[0].key.map((e) => e.title)).not.toContain('שיעור: עקרונות התקפה');
+    expect(d).toMatchObject({ calendars: [], calendarsFrom: 'schedule' });
     expect(d.weeks[2].key.map((e) => e.title)).toEqual(['טקס אמצע קורס']);
     expect(d.milestones.map((e) => e.title)).toEqual(['ניווט לילה', 'מטווח הפעלת כוח', 'תרגיל התקפה', 'מבחן עקרונות', 'טקס אמצע קורס', 'מבחן מסכם']);
     expect(d.weeks[0].plan).toEqual({ status: 'draft', approval: null, changed: false });
@@ -187,60 +187,60 @@ describe('the three-week plan', () => {
     expect(d.milestones.map((e) => e.title)).toContain('תרגיל סוף שבוע');
   });
 
-  it('reads the calendar the weeks were imported from, by the name it has in Google - also when not shown in the schedule', async () => {
-    const url = 'https://calendar.google.com/calendar/ical/company%40group.calendar.google.com/private-x/basic.ics';
-    const ics = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//Google Inc//Google Calendar 70.9054//EN',
-      'X-WR-CALNAME:יומן הפלוגה',
-      // a one-day marker naming the week is not an activity
-      'BEGIN:VEVENT',
-      'DTSTART;VALUE=DATE:20261011',
-      'DTEND;VALUE=DATE:20261012',
-      'UID:w2@google.com',
-      'SUMMARY:שבוע 2 - הגנה',
-      'END:VEVENT',
-      'BEGIN:VEVENT',
-      'DTSTART:20261012T060000Z',
-      'DTEND:20261012T090000Z',
-      'UID:a1@google.com',
-      'SUMMARY:תרגיל הגנה בשטח',
-      'LOCATION:שטח צפוני',
-      'END:VEVENT',
-      'BEGIN:VEVENT',
-      'DTSTART:20261013T070000Z',
-      'DTEND:20261013T080000Z',
-      'UID:a2@google.com',
-      'SUMMARY:שיעור: עקרונות הגנה',
-      'END:VEVENT',
-      // the routine is neither shown nor counted
-      'BEGIN:VEVENT',
-      'DTSTART:20261011T033000Z',
-      'DTEND:20261011T040000Z',
-      'RRULE:FREQ=DAILY;COUNT=5',
-      'UID:r1@google.com',
-      'SUMMARY:מסדר בוקר',
-      'END:VEVENT',
-      'END:VCALENDAR',
-    ].join('\r\n');
-    setCalendarFetcher(async () => ics);
+  it('reads the calendar chosen for the plans - only it, and only its main blocks', async () => {
+    const company = 'https://calendar.google.com/calendar/ical/company%40group.calendar.google.com/private-x/basic.ics';
+    const shown = 'https://calendar.google.com/calendar/ical/shown%40group.calendar.google.com/private-y/basic.ics';
+    const weeksCal = 'https://calendar.google.com/calendar/ical/weeks%40group.calendar.google.com/private-z/basic.ics';
+    const ics = (name: string, events: string[][]) =>
+      ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Google Inc//Google Calendar 70.9054//EN', `X-WR-CALNAME:${name}`, ...events.flatMap((e, i) => ['BEGIN:VEVENT', `UID:${name}-${i}@google.com`, ...e, 'END:VEVENT']), 'END:VCALENDAR'].join('\r\n');
+    const calendars: Record<string, string> = {
+      [company]: ics('יומן הפלוגה', [
+        // a one-day marker naming the week is not an activity
+        ['DTSTART;VALUE=DATE:20261011', 'DTEND;VALUE=DATE:20261012', 'SUMMARY:שבוע 2 - הגנה'],
+        ['DTSTART:20261012T060000Z', 'DTEND:20261012T090000Z', 'SUMMARY:תרגיל הגנה בשטח', 'LOCATION:שטח צפוני'],
+        // a block of whole days is one of the main blocks
+        ['DTSTART;VALUE=DATE:20261014', 'DTEND;VALUE=DATE:20261017', 'SUMMARY:גיבוש פלוגתי'],
+        // a lesson and the routine are not
+        ['DTSTART:20261013T070000Z', 'DTEND:20261013T080000Z', 'SUMMARY:שיעור: עקרונות הגנה'],
+        ['DTSTART:20261011T033000Z', 'DTEND:20261011T040000Z', 'RRULE:FREQ=DAILY;COUNT=5', 'SUMMARY:מסדר בוקר'],
+      ]),
+      [shown]: ics('יומן אחר', [['DTSTART:20261013T120000Z', 'DTEND:20261013T150000Z', 'SUMMARY:תרגיל מהיומן האחר']]),
+      [weeksCal]: ics('יומן השבועות', [['DTSTART:20261012T120000Z', 'DTEND:20261012T150000Z', 'SUMMARY:מטווח מיומן השבועות']]),
+    };
+    setCalendarFetcher(async (url) => calendars[url] ?? '');
+    const titles = (d: ThreeWeekPlan) => d.weeks.flatMap((w) => w.key.map((e) => e.title));
     try {
-      db().run("INSERT INTO meta(key, value) VALUES ('weeks_calendar_url', ?)", url);
+      // the calendar the weeks came from is not read; with no calendar chosen, the schedule's are
+      db().run("INSERT INTO meta(key, value) VALUES ('weeks_calendar_url', ?)", weeksCal);
+      expect((await c.cmd.post('/api/calendar/sources', { name: '', url: shown })).status).toBe(200);
       let d = await tw();
-      expect(d.calendars).toEqual([{ name: 'יומן הפלוגה', origin: 'weeks', count: 2, error: null }]);
-      expect(d.weeks[1].key.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח']);
-      expect(d.weeks[1].key[0]).toMatchObject({ date: '2026-10-12', startTime: '09:00', location: 'שטח צפוני', source: 'calendar' });
-      expect(d.weeks[1].other.map((e) => e.title)).toEqual(['שיעור: עקרונות הגנה']);
-      expect(d.milestones.map((e) => e.title)).toContain('תרגיל הגנה בשטח');
-      // the week's own document reads it too
-      expect((await doc(1)).horizon[0].events.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח']);
-      // shown in the schedule as well: read once, as one of the schedule's calendars
-      expect((await c.cmd.post('/api/calendar/sources', { name: '', url })).status).toBe(200);
+      expect(d).toMatchObject({ calendarsFrom: 'schedule', calendars: [{ name: 'יומן אחר', count: 1, error: null }] });
+      expect(titles(d)).toContain('תרגיל מהיומן האחר');
+      expect(titles(d)).not.toContain('מטווח מיומן השבועות');
+
+      // the one the server was set up with: only it, by its Google name, its main blocks
+      process.env.PLAN_CALENDAR_URL = company;
       d = await tw();
-      expect(d.calendars).toEqual([{ name: 'יומן הפלוגה', origin: 'schedule', count: 2, error: null }]);
-      expect(d.weeks[1].key.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח']);
+      expect(d).toMatchObject({ calendarsFrom: 'plan', calendars: [{ name: 'יומן הפלוגה', count: 2, error: null }] });
+      expect(d.weeks[1].key.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח', 'גיבוש פלוגתי']);
+      expect(d.weeks[1].key[1]).toMatchObject({ date: '2026-10-14', endDate: '2026-10-16', startTime: null });
+      expect(titles(d)).not.toContain('תרגיל מהיומן האחר');
+      expect(titles(d)).not.toContain('שיעור: עקרונות הגנה');
+      // the week's own document reads it too
+      expect((await doc(1)).horizon[0].events.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח', 'גיבוש פלוגתי']);
+
+      // the commander's to see and change
+      expect((await c.s1.get('/api/plan-calendars')).status).toBe(403);
+      expect((await c.cmd.get('/api/plan-calendars')).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null }], fromServer: true });
+      expect((await c.cmd.post('/api/plan-calendars', { url: company })).status).toBe(400); // already chosen
+      // none chosen: back to the schedule's calendars
+      expect((await c.cmd.del('/api/plan-calendars/0')).body).toEqual({ calendars: [], fromServer: false });
+      expect((await tw()).calendarsFrom).toBe('schedule');
+      // chosen in the app, with no name: the one it has in Google
+      expect((await c.cmd.post('/api/plan-calendars', { name: '', url: company })).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null }], fromServer: false });
+      expect((await tw()).calendars).toEqual([{ name: 'יומן הפלוגה', count: 2, error: null }]);
     } finally {
+      delete process.env.PLAN_CALENDAR_URL;
       setCalendarFetcher(async () => '');
     }
   });

@@ -41,12 +41,15 @@ import { shareTarget } from './alignment';
 import { setCourseCookie, viewingName } from './courses';
 import {
   addCalendarSource,
+  addPlanCalendar,
   applyCalendarWeeks,
   calendarFeed,
   externalEvents,
   listCalendarSources,
+  listPlanCalendars,
   previewCalendarWeeks,
   removeCalendarSource,
+  removePlanCalendar,
   scheduleIcs,
   userForFeedToken,
   weeksCalendarUrl,
@@ -891,6 +894,19 @@ export function apiRouter(): Router {
     removeCalendarSource(id(req.params.id));
     changed('events');
     res.json(listCalendarSources(true));
+  });
+  // the calendar the plan documents read (calendar.ts): the commander's
+  r.get('/plan-calendars', requireCommander, async (_req, res) => res.json(await listPlanCalendars()));
+  r.post('/plan-calendars', requireCommander, async (req, res) => {
+    const { name, url } = z.object({ name: z.string().trim().max(60).default(''), url: z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000) }).parse(req.body);
+    await addPlanCalendar(name, url);
+    changed('plans');
+    res.json(await listPlanCalendars());
+  });
+  r.delete('/plan-calendars/:index', requireCommander, async (req, res) => {
+    removePlanCalendar(Number(req.params.index));
+    changed('plans');
+    res.json(await listPlanCalendars());
   });
   r.get('/calendar/external', async (req, res) => {
     const today = localDateKey(clock.now(), tz());
