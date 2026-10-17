@@ -17,7 +17,8 @@ import {
 } from '../../shared/constants';
 import { addDays, isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import { byHe, byTeamAndName } from '../../shared/sort';
-import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, SPAN_SHORT, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
+import { FEEDBACK_POINTS, feedbackMissing, feedbackText, pointsText, readFeedbackForm, SCORE_MAX, scoreText } from '../../shared/experienceFeedback';
+import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, experienceName, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
 import type { Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz } from './core';
@@ -759,6 +760,8 @@ interface ExperienceRow {
   strengths: string;
   improvements: string;
   feedback: string;
+  /** feedback in the course's format, as JSON (shared/experienceFeedback.ts) */
+  feedback_form: string | null;
   score: number | null;
   evaluated_by_name: string | null;
   evaluated_at: string | null;
@@ -821,6 +824,7 @@ function toExperience(actor: UserRow, x: ExperienceRow): Experience {
     strengths: p.canSeeFeedback ? x.strengths : '',
     improvements: p.canSeeFeedback ? x.improvements : '',
     feedback: p.canSeeFeedback ? x.feedback : '',
+    feedbackForm: p.canSeeFeedback ? readFeedbackForm(x.feedback_form) : null,
     score: p.canSeeFeedback ? x.score : null,
     evaluatedByName: x.evaluated_by_name,
     evaluatedAt: x.evaluated_at,
@@ -867,9 +871,6 @@ function checkBroad(kind: ExperienceKind, role: string, span: ExperienceSpan | n
   if (!span) throw badRequest('בחרו לאיזו תקופה ההתנסות: חצי ראשון, חצי שני או כל הקורס');
 }
 
-/** the experience in words: "כ<role>", or "רוחב - <type> (<part of the course>)" */
-const experienceName = (kind: ExperienceKind, role: string, span: ExperienceSpan | null) => (kind === 'broad' ? `רוחב - ${role}${span ? ` (${SPAN_SHORT[span]})` : ''}` : role);
-
 /** the mentor's feedback task opens this many days before the experience ends */
 export const FEEDBACK_TASK_DAYS = 7;
 
@@ -889,7 +890,7 @@ function openFeedbackTask(actor: UserRow | null, x: ExperienceRow, now: string =
     {
       title: `משוב התנסות: ${x.cadet_name} - ${experienceName(x.kind, x.role, x.span)}`,
       description: [
-        `ההתנסות של ${x.cadet_name} מסתיימת ב-${x.end_date.split('-').reverse().join('.')}: להוריד משוב על ההתנסות - חוזקות, נקודות לשיפור וציון. המשימה נסגרת מעצמה כשהמשוב נמסר.`,
+        `ההתנסות של ${x.cadet_name} מסתיימת ב-${x.end_date.split('-').reverse().join('.')}: להוריד משוב על ההתנסות בפורמט המשוב - התייחסות כללית, שתי נקודות לשימור ושתיים לשיפור (כל אחת עם הציר שלה) וציון 0-100. המשימה נסגרת מעצמה כשהמשוב נמסר.`,
         x.goals && `מטרות ההתנסות:\n${x.goals}`,
       ]
         .filter(Boolean)
@@ -1012,25 +1013,51 @@ export function updateExperience(actor: UserRow, id: number, raw: Partial<z.inpu
   changed('cadets', 'tasks');
 }
 
-export const feedbackSchema = z.object({
-  strengths: z.string().trim().max(4000).optional().default(''),
-  improvements: z.string().trim().max(4000).optional().default(''),
-  feedback: z.string().trim().max(4000).optional().default(''),
-  score: z.number().int().min(1).max(5),
+const pointSchema = z.object({
+  title: z.string().trim().max(300, 'נקודה - עד 300 תווים'),
+  axis: z.string().trim().max(60, 'ציר - עד 60 תווים'),
+  text: z.string().trim().max(2000, 'פירוט נקודה - עד 2000 תווים').optional().default(''),
 });
+const twoPoints = z.array(pointSchema).length(FEEDBACK_POINTS, 'במשוב שתי נקודות לשימור ושתי נקודות לשיפור');
+
+/** the feedback in the course's format (shared/experienceFeedback.ts): nothing of it may be missing but the words under a point */
+export const feedbackSchema = z
+  .object({
+    general: z.string().trim().max(4000, 'ההתייחסות הכללית - עד 4000 תווים'),
+    keep: twoPoints,
+    improve: twoPoints,
+    score: z.number().int('ציון שלם בין 0 ל-100').min(0, 'ציון בין 0 ל-100').max(SCORE_MAX, 'ציון בין 0 ל-100'),
+  })
+  .superRefine((f, ctx) => {
+    const missing = feedbackMissing(f, f.score);
+    if (missing.length) ctx.addIssue({ code: 'custom', message: `חסר במשוב: ${missing.join(', ')}` });
+  });
+
+/** the axes already used in the course's feedback - offered beside the evaluation criteria */
+export function feedbackAxes(): string[] {
+  const axes = new Set<string>();
+  for (const r of db().all<{ feedback_form: string }>('SELECT feedback_form FROM experiences WHERE feedback_form IS NOT NULL')) {
+    const f = readFeedbackForm(r.feedback_form);
+    for (const p of f ? [...f.keep, ...f.improve] : []) if (p.axis.trim()) axes.add(p.axis.trim());
+  }
+  return [...axes].sort(byHe);
+}
 
 /** Feedback closes the experience, completes the mentor's task and feeds the cadet's development record. */
 export function giveFeedback(actor: UserRow, id: number, raw: z.input<typeof feedbackSchema>): void {
   const x = experienceRow(id);
   if (!experiencePerms(actor, x).canGiveFeedback) throw forbidden('רק החונך, מפקד הצוות או מפקד הקורס נותנים משוב');
   const f = feedbackSchema.parse(raw);
+  const form = { general: f.general, keep: f.keep, improve: f.improve };
   const at = nowIso();
   db().tx(() => {
+    // the form whole, and its parts as text where feedback was read before it (the evaluation file, search)
     db().run(
-      "UPDATE experiences SET status = 'done', strengths = ?, improvements = ?, feedback = ?, score = ?, evaluated_by = ?, evaluated_at = ? WHERE id = ?",
-      f.strengths,
-      f.improvements,
-      f.feedback,
+      "UPDATE experiences SET status = 'done', strengths = ?, improvements = ?, feedback = ?, feedback_form = ?, score = ?, evaluated_by = ?, evaluated_at = ? WHERE id = ?",
+      pointsText(f.keep),
+      pointsText(f.improve),
+      f.general,
+      JSON.stringify(form),
       f.score,
       actor.id,
       at,
@@ -1041,21 +1068,21 @@ export function giveFeedback(actor: UserRow, id: number, raw: z.input<typeof fee
       db().run("UPDATE tasks SET status = 'done', completed_at = ?, completed_late = ?, needs_commander = 0 WHERE id = ?", at, late, t.id);
       logActivity({ taskId: t.id, userId: actor.id, action: 'done', text: `${actor.display_name} מסר משוב - המשימה הושלמה` });
     }
-    const body = [f.strengths && `חוזקות: ${f.strengths}`, f.improvements && `לשיפור: ${f.improvements}`, f.feedback].filter(Boolean).join('\n');
+    // in the cadet's file: the whole feedback as text. Its score (out of 100) is in the text and not the
+    // record's score, which is out of 5 and averaged with the other evaluations
     db().run(
       `INSERT INTO cadet_records(cadet_id, kind, title, body, category, score, private, week_id, author_id, occurred_on, created_at)
-       VALUES (?, 'evaluation', ?, ?, 'התנסות', ?, 1, ?, ?, ?, ?)`,
+       VALUES (?, 'evaluation', ?, ?, 'התנסות', NULL, 1, ?, ?, ?, ?)`,
       x.cadet_id,
-      `התנסות: ${x.role}`,
-      body,
-      f.score,
+      `משוב התנסות: ${experienceName(x.kind, x.role, x.span)}`,
+      feedbackText(form, f.score),
       x.week_id,
       actor.id,
       x.end_date < today() ? x.end_date : today(),
       at,
     );
     if (x.team_commander_id) {
-      notify([x.team_commander_id], { type: 'experience_feedback', category: 'info', title: `התקבל משוב על ההתנסות של ${x.cadet_name} (${x.role})`, link: `/cadets/${x.cadet_id}` }, actor.id);
+      notify([x.team_commander_id], { type: 'experience_feedback', category: 'info', title: `התקבל משוב על ההתנסות של ${x.cadet_name} (${x.role}): ${scoreText(f.score)}`, link: `/cadets/${x.cadet_id}` }, actor.id);
     }
   });
   changed('cadets', 'tasks');

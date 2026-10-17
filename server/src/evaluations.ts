@@ -346,7 +346,7 @@ function buildFile(viewer: UserRow, cadetId: number): EvaluationFile {
     scores: [...byCriterion].map(([criterion, list]) => ({ criterion, count: list.length, average: Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 10) / 10 })),
     experiences: listExperiences(viewer, { cadetId })
       .filter((x) => x.status === 'done')
-      .map((x) => ({ role: x.role, startDate: x.startDate, endDate: x.endDate, mentorName: x.mentorName, score: x.score, strengths: x.strengths, improvements: x.improvements })),
+      .map((x) => ({ role: x.role, startDate: x.startDate, endDate: x.endDate, mentorName: x.mentorName, score: x.score, strengths: x.strengths, improvements: x.improvements, form: x.feedbackForm })),
     discipline: records.filter((r) => r.kind === 'discipline').map((r) => toRecord(viewer, r, order)),
     talks: records.filter((r) => r.kind === 'talk').map((r) => toRecord(viewer, r)),
     committees: db().all<CommitteeRow>(`${COMMITTEE_BASE} WHERE c.cadet_id = ? ORDER BY c.referred_at DESC`, cadetId).map(toCommittee),

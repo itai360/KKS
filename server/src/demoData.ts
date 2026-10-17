@@ -394,7 +394,20 @@ export function seedDemoData(PASSWORD = 'kks12345'): { tasks: number; weeks: num
   const expIds = exps.map(([cid, role, s0, e0, mentor, goals]) =>
     at(d(-10, '10:00'), () => createExperience(cmd, { cadetId: cid, role, startDate: addDays(today, s0), endDate: addDays(today, e0), mentorId: mentor, goals })),
   );
-  at(d(-7, '20:00'), () => giveFeedback(u(ids.s2), expIds[0], { strengths: 'החלטיות, קול פיקודי ברור', improvements: 'לשתף את הסגנים בתכנון', feedback: 'התנסות מוצלחת מאוד', score: 4 }));
+  at(d(-7, '20:00'), () =>
+    giveFeedback(u(ids.s2), expIds[0], {
+      general: 'התנסות מוצלחת מאוד: הוביל את הכיתה בביטחון, שמר על קשר רציף עם הסגל ולמד מהר מטעויות בתוך התרגיל.',
+      keep: [
+        { title: 'החלטיות', axis: 'פיקוד והובלה', text: 'קיבל החלטות מהר גם כשהתמונה לא הייתה ברורה, והסביר אותן לכיתה.' },
+        { title: 'קול פיקודי ברור', axis: 'פיקוד והובלה', text: 'פקודות קצרות וברורות, גם בקשר.' },
+      ],
+      improve: [
+        { title: 'שיתוף הסגנים בתכנון', axis: 'עבודת צוות', text: 'בנה את התכנית לבד - לשתף את הסגנים כבר בשלב ההערכה.' },
+        { title: 'ניהול זמן בהכנות', axis: 'מקצועיות', text: 'ההכנות נמשכו מעבר לזמן שהוקצב.' },
+      ],
+      score: 84,
+    }),
+  );
 
   // debriefs (section 57)
   const range0 = db().get<{ id: number }>("SELECT id FROM events WHERE title = 'תרגיל כיתה בשטח' ORDER BY date LIMIT 1")?.id ?? null;

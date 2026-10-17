@@ -16,6 +16,9 @@ export type ExperienceSpan = (typeof EXPERIENCE_SPANS)[number];
 export const SPAN_LABELS: Record<ExperienceSpan, string> = { first_half: 'חצי ראשון של הקורס', second_half: 'חצי שני של הקורס', full: 'כל הקורס' };
 export const SPAN_SHORT: Record<ExperienceSpan, string> = { first_half: 'חצי קורס ראשון', second_half: 'חצי קורס שני', full: 'קורס שלם' };
 
+/** the experience in words: its role, or "רוחב - <type> (<part of the course>)" */
+export const experienceName = (kind: ExperienceKind, role: string, span: ExperienceSpan | null) => (kind === 'broad' ? `רוחב - ${role}${span ? ` (${SPAN_SHORT[span]})` : ''}` : role);
+
 /** the days a broad experience covers, from the course's first and last day */
 export function spanDates(span: ExperienceSpan, courseStart: string, courseEnd: string): { startDate: string; endDate: string } {
   const half = Math.floor(diffDays(courseEnd, courseStart) / 2);

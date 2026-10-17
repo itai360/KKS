@@ -366,7 +366,7 @@ function Details({ task: t, onEdit, canChange }: { task: Task; onEdit: (f: EditF
             <>
               <dt>התנסות</dt>
               <dd>
-                <Link to="/experiences">משוב התנסות</Link>
+                <Link to={`/experiences?feedback=${t.experienceId}`}>{t.status === 'done' || t.status === 'cancelled' ? 'משוב התנסות' : 'מתן משוב על ההתנסות'}</Link>
               </dd>
             </>
           )}

@@ -13,6 +13,21 @@ beforeEach(async () => {
   c = await setup();
 });
 
+/** a whole feedback in the course's format (made-up words) */
+const feedback = (score = 84, patch: object = {}) => ({
+  general: 'הוביל את הכיתה בביטחון ולמד מהר מטעויות',
+  keep: [
+    { title: 'החלטיות', axis: 'פיקוד והובלה', text: 'החליט מהר גם בלי תמונה מלאה' },
+    { title: 'קשר רציף עם הסגל', axis: 'עבודת צוות', text: '' },
+  ],
+  improve: [
+    { title: 'שיתוף הסגנים', axis: 'עבודת צוות', text: 'תכנן לבד' },
+    { title: 'ניהול זמן', axis: 'ציר אישי', text: 'ההכנות התארכו' },
+  ],
+  score,
+  ...patch,
+});
+
 async function teamWithCadets() {
   const teams = (await c.cmd.post('/api/teams', { name: 'צוות 1', commanderId: c.ids.s1 })).body;
   const teamId = teams[0].id;
@@ -141,16 +156,30 @@ describe('experiences (section 31)', () => {
     const feedbackTask = [...mentorTasks.week, ...mentorTasks.later, ...mentorTasks.important].find((t: { experienceId: number }) => t.experienceId === x.id);
     expect(feedbackTask).toMatchObject({ title: 'משוב התנסות: דניאל כהן - מ"מ בתרגיל התקפה', deadline: at('2026-10-06', '18:00') });
 
-    expect((await c.s3.post(`/api/experiences/${x.id}/feedback`, { score: 5 })).status).toBe(403);
-    const done = (await c.s2.post(`/api/experiences/${x.id}/feedback`, { strengths: 'החלטיות', improvements: 'שליטה בקשר', score: 4 })).body;
-    expect(done).toMatchObject({ status: 'done', phase: 'done', score: 4 });
+    expect((await c.s3.post(`/api/experiences/${x.id}/feedback`, feedback())).status).toBe(403);
+    const done = (await c.s2.post(`/api/experiences/${x.id}/feedback`, feedback())).body;
+    expect(done).toMatchObject({ status: 'done', phase: 'done', score: 84, feedbackForm: { general: 'הוביל את הכיתה בביטחון ולמד מהר מטעויות' } });
+    expect(done.feedbackForm.keep.map((p: { title: string }) => p.title)).toEqual(['החלטיות', 'קשר רציף עם הסגל']);
     expect((await c.s2.get(`/api/tasks/${feedbackTask.id}`)).body.task.status).toBe('done');
 
     const seenByOther = (await c.s3.get('/api/experiences')).body.find((e: { id: number }) => e.id === x.id);
-    expect(seenByOther).toMatchObject({ score: null, strengths: '', canSeeFeedback: false });
+    expect(seenByOther).toMatchObject({ score: null, strengths: '', feedbackForm: null, canSeeFeedback: false });
+    // in the cadet's file: the whole feedback as text; its score out of 100 is not averaged with the evaluations out of 5
     const lead = (await c.s1.get(`/api/cadets/${a}`)).body;
-    expect(lead.records[0]).toMatchObject({ kind: 'evaluation', category: 'התנסות', score: 4, private: true });
+    expect(lead.records[0]).toMatchObject({ kind: 'evaluation', category: 'התנסות', title: 'משוב התנסות: מ"מ בתרגיל התקפה', score: null, private: true });
+    expect(lead.records[0].body).toBe(
+      [
+        'התייחסות כללית: הוביל את הכיתה בביטחון ולמד מהר מטעויות',
+        'נקודה לשימור: החלטיות (ציר: פיקוד והובלה)\nהחליט מהר גם בלי תמונה מלאה',
+        'נקודה לשימור: קשר רציף עם הסגל (ציר: עבודת צוות)',
+        'נקודה לשיפור: שיתוף הסגנים (ציר: עבודת צוות)\nתכנן לבד',
+        'נקודה לשיפור: ניהול זמן (ציר: ציר אישי)\nההכנות התארכו',
+        'ציון להתנסות: 84 - טוב מאוד',
+      ].join('\n\n'),
+    );
+    expect(lead.cadet.avgScore).toBeNull();
     expect((await c.s3.get(`/api/cadets/${a}`)).body.records).toHaveLength(0);
+    expect(notificationsOf(c.ids.s1).map((n) => n.title)).toContain('התקבל משוב על ההתנסות של דניאל כהן (מ"מ בתרגיל התקפה): 84 - טוב מאוד');
   });
 
   it('changing the mentor moves the open feedback task', async () => {
@@ -214,10 +243,69 @@ describe('the feedback task of an experience', () => {
 
     // feedback given before the week before: no task at all
     const early = (await c.s1.post('/api/experiences', { cadetId: a, role: 'נווט', startDate: '2026-10-14', endDate: '2026-12-31', mentorId: c.ids.s2 })).body;
-    expect((await c.s2.post(`/api/experiences/${early.id}/feedback`, { score: 4 })).status).toBe(200);
+    expect((await c.s2.post(`/api/experiences/${early.id}/feedback`, feedback())).status).toBe(200);
     clock.set(new Date(at('2026-12-25', '07:00')));
     runAutomation();
     expect(tasksOf(early.id)).toEqual([]);
+  });
+});
+
+describe("the feedback after an experience, in the course's format", () => {
+  it('asks for the general reference, two points to keep and two to improve with their axes, and a score of 0-100', async () => {
+    const { a } = await teamWithCadets();
+    const x = (await c.s1.post('/api/experiences', { cadetId: a, kind: 'broad', role: 'קב"ט', span: 'first_half', startDate: '2026-09-01', endDate: '2026-10-04', mentorId: c.ids.s2 })).body;
+    const give = (body: object) => c.s2.post(`/api/experiences/${x.id}/feedback`, body);
+    // what is missing, by name - the words under a point may stay empty
+    const blank = { title: '', axis: '', text: '' };
+    const res = await give(feedback(70, { general: ' ', keep: [{ title: 'יוזמה', axis: '', text: '' }, blank] }));
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('חסר במשוב: התייחסות כללית, הציר של נקודה לשימור 1, נקודה לשימור 2');
+    expect((await give(feedback(101))).body.error).toBe('ציון בין 0 ל-100');
+    expect((await give(feedback(80.5))).body.error).toBe('ציון שלם בין 0 ל-100');
+    expect((await give(feedback(80, { improve: [feedback().improve[0]] }))).body.error).toBe('במשוב שתי נקודות לשימור ושתי נקודות לשיפור');
+    // the experience stays open until the feedback is whole
+    expect((await c.s2.get('/api/experiences')).body.find((e: { id: number }) => e.id === x.id)).toMatchObject({ status: 'planned', score: null, feedbackForm: null });
+
+    const done = (await give(feedback(96))).body;
+    expect(done).toMatchObject({ status: 'done', score: 96, kind: 'broad' });
+    // the points as text where feedback was read before (the evaluation file, search)
+    expect(done.strengths).toBe('החלטיות (ציר: פיקוד והובלה)\nהחליט מהר גם בלי תמונה מלאה\nקשר רציף עם הסגל (ציר: עבודת צוות)');
+    expect(done.feedback).toBe('הוביל את הכיתה בביטחון ולמד מהר מטעויות');
+    const file = (await c.cmd.get(`/api/evaluations/${a}`)).body;
+    expect(file.experiences[0]).toMatchObject({ role: 'קב"ט', score: 96, form: { improve: [{ title: 'שיתוף הסגנים' }, { title: 'ניהול זמן' }] } });
+    expect((await c.s1.get(`/api/cadets/${a}`)).body.records[0].title).toBe('משוב התנסות: רוחב - קב"ט (חצי קורס ראשון)');
+    // an axis typed for a point is offered next time, beside the evaluation criteria
+    expect((await c.s3.get('/api/experiences/feedback-axes')).body).toEqual(['עבודת צוות', 'פיקוד והובלה', 'ציר אישי']);
+  });
+
+  it('reads the score on the legend: each band up to and including its top', async () => {
+    const { scoreBand, SCORE_BANDS } = await import('../../shared/experienceFeedback');
+    const bands = [0, 60, 61, 70, 71, 75, 76, 80, 81, 85, 86, 95, 96, 100].map((n) => `${n}:${scoreBand(n).label}`);
+    expect(bands).toEqual([
+      '0:נכשל',
+      '60:נכשל',
+      '61:מתחת לנדרש',
+      '70:מתחת לנדרש',
+      '71:עמד בנדרש',
+      '75:עמד בנדרש',
+      '76:טוב',
+      '80:טוב',
+      '81:טוב מאוד',
+      '85:טוב מאוד',
+      '86:מצוין',
+      '95:מצוין',
+      '96:יוצא דופן לחיוב',
+      '100:יוצא דופן לחיוב',
+    ]);
+    expect(SCORE_BANDS.map((b) => b.range)).toEqual(['60 ומטה', '60-70', '70-75', '75-80', '80-85', '85-95', '95-100']);
+  });
+
+  it('feedback given before the format still reads as it was - out of 5, without points', async () => {
+    const { a } = await teamWithCadets();
+    const x = (await c.s1.post('/api/experiences', { cadetId: a, role: 'סמל תורן', startDate: '2026-09-20', endDate: '2026-09-21', mentorId: c.ids.s2 })).body;
+    db().run("UPDATE experiences SET status = 'done', strengths = 'סדר', improvements = 'זמנים', score = 4 WHERE id = ?", x.id);
+    expect((await c.s2.get('/api/experiences')).body.find((e: { id: number }) => e.id === x.id)).toMatchObject({ status: 'done', score: 4, strengths: 'סדר', feedbackForm: null });
+    expect((await c.cmd.get(`/api/evaluations/${a}`)).body.experiences[0]).toMatchObject({ score: 4, strengths: 'סדר', form: null });
   });
 });
 

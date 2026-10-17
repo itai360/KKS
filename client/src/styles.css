@@ -12293,42 +12293,193 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 .exp-bar i {
   background: var(--yellow);
 }
-.score-scale {
-  display: flex;
-  gap: 6px;
-}
-.score-step {
-  flex: 1;
-  min-width: 44px;
-  height: 44px;
+/* ---------------- the feedback after an experience, in the course's format (components/ExperienceFeedback.tsx) ---------------- */
+/* on top, as on the paper form: the cadet, the experience and its dates */
+.fb-head {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--card);
-  color: var(--ink-2);
-  font: inherit;
-  font-family: var(--mono);
-  font-size: 16px;
+  overflow: hidden;
+}
+.fb-head > div {
+  padding: 8px 12px;
+  min-width: 0;
+}
+.fb-head > div + div {
+  border-inline-start: 1px solid var(--line);
+}
+.fb-head dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.fb-head dd {
+  margin: 2px 0 0;
   font-weight: 700;
-  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+/* a point to keep (green) or to improve (orange): the point and its axis side by side, its words under them */
+.fb-point {
+  margin: 0;
+  padding: 10px 14px 14px;
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--tone);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.fb-point legend {
+  padding: 0 6px;
+  font-weight: 700;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fb-point legend svg {
+  color: var(--tone);
+}
+.fb-point-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.fb-axis {
+  width: 220px;
+  flex: none;
+}
+.fb-point textarea {
+  resize: vertical;
+  min-height: 0;
+}
+/* the score, its band at once beside it, and the legend with that band lit */
+.fb-score-row {
+  align-items: center;
+}
+.fb-score-input {
+  width: 92px;
+  height: 48px;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+.fb-legend-title {
+  margin-top: 6px;
+}
+.fb-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.fb-legend li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--tone);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--ink-2);
   transition: background-color 0.2s, border-color 0.2s, color 0.2s, scale 0.25s var(--spring);
 }
-.score-step.is-filled {
-  border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
-  background: var(--gray-bg);
-  color: var(--ink);
+.fb-legend li .mono {
+  font-size: 11.5px;
+  color: var(--muted);
 }
-.score-step.on {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
+.fb-legend li.on {
+  background: var(--tone-bg);
+  border-color: var(--tone);
+  color: var(--tone-ink, var(--tone));
+  scale: 1.04;
 }
-.score-step:active {
-  scale: 0.92;
-  transition-duration: 0.08s;
+.fb-legend li.on .mono {
+  color: inherit;
 }
-.score-ends {
+.fb-missing {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* given: the general reference, then each point with its axis */
+.fb-view {
+  padding: 10px 12px;
+}
+.fb-general {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+.fb-points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 6px;
+}
+.fb-points li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.fb-points li > svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--tone);
+}
+.fb-point-text {
+  margin-top: 1px;
+  white-space: pre-wrap;
+}
+@media (max-width: 760px) {
+  .fb-head {
+    grid-template-columns: 1fr;
+  }
+  .fb-head > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .fb-head > div + div {
+    border-inline-start: 0;
+    border-top: 1px solid var(--line);
+  }
+  .fb-head dd {
+    margin: 0;
+    text-align: end;
+  }
+  .fb-point-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .fb-axis {
+    width: auto;
+  }
+  .fb-legend {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb-legend li {
+    transition: none;
+  }
+  .fb-legend li.on {
+    scale: none;
+  }
 }
 
 /* ---------------- morning briefing: a number leads to its part; the event on now (pages/BriefingPage.tsx) ---------------- */

@@ -16,6 +16,7 @@ import {
   type CommitteeDecision,
 } from '@shared/constants';
 import { shortDate } from '@shared/dates';
+import { scoreText } from '@shared/experienceFeedback';
 import type { Committee, CommitteeDetail, EvaluationFile, EvaluationListItem, Team } from '@shared/types';
 import { NoteDots, NotesBadge, noteTone, timeLabel } from '../components/Discipline';
 import { DocPager, useDocNav, type DocLink } from '../components/DocNav';
@@ -336,6 +337,13 @@ export function EvaluationFilePage() {
   );
 }
 
+/** an experience's feedback in a line: in the format - its score and band and the points; before it, the score out of 5 and the strengths */
+function experienceSummary(x: EvaluationFile['experiences'][number]): string {
+  if (!x.form) return `${x.score !== null ? ` · ציון ${x.score}/5` : ''}${x.strengths ? ` · חוזקות: ${x.strengths.slice(0, 60)}` : ''}`;
+  const titles = (points: { title: string }[]) => points.map((p) => p.title).filter(Boolean).join(', ');
+  return `${x.score !== null ? ` · ${scoreText(x.score)}` : ''}${titles(x.form.keep) ? ` · לשימור: ${titles(x.form.keep)}` : ''}${titles(x.form.improve) ? ` · לשיפור: ${titles(x.form.improve)}` : ''}`;
+}
+
 /** beside the file: what the cadet file already holds */
 function ContextColumn({ file, readOnly = false }: { file: EvaluationFile; readOnly?: boolean }) {
   return (
@@ -347,7 +355,7 @@ function ContextColumn({ file, readOnly = false }: { file: EvaluationFile; readO
       <SideCard
         title="התנסויות"
         empty="אין התנסויות שהסתיימו."
-        items={file.experiences.map((x) => `${x.role} · ${dateLabel(x.startDate)}${x.score !== null ? ` · ציון ${x.score}` : ''}${x.strengths ? ` · חוזקות: ${x.strengths.slice(0, 60)}` : ''}`)}
+        items={file.experiences.map((x) => `${x.role} · ${dateLabel(x.startDate)}${experienceSummary(x)}`)}
       />
       {file.committees.length > 0 && (
         <div className="card">

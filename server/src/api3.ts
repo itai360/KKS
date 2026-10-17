@@ -20,6 +20,7 @@ import {
   disciplinePreview,
   updateTalk,
   deleteTeam,
+  feedbackAxes,
   giveFeedback,
   importCadets,
   listCadets,
@@ -304,6 +305,8 @@ export function v3Router(): Router {
       }),
     ),
   );
+  // the axes already given to feedback points, offered when the next feedback is written
+  r.get('/experiences/feedback-axes', (_req, res) => res.json(feedbackAxes()));
   r.post('/experiences', (req, res) => {
     const newId = createExperience(me(req), req.body);
     res.json(listExperiences(me(req)).find((x) => x.id === newId));

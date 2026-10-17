@@ -1,6 +1,7 @@
 // API data shapes shared by the server (producer) and the client (consumer).
 
 import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
+import type { ExperienceFeedbackForm } from './experienceFeedback';
 import type { ExperienceKind, ExperienceSpan } from './experiences';
 import type { StaffGroupDef } from './staffGroups';
 import type {
@@ -799,6 +800,8 @@ export interface Experience {
   strengths: string;
   improvements: string;
   feedback: string;
+  /** given in the course's format (shared/experienceFeedback.ts) - the score is then out of 100; without it, feedback given before, out of 5 */
+  feedbackForm: ExperienceFeedbackForm | null;
   score: number | null;
   evaluatedByName: string | null;
   evaluatedAt: string | null;
@@ -1019,7 +1022,7 @@ export interface EvaluationFile {
   standing: Standing;
   /** from the cadet file: average score by criterion */
   scores: { criterion: string; average: number; count: number }[];
-  experiences: { role: string; startDate: string; endDate: string; mentorName: string | null; score: number | null; strengths: string; improvements: string }[];
+  experiences: { role: string; startDate: string; endDate: string; mentorName: string | null; score: number | null; strengths: string; improvements: string; form: ExperienceFeedbackForm | null }[];
   discipline: CadetRecord[];
   talks: CadetRecord[];
   committees: Committee[];

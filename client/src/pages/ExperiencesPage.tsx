@@ -1,13 +1,14 @@
 // Section 31 - experiences: role, goals, mentor, tasks, feedback and evaluation.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { diffDays, shortDate } from '@shared/dates';
 import { BROAD_EXPERIENCES, EXPERIENCE_KIND_LABELS, EXPERIENCE_SPANS, SPAN_LABELS, SPAN_SHORT, spanDates, type ExperienceKind, type ExperienceSpan } from '@shared/experiences';
 import { byHe } from '@shared/sort';
 import type { Cadet, Experience } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
 import { DoneDrawer } from '../components/DoneDrawer';
+import { FeedbackDialog, FeedbackView, ScoreBadge } from '../components/ExperienceFeedback';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
@@ -51,6 +52,26 @@ export function ExperiencesPage() {
   const done = useMemo(() => (tucks ? list.filter((x) => x.phase === 'done') : []), [list, tucks]);
   const leaving = useLeaving(open, (x) => x.id, (id) => done.find((x) => x.id === id));
   const count = (t: Tab) => (data ?? []).filter((x) => inTab(t, x, user.id)).length;
+  // from the feedback task ("?feedback=<id>"): the experience's feedback form opens at once
+  const toast = useToast();
+  const [params, setParams] = useSearchParams();
+  const asked = Number(params.get('feedback')) || null;
+  const [giving, setGiving] = useState<number | null>(null);
+  useEffect(() => {
+    if (!asked || !data) return;
+    const x = data.find((e) => e.id === asked);
+    if (x?.status === 'done') toast({ title: 'המשוב על ההתנסות הזו כבר נמסר' });
+    else if (x?.canGiveFeedback) setGiving(x.id);
+    setParams(
+      (p) => {
+        p.delete('feedback');
+        return p;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked, data]);
+  const givingX = giving === null ? undefined : data?.find((x) => x.id === giving && x.status !== 'done');
 
   return (
     <BulkScope entity="experiences" noun="התנסויות" topics={['cadets', 'tasks']} ids={list.filter((x) => x.canEdit).map((x) => x.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} התנסויות?' }]}>
@@ -113,6 +134,7 @@ export function ExperiencesPage() {
         </>
       )}
       {creating && <ExperienceForm onClose={() => setCreating(false)} />}
+      {givingX && <FeedbackDialog x={givingX} onClose={() => setGiving(null)} />}
     </div>
     </BulkScope>
   );
@@ -166,7 +188,7 @@ export function ExperienceCard({ x, compact, leaving }: { x: Experience; compact
         </span>
         {x.weekName && <span className="tiny muted">{x.weekName}</span>}
         <span className="grow" />
-        {x.score !== null && <span className="badge t-gray mono">ציון {x.score}/5</span>}
+        <ScoreBadge x={x} />
       </div>
       <div className="strong mt-8" style={{ fontSize: compact ? 15 : 17 }}>
         {x.role}
@@ -184,7 +206,8 @@ export function ExperienceCard({ x, compact, leaving }: { x: Experience; compact
           <b>מטרות:</b> {x.goals}
         </p>
       )}
-      {x.status === 'done' && x.canSeeFeedback && (x.strengths || x.improvements || x.feedback) && (
+      {x.status === 'done' && x.canSeeFeedback && x.feedbackForm && <FeedbackView form={x.feedbackForm} by={x.evaluatedByName} compact={compact} />}
+      {x.status === 'done' && x.canSeeFeedback && !x.feedbackForm && (x.strengths || x.improvements || x.feedback) && (
         <div className="update mt-8" style={{ padding: 10 }}>
           {x.strengths && <div className="small"><b>חוזקות:</b> {x.strengths}</div>}
           {x.improvements && <div className="small"><b>לשיפור:</b> {x.improvements}</div>}
@@ -350,81 +373,6 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
         </Field>
       </div>
       <div className="mt-12">
-        <ErrorBox error={error} />
-      </div>
-    </Modal>
-  );
-}
-
-function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => void }) {
-  const toast = useToast();
-  const [strengths, setStrengths] = useState('');
-  const [improvements, setImprovements] = useState('');
-  const [feedback, setFeedback] = useState('');
-  const [score, setScore] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const save = async () => {
-    setError(null);
-    try {
-      await api.post(`/api/experiences/${x.id}/feedback`, { strengths, improvements, feedback, score });
-      toast({ title: 'המשוב נשמר ונכנס לתיק הצוער', tone: 'green' });
-      emitLocalChange('cadets', 'tasks');
-      onClose();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <Modal
-      title={`משוב: ${x.cadetName} - ${x.role}`}
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-primary" disabled={!score} onClick={() => void save()}>
-            שמור משוב
-          </button>
-          <button className="btn btn-ghost" onClick={onClose}>
-            ביטול
-          </button>
-        </>
-      }
-    >
-      <div className="col gap-16">
-        {x.goals && <div className="info-box"><b>מטרות:</b> {x.goals}</div>}
-        <Field label="חוזקות">
-          <textarea className="textarea" value={strengths} onChange={(e) => setStrengths(e.target.value)} style={{ minHeight: 64 }} data-autofocus />
-        </Field>
-        <Field label="נקודות לשיפור">
-          <textarea className="textarea" value={improvements} onChange={(e) => setImprovements(e.target.value)} style={{ minHeight: 64 }} />
-        </Field>
-        <Field label="משוב כללי">
-          <textarea className="textarea" value={feedback} onChange={(e) => setFeedback(e.target.value)} style={{ minHeight: 64 }} />
-        </Field>
-        <div className="field" role="group" aria-labelledby="exp-score-l">
-          <span id="exp-score-l">
-            הערכה<span className="req"> *</span>
-          </span>
-          <div className="score-scale">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                className={`score-step${score !== null && n <= score ? ' is-filled' : ''}${score === n ? ' on' : ''}`}
-                aria-pressed={score === n}
-                onClick={() => {
-                  setScore(n);
-                  haptic('tick');
-                }}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-          <span className="hint score-ends" aria-hidden="true">
-            <span>נמוך</span>
-            <span>גבוה</span>
-          </span>
-        </div>
         <ErrorBox error={error} />
       </div>
     </Modal>
