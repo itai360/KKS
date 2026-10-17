@@ -15,6 +15,7 @@ import { generateRecurring } from './recurring';
 import { involvedIds, queryTasks } from './taskRepo';
 import { applyTemplate } from './templates';
 import { weeklyDebriefTasks } from './weeklyDebriefTask';
+import { experienceFeedbackTasks } from './cadets';
 
 export interface AutomationResult {
   overdue: number;
@@ -24,6 +25,7 @@ export interface AutomationResult {
   templates: number;
   learning: number;
   debriefTasks: number;
+  feedbackTasks: number;
   briefs: number;
   roll: number;
 }
@@ -31,7 +33,7 @@ export interface AutomationResult {
 export function runAutomation(): AutomationResult {
   const now = clock.now();
   const nowS = now.toISOString();
-  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, debriefTasks: 0, briefs: 0, roll: 0 };
+  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, debriefTasks: 0, feedbackTasks: 0, briefs: 0, roll: 0 };
 
   // 1. Deadline passed -> overdue (derived status) + alerts, once per deadline.
   for (const t of queryTasks("t.status NOT IN ('done', 'cancelled') AND t.overdue_notified = 0 AND t.deadline < ?", nowS)) {
@@ -120,11 +122,18 @@ export function runAutomation(): AutomationResult {
     console.error('[automation] learning', e);
   }
 
-  // 6b. The week's lead gets the weekly debrief as a task on the week's Tuesday, due the next Tuesday at 12:00.
+  // 6b. The week's lead gets the weekly debrief as a task on the week's Tuesday at 10:00, due the next Tuesday at 12:00.
   try {
     res.debriefTasks = weeklyDebriefTasks(now);
   } catch (e) {
     console.error('[automation] debrief tasks', e);
+  }
+
+  // 6c. A mentor gets the feedback task of an experience a week before it ends.
+  try {
+    res.feedbackTasks = experienceFeedbackTasks(now);
+  } catch (e) {
+    console.error('[automation] feedback tasks', e);
   }
 
   // 7. The morning brief, once a day from 07:00.

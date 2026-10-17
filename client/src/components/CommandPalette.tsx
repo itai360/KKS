@@ -17,7 +17,7 @@ import { fmtDeadline, todayKey } from '../lib/format';
 import { useSession } from '../lib/session';
 import { setThemePref } from '../lib/theme';
 
-interface Item {
+export interface FindItem {
   id: string;
   group: string;
   label: string;
@@ -29,47 +29,21 @@ interface Item {
   run: () => void;
 }
 
+type Item = FindItem;
+export type FindPage = { to: string; label: string; icon: string; keywords?: string };
+
 export const OPEN_PALETTE = 'kks:palette';
 
-export function CommandPalette({ pages }: { pages: { to: string; label: string; icon: string; keywords?: string }[] }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
-        // in a dialog it stays the dialog's
-        if (!open && document.querySelector('.modal')) return;
-        e.preventDefault();
-        setOpen((o) => !o);
-      }
-    };
-    const onOpen = () => setOpen(true);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener(OPEN_PALETTE, onOpen);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener(OPEN_PALETTE, onOpen);
-    };
-  }, [open]);
-  if (!open) return null;
-  return <Palette pages={pages} onClose={() => setOpen(false)} />;
-}
-
-function Palette({ pages, onClose }: { pages: { to: string; label: string; icon: string; keywords?: string }[]; onClose: () => void }) {
-  const { isCommander, weeks } = useSession();
+/**
+ * What a few typed letters find: the actions, the screens, the people and the weeks (here at once), and
+ * a moment later what the search finds (tasks, cadets, events, debriefs, documents). `capped`: a few of
+ * each, for the top bar's list.
+ */
+export function useFindItems(q: string, pages: FindPage[], { capped = false }: { capped?: boolean } = {}): FindItem[] {
+  const { isCommander, weeks, users, settings } = useSession();
   const navigate = useNavigate();
   const newTask = useNewTask();
-  const [q, setQ] = useState('');
   const [found, setFound] = useState<SearchResults | null>(null);
-  const [active, setActive] = useState(0);
-  const input = useRef<HTMLInputElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  const back = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
-
-  useEffect(() => {
-    input.current?.focus();
-    const prev = back.current;
-    return () => prev?.focus?.();
-  }, []);
 
   // what the search finds, a moment after typing stops
   useEffect(() => {
@@ -90,9 +64,11 @@ function Palette({ pages, onClose }: { pages: { to: string; label: string; icon:
     };
   }, [q]);
 
-  const items = useMemo<Item[]>(() => {
+  return useMemo<Item[]>(() => {
     const go = (to: string) => () => navigate(to);
     const today = todayKey();
+    const typed = !!q.trim();
+    const cap = <T,>(list: T[], n: number) => (capped ? list.slice(0, n) : list);
     const cur = weeks.find((w) => w.startDate <= today && w.endDate >= today) ?? weeks.find((w) => w.startDate > today);
     const actions: Item[] = [
       { id: 'a:task', group: 'פעולות', label: 'משימה חדשה', icon: 'plus', hint: 'N', run: () => newTask() },
@@ -120,11 +96,25 @@ function Palette({ pages, onClose }: { pages: { to: string; label: string; icon:
       { id: 'a:light', group: 'פעולות', label: 'מצב בהיר', icon: 'sun', run: () => setThemePref('light') },
     ];
     const screens: Item[] = pages.map((p) => ({ id: `p:${p.to}`, group: 'מסכים', label: p.label, icon: p.icon, keywords: p.keywords, run: go(p.to) }));
-    const local = [...actions, ...screens].filter((i) => !q.trim() || matchesSearch(q, i.label, i.keywords));
-    if (!found) return local;
+    const match = (i: Item) => !typed || matchesSearch(q, i.label, i.keywords);
+    // the palette leads with what to do; the top bar's search with where to go
+    const local = capped ? [...cap(screens.filter(match), 6), ...cap(actions.filter(match), 4)] : [...actions, ...screens].filter(match);
+    if (!typed) return local;
+    // the people, the weeks and the domains are all here already: found from the first letter
+    const people: Item[] = users
+      .filter((u) => matchesSearch(q, u.displayName, u.title))
+      .map((u) => ({ id: `u:${u.id}`, group: 'סגל', label: u.displayName, sub: u.title || undefined, icon: 'users', run: go(isCommander ? `/team/${u.id}` : `/tasks?owner=${u.id}`) }));
+    const weekItems: Item[] = weeks
+      .filter((w) => matchesSearch(q, w.name, w.topic, `שבוע ${w.number}`))
+      .map((w) => ({ id: `w:${w.id}`, group: 'שבועות', label: w.name, sub: `שבוע ${w.number} · ${shortDate(w.startDate)}-${shortDate(w.endDate)}`, icon: 'layers', run: go(`/weeks/${w.id}`) }));
+    const domains: Item[] = settings.domains
+      .filter((d) => matchesSearch(q, d))
+      .map((d) => ({ id: `dom:${d}`, group: 'תחומים', label: d, sub: 'משימות בתחום', icon: 'tasks', run: go(`/tasks?domain=${encodeURIComponent(d)}`) }));
+    const near = [...local, ...cap(people, 5), ...cap(weekItems, 4), ...cap(domains, 3)];
+    if (!found) return near;
     const fromSearch: Item[] = [
       // the open ones first (the search puts them there); one already closed says so instead of its deadline
-      ...found.tasks.slice(0, 6).map((t) => ({
+      ...found.tasks.slice(0, capped ? 5 : 6).map((t) => ({
         id: `t:${t.id}`,
         group: 'משימות',
         label: t.title,
@@ -132,15 +122,51 @@ function Palette({ pages, onClose }: { pages: { to: string; label: string; icon:
         icon: isOpenStatus(t.status) ? 'tasks' : 'check',
         run: go(`/tasks/${t.id}`),
       })),
-      ...found.weeks.slice(0, 4).map((w) => ({ id: `w:${w.id}`, group: 'שבועות', label: w.name, sub: `שבוע ${w.number} · ${shortDate(w.startDate)}-${shortDate(w.endDate)}`, icon: 'layers', run: go(`/weeks/${w.id}`) })),
-      ...found.cadets.slice(0, 5).map((c) => ({ id: `c:${c.id}`, group: 'צוערים', label: c.fullName, sub: c.teamName ?? undefined, icon: 'shield', run: go(`/cadets/${c.id}`) })),
-      ...found.events.slice(0, 4).map((e) => ({ id: `e:${e.id}`, group: 'לו"ז', label: e.title, sub: `${shortDate(e.date)} ${e.startTime}`, icon: 'calendar', run: go(`/schedule?date=${e.date}&event=${e.id}`) })),
-      ...found.debriefs.slice(0, 4).map((d) => ({ id: `d:${d.id}`, group: 'תחקירים', label: d.title, sub: shortDate(d.occurredOn), icon: 'lightbulb', run: go(`/debriefs/${d.id}`) })),
-      ...found.documents.slice(0, 4).map((d) => ({ id: `doc:${d.id}`, group: 'מסמכים', label: d.title, sub: d.category, icon: 'file', run: go(`/search?q=${encodeURIComponent(d.title)}`) })),
-      ...found.users.slice(0, 4).map((u) => ({ id: `u:${u.id}`, group: 'סגל', label: u.displayName, sub: u.title || undefined, icon: 'users', run: go(`/team/${u.id}`) })),
+      ...found.cadets.slice(0, capped ? 4 : 5).map((c) => ({ id: `c:${c.id}`, group: 'צוערים', label: c.fullName, sub: c.teamName ?? undefined, icon: 'shield', run: go(`/cadets/${c.id}`) })),
+      ...found.events.slice(0, capped ? 3 : 4).map((e) => ({ id: `e:${e.id}`, group: 'לו"ז', label: e.title, sub: `${shortDate(e.date)} ${e.startTime}`, icon: 'calendar', run: go(`/schedule?date=${e.date}&event=${e.id}`) })),
+      ...found.debriefs.slice(0, capped ? 3 : 4).map((d) => ({ id: `d:${d.id}`, group: 'תחקירים', label: d.title, sub: shortDate(d.occurredOn), icon: 'lightbulb', run: go(`/debriefs/${d.id}`) })),
+      ...found.documents.slice(0, capped ? 3 : 4).map((d) => ({ id: `doc:${d.id}`, group: 'מסמכים', label: d.title, sub: d.category, icon: 'file', run: go(`/search?q=${encodeURIComponent(d.title)}`) })),
     ];
-    return [...local, ...fromSearch, { id: 'all', group: 'חיפוש', label: `כל התוצאות עבור "${q.trim()}"`, icon: 'search', run: go(`/search?q=${encodeURIComponent(q.trim())}`) }];
-  }, [q, found, pages, weeks, isCommander, navigate, newTask]);
+    return [...near, ...fromSearch, { id: 'all', group: 'חיפוש', label: `כל התוצאות עבור "${q.trim()}"`, icon: 'search', run: go(`/search?q=${encodeURIComponent(q.trim())}`) }];
+  }, [q, found, pages, weeks, users, settings.domains, isCommander, navigate, newTask, capped]);
+}
+
+export function CommandPalette({ pages }: { pages: FindPage[] }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
+        // in a dialog it stays the dialog's
+        if (!open && document.querySelector('.modal')) return;
+        e.preventDefault();
+        setOpen((o) => !o);
+      }
+    };
+    const onOpen = () => setOpen(true);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener(OPEN_PALETTE, onOpen);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener(OPEN_PALETTE, onOpen);
+    };
+  }, [open]);
+  if (!open) return null;
+  return <Palette pages={pages} onClose={() => setOpen(false)} />;
+}
+
+function Palette({ pages, onClose }: { pages: FindPage[]; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const [active, setActive] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const back = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
+  const items = useFindItems(q, pages);
+
+  useEffect(() => {
+    input.current?.focus();
+    const prev = back.current;
+    return () => prev?.focus?.();
+  }, []);
 
   const at = Math.min(active, Math.max(0, items.length - 1));
   useEffect(() => {

@@ -12,26 +12,7 @@ import { useSession } from '../lib/session';
 import { matchesSearch } from '@shared/search';
 import { useApi } from '../lib/useApi';
 import { safeUrl } from '../lib/safeUrl';
-
-const RECENT_MAX = 8;
-const recentKey = (userId: number) => `kks.search.recent.${userId}`;
-
-function readRecent(userId: number): string[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(recentKey(userId)) ?? '[]');
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, RECENT_MAX) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeRecent(userId: number, list: string[]): void {
-  try {
-    localStorage.setItem(recentKey(userId), JSON.stringify(list.slice(0, RECENT_MAX)));
-  } catch {
-    /* this visit only */
-  }
-}
+import { readRecent, rememberSearch, writeRecent } from '../lib/recentSearches';
 
 export function SearchPage() {
   const [params, setParams] = useSearchParams();
@@ -58,11 +39,7 @@ export function SearchPage() {
     const t = q.trim();
     if (t.length < 2 || !total) return;
     const timer = setTimeout(() => {
-      setRecent((r) => {
-        const next = [t, ...r.filter((x) => x !== t)].slice(0, RECENT_MAX);
-        writeRecent(user.id, next);
-        return next;
-      });
+      setRecent(rememberSearch(user.id, t));
     }, 1200);
     return () => clearTimeout(timer);
   }, [q, total, user.id]);

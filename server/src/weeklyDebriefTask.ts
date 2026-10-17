@@ -1,5 +1,5 @@
-// The weekly debrief as a task: on the Tuesday of each course week its lead gets a task to hold the
-// week's debrief, due the next Tuesday at 12:00. It closes itself when the week's weekly debrief is
+// The weekly debrief as a task: on the Tuesday of each course week at 10:00 its lead gets a task to hold
+// the week's debrief, due the next Tuesday at 12:00. It closes itself when the week's weekly debrief is
 // summed up, and follows the week to a new lead. Run by the automation (automation.ts).
 
 import { addDays, diffDays, localDateKey, localTime, weekdayOf, zonedIso } from '../../shared/dates';
@@ -11,7 +11,7 @@ import { createTasks, updateTask } from './taskService';
 
 /** the task opens on this day of the week (Sunday = 0), from this hour */
 const OPEN_WEEKDAY = 2;
-const OPEN_TIME = '08:00';
+const OPEN_TIME = '10:00';
 const DUE_TIME = '12:00';
 
 /** the week's Tuesday - or, for a week without one, its first day */

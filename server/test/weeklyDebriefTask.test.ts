@@ -1,4 +1,4 @@
-// The weekly debrief as a task: each week's lead gets it on the week's Tuesday from 08:00, due the
+// The weekly debrief as a task: each week's lead gets it on the week's Tuesday from 10:00, due the
 // next Tuesday at 12:00; it closes itself when the week's debrief is summed up, and moves to a new lead.
 
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -23,11 +23,11 @@ const debriefTasks = async (agent = c.cmd) =>
   ((await agent.get('/api/tasks')).body as { id: number; title: string; ownerId: number; deadline: string; weekId: number; status: string }[]).filter((t) => t.title.startsWith('תחקיר שבועי'));
 
 describe('the weekly debrief task', () => {
-  it('opens for the week’s lead on its Tuesday from 08:00, due the next Tuesday at 12:00 - once', async () => {
+  it('opens for the week’s lead on its Tuesday from 10:00, due the next Tuesday at 12:00 - once', async () => {
     run('2026-10-05', '10:00');
-    run('2026-10-06', '07:30');
+    run('2026-10-06', '09:30');
     expect(await debriefTasks()).toHaveLength(0);
-    expect(run('2026-10-06', '08:05').debriefTasks).toBe(1);
+    expect(run('2026-10-06', '10:05').debriefTasks).toBe(1);
     const [t] = await debriefTasks();
     expect(t).toMatchObject({ title: 'תחקיר שבועי - שבוע הגנה', ownerId: c.ids.s1, weekId: week, deadline: at('2026-10-13', '12:00') });
     // the lead hears of it
@@ -41,7 +41,7 @@ describe('the weekly debrief task', () => {
   });
 
   it('its page leads to the debrief; summing the debrief up closes it', async () => {
-    run('2026-10-06', '09:00');
+    run('2026-10-06', '10:30');
     const [t] = await debriefTasks();
     expect((await c.s1.get(`/api/tasks/${t.id}`)).body.weeklyDebrief).toEqual({ weekId: week, weekName: 'שבוע הגנה', debriefId: null });
     clock.set(new Date(at('2026-10-11', '10:00')));
@@ -55,7 +55,7 @@ describe('the weekly debrief task', () => {
   });
 
   it('a new lead takes it; a week without a lead gets it once one is set, until the day it would be due', async () => {
-    run('2026-10-06', '09:00');
+    run('2026-10-06', '10:30');
     const [t] = await debriefTasks();
     await c.cmd.patch(`/api/weeks/${week}`, { leadId: c.ids.s2 });
     expect((await c.cmd.get(`/api/tasks/${t.id}`)).body.task.ownerId).toBe(c.ids.s2);

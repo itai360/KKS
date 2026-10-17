@@ -1,6 +1,8 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { runAutomation } from '../src/automation';
+import { clock } from '../src/core';
 import { db } from '../src/db';
 import { setJwksFetcher } from '../src/google';
 import { setPushSender, type PushTarget } from '../src/push';
@@ -166,12 +168,56 @@ describe('experiences (section 31)', () => {
     expect((await post({ role: 'קב"ט' })).body.error).toContain('לאיזו תקופה');
     const x = (await post({ role: 'קב"ט', span: 'first_half', mentorId: c.ids.s2 })).body;
     expect(x).toMatchObject({ kind: 'broad', span: 'first_half', role: 'קב"ט', startDate: '2026-09-01', endDate: '2026-11-30', mentorId: c.ids.s2 });
-    expect(db().get<{ title: string }>('SELECT title FROM tasks WHERE experience_id = ?', x.id)!.title).toBe('משוב התנסות: דניאל כהן - רוחב - קב"ט (חצי קורס ראשון)');
+    // its feedback task comes a week before it ends
+    expect(db().get('SELECT 1 FROM tasks WHERE experience_id = ?', x.id)).toBeUndefined();
     // it becomes a whole-course one, but stays one of the list
     expect((await c.s1.patch(`/api/experiences/${x.id}`, { span: 'full', endDate: '2027-02-28' })).body).toMatchObject({ span: 'full', endDate: '2027-02-28' });
     expect((await c.s1.patch(`/api/experiences/${x.id}`, { role: 'טבח' })).status).toBe(400);
     // an experience in a role has no part of the course
     expect((await c.s1.post('/api/experiences', { cadetId: a, role: 'סמל תורן', span: 'full', startDate: '2026-10-04', endDate: '2026-10-05' })).body).toMatchObject({ kind: 'role', span: null });
+    clock.set(new Date(at('2027-02-21', '08:00')));
+    expect(runAutomation().feedbackTasks).toBe(1);
+    expect(db().get<{ title: string }>('SELECT title FROM tasks WHERE experience_id = ?', x.id)!.title).toBe('משוב התנסות: דניאל כהן - רוחב - קב"ט (קורס שלם)');
+  });
+});
+
+describe('the feedback task of an experience', () => {
+  it('opens for the mentor a week before the experience ends - at once for a shorter one - and only once', async () => {
+    const { a, b } = await teamWithCadets();
+    const tasksOf = (id: number) => db().all<{ owner_id: number; deadline: string; status: string }>('SELECT owner_id, deadline, status FROM tasks WHERE experience_id = ?', id);
+    // three weeks long: nothing yet
+    const long = (await c.s1.post('/api/experiences', { cadetId: a, role: 'מ"מ', startDate: '2026-10-01', endDate: '2026-10-21', mentorId: c.ids.s2 })).body;
+    expect(tasksOf(long.id)).toEqual([]);
+    expect(runAutomation().feedbackTasks).toBe(0);
+    // the day before the week before its end: still nothing
+    clock.set(new Date(at('2026-10-13', '23:00')));
+    runAutomation();
+    expect(tasksOf(long.id)).toEqual([]);
+    // a week before its end: the mentor's, due on its last day
+    clock.set(new Date(at('2026-10-14', '07:00')));
+    expect(runAutomation().feedbackTasks).toBe(1);
+    expect(tasksOf(long.id)).toEqual([{ owner_id: c.ids.s2, deadline: at('2026-10-21', '18:00'), status: 'todo' }]);
+    // once: deleted, it is not opened again
+    db().run('DELETE FROM tasks WHERE experience_id = ?', long.id);
+    runAutomation();
+    expect(tasksOf(long.id)).toEqual([]);
+
+    // ending within the week: at once; with no mentor, the cadet's team commander's
+    const short = (await c.s1.post('/api/experiences', { cadetId: b, role: 'סמל תורן', startDate: '2026-10-14', endDate: '2026-10-16' })).body;
+    expect(tasksOf(short.id)).toEqual([{ owner_id: c.ids.s1, deadline: at('2026-10-16', '18:00'), status: 'todo' }]);
+
+    // its end brought within the week: the next change opens it
+    const moved = (await c.s1.post('/api/experiences', { cadetId: b, role: 'קשר', startDate: '2026-10-14', endDate: '2026-11-30', mentorId: c.ids.s3 })).body;
+    expect(tasksOf(moved.id)).toEqual([]);
+    await c.s1.patch(`/api/experiences/${moved.id}`, { endDate: '2026-10-18' });
+    expect(tasksOf(moved.id)).toEqual([{ owner_id: c.ids.s3, deadline: at('2026-10-18', '18:00'), status: 'todo' }]);
+
+    // feedback given before the week before: no task at all
+    const early = (await c.s1.post('/api/experiences', { cadetId: a, role: 'נווט', startDate: '2026-10-14', endDate: '2026-12-31', mentorId: c.ids.s2 })).body;
+    expect((await c.s2.post(`/api/experiences/${early.id}/feedback`, { score: 4 })).status).toBe(200);
+    clock.set(new Date(at('2026-12-25', '07:00')));
+    runAutomation();
+    expect(tasksOf(early.id)).toEqual([]);
   });
 });
 

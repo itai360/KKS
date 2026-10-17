@@ -15,7 +15,7 @@ import {
   type CommitteeDecision,
   type RecordKind,
 } from '../../shared/constants';
-import { isDateKey, localDateKey, zonedIso } from '../../shared/dates';
+import { addDays, isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import { byHe, byTeamAndName } from '../../shared/sort';
 import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, SPAN_SHORT, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
 import type { Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '../../shared/types';
@@ -870,6 +870,57 @@ function checkBroad(kind: ExperienceKind, role: string, span: ExperienceSpan | n
 /** the experience in words: "כ<role>", or "רוחב - <type> (<part of the course>)" */
 const experienceName = (kind: ExperienceKind, role: string, span: ExperienceSpan | null) => (kind === 'broad' ? `רוחב - ${role}${span ? ` (${SPAN_SHORT[span]})` : ''}` : role);
 
+/** the mentor's feedback task opens this many days before the experience ends */
+export const FEEDBACK_TASK_DAYS = 7;
+
+/**
+ * The feedback task of an experience, once: from a week before it ends (at once for a shorter one),
+ * for its mentor - or, with no mentor, the cadet's team commander; with neither, it waits for one.
+ * Due on its last day. An experience already given its feedback gets none.
+ */
+function openFeedbackTask(actor: UserRow | null, x: ExperienceRow, now: string = today()): boolean {
+  if (x.status === 'done' || addDays(x.end_date, -FEEDBACK_TASK_DAYS) > now) return false;
+  if (db().get('SELECT 1 FROM experience_feedback_tasks WHERE experience_id = ?', x.id)) return false;
+  const owner = getUserRow(x.mentor_id ?? x.team_commander_id ?? 0);
+  if (!owner?.active) return false;
+  const by = actor ?? getUserRow(commanderIds()[0] ?? 0) ?? owner;
+  const [taskId] = createTasks(
+    by,
+    {
+      title: `משוב התנסות: ${x.cadet_name} - ${experienceName(x.kind, x.role, x.span)}`,
+      description: [
+        `ההתנסות של ${x.cadet_name} מסתיימת ב-${x.end_date.split('-').reverse().join('.')}: להוריד משוב על ההתנסות - חוזקות, נקודות לשיפור וציון. המשימה נסגרת מעצמה כשהמשוב נמסר.`,
+        x.goals && `מטרות ההתנסות:\n${x.goals}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+      ownerIds: [owner.id],
+      deadline: zonedIso(x.end_date < now ? now : x.end_date, getSettings().defaultDeadlineTime, tz()),
+      domain: 'הערכה',
+      cadetId: x.cadet_id,
+      experienceId: x.id,
+      visibility: 'private',
+    },
+    { system: true },
+  );
+  db().run('INSERT OR IGNORE INTO experience_feedback_tasks(experience_id, task_id, created_at) VALUES (?, ?, ?)', x.id, taskId ?? null, nowIso());
+  return true;
+}
+
+/** The automation: each experience ending within a week whose mentor has no feedback task yet gets it. */
+export function experienceFeedbackTasks(now: Date = clock.now()): number {
+  const day = localDateKey(now, tz());
+  const due = db().all<{ id: number }>(
+    `SELECT x.id FROM experiences x WHERE x.status <> 'done' AND x.end_date <= ?
+       AND NOT EXISTS (SELECT 1 FROM experience_feedback_tasks f WHERE f.experience_id = x.id)`,
+    addDays(day, FEEDBACK_TASK_DAYS),
+  );
+  let opened = 0;
+  for (const { id } of due) if (db().tx(() => openFeedbackTask(null, experienceRow(id), day))) opened++;
+  if (opened) changed('cadets', 'tasks');
+  return opened;
+}
+
 export function createExperience(actor: UserRow, raw: z.input<typeof experienceSchema>): number {
   const x = experienceSchema.parse(raw);
   const c = cadetRow(x.cadetId);
@@ -896,21 +947,8 @@ export function createExperience(actor: UserRow, raw: z.input<typeof experienceS
       actor.id,
       nowIso(),
     ).id;
-    // The mentor gets a feedback task due at the end of the experience.
-    createTasks(
-      actor,
-      {
-        title: `משוב התנסות: ${name} - ${experienceName(x.kind, x.role, span)}`,
-        description: x.goals ? `מטרות ההתנסות:\n${x.goals}` : '',
-        ownerIds: [x.mentorId ?? actor.id],
-        deadline: zonedIso(x.endDate, getSettings().defaultDeadlineTime, tz()),
-        domain: 'הערכה',
-        cadetId: x.cadetId,
-        experienceId: id,
-        visibility: 'private',
-      },
-      { system: true },
-    );
+    // the mentor's feedback task: now if the experience ends within a week, else a week before it ends
+    openFeedbackTask(actor, experienceRow(id));
     logActivity({ userId: actor.id, action: 'experience', text: `${actor.display_name} שיבץ את ${name} ${x.kind === 'broad' ? `להתנסות ${experienceName(x.kind, x.role, span)}` : `להתנסות כ${x.role}`}` });
   });
   changed('cadets', 'tasks');
@@ -968,6 +1006,8 @@ export function updateExperience(actor: UserRow, id: number, raw: Partial<z.inpu
       if (next.end !== cur.end_date) patch.deadline = deadline;
       if (Object.keys(patch).length) updateTask(actor, task.id, patch, true, 'עדכון התנסות');
     }
+    // its end moved within a week, or it was given a mentor: the feedback task may open now
+    openFeedbackTask(actor, experienceRow(id));
   });
   changed('cadets', 'tasks');
 }

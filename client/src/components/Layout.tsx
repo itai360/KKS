@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
 import type { Task, TaskRequest } from '@shared/types';
 import { pendingRequests, reportIssue } from '../lib/api';
@@ -15,7 +15,8 @@ import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
 import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
-import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
+import { CommandPalette } from './CommandPalette';
+import { TopSearch } from './TopSearch';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials, Modal } from './ui';
 import { NavMenu, SETTINGS_ITEM } from './NavMenu';
@@ -261,6 +262,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // the commander and the week leads add to the schedule from anywhere, as they add a task
   const canEvent = !viewing && (isCommander || weeks.some((w) => w.leadId === user.id));
   const sections = useNavSections();
+  const palettePages = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const newTask = useNewTask();
   const navigate = useNavigate();
   const location = useLocation();
@@ -305,7 +307,6 @@ export function Layout({ children }: { children: ReactNode }) {
   const mainRef = useRef<HTMLElement>(null);
   const ptrRef = useRef<HTMLDivElement>(null);
   usePullToRefresh(mainRef, ptrRef, useMedia('(pointer: coarse)'));
-  const [q, setQ] = useState('');
   const [live, setLive] = useState(false);
 
   useEffect(() => onStatus(setLive), []);
@@ -516,6 +517,8 @@ export function Layout({ children }: { children: ReactNode }) {
   }, []);
   // the bar's "+": a new task or something for the weekly
   const [plusOpen, setPlusOpen] = useState(false);
+  // where the "+" menu opened from: the phone bar's, or the top bar's on a computer
+  const [plusAt, setPlusAt] = useState<'bar' | 'top'>('bar');
   const plus = usePresence(plusOpen, 200);
   useEffect(() => {
     setPlusOpen(false);
@@ -667,20 +670,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <Icon name="chevronDown" size={15} className="top-brand-chev" />
             </button>
           </div>
-          <form
-            className="search"
-            role="search"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`);
-            }}
-          >
-            <Icon name="search" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש משימה, איש סגל, שבוע, תחום..." aria-label="חיפוש" aria-keyshortcuts="/" />
-            <button type="button" className="search-palette" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))} aria-label="פקודה מהירה" aria-keyshortcuts="Control+K" title="פקודה מהירה: מסך, פעולה או פריט">
-              <span className="kbd">Ctrl K</span>
-            </button>
-          </form>
+          <TopSearch pages={palettePages} />
           <div className="top-actions">
             <span className={`live hide-mobile${live ? ' on' : ''}`} title={live ? 'מחובר - עדכונים בזמן אמת' : 'מתחבר...'}>
               {live ? 'מעודכן' : 'מתחבר'}
@@ -690,9 +680,24 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
             <Bell unread={unread} />
             <ThemeButton />
+            {/* on a computer, the same "+" as the phone bar's: what one adds, in a menu under it */}
             {!viewing && (
-              <button className="btn btn-primary hide-mobile" onClick={() => newTask()} title="קיצור מקלדת: N">
-                <Icon name="plus" /> משימה
+              <button
+                id="top-plus-button"
+                type="button"
+                className={`top-plus hide-mobile${plusOpen && plusAt === 'top' ? ' plus-open' : ''}`}
+                onClick={() => {
+                  if (plusOpen && plusAt === 'top') return setPlusOpen(false);
+                  setPlusAt('top');
+                  setPlusOpen(true);
+                }}
+                aria-label={canEvent ? 'הוספה: משימה, אירוע בלו"ז, שבועי או תחקיר השבוע' : 'הוספה: משימה, שבועי או תחקיר השבוע'}
+                title="הוספה (N - משימה חדשה)"
+                aria-haspopup="menu"
+                aria-expanded={plusOpen && plusAt === 'top'}
+                aria-controls={plusOpen && plusAt === 'top' ? 'plus-menu' : undefined}
+              >
+                <Icon name="plus" />
               </button>
             )}
           </div>
@@ -730,7 +735,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <main id="main" tabIndex={-1} ref={mainRef}>
           <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
           <ShortcutsHelp />
-          <CommandPalette pages={sections.flatMap((s) => s.items)} />
+          <CommandPalette pages={palettePages} />
         </main>
       </div>
 
@@ -754,6 +759,7 @@ export function Layout({ children }: { children: ReactNode }) {
           className={plusOpen ? 'plus-open' : ''}
           onClick={() => {
             if (viewing) return;
+            setPlusAt('bar');
             setPlusOpen((o) => !o);
             // its menu opens over the whole bar
             setBarSmall(false);
@@ -784,6 +790,7 @@ export function Layout({ children }: { children: ReactNode }) {
       )}
       {plus.mounted && (
         <PlusMenu
+          at={plusAt}
           leaving={plus.leaving}
           onClose={() => setPlusOpen(false)}
           onTask={() => {
@@ -812,8 +819,12 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 }
 
-/** the phone bar's "+": the things one adds on the move, rising above it */
+/**
+ * The "+": the things one adds. From the phone bar it rises above the bar; from the top bar on a
+ * computer it drops under the button, as a menu.
+ */
 function PlusMenu({
+  at,
   onClose,
   onTask,
   onWeekly,
@@ -821,6 +832,7 @@ function PlusMenu({
   onEvent,
   leaving,
 }: {
+  at: 'bar' | 'top';
   onClose: () => void;
   onTask: () => void;
   onWeekly: () => void;
@@ -829,12 +841,25 @@ function PlusMenu({
   leaving: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const anchorId = at === 'top' ? 'top-plus-button' : 'plus-button';
+  // under the top bar's button, its edge in line with the button's
+  const [spot, setSpot] = useState<{ top: number; left: number } | null>(null);
+  useLayoutEffect(() => {
+    if (at !== 'top') return;
+    const place = () => {
+      const r = document.getElementById(anchorId)?.getBoundingClientRect();
+      if (r) setSpot({ top: r.bottom + 10, left: Math.max(12, Math.min(r.left, window.innerWidth - 312)) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [at, anchorId]);
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
-        document.getElementById('plus-button')?.focus();
+        document.getElementById(anchorId)?.focus();
         return;
       }
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -845,7 +870,7 @@ function PlusMenu({
     };
     const onDown = (e: PointerEvent) => {
       const t = e.target as Element;
-      if (!ref.current?.contains(t) && !t.closest('#plus-button')) onClose();
+      if (!ref.current?.contains(t) && !t.closest(`#${anchorId}`)) onClose();
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onDown);
@@ -853,12 +878,20 @@ function PlusMenu({
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onDown);
     };
-  }, [onClose]);
+  }, [onClose, anchorId]);
   return (
     <>
-      <div className={`plus-scrim${leaving ? ' is-leaving' : ''}`} aria-hidden="true" />
-      {/* closed, it sinks back into the "+" it rose from */}
-      <div className={`plus-menu${leaving ? ' is-leaving' : ''}`} id="plus-menu" role="menu" aria-label="הוספה" ref={ref} inert={leaving || undefined}>
+      {at === 'bar' && <div className={`plus-scrim${leaving ? ' is-leaving' : ''}`} aria-hidden="true" />}
+      {/* closed, it goes back into the "+" it came from */}
+      <div
+        className={`plus-menu${at === 'top' ? ' at-top' : ''}${leaving ? ' is-leaving' : ''}`}
+        id="plus-menu"
+        role="menu"
+        aria-label="הוספה"
+        ref={ref}
+        inert={leaving || undefined}
+        style={at === 'top' ? (spot ? { top: spot.top, left: spot.left } : { visibility: 'hidden' }) : undefined}
+      >
         <button type="button" role="menuitem" onClick={onTask}>
           <span className="plus-menu-icon">
             <Icon name="tasks" />

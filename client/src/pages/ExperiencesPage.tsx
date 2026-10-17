@@ -265,7 +265,7 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
       const body = { role: name, startDate: start, endDate: end, goals, mentorId: mentor ? Number(mentor) : null, ...(isBroad ? { span } : {}) };
       if (experience) await api.patch(`/api/experiences/${experience.id}`, body);
       else await api.post('/api/experiences', { ...body, kind, cadetId: Number(cadet) });
-      toast({ title: experience ? 'ההתנסות עודכנה' : 'ההתנסות שובצה - נפתחה משימת משוב לחונך', tone: 'green' });
+      toast({ title: experience ? 'ההתנסות עודכנה' : 'ההתנסות שובצה - שבוע לפני סופה תיפתח לחונך משימת משוב', tone: 'green' });
       emitLocalChange('cadets', 'tasks');
       onClose();
     } catch (e) {
@@ -335,7 +335,7 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
         <Field label="עד תאריך">
           <DateInput value={end} onChange={(v) => setEnd(v)} />
         </Field>
-        <Field label="מפקד חונך" className="span-2" hint="יקבל משימת משוב שמסתיימת ביום האחרון של ההתנסות">
+        <Field label="מפקד חונך" className="span-2" hint="שבוע לפני סוף ההתנסות יקבל משימת משוב, עם דד-ליין ביום האחרון שלה. בלי חונך - מפקד הצוות">
           <Select className="select" value={mentor} onChange={(e) => setMentor(e.target.value)}>
             <option value="">ללא (המשימה תיפתח עליך)</option>
             {users.map((u) => (

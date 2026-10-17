@@ -710,7 +710,7 @@ html[data-scrolled] .topbar {
   font-size: 14px;
 }
 
-.search svg {
+.search > svg {
   position: absolute;
   right: 13px;
   top: 10px;
@@ -7313,6 +7313,51 @@ button.fab-missing {
   }
 }
 
+/* ---------- the top bar's search on a computer: what it finds, under it (components/TopSearch.tsx) ---------- */
+
+.search-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline: 0;
+  min-width: 360px;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 540px);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 22px 48px -18px rgba(0, 0, 0, 0.4), 0 2px 8px -4px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  transform-origin: 50% 0;
+  animation: search-pop-in 0.2s var(--spring) both;
+}
+.search-pop-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+.search-pop-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--card-2);
+}
+@keyframes search-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-pop {
+    animation: none;
+  }
+}
+
 /* ---------- quick command, Ctrl+K (components/CommandPalette.tsx) ---------- */
 
 .search input {
@@ -9220,6 +9265,74 @@ button.weekly-item-title:hover {
   font-size: 12px;
   color: var(--rail-muted);
 }
+/* on a computer: the top bar's "+", and its menu dropping under it */
+.top-plus {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  transition: background 0.15s, transform 0.34s var(--spring);
+}
+@media (hover: hover) {
+  .top-plus:hover {
+    background: var(--primary-hover);
+  }
+}
+.top-plus:active {
+  transform: scale(0.93);
+  transition: background 0.15s, transform 0.1s ease-out;
+}
+.top-plus:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.top-plus svg {
+  width: 21px;
+  height: 21px;
+  transition: transform 0.36s var(--spring-bounce);
+}
+.top-plus.plus-open svg {
+  transform: rotate(45deg);
+}
+.plus-menu.at-top {
+  bottom: auto;
+  width: 300px;
+  transform: none;
+}
+.plus-menu.at-top button {
+  transform-origin: 0 0;
+  animation-name: plus-drop;
+}
+/* the nearer one comes first: here the top one */
+.plus-menu.at-top button:first-child {
+  animation-delay: 0s;
+}
+.plus-menu.at-top button:last-child {
+  animation-delay: 0.05s;
+}
+.plus-menu.at-top.is-leaving button {
+  animation: plus-lift 0.16s cubic-bezier(0.4, 0, 0.8, 0.4) both;
+}
+@keyframes plus-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+}
+@keyframes plus-lift {
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+}
+
 /* open: the "+" turns to a close mark */
 .bottom-nav .plus svg {
   transition: transform 0.36s var(--spring-bounce), scale 0.36s var(--spring);
@@ -9240,8 +9353,13 @@ button.weekly-item-title:hover {
 }
 @media (prefers-reduced-motion: reduce) {
   .plus-scrim,
-  .plus-menu button {
+  .plus-menu button,
+  .plus-menu.at-top button,
+  .plus-menu.at-top.is-leaving button {
     animation: none;
+  }
+  .top-plus svg {
+    transition: none;
   }
   .bottom-nav .plus svg {
     transition: none;
