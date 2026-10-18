@@ -10,7 +10,7 @@ import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
 import { unlessHeld, useTaskMenu } from '../components/TaskMenu';
 import { canQuickUpdate, doneNow, GroupTag, prefetchTask, ProgressBadge, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useTaskTick } from '../components/TaskRow';
-import { finishedJustNow, leaveClass, noteFinished, useLeaving, type LeavePhase } from '../lib/leaving';
+import { finishedJustNow, leaveClass, noteFinished, useLeaving } from '../lib/leaving';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
 import { api, qs } from '../lib/api';
@@ -21,6 +21,8 @@ import { useSession } from '../lib/session';
 import { useIncremental } from '../lib/incremental';
 import { useApi, useTick } from '../lib/useApi';
 import { foldTasks, groupLabel, type TaskView } from '../lib/taskGroups';
+import { CourseBoard, type BoardGrouping, type BoardSort } from '../components/CourseBoard';
+import './TasksWorkspace.css';
 
 type View = 'table' | 'list' | 'board';
 // a remembered view is a convenience: storage can be missing or blocked
@@ -40,25 +42,30 @@ function writePref(key: string, value: string): void {
 }
 
 const SCOPES: [string, string][] = [
+  ['all', 'הכל'],
   ['open', 'פתוחות'],
   ['overdue', 'באיחור'],
   ['today', 'להיום'],
   ['week', 'לשבוע הקרוב'],
   ['attention', 'חריגות'],
   ['done', 'הושלמו'],
-  ['all', 'הכל'],
 ];
 
 export function TasksPage() {
   const [params, setParams] = useSearchParams();
-  const { staff, users, weeks, tracks, settings, isCommander, user, userName } = useSession();
+  const { staff, users, weeks, tracks, settings, isCommander, user, userName, viewing } = useSession();
   const newTask = useNewTask();
   const toast = useToast();
-  const [view, setView] = useState<View>(() => (window.innerWidth < 860 ? 'list' : ((readPref('kks.tasksView') as View | null) ?? 'table')));
+  const [view, setView] = useState<View>(() => {
+    const saved = readPref('kks.workBoardView');
+    return saved === 'list' || saved === 'board' ? saved : 'table';
+  });
+  const [groupBy, setGroupBy] = useState<BoardGrouping>('status');
+  const [sortBy, setSortBy] = useState<BoardSort>('deadline');
   useTick();
 
   const f = {
-    scope: params.get('scope') ?? 'open',
+    scope: params.get('scope') ?? 'all',
     owner: params.get('owner') ?? '',
     week: params.get('week') ?? '',
     track: params.get('track') ?? '',
@@ -88,65 +95,94 @@ export function TasksPage() {
   })}`;
   const { data, error, loading } = useApi<Task[]>(url);
   // a task given to a group is one row, under the group's name - unless the list is one person's
-  const collapse = !f.owner;
+  const collapse = !f.owner && (view !== 'table' || groupBy !== 'owner');
   const rows = useMemo(() => foldTasks(data ?? [], user.id, collapse), [data, collapse, user.id]);
   const changeView = (v: View) => {
     setView(v);
-    writePref('kks.tasksView', v);
+    writePref('kks.workBoardView', v);
   };
   const people = isCommander ? users : staff;
-  const active = [f.owner, f.week, f.track, f.domain, f.status, f.priority, f.q].filter(Boolean).length;
+  const active = [f.owner, f.week, f.track, f.domain, f.status, f.priority, f.routine === '1' ? 'routine' : ''].filter(Boolean).length;
+  const filtered = active > 0 || Boolean(f.q);
+  const clearFilters = () => setParams(f.scope !== 'all' ? { scope: f.scope } : {}, { replace: true });
+  const createTask = () => newTask({ weekId: f.week && f.week !== 'none' ? Number(f.week) : undefined });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
     <TaskBulkScope tasks={data ?? []} collapse={collapse}>
-    <div className="page">
+    <div className="page tasks-workspace">
       <PageHead
-        title="כל המשימות"
-        sub={data ? `${rows.length} משימות` : undefined}
+        title="לוח הקורס"
+        docTitle="לוח הקורס"
+        sub={`${settings.courseName} · משימות, אחריות ותכנון העבודה`}
         actions={
-          <>
-            {/* on a phone: beside the scopes below */}
-            <BulkToggle className="hide-mobile" />
-            <Seg
-              value={view}
-              onChange={changeView}
-              options={[
-                { value: 'table', label: 'טבלה', icon: 'tasks' },
-                { value: 'list', label: 'רשימה', icon: 'layers' },
-                { value: 'board', label: 'לוח', icon: 'board' },
-              ]}
-            />
-            <button
-              className="btn hide-mobile"
-              onClick={() => data && exportCsv(data, userName).catch((e: Error) => toast({ title: e.message, tone: 'red' }))}
-              disabled={!data?.length}
-              title="ייצוא הרשימה המסוננת לאקסל"
-            >
-              <Icon name="download" /> אקסל
-            </button>
-            <button className="btn btn-primary" onClick={() => newTask({ weekId: f.week ? Number(f.week) : undefined })}>
-              <Icon name="plus" /> משימה
-            </button>
-          </>
+          viewing ? <span className="badge">קורס קודם · לצפייה בלבד</span> : <button className="btn btn-primary" onClick={createTask}>
+            <Icon name="plus" /> משימה חדשה
+          </button>
         }
       />
-      {/* the scopes, and on a phone the filters and selecting beside them: one line before the tasks */}
-      <div className="list-tools mb-12">
-        <div className="chips chips-scroll">
+      <div className="task-view-tabs">
+        <Seg value={view} onChange={changeView} options={[
+          { value: 'table', label: 'לוח ראשי', icon: 'tasks' },
+          { value: 'board', label: 'קנבן', icon: 'board' },
+          { value: 'list', label: 'רשימה', icon: 'layers' },
+        ]} />
+      </div>
+      <section className="task-controls" aria-label="חיפוש וסינון משימות">
+        <div className="task-search-row">
+          <div className="task-search">
+            <Icon name="search" size={20} />
+            <input
+              className="input"
+              type="search"
+              placeholder="חיפוש בלוח"
+              value={f.q}
+              onChange={(e) => set('q', e.target.value)}
+              aria-label="חיפוש במשימות"
+            />
+          </div>
+          <button
+            className={`btn btn-ghost task-filter-toggle${active ? ' is-set' : ''}`}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            aria-expanded={filtersOpen}
+            aria-controls="task-advanced-filters"
+          >
+            <Icon name="filter" /> סינון
+            {active > 0 && <span className="task-filter-count">{active}</span>}
+            <Icon name="chevronDown" size={14} className={filtersOpen ? 'is-open' : ''} />
+          </button>
+          {view === 'table' && <div className="task-board-options">
+            <Select className="select" aria-label="קיבוץ משימות" value={groupBy} onChange={(e) => setGroupBy(e.target.value as BoardGrouping)}>
+              <option value="status">קיבוץ: סטטוס</option><option value="week">קיבוץ: שבוע</option><option value="owner">קיבוץ: אחראי</option>
+            </Select>
+            <Select className="select" aria-label="מיון משימות" value={sortBy} onChange={(e) => setSortBy(e.target.value as BoardSort)}>
+              <option value="deadline">מיון: תאריך יעד</option><option value="priority">מיון: עדיפות</option><option value="title">מיון: שם משימה</option>
+            </Select>
+          </div>}
+        </div>
+        <div className="task-scope-row" role="group" aria-label="אילו משימות להציג">
           {SCOPES.map(([v, l]) => (
-            <button key={v} className={`chip${f.scope === v ? ' on' : ''}${v === 'overdue' && f.scope === v ? ' t-red' : ''}`} onClick={() => set('scope', v === 'open' ? '' : v)}>
+            <button
+              key={v}
+              type="button"
+              className={`task-scope${f.scope === v ? ' is-active' : ''}`}
+              aria-pressed={f.scope === v}
+              onClick={() => set('scope', v === 'all' ? '' : v)}
+            >
+              {v === 'open' && <Icon name="tasks" size={15} />}
+              {v === 'overdue' && <Icon name="clock" size={15} />}
+              {v === 'done' && <Icon name="check" size={15} />}
               {l}
             </button>
           ))}
         </div>
-        <button className={`btn btn-sm only-mobile${active ? ' is-set' : ''}`} onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen} aria-label={active ? `סינון - ${active} פעילים` : 'סינון'}>
-          <Icon name="filter" /> {active ? active : 'סינון'}
-        </button>
-        <BulkToggle className="btn-sm only-mobile" />
-      </div>
-      <div className={`filters${filtersOpen ? '' : ' mobile-collapsed'}`}>
-        <input className="input" placeholder="מילת מפתח..." value={f.q} onChange={(e) => set('q', e.target.value)} aria-label="חיפוש במשימות" />
+        {filtersOpen && (
+          <div id="task-advanced-filters" className="task-advanced-filters">
+            <div className="task-filter-heading">
+              <span className="strong">סינון הלוח</span>
+              {filtered && <button className="btn btn-ghost btn-sm" onClick={clearFilters}><Icon name="x" size={14} /> איפוס סינון</button>}
+            </div>
+            <div className="task-filter-fields">
         <Select className="select" value={f.owner} onChange={(e) => set('owner', e.target.value)} aria-label="איש סגל">
           <option value="">כל הסגל</option>
           {people.map((u) => (
@@ -200,152 +236,62 @@ export function TasksPage() {
           <input type="checkbox" checked={f.routine === '1'} onChange={(e) => set('routine', e.target.checked ? '1' : '')} />
           כולל משימות שגרה
         </label>
-        {active > 0 && (
-          <button className="btn btn-ghost btn-sm" onClick={() => setParams(f.scope !== 'open' ? { scope: f.scope } : {}, { replace: true })}>
-            <Icon name="x" /> נקה סינון
-          </button>
+            </div>
+          </div>
         )}
+      </section>
+      <div className="task-results-toolbar">
+        <div className="task-results-summary" aria-live="polite" aria-atomic="true">
+          <span className="strong">{SCOPES.find(([scope]) => scope === f.scope)?.[1] ?? 'משימות'}</span>
+          {data && <span className="task-result-count">{rows.length}</span>}
+          {loading && data && <span className="tiny muted">מעדכן…</span>}
+          {filtered && !filtersOpen && <button className="btn btn-ghost btn-sm" onClick={clearFilters}>איפוס סינון</button>}
+        </div>
+        <div className="task-result-actions">
+          {!viewing && <BulkToggle />}
+          <button
+            className="btn task-export"
+            onClick={() => data && exportCsv(data, userName).catch((e: Error) => toast({ title: e.message, tone: 'red' }))}
+            disabled={!data?.length}
+            title="ייצוא הרשימה המסוננת לאקסל"
+          >
+            <Icon name="download" size={16} /><span>ייצוא</span>
+          </button>
+
+        </div>
       </div>
       <ErrorBox error={error} />
       {loading && !data ? (
         <Loading rows={6} />
-      ) : !data?.length ? (
-        <Empty icon="filter" title="אין משימות" text="אין משימות שתואמות את הסינון." />
+      ) : !data && error ? null : !data?.length ? (
+        <div className="task-empty-state">
+          <Empty
+            icon={filtered ? 'search' : f.scope === 'done' ? 'check' : 'tasks'}
+            title={filtered ? 'לא מצאנו משימות שמתאימות' : f.scope === 'done' ? 'ההתקדמות שלכם תופיע כאן' : 'אפשר להתחיל ממשימה אחת'}
+            text={
+              <>
+                {filtered ? 'אפשר לנסות חיפוש אחר או להסיר את הסינון.' : f.scope === 'done' ? 'כל משימה שתושלם תישמר כאן, כדי שתוכלו לראות מה כבר עשיתם.' : 'אין משימות בתצוגה הזו. אפשר להוסיף משימה או לבחור סינון אחר.'}
+                <span className="empty-actions">
+                  {filtered ? (
+                    <button className="btn btn-primary" onClick={clearFilters}>איפוס הסינון <Icon name="chevronLeft" size={16} /></button>
+                  ) : (
+                    !viewing && <button className="btn btn-primary" onClick={createTask}><Icon name="plus" /> יצירת משימה</button>
+                  )}
+                  {f.scope !== 'all' && <button className="btn btn-ghost" onClick={() => setParams({ scope: 'all' }, { replace: true })}>לכל המשימות</button>}
+                </span>
+              </>
+            }
+          />
+        </div>
       ) : view === 'list' ? (
         <TaskList tasks={data} collapse={collapse} />
       ) : view === 'table' ? (
-        <TaskTable rows={rows} />
+        <CourseBoard rows={rows} groupBy={groupBy} sortBy={sortBy} />
       ) : (
         <Board rows={rows} />
       )}
     </div>
     </TaskBulkScope>
-  );
-}
-
-function TaskTable({ rows }: { rows: TaskView[] }) {
-  const { userName } = useSession();
-  const [sort, setSort] = useState<'deadline' | 'priority' | 'owner' | 'group' | 'status'>('deadline');
-  const sorted = useMemo(() => {
-    const rank = { low: 0, normal: 1, high: 2, critical: 3 };
-    const list = [...rows];
-    const owner = (r: TaskView) => (r.folded ? '' : r.task.ownerName);
-    const group = (r: TaskView) => groupLabel(r.task, userName) || '\uffff';
-    const byDeadline = (a: TaskView, b: TaskView) => a.task.deadline.localeCompare(b.task.deadline);
-    if (sort === 'priority') list.sort((a, b) => rank[b.task.priority] - rank[a.task.priority] || byDeadline(a, b));
-    else if (sort === 'owner') list.sort((a, b) => owner(a).localeCompare(owner(b), 'he') || byDeadline(a, b));
-    // tasks of the same group together, people on their own last
-    else if (sort === 'group') list.sort((a, b) => group(a).localeCompare(group(b), 'he') || byDeadline(a, b));
-    else if (sort === 'status') list.sort((a, b) => STATUSES.indexOf(a.task.status) - STATUSES.indexOf(b.task.status) || byDeadline(a, b));
-    else list.sort(byDeadline);
-    return list;
-  }, [rows, sort, userName]);
-  // ticked done here and gone from the table: it stays a moment, done, and fades
-  const leaving = useLeaving(sorted, (r) => r.task.id, (id, last) => finishedJustNow('tasks', id) && { ...last, task: doneNow(last.task) });
-  const { shown, more } = useIncremental(leaving.rows);
-  const th = (key: typeof sort, label: string) => (
-    <th>
-      <button className="btn btn-ghost btn-sm" style={{ padding: 0, height: 'auto', fontSize: 12, color: sort === key ? 'var(--ink)' : undefined }} onClick={() => setSort(key)}>
-        {label} {sort === key && '↓'}
-      </button>
-    </th>
-  );
-  return (
-    <div className="card" style={{ overflowX: 'auto' }}>
-      <table className="table tasks-table">
-        <thead>
-          <tr>
-            <th style={{ width: 6, padding: 0 }} />
-            <th>משימה</th>
-            {th('owner', 'אחראי')}
-            {th('group', 'קבוצה')}
-            <th>יצר</th>
-            <th>תחום</th>
-            <th>שבוע</th>
-            {th('deadline', 'דד-ליין')}
-            {th('priority', 'עדיפות')}
-            {th('status', 'סטטוס')}
-          </tr>
-        </thead>
-        <tbody>
-          {shown.map((r) => (
-            <TaskTableRow key={r.task.id} t={r.task} folded={r.folded} leaving={leaving.phaseOf(r.task.id)} />
-          ))}
-        </tbody>
-      </table>
-      {more}
-    </div>
-  );
-}
-
-function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leaving?: LeavePhase }) {
-  const navigate = useNavigate();
-  const bulk = useBulk();
-  const tick = useTaskTick(t, folded);
-  const tag = useGroupTag(t, !folded);
-  const flash = useLiveFlash(`${t.status}|${t.deadline}|${t.ownerId}|${t.title}|${t.priority}|${t.overdue}`);
-  const menu = useTaskMenu(t, tick, bulk?.active || folded);
-  return (
-    <tr
-      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${leaving ? ' is-finished' : ''}${leaving === 'fold' ? ' is-folding' : ''}`}
-      {...openable(bulkClick(bulk, t.id, unlessHeld(menu, () => navigate(`/tasks/${t.id}`))), { role: false })}
-      {...menu.bind}
-      onPointerEnter={() => prefetchTask(t.id)}
-      onFocus={() => prefetchTask(t.id)}
-    >
-      <td style={{ padding: 0, width: 6, background: 'var(--tone)' }} />
-      <td className="tasks-table-title">
-        <div className="strong row gap-6" style={{ textDecoration: tick.done ? 'line-through' : undefined }}>
-          {bulk?.active ? <BulkCheck id={t.id} /> : <TaskCheck task={t} tick={tick} small />}
-          <span>{t.title}</span>
-        </div>
-        {t.subtaskTotal > 0 && (
-          <div className="tiny muted mono">
-            {t.subtaskDone}/{t.subtaskTotal} משימות משנה
-          </div>
-        )}
-      </td>
-      <td className="nowrap">{folded ? <GroupDone t={t} /> : t.ownerName}</td>
-      <td className="nowrap">
-        {tag ? (
-          <span className="row gap-6">
-            <GroupTag label={tag} />
-            {!folded && <ProgressBadge task={t} />}
-          </span>
-        ) : (
-          <span className="faint">-</span>
-        )}
-      </td>
-      <td className="small muted nowrap">{t.createdByName}</td>
-      <td className="small nowrap">{t.domain || <span className="faint">-</span>}</td>
-      <td className="small">{t.weekName || <span className="faint">-</span>}</td>
-      <td style={{ whiteSpace: 'nowrap' }}>
-        <span className="task-meta" style={{ marginTop: 0 }}>
-          <DeadlineText task={t} />
-        </span>
-      </td>
-      <td>
-        <PriorityBadge priority={t.priority} hideNormal={false} />
-      </td>
-      <td style={{ whiteSpace: 'nowrap' }}>
-        <span className="row gap-4">
-          <StatusBadge status={tick.done ? 'done' : t.status} overdue={!tick.done && t.overdue} />
-        </span>
-      </td>
-      {menu.menu}
-    </tr>
-  );
-}
-
-/** a row for a whole group, in the owner's column: how many have done theirs */
-function GroupDone({ t }: { t: Task }) {
-  const { userName } = useSession();
-  const left = t.groupCopies.filter((c) => !c.done).map((c) => userName(c.ownerId));
-  const done = t.groupCopies.length - left.length;
-  return (
-    <span className="small muted" title={left.length ? `עוד לא: ${left.join(', ')}` : undefined}>
-      {done === t.groupCopies.length ? 'כולם השלימו' : `${done} מתוך ${t.groupCopies.length} השלימו`}
-    </span>
   );
 }
 

@@ -2,14 +2,14 @@
   "id": "/",
   "name": "ניהול קורס קק\"ס",
   "short_name": "קק\"ס",
-  "description": "משימות, אחריות, דד-ליינים ותמונת מצב של הקורס - לכל הסגל, בטלפון ובמחשב",
+  "description": "כל הקורס, במקום אחד. המשימות, האנשים וסדר היום שלך, בצורה ברורה ופשוטה.",
   "lang": "he",
   "dir": "rtl",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f2efe6",
-  "theme_color": "#f2efe6",
+  "background_color": "#f6f7fb",
+  "theme_color": "#f6f7fb",
   "categories": ["productivity", "education"],
   "launch_handler": {
     "client_mode": ["navigate-existing", "auto"]

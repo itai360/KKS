@@ -15,7 +15,7 @@ import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
 import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
-import { CommandPalette } from './CommandPalette';
+import { CommandPalette, OPEN_PALETTE } from './CommandPalette';
 import { TopSearch } from './TopSearch';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials, Modal } from './ui';
@@ -27,6 +27,7 @@ import { switchCourse } from '../lib/courses';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 import { useMedia } from '../lib/media';
 import { usePullToRefresh } from '../lib/pullRefresh';
+import './Layout.css';
 
 interface NavItem {
   to: string;
@@ -38,8 +39,6 @@ interface NavItem {
   keywords?: string;
 }
 
-/** each group of the menu, by its title - shown alone when the menu is folded to icons */
-const GROUP_ICONS: Record<string, string> = { 'תכנון הקורס': 'plan', צוערים: 'cap', בקרה: 'pulse', כלים: 'wrench' };
 const GROUPS_KEY = 'kks.navGroups';
 function readGroups(): Record<string, boolean> {
   try {
@@ -140,8 +139,9 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
     return [
       {
         items: [
-          { to: '/', label: 'בית', icon: 'home', end: true },
-          { to: '/my', label: 'המשימות שלי', icon: 'my' },
+          { to: '/', label: 'לוח הקורס', icon: 'board', end: true },
+          { to: '/overview', label: 'סקירה כללית', icon: 'chart' },
+          { to: '/my', label: 'העבודה שלי', icon: 'my' },
           { to: '/tasks', label: 'כל המשימות', icon: 'tasks' },
           { to: '/schedule', label: 'לו"ז', icon: 'calendar' },
           { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס' },
@@ -246,7 +246,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
 }
 
 const RAIL_KEY = 'kks.rail';
-const MEDIUM = '(max-width: 1279px)';
+const MEDIUM = '(max-width: 1099px)';
 
 function readRailPref(): 'collapsed' | 'expanded' | null {
   try {
@@ -529,9 +529,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const path = location.pathname;
   // the phone's bar, right to left: tasks, cadets, "+", weeks, schedule; on any other screen no tab is marked
   // (everything else is in the menu under the course mark at the top)
-  const tasksHome = bottomBarScreens(isCommander)[0];
+  const tasksHome = isCommander ? '/' : bottomBarScreens(isCommander)[0];
   const barIdx =
-    path.startsWith('/tasks') || path === '/my' || (!isCommander && path === '/')
+    path.startsWith('/tasks') || path === '/my' || path === '/'
       ? 0
       : path.startsWith('/cadets')
         ? 1
@@ -550,14 +550,15 @@ export function Layout({ children }: { children: ReactNode }) {
   // and the group of the screen on show opens by itself
   const [groups, setGroups] = useState<Record<string, boolean>>(readGroups);
   const here = sections.find((s) => s.title && s.items.some((it) => (it.end ? path === it.to : path === it.to || path.startsWith(`${it.to}/`))))?.title;
+  const currentScreen = [...sections.flatMap((s) => s.items), SETTINGS_ITEM].find((it) => it.end ? path === it.to : path === it.to || path.startsWith(`${it.to}/`));
   useEffect(() => {
     if (here) setGroups((g) => (g[here] ? g : saveGroups({ ...g, [here]: true })));
   }, [here]);
-  const groupOpen = (title: string) => groups[title] ?? false;
-  const toggleGroup = (title: string) => setGroups((g) => saveGroups({ ...g, [title]: !g[title] }));
+  const groupOpen = (title: string) => groups[title] ?? title === 'תכנון הקורס';
+  const toggleGroup = (title: string) => setGroups((g) => saveGroups({ ...g, [title]: !(g[title] ?? title === 'תכנון הקורס') }));
 
   return (
-    <div className={`app${folded ? ' rail-collapsed' : ''}${viewing ? ' viewing-past' : ''}`}>
+    <div className={`app workspace-shell${folded ? ' rail-collapsed' : ''}${viewing ? ' viewing-past' : ''}`}>
       {/* keyboard and screen-reader users skip the menu */}
       <a
         className="skip-link"
@@ -569,19 +570,53 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         דילוג לתוכן הראשי
       </a>
+      <nav className="workspace-app-rail" aria-label="כלי סביבת העבודה">
+        <NavLink to="/" end className="workspace-app-logo" aria-label="KKS — סביבת העבודה" title="KKS">
+          <span className="workspace-logo-bars" aria-hidden="true"><i /><i /><i /></span>
+          <span>KKS</span>
+        </NavLink>
+        <div className="workspace-app-links">
+          <NavLink to="/" end className="workspace-app-link" aria-label={isCommander ? 'לוח הקורס' : 'העבודה שלי'} title={isCommander ? 'לוח הקורס' : 'העבודה שלי'}><Icon name="board" size={22} /></NavLink>
+          <NavLink to={isCommander ? '/my' : '/tasks'} className="workspace-app-link" aria-label="המשימות שלי" title="המשימות שלי"><Icon name="my" size={22} /></NavLink>
+          <NavLink to="/schedule" className="workspace-app-link" aria-label="לוח זמנים" title="לוח זמנים"><Icon name="calendar" size={22} /></NavLink>
+          <NavLink to="/announcements" className="workspace-app-link" aria-label="עדכונים לסגל" title="עדכונים לסגל"><Icon name="inbox" size={22} /></NavLink>
+        </div>
+        <div className="workspace-app-bottom">
+          <button type="button" className="workspace-app-link" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))} aria-label="חיפוש ופעולות מהירות" title="חיפוש ופעולות מהירות · Ctrl K"><Icon name="search" size={21} /></button>
+          <NavLink to="/settings" className="workspace-app-link" aria-label="הגדרות" title="הגדרות"><Icon name="settings" size={21} /></NavLink>
+          <NavLink to="/settings" className="workspace-app-avatar" aria-label={`הפרופיל של ${user.displayName}`} title={user.displayName}>{initials(user.displayName)}</NavLink>
+        </div>
+      </nav>
       <aside
         className={`rail${noPeek ? ' no-peek' : ''}`}
         aria-label="ניווט ראשי"
         onMouseLeave={() => setNoPeek(false)}
         onFocus={(e) => noPeek && !(e.target as HTMLElement).classList.contains('rail-toggle') && setNoPeek(false)}
       >
-        <div className="brand">
-          <div className="brand-mark">{symbol.slice(0, 4)}</div>
+        <NavLink to="/" end className="brand" aria-label="KKS — סביבת העבודה">
+          <span className="workspace-brand-symbol"><Icon name="board" size={20} /></span>
           <div className="brand-text">
-            <div className="brand-name">{settings.courseName}</div>
-            <div className="brand-sub">מערכת ניהול קורס</div>
+            <div className="brand-name">סביבת העבודה</div>
+            <div className="brand-sub">ניהול הקורס והסגל</div>
           </div>
-        </div>
+        </NavLink>
+        <button type="button" className="workspace-course" title="כל המסכים בקורס" onClick={() => setMenuOpen(true)} aria-haspopup="dialog" aria-expanded={menuOpen}>
+          <span className="workspace-course-mark">{symbol.slice(0, 4)}</span>
+          <span className="workspace-course-copy rail-label">
+            <span className="workspace-course-caption">{viewing ? 'קורס קודם' : 'הקורס הנוכחי'}</span>
+            <span className="workspace-course-name">{viewing?.name ?? settings.courseName}</span>
+          </span>
+          <Icon name="chevronDown" size={14} className="workspace-course-chevron rail-label" />
+        </button>
+        {!viewing && (
+          <button type="button" className="workspace-new-task" onClick={() => newTask()} title="משימה חדשה · קיצור מקלדת N" aria-label="משימה חדשה" aria-keyshortcuts="N">
+            <Icon name="plus" size={20} />
+            <span className="rail-label">משימה חדשה</span>
+            <kbd className="workspace-shortcut rail-label">N</kbd>
+          </button>
+        )}
+        <div className="workspace-navigation">
+        <div className="rail-section">הלוחות שלי</div>
         {sections.map((s, i) => {
           const links = s.items.map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
@@ -609,7 +644,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 onClick={() => toggleGroup(s.title!)}
                 title={s.title === here && !open ? `${s.title} - המסך הפתוח נמצא כאן` : s.title}
               >
-                <Icon name={GROUP_ICONS[s.title] ?? 'layers'} />
+                <Icon name="folder" />
                 <span className="rail-label">{s.title}</span>
                 {/* closed, with the screen on show inside: marked, so it is clear where one is */}
                 {!open && s.title === here && <span className="rail-group-here" aria-hidden="true" />}
@@ -622,12 +657,13 @@ export function Layout({ children }: { children: ReactNode }) {
             </nav>
           );
         })}
-        <NavLink to="/settings" className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`} style={{ marginTop: 14 }}>
+        <NavLink to="/settings" className={({ isActive }) => `rail-link workspace-settings${isActive ? ' active' : ''}`}>
           <Icon name="settings" />
           <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
         </NavLink>
+        </div>
         <div className="rail-foot">
-          <div className="avatar">{initials(user.displayName)}</div>
+          <NavLink to="/settings" className="avatar" aria-label={`הגדרות הפרופיל של ${user.displayName}`}>{initials(user.displayName)}</NavLink>
           <div className="grow rail-user" title={`${user.displayName} - ${isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}`}>
             <div className="strong small">{user.displayName}</div>
             <div className="tiny" style={{ color: 'var(--rail-muted)' }}>
@@ -646,6 +682,11 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="main">
         <header className="topbar">
           <BackButton />
+          <nav className="workspace-breadcrumb" aria-label="מיקום באתר">
+            <NavLink to="/">{viewing?.name ?? settings.courseName}</NavLink>
+            <Icon name="chevronLeft" size={14} />
+            <span aria-current="page">{barTitle || currentScreen?.label || 'הקורס שלי'}</span>
+          </nav>
           <div className={`top-brand${menuOpen ? ' is-open' : ''}`}>
             {/* the mark goes home - from anywhere; already there, back to the top */}
             <NavLink
@@ -700,6 +741,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 <Icon name="plus" />
               </button>
             )}
+            <NavLink to="/settings" className="workspace-profile hide-mobile" aria-label={`הגדרות הפרופיל של ${user.displayName}`} title={user.displayName}>
+              <span className="avatar">{initials(user.displayName)}</span>
+            </NavLink>
           </div>
         </header>
         {viewing && (
@@ -747,8 +791,8 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* slides to the current tab */}
         <span className="nav-ind" aria-hidden />
         <NavLink to={tasksHome} end={tasksHome === '/'} className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
-          <Icon name="tasks" />
-          <span className="nav-label">משימות</span>
+          <Icon name={isCommander ? 'board' : 'tasks'} />
+          <span className="nav-label">{isCommander ? 'לוח הקורס' : 'משימות'}</span>
         </NavLink>
         <NavLink to="/cadets" className={() => (barIdx === 1 ? 'active' : '')} aria-current={barIdx === 1 ? 'page' : undefined}>
           <Icon name="cap" />
