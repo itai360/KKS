@@ -80,8 +80,8 @@
   --field-ring: rgba(28, 63, 122, 0.22);
   --board-col: rgba(229, 229, 234, 0.6);
   --done-line: rgba(60, 60, 67, 0.3);
-  --event-bg: #dceaff;
-  --event-ink: #0a4fa6;
+  --event-bg: #e3e9f4;
+  --event-ink: #1c3f7a;
   color-scheme: light;
 }
 
@@ -144,7 +144,7 @@
     --board-col: rgba(28, 28, 30, 0.8);
     --done-line: rgba(235, 235, 245, 0.3);
     --event-bg: #14233f;
-    --event-ink: #9ccaff;
+    --event-ink: #a9c2ee;
     color-scheme: dark;
   }
 }
@@ -208,7 +208,7 @@
     --board-col: rgba(28, 28, 30, 0.8);
     --done-line: rgba(235, 235, 245, 0.3);
     --event-bg: #14233f;
-    --event-ink: #9ccaff;
+    --event-ink: #a9c2ee;
     color-scheme: dark;
   }
 }
@@ -888,17 +888,17 @@ input[type='radio'] {
 .dashboard-stats .stat.alert .stat-heading > svg {
   color: var(--red);
 }
-.count-pill {
+.count-tap {
   border: none;
   background: var(--card);
   color: var(--ink-2);
 }
-.count-pill.is-alert {
+.count-tap.is-alert {
   background: var(--card);
   color: var(--red-ink);
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--red) 55%, transparent);
 }
-.count-pill.is-alert .count-pill-n {
+.count-tap.is-alert .count-tap-n {
   color: var(--red);
 }
 .mini-bar,
@@ -1078,7 +1078,7 @@ input[type='radio'] {
   background: var(--tone-bg, var(--fill));
   box-shadow: none;
 }
-.count-pill.is-alert {
+.count-tap.is-alert {
   background: color-mix(in srgb, var(--red) 12%, var(--card));
   box-shadow: none;
 }

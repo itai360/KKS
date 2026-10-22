@@ -66,7 +66,7 @@ export function MyTasksPage() {
           {/* four zeros say nothing: with nothing open and nothing done today, the empty state says it */}
           {/* what was done today is in "היום שלך" above; these go to what is still open */}
           {total > 0 && (
-            <div className="count-pills" role="group" aria-label="המשימות שלך במספרים">
+            <div className="count-taps" role="group" aria-label="המשימות שלך במספרים">
               <CountPill n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
               <CountPill n={data.stats.today} label="היום" target="group-today" />
               <CountPill n={data.stats.week} label="השבוע" target="group-week" />
@@ -245,8 +245,8 @@ function CountPill({ n, label, alert, target }: { n: number; label: string; aler
     document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   return (
-    <button type="button" className={`count-pill${alert ? ' is-alert' : ''}`} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
-      <b className="count-pill-n">
+    <button type="button" className={`count-tap${alert ? ' is-alert' : ''}`} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
+      <b className="count-tap-n">
         <CountUp value={n} />
       </b>
       <span>{label}</span>

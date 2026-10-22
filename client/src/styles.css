@@ -13930,7 +13930,7 @@ tr.is-finished.is-folding {
 }
 
 /* ---------------- counts in pills: a tap goes to the section (pages/MyTasksPage.tsx, DashboardPage.tsx) ---------------- */
-.count-pills {
+.count-taps {
   display: flex;
   gap: 8px;
   margin-top: 12px;
@@ -13938,10 +13938,10 @@ tr.is-finished.is-folding {
   overflow-x: auto;
   scrollbar-width: none;
 }
-.count-pills::-webkit-scrollbar {
+.count-taps::-webkit-scrollbar {
   display: none;
 }
-.count-pill {
+.count-tap {
   display: inline-flex;
   flex: 1 0 auto;
   align-items: baseline;
@@ -13962,32 +13962,32 @@ tr.is-finished.is-folding {
     background 0.15s,
     border-color 0.15s;
 }
-.count-pill-n {
+.count-tap-n {
   color: var(--ink);
   font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
-.count-pill:hover:not(:disabled) {
+.count-tap:hover:not(:disabled) {
   border-color: var(--line-2);
   background: var(--hover);
 }
-.count-pill:active:not(:disabled) {
+.count-tap:active:not(:disabled) {
   transform: scale(0.96);
 }
-.count-pill:disabled {
+.count-tap:disabled {
   cursor: default;
   opacity: 0.55;
 }
-.count-pill.is-alert {
+.count-tap.is-alert {
   border-color: color-mix(in srgb, var(--red) 40%, var(--line));
   background: var(--red-bg);
   color: var(--red-ink);
 }
-.count-pill.is-alert .count-pill-n {
+.count-tap.is-alert .count-tap-n {
   color: var(--red-ink);
 }
 @media (prefers-reduced-motion: reduce) {
-  .count-pill:active:not(:disabled) {
+  .count-tap:active:not(:disabled) {
     transform: none;
   }
 }
