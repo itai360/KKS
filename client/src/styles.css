@@ -3853,6 +3853,21 @@ input::-webkit-date-and-time-value {
   border-bottom: none;
 }
 
+/* a row's tone as a thin first cell, and a card's as its edge */
+.table .tone-cell {
+  width: 6px;
+  padding: 0;
+}
+.table td.tone-cell {
+  background: var(--tone);
+}
+.tone-edge {
+  border-right: 4px solid var(--tone);
+}
+.task-head.tone-edge {
+  border-right-width: 6px;
+}
+
 .table tr.click {
   cursor: pointer;
 }

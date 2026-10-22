@@ -27,7 +27,7 @@ export function BackButton() {
   const back = () => (idx > 0 ? navigate(-1) : navigate(parentPath(location.pathname), { replace: true }));
   return (
     <button type="button" className="back-top no-print" aria-label="חזרה למסך הקודם" title="חזרה" onClick={back}>
-      <Icon name="arrowRight" size={19} />
+      <Icon name="chevronRight" size={24} />
     </button>
   );
 }

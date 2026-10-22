@@ -1362,7 +1362,7 @@ function Records({ records, cadet, all }: { records: CadetRecord[]; cadet: Cadet
   return (
     <div className="list">
       {records.map((r) => (
-        <div key={r.id} className={`card card-pad t-${r.formal ? 'red' : KIND_TONE[r.kind]}`} style={{ borderRight: '4px solid var(--tone)', padding: 14 }}>
+        <div key={r.id} className={`card card-pad tone-edge t-${r.formal ? 'red' : KIND_TONE[r.kind]}`} style={{ padding: 14 }}>
           <div className="row wrap gap-6">
             <span className={`badge t-${KIND_TONE[r.kind]}`}>{RECORD_KIND_LABELS[r.kind]}</span>
             {r.formal && (

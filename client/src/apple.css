@@ -1,0 +1,1369 @@
+/*
+ * The app's look, built after Apple's Human Interface Guidelines: the system font, the system colours (light
+ * and dark), grouped content on a soft grey ground, translucent bars the page scrolls under, a tab bar on the
+ * phone, sheets that rise from below and controls sized for a thumb on the move. It sits over styles.css,
+ * which keeps the layout of each screen; everything that gives the screens their look is decided here.
+ */
+
+/* ---------------- colours and type ---------------- */
+
+:root {
+  /* grounds: the grey the content sits on, white for the content itself */
+  --paper: #f2f2f7;
+  --paper-2: #e5e5ea;
+  --card: #ffffff;
+  --card-2: #f2f2f7;
+  /* labels */
+  --ink: #000000;
+  --ink-2: #3c3c43;
+  --muted: #8a8a8e;
+  --faint: #c7c7cc;
+  /* separators */
+  --line: #e3e3e8;
+  --line-2: #d1d1d6;
+  --grid: transparent;
+  /* the side bar (a computer): a light material, the chosen screen in the tint */
+  --rail: rgba(246, 246, 248, 0.92);
+  --rail-2: rgba(118, 118, 128, 0.12);
+  --rail-ink: #000000;
+  --rail-muted: #8a8a8e;
+  --focus: #007aff;
+  /* the tint, and the fills of controls */
+  --tint: #007aff;
+  --tint-press: #0062cc;
+  --tint-bg: rgba(0, 122, 255, 0.12);
+  --fill: rgba(118, 118, 128, 0.12);
+  --fill-2: rgba(118, 118, 128, 0.2);
+  --thumb: #ffffff;
+  --material: rgba(249, 249, 249, 0.8);
+  --material-strong: rgba(249, 249, 249, 0.94);
+  --hud: rgba(30, 30, 32, 0.92);
+
+  --red: #ff3b30;
+  --red-bg: #ffe5e3;
+  --orange: #ff9500;
+  --orange-bg: #fff0db;
+  --yellow: #ffcc00;
+  --yellow-bg: #fff7d1;
+  --green: #34c759;
+  --green-bg: #e2f7e7;
+  --gray: #8e8e93;
+  --gray-bg: #efeff4;
+  --blue: #007aff;
+  --blue-bg: #e3efff;
+  --purple: #af52de;
+  --purple-bg: #f4e7fb;
+  /* the same tones dark enough for small text on white */
+  --red-ink: #d70015;
+  --orange-ink: #b25000;
+  --yellow-ink: #8a6a00;
+  --green-ink: #1f7a34;
+  --gray-ink: #636366;
+
+  --radius: 14px;
+  --radius-sm: 12px;
+  --shadow: none;
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Hebrew', 'Segoe UI', Roboto, 'Noto Sans Hebrew', 'Helvetica Neue', Arial, sans-serif;
+  --display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Hebrew', 'Segoe UI', Roboto, 'Noto Sans Hebrew', 'Helvetica Neue', Arial, sans-serif;
+  --mono: var(--font);
+  --rail-w: 260px;
+  --top-h: 56px;
+
+  --topbar-bg: var(--material);
+  --primary-hover: #0066d6;
+  --hover: rgba(0, 0, 0, 0.04);
+  --hover-2: rgba(0, 0, 0, 0.08);
+  --field: rgba(118, 118, 128, 0.12);
+  --field-ring: rgba(0, 122, 255, 0.25);
+  --board-col: rgba(229, 229, 234, 0.6);
+  --done-line: rgba(60, 60, 67, 0.3);
+  --event-bg: #dceaff;
+  --event-ink: #0a4fa6;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #000000;
+    --paper-2: #1c1c1e;
+    --card: #1c1c1e;
+    --card-2: #2c2c2e;
+    --ink: #ffffff;
+    --ink-2: #d1d1d6;
+    --muted: #98989f;
+    --faint: #48484a;
+    --line: #38383a;
+    --line-2: #48484a;
+    --rail: rgba(28, 28, 30, 0.92);
+    --rail-2: rgba(118, 118, 128, 0.24);
+    --rail-ink: #ffffff;
+    --rail-muted: #98989f;
+    --focus: #0a84ff;
+    --tint: #0a84ff;
+    --tint-press: #409cff;
+    --tint-bg: rgba(10, 132, 255, 0.2);
+    --fill: rgba(118, 118, 128, 0.24);
+    --fill-2: rgba(118, 118, 128, 0.32);
+    --thumb: #636366;
+    --material: rgba(22, 22, 24, 0.78);
+    --material-strong: rgba(28, 28, 30, 0.94);
+    --hud: rgba(58, 58, 60, 0.94);
+
+    --red: #ff453a;
+    --red-bg: #3b1714;
+    --orange: #ff9f0a;
+    --orange-bg: #3a2709;
+    --yellow: #ffd60a;
+    --yellow-bg: #373008;
+    --green: #30d158;
+    --green-bg: #10321a;
+    --gray: #8e8e93;
+    --gray-bg: #2c2c2e;
+    --blue: #0a84ff;
+    --blue-bg: #0b2a4b;
+    --purple: #bf5af2;
+    --purple-bg: #2f1940;
+    --red-ink: #ff6961;
+    --orange-ink: #ffb340;
+    --yellow-ink: #ffd426;
+    --green-ink: #4ae168;
+    --gray-ink: #aeaeb2;
+
+    --shadow: none;
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
+    --topbar-bg: var(--material);
+    --primary-hover: #409cff;
+    --hover: rgba(255, 255, 255, 0.05);
+    --hover-2: rgba(255, 255, 255, 0.1);
+    --field: rgba(118, 118, 128, 0.24);
+    --field-ring: rgba(10, 132, 255, 0.35);
+    --board-col: rgba(28, 28, 30, 0.8);
+    --done-line: rgba(235, 235, 245, 0.3);
+    --event-bg: #0b2a4b;
+    --event-ink: #9ccaff;
+    color-scheme: dark;
+  }
+}
+
+@media screen {
+  :root[data-theme='dark'] {
+    --paper: #000000;
+    --paper-2: #1c1c1e;
+    --card: #1c1c1e;
+    --card-2: #2c2c2e;
+    --ink: #ffffff;
+    --ink-2: #d1d1d6;
+    --muted: #98989f;
+    --faint: #48484a;
+    --line: #38383a;
+    --line-2: #48484a;
+    --rail: rgba(28, 28, 30, 0.92);
+    --rail-2: rgba(118, 118, 128, 0.24);
+    --rail-ink: #ffffff;
+    --rail-muted: #98989f;
+    --focus: #0a84ff;
+    --tint: #0a84ff;
+    --tint-press: #409cff;
+    --tint-bg: rgba(10, 132, 255, 0.2);
+    --fill: rgba(118, 118, 128, 0.24);
+    --fill-2: rgba(118, 118, 128, 0.32);
+    --thumb: #636366;
+    --material: rgba(22, 22, 24, 0.78);
+    --material-strong: rgba(28, 28, 30, 0.94);
+    --hud: rgba(58, 58, 60, 0.94);
+
+    --red: #ff453a;
+    --red-bg: #3b1714;
+    --orange: #ff9f0a;
+    --orange-bg: #3a2709;
+    --yellow: #ffd60a;
+    --yellow-bg: #373008;
+    --green: #30d158;
+    --green-bg: #10321a;
+    --gray: #8e8e93;
+    --gray-bg: #2c2c2e;
+    --blue: #0a84ff;
+    --blue-bg: #0b2a4b;
+    --purple: #bf5af2;
+    --purple-bg: #2f1940;
+    --red-ink: #ff6961;
+    --orange-ink: #ffb340;
+    --yellow-ink: #ffd426;
+    --green-ink: #4ae168;
+    --gray-ink: #aeaeb2;
+
+    --shadow: none;
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
+    --topbar-bg: var(--material);
+    --primary-hover: #409cff;
+    --hover: rgba(255, 255, 255, 0.05);
+    --hover-2: rgba(255, 255, 255, 0.1);
+    --field: rgba(118, 118, 128, 0.24);
+    --field-ring: rgba(10, 132, 255, 0.35);
+    --board-col: rgba(28, 28, 30, 0.8);
+    --done-line: rgba(235, 235, 245, 0.3);
+    --event-bg: #0b2a4b;
+    --event-ink: #9ccaff;
+    color-scheme: dark;
+  }
+}
+
+/* ---------------- the ground and the text ---------------- */
+
+body {
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  background: var(--paper);
+  -webkit-tap-highlight-color: transparent;
+}
+::selection {
+  background: color-mix(in srgb, var(--tint) 28%, transparent);
+}
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.main {
+  background: var(--paper);
+  background-image: none;
+}
+.boot {
+  background: var(--paper);
+}
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+.mono,
+.deadline,
+.stat-num,
+.count {
+  font-variant-numeric: tabular-nums;
+}
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.01em;
+}
+
+/* the large title (a screen's name) - tight, heavy, the system's display face */
+.page-title {
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.022em;
+}
+.eyebrow {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.page-sub {
+  font-size: 15px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.page {
+  padding: 22px 32px 96px;
+}
+.page-head {
+  margin-bottom: 20px;
+  align-items: flex-end;
+}
+.section-title h2 {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+/* a list's section heading, as in Settings: small, grey, just above its group */
+.group-title {
+  margin: 22px 0 7px;
+  padding-inline: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.group-title .n {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--faint);
+}
+.group-title .line {
+  display: none;
+}
+.label-caps {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.empty .big,
+.dq-big,
+.plan-kpis b,
+.eval-table caption,
+.doc h1 {
+  font-family: var(--display);
+  letter-spacing: -0.02em;
+}
+.week-num {
+  font-family: var(--display);
+  font-size: 44px;
+  letter-spacing: -0.03em;
+}
+.brief-title {
+  font-family: var(--display);
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+.brief-num b {
+  font-family: var(--display);
+  font-size: 40px;
+  letter-spacing: -0.03em;
+}
+.ring span {
+  font-family: var(--font);
+  letter-spacing: -0.02em;
+}
+
+/* ---------------- the side bar (a computer) ---------------- */
+
+.rail {
+  top: 0;
+  margin: 0;
+  height: 100vh;
+  height: 100dvh;
+  border-radius: 0;
+  background: var(--rail);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  border-inline-end: 0.5px solid var(--line-2);
+  box-shadow: none;
+  color: var(--rail-ink);
+  padding: 16px 10px 12px;
+}
+.app {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+}
+/* the app's icon: a rounded square in the tint, the course's letters in white */
+.brand-mark {
+  font-family: var(--display);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 80%, #fff) 0%, var(--tint) 100%);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.brand-name {
+  color: var(--rail-ink);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.brand-sub {
+  color: var(--rail-muted);
+}
+.rail-link {
+  color: var(--rail-ink);
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.rail-link svg {
+  color: var(--tint);
+}
+@media (hover: hover) {
+  .rail-link:hover {
+    background: var(--rail-2);
+    color: var(--rail-ink);
+  }
+}
+.rail-link.active {
+  background: var(--tint);
+  color: #fff;
+}
+.rail-link.active svg {
+  color: #fff;
+}
+.rail-link .count {
+  background: var(--fill);
+  color: var(--muted);
+}
+.rail-link.active .count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+.rail-group-head {
+  color: var(--rail-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.rail-group-head > svg:first-child {
+  color: var(--rail-muted);
+}
+@media (hover: hover) {
+  .rail-group-head:hover {
+    background: transparent;
+    color: var(--rail-ink);
+  }
+}
+.rail-group.open .rail-group-head {
+  color: var(--rail-ink);
+}
+.rail-foot {
+  border-top: 0.5px solid var(--line-2);
+}
+.rail .avatar,
+.avatar {
+  background: linear-gradient(180deg, #a5a5aa, #86868b);
+  color: #fff;
+  font-weight: 600;
+}
+.rail-toggle {
+  color: var(--rail-muted);
+}
+@media (hover: hover) {
+  .rail-toggle:hover {
+    background: var(--rail-2);
+    color: var(--rail-ink);
+  }
+}
+
+/* ---------------- the top bar: a material the page scrolls under ---------------- */
+
+.topbar {
+  height: var(--top-h);
+  background: var(--material);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  backdrop-filter: blur(24px) saturate(1.8);
+  padding: 0 24px;
+}
+html[data-scrolled] .topbar {
+  border-bottom-color: var(--line-2);
+  border-bottom-width: 0.5px;
+  box-shadow: none;
+}
+.top-brand .brand-mark {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 80%, #fff) 0%, var(--tint) 100%);
+  color: #fff;
+  border-radius: 9px;
+  font-size: 14px;
+  padding: 3px 7px 0;
+}
+.search input {
+  height: 36px;
+  border: none;
+  background: var(--fill);
+  border-radius: 10px;
+  font-size: 16px;
+}
+.search input:focus {
+  background: var(--fill-2);
+  box-shadow: none;
+}
+.icon-btn {
+  color: var(--tint);
+  border-radius: 10px;
+}
+@media (hover: hover) {
+  .icon-btn:hover {
+    background: var(--fill);
+    border-color: transparent;
+  }
+}
+.bell .count {
+  background: var(--red);
+  border-color: var(--material-strong);
+}
+.live.on::before {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent);
+}
+
+/* ---------------- content groups ---------------- */
+
+.card {
+  background: var(--card);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+.card-head {
+  border-bottom: 0.5px solid var(--line);
+  padding: 13px 16px;
+}
+.card-head h2,
+.card-head h3 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.card-head > svg,
+.card-head .dashboard-section-icon svg {
+  color: var(--tint);
+}
+.card-body {
+  padding: 13px 16px 16px;
+}
+.card-pad {
+  padding: 16px;
+}
+
+/* ---------------- buttons ---------------- */
+
+/* the default: a grey capsule with the label in the tint */
+.btn {
+  height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--tint);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition:
+    background 0.15s,
+    transform 0.1s ease-out,
+    opacity 0.15s;
+}
+@media (hover: hover) {
+  .btn:hover {
+    background: var(--fill-2);
+    border-color: transparent;
+  }
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+.btn-primary {
+  background: var(--tint);
+  border-color: var(--tint);
+  color: #fff;
+}
+@media (hover: hover) {
+  .btn-primary:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--tint);
+}
+@media (hover: hover) {
+  .btn-ghost:hover {
+    background: var(--fill);
+  }
+}
+.btn-danger {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red-ink);
+  border: none;
+}
+.btn-sm {
+  height: 32px;
+  padding: 0 11px;
+  font-size: 14px;
+  border-radius: 9px;
+}
+.btn-lg {
+  height: 50px;
+  font-size: 17px;
+  border-radius: 12px;
+}
+.link-btn {
+  color: var(--tint);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+/* ---------------- fields ---------------- */
+
+.input,
+.select,
+.textarea {
+  border: 1px solid transparent;
+  background: var(--field);
+  border-radius: 10px;
+  height: 42px;
+  font-size: 16px;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.textarea {
+  height: auto;
+  padding-block: 10px;
+  line-height: 1.45;
+}
+.input:focus,
+.select:focus,
+.textarea:focus,
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: none;
+  background: var(--card);
+  border-color: var(--tint);
+  box-shadow: 0 0 0 3px var(--field-ring);
+}
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--muted);
+}
+.field > span:first-child,
+.field > label:first-child {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.check input,
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--tint);
+}
+
+/* ---------------- segmented controls, tabs, chips, badges ---------------- */
+
+.seg {
+  background: var(--fill);
+  border-radius: 9px;
+  padding: 2px;
+  gap: 0;
+}
+.seg button {
+  height: 30px;
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.seg button svg {
+  color: inherit;
+}
+.seg button.on {
+  background: var(--thumb);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.12),
+    0 3px 1px rgba(0, 0, 0, 0.04);
+}
+
+/* its sliding thumb: white in the light, a lighter grey in the dark */
+.seg-pill {
+  border-radius: 7px;
+  background: var(--thumb);
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.12),
+    0 3px 1px rgba(0, 0, 0, 0.04);
+}
+
+/* the tabs of a screen: one segmented control, its thumb sliding to the chosen one */
+.tabs {
+  border-bottom: none;
+  background: var(--fill);
+  border-radius: 10px;
+  padding: 2px;
+  gap: 0;
+  width: fit-content;
+  max-width: 100%;
+}
+.tab {
+  position: relative;
+  z-index: 1;
+  border: none;
+  border-radius: 8px;
+  margin: 0;
+  padding: 6px 13px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.tab.on {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: transparent;
+}
+.tabs:not(.has-ind) .tab.on {
+  background: var(--thumb);
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.12),
+    0 3px 1px rgba(0, 0, 0, 0.04);
+}
+.tabs.has-ind::after {
+  top: 2px;
+  bottom: 2px;
+  height: auto;
+  border-radius: 8px;
+  background: var(--thumb);
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.12),
+    0 3px 1px rgba(0, 0, 0, 0.04);
+  z-index: 0;
+}
+.tab .n {
+  color: var(--muted);
+}
+
+.chip {
+  height: 32px;
+  padding: 0 13px;
+  border: none;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+@media (hover: hover) {
+  .chip:hover {
+    background: var(--fill-2);
+  }
+}
+.chip.on {
+  background: var(--tint);
+  border-color: var(--tint);
+  color: #fff;
+}
+.chip.on.t-red {
+  background: var(--red);
+  border-color: var(--red);
+}
+.chip-sm {
+  height: 28px;
+  font-size: 13px;
+}
+
+.badge {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--fill);
+  color: var(--ink-2);
+}
+
+/* ---------------- lists: one rounded group, a hairline between rows (as in Settings and Reminders) ---------------- */
+
+.list {
+  gap: 0;
+}
+.task-row {
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  background: var(--card);
+  padding: 11px 14px;
+  min-height: 52px;
+}
+.list .task-row {
+  border-radius: 0;
+}
+.list > :first-child,
+.list > :first-child .task-row,
+.list > .task-row:first-child {
+  border-start-start-radius: var(--radius-sm);
+  border-start-end-radius: var(--radius-sm);
+}
+.list > :last-child,
+.list > :last-child .task-row,
+.list > .task-row:last-child {
+  border-end-start-radius: var(--radius-sm);
+  border-end-end-radius: var(--radius-sm);
+}
+/* the hairline begins after the round button, like the system's lists */
+.list > :not(:first-child) .task-row,
+.list > .task-row:not(:first-child) {
+  background-image: linear-gradient(var(--line), var(--line));
+  background-repeat: no-repeat;
+  background-position: top left;
+  background-size: calc(100% - 52px) 0.5px;
+}
+.list > .swipe-wrap.is-removing {
+  margin-bottom: 0;
+}
+@media (hover: hover) {
+  .task-row:hover {
+    transform: none;
+    box-shadow: none;
+    background-color: color-mix(in srgb, var(--card) 96%, var(--ink));
+  }
+}
+.task-row:active {
+  background-color: color-mix(in srgb, var(--card) 92%, var(--ink));
+}
+.task-title {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+}
+.task-meta {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.task-meta .deadline {
+  font-family: var(--font);
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.task-row.done .task-title {
+  color: var(--muted);
+}
+
+/* the round button of Reminders: an outline, filled in the tint once done */
+.task-check {
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--faint);
+  background: transparent;
+}
+@media (hover: hover) {
+  .task-check:hover {
+    border-color: var(--tint);
+  }
+}
+.task-check.checked,
+.task-row.done .task-check {
+  background: var(--tint);
+  border-color: var(--tint);
+  color: #fff;
+}
+
+/* ---------------- numbers at a glance ---------------- */
+
+.stat {
+  border: none;
+  border-radius: var(--radius);
+  background: var(--card);
+}
+@media (hover: hover) {
+  .stat:hover {
+    transform: none;
+    box-shadow: none;
+    background: color-mix(in srgb, var(--card) 96%, var(--ink));
+  }
+}
+.stat-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.stat-num,
+.dashboard-stats .stat-num {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.stat-heading > svg {
+  color: var(--tint);
+}
+.stat.alert,
+.dashboard-stats .stat.alert {
+  background: var(--card);
+  border: none;
+}
+.stat.alert .stat-num,
+.stat.alert .stat-label,
+.dashboard-stats .stat.alert .stat-heading > svg {
+  color: var(--red);
+}
+.count-pill {
+  border: none;
+  background: var(--card);
+  color: var(--ink-2);
+}
+.count-pill.is-alert {
+  background: var(--card);
+  color: var(--red-ink);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--red) 55%, transparent);
+}
+.count-pill.is-alert .count-pill-n {
+  color: var(--red);
+}
+.mini-bar,
+.bar {
+  background: var(--fill);
+}
+
+/* ---------------- sheets and dialogs ---------------- */
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, calc(0.32 * var(--scrim, 1)));
+}
+.modal {
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+}
+.modal-head {
+  padding: 14px 18px;
+}
+.modal-head h2,
+.modal-head h3,
+.modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.modal-foot {
+  border-top: 0.5px solid var(--line);
+  background: var(--card);
+}
+
+/* the "+" menu: an action sheet of the system - one material group, a hairline between its actions */
+.plus-scrim {
+  background: rgba(0, 0, 0, 0.25);
+}
+.plus-menu {
+  gap: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--material-strong);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow: var(--shadow-lg);
+  animation: apple-pop 0.32s var(--spring) both;
+  transform-origin: 50% 100%;
+}
+.plus-menu button {
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+  padding: 12px 16px;
+  animation: none;
+}
+.plus-menu button + button {
+  box-shadow: inset 0 0.5px 0 var(--line-2);
+}
+.plus-menu button:active {
+  transform: none;
+  background: var(--hover-2);
+}
+.plus-menu-icon {
+  background: var(--tint-bg);
+  color: var(--tint);
+}
+.plus-menu-sub {
+  color: var(--muted);
+}
+@keyframes apple-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.92);
+  }
+}
+
+/* messages: the system's banner - dark material, rounded, no coloured edge */
+.toast {
+  background: var(--hud);
+  color: #fff;
+  border-right: none;
+  border-radius: 14px;
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow: var(--shadow-lg);
+}
+
+.empty {
+  color: var(--muted);
+}
+.kv dt {
+  color: var(--muted);
+  font-weight: 500;
+}
+.info-box {
+  background: var(--tint-bg);
+  border: none;
+  border-radius: 12px;
+  color: var(--ink);
+}
+
+/* ---------------- no coloured edges: the state is in the words and a small dot ---------------- */
+
+.tone-edge,
+.task-head.tone-edge {
+  border-right: 0;
+}
+.table .tone-cell,
+.table td.tone-cell {
+  width: 0;
+  padding: 0;
+  background: none;
+}
+.attn-bar {
+  width: 8px;
+  height: 8px;
+  min-height: 0;
+  border-radius: 50%;
+  align-self: center;
+}
+.dashboard-stats .stat.alert {
+  box-shadow: none;
+}
+.announce,
+.dform-intro,
+.dsec-lessons {
+  border-top: 0;
+}
+.announce-pin,
+.next-up {
+  border-inline-start: 0;
+}
+.ladder-hint {
+  border-right: 0;
+}
+.setup-nudge {
+  border-inline-start: 0;
+}
+
+/* an empty list: a bold, quiet line - as the system's empty states */
+.empty .big {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink);
+}
+/* days with nothing in the calendar: a grey row, not a dashed frame */
+.agenda-gap {
+  border: none;
+  background: var(--fill);
+}
+
+/* a quiet card where the old one had a frame */
+.dashboard-command-details {
+  border: none;
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.qa-field {
+  border: none;
+  background: var(--fill);
+  box-shadow: none;
+}
+.qa-field:focus-within {
+  border: none;
+  background: var(--card);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--tint) 35%, transparent);
+}
+.qa-chip.soft {
+  border: none;
+  background: var(--fill);
+}
+
+/* a badge is never a frame: a soft fill, its words in their colour */
+.badge.badge-outline {
+  border: 0;
+  background: var(--tone-bg, var(--fill));
+  box-shadow: none;
+}
+.count-pill.is-alert {
+  background: color-mix(in srgb, var(--red) 12%, var(--card));
+  box-shadow: none;
+}
+
+/* "done" folded at the end of a list: a grey capsule row, not a dashed frame */
+.done-drawer-head {
+  border: none;
+  background: var(--fill);
+}
+@media (hover: hover) {
+  .done-drawer-head:hover {
+    background: color-mix(in srgb, var(--ink) 9%, transparent);
+    color: var(--ink);
+  }
+}
+
+/* progress rings in the tint, their track a grey fill that shows in the dark too */
+.ring {
+  background: conic-gradient(var(--tone, var(--tint)) calc(var(--p) * 1%), var(--fill) 0);
+}
+
+/* the calendar's today: a trace of the tint */
+.cal-col.today {
+  background-color: color-mix(in srgb, var(--tint) 5%, transparent);
+}
+
+/* check boxes and switches in the tint */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--tint);
+}
+
+/* back: the system's chevron in the tint - no circle, no frame */
+.back-top,
+.modal-back {
+  border: none;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  color: var(--tint);
+}
+@media (hover: hover) {
+  .back-top:hover,
+  .modal-back:hover {
+    background: var(--fill);
+  }
+}
+.back-top svg,
+.modal-back svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.4;
+}
+
+/* the computer's "+": a round button in the tint */
+.top-plus {
+  background: var(--tint);
+  color: #fff;
+  box-shadow: none;
+}
+@media (hover: hover) {
+  .top-plus:hover {
+    background: color-mix(in srgb, var(--tint) 88%, #000);
+  }
+}
+
+/* ---------------- signing in: the app's icon, its name, and the two fields ---------------- */
+
+.login {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  justify-items: center;
+  gap: 28px;
+  min-height: 100dvh;
+  padding: 48px 20px calc(48px + env(safe-area-inset-bottom));
+  background: var(--paper);
+}
+.login-art {
+  min-height: 0;
+  padding: 0;
+  gap: 16px;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+  background: none;
+  color: var(--ink);
+  overflow: visible;
+}
+.login-art::before,
+.login-principles {
+  display: none;
+}
+.login-symbol {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  border-radius: 21px;
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 72%, #fff), var(--tint));
+  box-shadow: 0 12px 28px -14px color-mix(in srgb, var(--tint) 80%, transparent);
+}
+.login-tag {
+  max-width: 330px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.login-tag::first-line {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.login-form {
+  width: 100%;
+  max-width: 380px;
+  padding: 0;
+}
+.login-card h1 {
+  font-family: var(--display);
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+.login-card h1 + p {
+  text-align: center;
+}
+
+/* ---------------- the phone ---------------- */
+
+@media (max-width: 860px) {
+  body {
+    font-size: 16px;
+  }
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .page {
+    padding: 8px 16px calc(108px + env(safe-area-inset-bottom));
+  }
+  .page-title {
+    font-size: 32px;
+  }
+  .page-sub {
+    font-size: 15px;
+  }
+  .topbar {
+    padding: 0 12px;
+    height: 52px;
+  }
+  .card-head {
+    padding: 12px 14px;
+  }
+  .card-body {
+    padding: 12px 14px 14px;
+  }
+  .btn {
+    height: 44px;
+    font-size: 16px;
+    border-radius: 12px;
+  }
+  .btn-sm {
+    height: 36px;
+    font-size: 15px;
+    border-radius: 10px;
+  }
+  .input,
+  .select {
+    height: 46px;
+  }
+  .task-row {
+    padding: 12px 14px 12px 12px;
+    min-height: 56px;
+  }
+  .task-title {
+    font-size: 17px;
+  }
+
+  /* the tab bar of the system: the width of the screen, a material, the chosen tab in the tint */
+  .bottom-nav,
+  .bottom-nav.compact {
+    inset-inline: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 4px 6px calc(2px + env(safe-area-inset-bottom));
+    border-radius: 0;
+    background: var(--material-strong);
+    -webkit-backdrop-filter: blur(30px) saturate(1.8);
+    backdrop-filter: blur(30px) saturate(1.8);
+    border-top: 0.5px solid var(--line-2);
+    box-shadow: none;
+  }
+  .nav-ind {
+    display: none;
+  }
+  .bottom-nav a,
+  .bottom-nav button,
+  .bottom-nav.compact :is(a, button) {
+    min-height: 50px;
+    padding: 4px 0 2px;
+    gap: 3px;
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .bottom-nav.compact .nav-label {
+    height: 1.5em;
+    opacity: 1;
+  }
+  .bottom-nav svg {
+    width: 25px;
+    height: 25px;
+  }
+  .bottom-nav .active {
+    color: var(--tint);
+  }
+  .bottom-nav .active svg {
+    transform: none;
+  }
+  .bottom-nav .plus,
+  .bottom-nav.compact .plus {
+    width: 44px;
+    height: 44px;
+    background: var(--tint);
+    color: #fff;
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--tint) 35%, transparent);
+  }
+  .bottom-nav.compact .plus svg {
+    scale: 1;
+  }
+  .bottom-nav .count {
+    background: var(--red);
+  }
+  .plus-menu {
+    bottom: calc(env(safe-area-inset-bottom) + 70px);
+    width: min(340px, calc(100vw - 24px));
+  }
+  .toasts {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  /* a sheet rising from below, its grabber on top */
+  .modal {
+    border-radius: 14px 14px 0 0;
+    background: var(--card);
+  }
+}
+
+/* ---------------- the user's own settings ---------------- */
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --material: var(--paper);
+    --material-strong: var(--card);
+    --rail: var(--card);
+  }
+  .topbar,
+  .rail,
+  .bottom-nav,
+  .plus-menu,
+  .toast {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --line: #8e8e93;
+    --muted: #3c3c43;
+  }
+  .card,
+  .task-row {
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plus-menu {
+    animation: plus-fade 0.18s ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+}

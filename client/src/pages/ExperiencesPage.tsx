@@ -218,7 +218,7 @@ export function ExperienceCard({ x, compact, leaving }: { x: Experience; compact
   const p = PHASE[x.phase];
   return (
     <SwipeRow itemId={x.id} label={`${x.role} - ${x.cadetName}`} leaving={leaving}>
-    <div className={`card card-pad t-${p.tone}${justDone ? ' just-cleared' : ''}`} style={{ borderRight: '4px solid var(--tone)', padding: compact ? 12 : 16 }}>
+    <div className={`card card-pad tone-edge t-${p.tone}${justDone ? ' just-cleared' : ''}`} style={{ padding: compact ? 12 : 16 }}>
       <div className="row wrap gap-6">
         {x.canEdit && <BulkCheck id={x.id} />}
         <span className={`badge t-${p.tone}`}>{p.label}</span>

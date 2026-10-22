@@ -85,7 +85,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
         )}
       </div>
 
-      <div className={`card card-pad t-${t.tone} task-head${justDone ? ' just-done' : ''}`} style={{ borderRight: '6px solid var(--tone)', marginBottom: 16 }}>
+      <div className={`card card-pad t-${t.tone} task-head tone-edge${justDone ? ' just-done' : ''}`} style={{ marginBottom: 16 }}>
         <div className="row row-top wrap">
           <div className="grow">
             <div className="row gap-6 wrap mb-12">

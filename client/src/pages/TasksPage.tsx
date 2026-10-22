@@ -255,7 +255,7 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
       <table className="table tasks-table">
         <thead>
           <tr>
-            <th style={{ width: 6, padding: 0 }} />
+            <th className="tone-cell" />
             <th>משימה</th>
             {th('owner', 'אחראי')}
             {th('group', 'קבוצה')}
@@ -293,7 +293,7 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
       onPointerEnter={() => prefetchTask(t.id)}
       onFocus={() => prefetchTask(t.id)}
     >
-      <td style={{ padding: 0, width: 6, background: 'var(--tone)' }} />
+      <td className="tone-cell" />
       <td className="tasks-table-title">
         <div className="strong row gap-6" style={{ textDecoration: tick.done ? 'line-through' : undefined }}>
           {bulk?.active ? <BulkCheck id={t.id} /> : <TaskCheck task={t} tick={tick} small />}

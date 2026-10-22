@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import '../client/src/styles.css';
+import '../client/src/apple.css';
 import { AppShell } from '../client/src/App';
 import { applyTheme } from '../client/src/lib/theme';
 import { boot } from './bridge';
@@ -29,7 +30,7 @@ boot()
     console.error(e);
     root.innerHTML = '';
     const box = document.createElement('div');
-    box.style.cssText = 'max-width:520px;margin:15vh auto;padding:0 16px;font-family:"IBM Plex Sans Hebrew",system-ui,sans-serif;text-align:center';
+    box.style.cssText = 'max-width:520px;margin:15vh auto;padding:0 16px;font-family:-apple-system,system-ui,sans-serif;text-align:center';
     box.innerHTML = '<h2 style="margin:0 0 8px">ההדגמה לא נטענה</h2><p style="margin:0">רעננו את הדף. אם זה חוזר, ייתכן שהדפדפן חוסם סקריפטים חיצוניים.</p>';
     const detail = document.createElement('p');
     detail.style.cssText = 'opacity:.6;font-size:12px;direction:ltr';
