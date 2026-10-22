@@ -21,6 +21,7 @@ import { BulkCheck, bulkClick, BulkScope, SwipeRow, useBulk } from './Bulk';
 import { CheckMark } from './CheckMark';
 import { Icon } from './Icon';
 import { Sheet, usePhonePicker } from './pickers';
+import { PushBellOffer } from './PushOffer';
 import { useToast } from './Toasts';
 import { Empty, openable, Seg } from './ui';
 
@@ -256,6 +257,7 @@ function PanelBody({ onClose, only, tools, inSheet }: { onClose: () => void; onl
   );
   const foot = (
     <div className="notif-foot">
+      <PushBellOffer onNavigate={onClose} />
       <Link to="/notifications" className="btn btn-ghost btn-sm" onClick={onClose}>
         לכל ההתראות <Icon name="chevronLeft" size={15} />
       </Link>

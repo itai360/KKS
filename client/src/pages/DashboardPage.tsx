@@ -11,7 +11,7 @@ import { Decided, useDecision } from '../components/Decision';
 import { DisciplineCard } from '../components/DisciplineCard';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
-import { InstallNudge } from '../components/InstallApp';
+import { PhoneNudge } from '../components/InstallApp';
 import { WeeklyCard } from '../components/WeeklyCard';
 import { useNewTask } from '../components/NewTask';
 import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
@@ -68,7 +68,7 @@ export function DashboardPage() {
         <Link to="/team"><Icon name="users" size={16} /> אנשי הסגל</Link>
         <Link to="/weeks"><Icon name="layers" size={16} /> שבועות הקורס</Link>
       </nav>
-      <InstallNudge />
+      <PhoneNudge />
       <ErrorBox error={error} />
       {error && (
         <button className="btn mb-12" onClick={() => void reload()}>

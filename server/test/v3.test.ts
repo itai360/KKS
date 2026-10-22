@@ -375,7 +375,7 @@ describe('documents (section 31)', () => {
 });
 
 describe('web push', () => {
-  const sent: { target: PushTarget; payload: { title: string; link: string } }[] = [];
+  const sent: { target: PushTarget; payload: { title: string; link: string; category: string } }[] = [];
   let status = 201;
   beforeEach(() => {
     sent.length = 0;
@@ -400,16 +400,25 @@ describe('web push', () => {
     expect(sent[0].payload.link).toMatch(/^\/tasks\/\d+$/);
   });
 
-  it('does not push information-only notifications, and drops expired subscriptions', async () => {
+  it('pushes every notification - the updates too - and drops expired subscriptions', async () => {
     await c.cmd.post('/api/push/subscribe', sub);
     const id = await newTask(c.cmd, { title: 'x', ownerIds: [c.ids.s1], priority: 'high' });
-    await c.s1.post(`/api/tasks/${id}/transition`, { action: 'complete' }); // "info" to the commander
+    await c.s1.post(`/api/tasks/${id}/transition`, { action: 'complete' }); // an update ("info") to the commander
     await new Promise((r) => setTimeout(r, 20));
-    expect(sent).toHaveLength(0);
+    expect(sent.map((s) => s.payload.category)).toEqual(['info']);
     status = 410;
     const r = await c.cmd.post('/api/push/test');
     expect(r.body.sent).toBe(0);
     expect(db().get<{ n: number }>('SELECT count(*) AS n FROM push_subscriptions')!.n).toBe(0);
+  });
+
+  it('the commander sees who gets them on the phone; the staff do not', async () => {
+    await c.s1.post('/api/push/subscribe', sub);
+    const list = (await c.cmd.get('/api/users')).body as { id: number; pushDevices?: number }[];
+    expect(list.find((u) => u.id === c.ids.s1)?.pushDevices).toBe(1);
+    expect(list.find((u) => u.id === c.ids.s2)?.pushDevices).toBe(0);
+    const theirs = (await c.s2.get('/api/users')).body as { pushDevices?: number }[];
+    expect(theirs.every((u) => u.pushDevices === undefined)).toBe(true);
   });
 });
 

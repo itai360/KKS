@@ -89,6 +89,7 @@ import { copyPreviousCycleTasks, coursesOverview, previousCycleWeek, startNewCou
 import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
+import { changed } from './journal';
 import { MAX_PART_BYTES, MAX_TRANSCRIPT_CHARS, summarizeTalk, talkAiStatus, transcribePart } from './talkAi';
 import { TALK_TYPES } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
@@ -505,17 +506,20 @@ export function v3Router(): Router {
     keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(4).max(100) }),
   });
   r.get('/push/key', (req, res) => res.json({ publicKey: vapidPublicKey(), subscriptions: subscriptionCount(me(req).id) }));
+  // the commander's list of the staff shows who gets them on the phone: it follows at once
   r.post('/push/subscribe', (req, res) => {
     subscribe(me(req).id, subSchema.parse(req.body), String(req.headers['user-agent'] ?? ''));
+    changed('users');
     res.json({ subscriptions: subscriptionCount(me(req).id) });
   });
   r.post('/push/unsubscribe', (req, res) => {
     const { endpoint } = z.object({ endpoint: z.string().max(2000) }).parse(req.body);
     unsubscribe(me(req).id, endpoint);
+    changed('users');
     res.json({ subscriptions: subscriptionCount(me(req).id) });
   });
   r.post('/push/test', async (req, res) => {
-    const sent = await sendPush(me(req).id, { id: 0, title: 'התראת בדיקה', body: 'ההתראות לטלפון פועלות', link: '/notifications', category: 'action' }, true);
+    const sent = await sendPush(me(req).id, { id: 0, title: 'התראת בדיקה', body: 'ההתראות לטלפון פועלות', link: '/notifications', category: 'action' });
     res.json({ sent });
   });
 

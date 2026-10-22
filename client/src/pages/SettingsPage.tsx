@@ -25,7 +25,7 @@ import { useApi } from '../lib/useApi';
 import { useHashScroll } from '../lib/hashScroll';
 import { onThemeChange, setThemePref, themePref, type ThemePref } from '../lib/theme';
 import { GenerateWeeks } from './WeeksPage';
-import { currentSubscription, disablePush, enablePush, needsHomeScreen, pushSupported } from '../lib/push';
+import { turnPushOff, turnPushOn, usePushState } from '../lib/push';
 import { ask } from '../components/Confirm';
 import { TwoFactorSettings } from '../components/TwoFactor';
 import { STAFF_GROUP_RULE_LABELS, type StaffGroupDef } from '@shared/staffGroups';
@@ -295,6 +295,7 @@ function StaffCard() {
             <th>שם משתמש</th>
             <th>הרשאה</th>
             <th>טלפון</th>
+            <th>התראות לטלפון</th>
             <th />
           </tr>
         </thead>
@@ -320,6 +321,15 @@ function StaffCard() {
                 )}
               </td>
               <td className="mono small">{u.phone}</td>
+              <td>
+                {u.pushDevices ? (
+                  <span className="badge t-green" title={`פעיל ב-${u.pushDevices} ${u.pushDevices === 1 ? 'מכשיר' : 'מכשירים'}`}>
+                    <Icon name="bell" size={12} /> {u.pushDevices === 1 ? 'פעיל' : `${u.pushDevices} מכשירים`}
+                  </span>
+                ) : (
+                  <span className="tiny muted">לא הופעל</span>
+                )}
+              </td>
               <td>
                 <Icon name="edit" size={16} className="muted" />
               </td>
@@ -683,22 +693,16 @@ function PermissionsCard() {
 
 function BrowserNotificationsCard() {
   const toast = useToast();
-  const supported = !IS_DEMO && pushSupported();
-  const [state, setState] = useState<'loading' | 'on' | 'off' | 'denied'>('loading');
+  const { isCommander } = useSession();
+  const state = usePushState();
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!supported) return;
-    void currentSubscription().then((sub) => setState(Notification.permission === 'denied' ? 'denied' : sub ? 'on' : 'off'));
-  }, [supported]);
-  const act = async (fn: () => Promise<unknown>, ok: string, next: typeof state) => {
+  const act = async (fn: () => Promise<unknown>, ok: string) => {
     setBusy(true);
     try {
       await fn();
-      setState(next);
       toast({ title: ok, tone: 'green' });
     } catch (e) {
       toast({ title: (e as Error).message, tone: 'red' });
-      if (Notification.permission === 'denied') setState('denied');
     } finally {
       setBusy(false);
     }
@@ -710,39 +714,62 @@ function BrowserNotificationsCard() {
         <h3 className="grow">התראות לטלפון ולמחשב</h3>
         {state === 'on' && <span className="badge t-green">פעיל במכשיר הזה</span>}
       </div>
-      <div className="card-body col gap-6">
-        <p className="small">
-          התראה תגיע גם כשהאפליקציה סגורה: משימה חדשה, תזכורות לפני דד-ליין, איחורים, חסמים ובקשות שמחכות לך. עדכוני מידע נשארים בתוך המערכת.
-        </p>
+      <div className="card-body col gap-12">
+        <p className="small">כל התראה שמגיעה אליך במערכת מגיעה גם לטלפון, גם כשהאפליקציה סגורה: משימה חדשה, תזכורות לפני דד-ליין, איחורים, חסמים, בקשות שמחכות לך ועדכונים על מה שבאחריותך.</p>
         {IS_DEMO ? (
           <p className="small muted">בגרסת ההדגמה ההתראות מופיעות בתוך המערכת. התראות לטלפון פועלות במערכת המותקנת על שרת עם HTTPS.</p>
-        ) : !supported ? (
-          <p className="small muted">הדפדפן הזה לא תומך בהתראות. התראות ימשיכו להופיע בתוך המערכת.</p>
-        ) : needsHomeScreen() ? (
+        ) : state === 'install' ? (
           <div className="info-box">
             באייפון ההתראות מגיעות רק לאפליקציה שבמסך הבית: מתקינים אותה (ב<a href="#part-app">"אפליקציה בטלפון"</a> כאן למעלה), פותחים מהאייקון ומפעילים כאן את ההתראות.
           </div>
+        ) : state === 'unsupported' ? (
+          <p className="small muted">הדפדפן הזה לא תומך בהתראות. התראות ימשיכו להופיע בתוך המערכת.</p>
         ) : state === 'denied' ? (
-          <p className="small text-red">ההתראות חסומות בדפדפן. אפשרו אותן בהגדרות האתר (סמל המנעול ליד הכתובת) ונסו שוב.</p>
+          <p className="small text-red">ההתראות חסומות בדפדפן. אפשרו אותן בהגדרות האתר (סמל המנעול ליד הכתובת, או בהגדרות הטלפון - התראות) ונסו שוב.</p>
         ) : (
           <div className="row wrap gap-6">
             {state !== 'on' ? (
-              <button className="btn btn-primary" disabled={busy || state === 'loading'} onClick={() => void act(enablePush, 'ההתראות הופעלו במכשיר הזה', 'on')}>
-                הפעל התראות במכשיר הזה
+              <button className="btn btn-primary" disabled={busy || state === 'loading'} onClick={() => void act(() => turnPushOn({ test: true }), 'ההתראות הופעלו במכשיר הזה - נשלחה התראת בדיקה')}>
+                <Icon name="bell" /> הפעלת התראות במכשיר הזה
               </button>
             ) : (
               <>
-                <button className="btn" disabled={busy} onClick={() => void act(() => api.post('/api/push/test'), 'נשלחה התראת בדיקה', 'on')}>
-                  שלח התראת בדיקה
+                <button className="btn" disabled={busy} onClick={() => void act(() => api.post('/api/push/test'), 'נשלחה התראת בדיקה')}>
+                  שליחת התראת בדיקה
                 </button>
-                <button className="btn btn-ghost" disabled={busy} onClick={() => void act(disablePush, 'ההתראות כובו במכשיר הזה', 'off')}>
-                  כבה במכשיר הזה
+                <button className="btn btn-ghost" disabled={busy} onClick={() => void act(turnPushOff, 'ההתראות כובו במכשיר הזה')}>
+                  כיבוי במכשיר הזה
                 </button>
               </>
             )}
           </div>
         )}
+        {isCommander && !IS_DEMO && <StaffPushStatus />}
       </div>
+    </div>
+  );
+}
+
+/** the commander: who on the staff gets them on the phone, and who has not turned them on yet */
+function StaffPushStatus() {
+  const { data } = useApi<User[]>('/api/users?all=1', ['users']);
+  if (!data) return null;
+  const active = data.filter((u) => u.active);
+  const on = active.filter((u) => (u.pushDevices ?? 0) > 0);
+  const off = active.filter((u) => !u.pushDevices);
+  return (
+    <div className="push-staff col gap-6">
+      <div className="row gap-6 small">
+        <span className="strong grow">אצל הסגל</span>
+        <span className={`badge${off.length ? '' : ' t-green'}`}>
+          {on.length} מתוך {active.length} קיבלו התראות לטלפון
+        </span>
+      </div>
+      {off.length > 0 && (
+        <p className="tiny muted">
+          עוד לא הפעילו: {off.map((u) => u.displayName).join(', ')}. כשהם נכנסים מהטלפון, מסך הבית מציע להם להפעיל בלחיצה (באייפון - אחרי התקנת האפליקציה).
+        </p>
+      )}
     </div>
   );
 }

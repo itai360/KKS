@@ -1,7 +1,7 @@
-// Web Push: notifications reach the phone even when the app is closed.
+// Web Push: notifications reach the phone even when the app is closed - every one that comes to
+// someone in the app (a task, a reminder, an update), on each device they turned them on.
 // VAPID keys are generated on first use and kept in the database, so a deployment
-// needs no extra configuration. Only "action" and "exception" notifications are
-// pushed - information stays inside the app (section 74, not too many alerts).
+// needs no extra configuration.
 
 import webpush from 'web-push';
 import type { Notification } from '../../shared/types';
@@ -61,6 +61,11 @@ export function subscriptionCount(userId: number): number {
   return db().get<{ n: number }>('SELECT count(*) AS n FROM push_subscriptions WHERE user_id = ?', userId)!.n;
 }
 
+/** each person's devices with notifications on (the commander's list of the staff) */
+export function subscriptionCounts(): Map<number, number> {
+  return new Map(db().all<{ user_id: number; n: number }>('SELECT user_id, count(*) AS n FROM push_subscriptions GROUP BY user_id').map((r) => [r.user_id, r.n]));
+}
+
 const inFlight = new Set<Promise<number>>();
 
 /** Settles when the pushes sent so far are done (a serverless function must not stop before). */
@@ -68,15 +73,14 @@ export function pushesSettled(): Promise<unknown> {
   return Promise.allSettled([...inFlight]);
 }
 
-export function sendPush(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>, force = false): Promise<number> {
-  const p = deliver(userId, n, force);
+export function sendPush(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>): Promise<number> {
+  const p = deliver(userId, n);
   inFlight.add(p);
   void p.finally(() => inFlight.delete(p)).catch(() => undefined);
   return p;
 }
 
-async function deliver(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>, force: boolean): Promise<number> {
-  if (!force && n.category === 'info') return 0;
+async function deliver(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>): Promise<number> {
   // only to a browser's push service - never to an address of someone's choosing
   const subs = db()
     .all<{ endpoint: string; p256dh: string; auth: string }>('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', userId)

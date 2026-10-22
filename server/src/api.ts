@@ -66,6 +66,7 @@ import {
   shiftEventTasks,
   updateEvent,
 } from './schedule';
+import { subscriptionCounts } from './push';
 import { staffGroups } from './staffGroups';
 import { canEdit, canView, getTaskRow, isCommander, mustTaskRow, visibleTasks } from './taskRepo';
 import {
@@ -326,8 +327,10 @@ export function apiRouter(): Router {
   r.get('/users', (req, res) => {
     const all = req.query.all === '1' && isCommander(me(req));
     const rows = db().all<UserRow>(`SELECT * FROM users ${all ? '' : 'WHERE active = 1'} ORDER BY role, display_name`);
-    // who has two-step sign-in: the commander's business only
-    res.json(rows.map((r) => (isCommander(me(req)) ? { ...toUser(r), twoFactor: !!r.totp_secret } : toUser(r))));
+    // who has two-step sign-in, and on how many devices phone notifications: the commander's business only
+    if (!isCommander(me(req))) return void res.json(rows.map(toUser));
+    const devices = subscriptionCounts();
+    res.json(rows.map((r) => ({ ...toUser(r), twoFactor: !!r.totp_secret, pushDevices: devices.get(r.id) ?? 0 })));
   });
 
   const userSchema = z.object({

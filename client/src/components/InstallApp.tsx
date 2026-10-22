@@ -1,11 +1,13 @@
 // Installing the app on the phone (lib/install.ts): in the settings, a card that installs it or says how on
-// this device; on the home screen of a phone still in its browser, a short offer that can wait.
+// this device; on the home screen of a phone still in its browser, a short offer that can wait - and once
+// that is settled, the offer to turn phone notifications on (PushOffer.tsx).
 
 import { useState, type ReactNode } from 'react';
 import { IS_DEMO } from '../lib/demo';
 import { installApp, useInstallWay, type InstallWay } from '../lib/install';
 import { useMedia } from '../lib/media';
 import { Icon } from './Icon';
+import { PushNudge } from './PushOffer';
 import { useToast } from './Toasts';
 import { Modal } from './ui';
 
@@ -174,8 +176,9 @@ export function InstallCard() {
 const LATER_KEY = 'kks.installLater';
 const LATER_DAYS = 30;
 
-/** on the home screen of a phone still in its browser: a short offer, until installed - or asked to wait */
-export function InstallNudge() {
+/** on the home screen of a phone: the app to install, until installed or asked to wait - then the
+ *  notifications to turn on (one offer at a time) */
+export function PhoneNudge() {
   const way = useInstallWay();
   const touch = useMedia('(pointer: coarse)');
   const { busy, install } = useInstall();
@@ -188,7 +191,7 @@ export function InstallNudge() {
     }
   });
   // a computer offering to install is answered in the settings, not on the home screen
-  if (IS_DEMO || later || way === 'installed' || way === 'none' || (way === 'prompt' && !touch)) return null;
+  if (IS_DEMO || later || way === 'installed' || way === 'none' || (way === 'prompt' && !touch)) return <PushNudge />;
   const wait = () => {
     try {
       localStorage.setItem(LATER_KEY, String(Date.now() + LATER_DAYS * 86_400_000));

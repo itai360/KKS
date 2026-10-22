@@ -2997,6 +2997,34 @@ input::-webkit-date-and-time-value {
   color: var(--ink-2);
 }
 
+/* phone notifications to turn on: the home screen's offer, the bell's foot, the commander's view (components/PushOffer.tsx) */
+.push-nudge {
+  margin-bottom: 16px;
+  border-inline-start-color: var(--accent, var(--blue));
+}
+.push-nudge-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--accent-soft, var(--blue-bg));
+  color: var(--accent-ink, var(--blue));
+}
+.notif-foot:has(.notif-push) {
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.notif-push.btn {
+  color: var(--accent-ink, var(--blue));
+}
+.push-staff {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
 .install-steps {
   display: grid;
   gap: 10px;

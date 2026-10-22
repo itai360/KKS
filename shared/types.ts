@@ -38,6 +38,8 @@ export interface User {
   email: string;
   /** two-step sign-in is on (only for oneself, and in the commander's list of users) */
   twoFactor?: boolean;
+  /** on how many devices phone notifications are on (the commander's list of users) */
+  pushDevices?: number;
 }
 
 /** signing in: a session, or - with two-step sign-in - a ticket for the code step */
