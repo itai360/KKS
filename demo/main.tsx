@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router';
 import '../client/src/styles.css';
 import '../client/src/apple.css';
 import { AppShell } from '../client/src/App';
+import { watchKeyboard } from '../client/src/lib/keyboard';
 import { applyTheme } from '../client/src/lib/theme';
 import { boot } from './bridge';
 
@@ -15,6 +16,7 @@ window.confirm = () => true;
 
 const root = document.getElementById('root')!;
 applyTheme();
+watchKeyboard();
 
 boot()
   .then(() =>

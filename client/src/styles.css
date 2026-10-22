@@ -8287,6 +8287,32 @@ body:has(.app.rail-collapsed) .modal-back {
   }
 }
 
+/* a phone's keyboard up (lib/keyboard.ts): the dialog takes only the part of the screen still in sight,
+   its bottom right on the keyboard - not the whole screen with the keyboard over its lower half */
+html[data-kb] .modal-backdrop {
+  top: var(--vv-top, 0px);
+  bottom: auto;
+  height: var(--vv-h, 100%);
+}
+html[data-kb] .modal-backdrop .modal,
+html[data-kb] .modal-backdrop:has(.modal-back) .modal {
+  max-height: calc(var(--vv-h, 100dvh) - 8px);
+}
+/* the floating arrow would sit on the dialog's head: its own X and the pull down close it */
+html[data-kb] .modal-back {
+  display: none;
+}
+html[data-kb] .modal-body {
+  scroll-padding-bottom: 84px;
+}
+/* the bottom of the dialog is on the keyboard, not on the phone's edge */
+html[data-kb] .modal-foot {
+  padding-bottom: 12px;
+}
+html[data-kb] .fab-dock {
+  padding-bottom: 2px;
+}
+
 /* ---------- previous courses (pages/CoursesPage.tsx) ---------- */
 
 .course-card.current {

@@ -25,6 +25,7 @@ import { NotificationsPanel } from './Notifications';
 import { noteScreen, screenOf } from '../lib/frequent';
 import { bottomBarScreens } from '../lib/bottomBar';
 import { switchCourse } from '../lib/courses';
+import { isTypingField } from '../lib/keyboard';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 import { useMedia } from '../lib/media';
 import { usePullToRefresh } from '../lib/pullRefresh';
@@ -503,10 +504,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // of it would cover the very field being typed
   const [typingField, setTypingField] = useState(false);
   useEffect(() => {
-    const typed = (el: EventTarget | null) =>
-      el instanceof HTMLTextAreaElement ||
-      (el instanceof HTMLElement && el.isContentEditable) ||
-      (el instanceof HTMLInputElement && el.inputMode !== 'none' && !['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color'].includes(el.type));
+    const typed = isTypingField;
     const onIn = (e: FocusEvent) => setTypingField(typed(e.target));
     const onOut = (e: FocusEvent) => setTypingField(typed(e.relatedTarget));
     document.addEventListener('focusin', onIn);

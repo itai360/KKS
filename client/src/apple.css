@@ -1232,9 +1232,13 @@ input[type='radio'] {
   .page-sub {
     font-size: 15px;
   }
+  /* the bar keeps clear of the clock and the notch (and of the rounded corners sideways) */
+  :root {
+    --top-h: calc(52px + env(safe-area-inset-top, 0px));
+  }
   .topbar {
-    padding: 0 12px;
-    height: 52px;
+    height: var(--top-h);
+    padding: env(safe-area-inset-top, 0px) max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
   }
   .card-head {
     padding: 12px 14px;
