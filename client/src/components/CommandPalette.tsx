@@ -10,7 +10,6 @@ import { matchesSearch, searchKey } from '@shared/search';
 import type { SearchResults } from '@shared/types';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
-import { addMeetingPoint } from './MeetingPointAdd';
 import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
 import { api } from '../lib/api';
@@ -81,7 +80,6 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
         : []),
       { id: 'a:weeklyadd', group: 'פעולות', label: 'הוספה לשבועי - נושא, סגירה מקצועית או הערה ללו"ז', icon: 'weekly', run: () => addToWeekly() },
       { id: 'a:weeknote', group: 'פעולות', label: 'לתחקיר השבוע - לשימור, לשיפור או לקח', icon: 'lightbulb', run: () => addToWeekDebrief() },
-      { id: 'a:meetingpoint', group: 'פעולות', label: 'נקודה לישב"ס - משהו להעלות בישיבת הסגל', icon: 'message', run: () => addMeetingPoint() },
       { id: 'a:weeklynow', group: 'פעולות', label: 'השבועי הקרוב', icon: 'weekly', run: go('/weekly') },
       { id: 'a:weekly', group: 'פעולות', label: 'תחקיר שבועי חדש', icon: 'calendar', run: go('/debriefs?new=weekly') },
       { id: 'a:eventdebrief', group: 'פעולות', label: 'תחקיר מופע עצים חדש', icon: 'zap', run: go('/debriefs?new=event') },

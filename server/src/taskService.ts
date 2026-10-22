@@ -67,7 +67,6 @@ export const createTaskSchema = z.object({
   trackId: z.number().int().positive().nullable().optional(),
   eventId: z.number().int().positive().nullable().optional(),
   parentId: z.number().int().positive().nullable().optional(),
-  meetingId: z.number().int().positive().nullable().optional(),
   cadetId: z.number().int().positive().nullable().optional(),
   experienceId: z.number().int().positive().nullable().optional(),
   debriefId: z.number().int().positive().nullable().optional(),
@@ -181,9 +180,9 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
       const flags = reminderFlags(input.deadline);
       const id = db().run(
         `INSERT INTO tasks(title, description, owner_id, created_by, deadline, priority, status, domain, domain_note, week_id, track_id, event_id,
-           parent_id, group_id, meeting_id, recurring_rule_id, cadet_id, experience_id, debrief_id, requires_approval, visibility,
+           parent_id, group_id, recurring_rule_id, cadet_id, experience_id, debrief_id, requires_approval, visibility,
            reminded_24h, reminded_2h, overdue_notified, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         input.title,
         input.description,
         unit.owner,
@@ -197,7 +196,6 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
         input.eventId ?? null,
         input.parentId ?? null,
         groupId,
-        input.meetingId ?? null,
         opts.recurringRuleId ?? null,
         input.cadetId ?? null,
         input.experienceId ?? null,

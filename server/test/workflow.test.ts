@@ -346,16 +346,6 @@ describe('dashboard and reports', () => {
     expect(de.stillOpen.map((x: { title: string }) => x.title)).toEqual(['עוד היום']);
     expect(de.tomorrow.map((x: { title: string }) => x.title)).toEqual(['מחר']);
   });
-
-  it('staff meeting: tasks opened during the meeting appear in its summary (sections 68-69)', async () => {
-    const m = (await c.cmd.post('/api/meetings', { title: 'ישיבת סגל שבועית' })).body;
-    await newTask(c.cmd, { title: 'לבדוק הקדמת מטווח', ownerIds: [c.ids.s3], meetingId: m.id });
-    await c.cmd.patch(`/api/meetings/${m.id}`, { decisions: '- שינוי לו"ז\n- מפק"צ 2 אחראי על ניווט', followUps: 'אישור מדריך' });
-    const ended = (await c.cmd.post(`/api/meetings/${m.id}/end`)).body;
-    expect(ended.summary.newTasks.map((t: { title: string }) => t.title)).toEqual(['לבדוק הקדמת מטווח']);
-    expect(ended.summary.decisions).toEqual(['שינוי לו"ז', 'מפק"צ 2 אחראי על ניווט']);
-    expect(ended.summary.followUps).toEqual(['אישור מדריך']);
-  });
 });
 
 describe('housekeeping', () => {

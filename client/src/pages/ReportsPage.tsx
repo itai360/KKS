@@ -437,7 +437,7 @@ function DoneToday({ n }: { n: number }) {
 }
 
 export function ActivityPage() {
-  const { data, error, loading } = useApi<ActivityEntry[]>('/api/activity?limit=200', ['tasks', 'weeks', 'events', 'meetings']);
+  const { data, error, loading } = useApi<ActivityEntry[]>('/api/activity?limit=200', ['tasks', 'weeks', 'events']);
   const groups = new Map<string, ActivityEntry[]>();
   for (const a of data ?? []) {
     const k = fmtLongDate(dateKeyOf(a.createdAt));

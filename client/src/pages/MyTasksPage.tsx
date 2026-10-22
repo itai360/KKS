@@ -6,7 +6,6 @@ import { shortDate } from '@shared/dates';
 import type { MyTasksData, ScheduleEvent } from '@shared/types';
 import { UpNext } from '../components/Agenda';
 import { DisciplineCard } from '../components/DisciplineCard';
-import { DeadlineText } from '../components/Badges';
 import { PendingAnnouncements } from '../components/Announcements';
 import { Icon } from '../components/Icon';
 import { PhoneNudge } from '../components/InstallApp';
@@ -15,14 +14,13 @@ import { BulkToggle } from '../components/Bulk';
 import { DoneDrawer, revealDrawer } from '../components/DoneDrawer';
 import { GroupTaskRow, TaskBulkScope, TaskList, TaskRow, TaskSection } from '../components/TaskRow';
 import { CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
-import { fmtLongDate, fmtTime, todayKey } from '../lib/format';
+import { fmtLongDate, fmtTime, greetName, greeting, todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
-import './MyWork.css';
 
 export function MyTasksPage() {
-  const { user } = useSession();
+  const { user, isCommander } = useSession();
   const { data, error, loading } = useApi<MyTasksData>('/api/my', ['tasks', 'weeks']);
   const navigate = useNavigate();
   const newTask = useNewTask();
@@ -30,25 +28,24 @@ export function MyTasksPage() {
 
   const total = data ? data.overdue.length + data.today.length + data.important.length + data.week.length + data.later.length + data.waiting.length : 0;
 
-  const nextTask = data && (data.overdue[0] ?? data.today[0] ?? data.important[0] ?? data.week[0] ?? data.later[0]);
-
   const allTasks = data ? [...data.overdue, ...data.today, ...data.important, ...data.week, ...data.later, ...data.waiting, ...data.teamTasks] : [];
 
   return (
     <TaskBulkScope tasks={allTasks}>
-    <div className="page my-workspace">
+    <div className="page">
       <PageHead
-        eyebrow="מרחב העבודה / העבודה שלי"
-        title="העבודה שלי"
-        docTitle="העבודה שלי"
-        sub={`${user.displayName} · ${fmtLongDate(todayKey())}`}
+        eyebrow={fmtLongDate(todayKey())}
+        title={isCommander ? 'המשימות שלי' : `${greeting()}, ${greetName(user.displayName)}`}
+        docTitle={isCommander ? 'המשימות שלי' : 'דף הבית'}
+        sub="היום, באיחור, השבוע ובהמשך - מה שאתה צריך לעשות."
         actions={
           <>
+            <BulkToggle />
             <button className="btn" onClick={() => navigate('/day-end')}>
               <Icon name="moon" /> סיכום יום
             </button>
             <button className="btn btn-primary" onClick={() => newTask({ ownerIds: [user.id] })}>
-              <Icon name="plus" /> משימה חדשה
+              <Icon name="plus" /> משימה לעצמי
             </button>
           </>
         }
@@ -61,9 +58,11 @@ export function MyTasksPage() {
       ) : data ? (
         <div className="fade-in">
           <PendingAnnouncements spaced />
+          <TodayOnSchedule />
+          <DayProgress done={data.stats.doneToday} late={data.stats.overdue} today={data.stats.today} />
           {/* four zeros say nothing: with nothing open and nothing done today, the empty state says it */}
           {(total > 0 || data.stats.doneToday > 0) && (
-            <div className="my-work-stats">
+            <div className="stats">
               <MiniStat n={data.stats.today} label="היום" target="group-today" />
               <MiniStat n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
               <MiniStat n={data.stats.week} label="השבוע" target="group-week" />
@@ -71,32 +70,16 @@ export function MyTasksPage() {
             </div>
           )}
 
-          {nextTask && (
-            <button className="my-work-next" onClick={() => navigate(`/tasks/${nextTask.id}`)}>
-              <span className="my-work-next-label"><Icon name="target" size={17} /> הבא לטיפול</span>
-              <strong>{nextTask.title}</strong>
-              <span className="my-work-next-date"><DeadlineText task={nextTask} /></span>
-              <Icon name="chevronLeft" size={17} />
-            </button>
-          )}
-          <DayProgress done={data.stats.doneToday} late={data.stats.overdue} today={data.stats.today} />
-          <div className="split my-work-split">
-            <div className="my-work-task-column">
-              <div className="my-work-list-heading">
-                <div><Icon name="tasks" size={17} /><h2>המשימות שלי</h2><span className="my-work-count">{total}</span></div>
-                <BulkToggle />
-              </div>
+          <div className="split mt-16">
+            <div>
               {total === 0 && (
                 <Empty
                   title="אין לך משימות פתוחות"
                   text={
                     <>
-                      משימות שמוקצות אליכם יופיעו כאן, לפי מועד הביצוע.
+                      כל הכבוד. משימות חדשות יופיעו כאן ברגע שייפתחו.
                       <span className="empty-actions">
-                        <button className="btn btn-primary" onClick={() => newTask({ ownerIds: [user.id] })}>
-                          <Icon name="plus" size={16} /> משימה חדשה לעצמי
-                        </button>
-                        <button className="btn btn-ghost" onClick={() => navigate('/tasks')}>
+                        <button className="btn" onClick={() => navigate('/tasks')}>
                           לכל המשימות <Icon name="chevronLeft" size={15} />
                         </button>
                       </span>
@@ -115,8 +98,7 @@ export function MyTasksPage() {
                 <TaskList tasks={data.recentDone} showOwner={false} />
               </DoneDrawer>
             </div>
-            <div className="col gap-16 sticky-side my-work-sidebar">
-              <TodayOnSchedule />
+            <div className="col gap-16 sticky-side">
               <DisciplineCard />
               {data.myWeeks.length > 0 && (
                 <div className="card">
@@ -209,7 +191,7 @@ function DayProgress({ done, late, today }: { done: number; late: number; today:
   if (!all) return null;
   const marks = all <= 24;
   return (
-    <div className={`card day-progress my-work-progress${left === 0 ? ' is-clear' : ''}${cleared ? ' just-cleared' : ''}`} role="group" aria-label="היום שלך">
+    <div className={`card day-progress${left === 0 ? ' is-clear' : ''}${cleared ? ' just-cleared' : ''}`} role="group" aria-label="היום שלך">
       <div className="row">
         {left === 0 ? (
           <>
@@ -227,7 +209,7 @@ function DayProgress({ done, late, today }: { done: number; late: number; today:
         ) : (
           <>
             <span className="grow">
-              <b>התקדמות היום</b>
+              <b>היום שלך</b>
               <span className="small muted">
                 {' '}
                 · {done === 1 ? 'אחת בוצעה, ' : done ? `${done} בוצעו, ` : ''}
@@ -260,13 +242,12 @@ function MiniStat({ n, label, alert, target }: { n: number; label: string; alert
   // a drawer opens on the way (the done ones are tucked in one)
   const go = () => {
     revealDrawer(target);
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    document.getElementById(target)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   return (
-    <button type="button" className={`my-work-stat${alert ? ' is-alert' : ''}`} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
-      <span className="my-work-stat-label">{label}</span>
-      <span className="my-work-stat-value">
+    <button type="button" className={`card stat${alert ? ' alert' : ''}`} style={{ textAlign: 'start', cursor: n ? 'pointer' : 'default' }} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
+      <span className="stat-label">{label}</span>
+      <span className="stat-num">
         <CountUp value={n} />
       </span>
     </button>

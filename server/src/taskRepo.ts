@@ -25,7 +25,6 @@ export interface TaskRow {
   event_id: number | null;
   parent_id: number | null;
   group_id: string | null;
-  meeting_id: number | null;
   recurring_rule_id: number | null;
   cadet_id: number | null;
   experience_id: number | null;
@@ -137,7 +136,6 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     groupId: r.group_id,
     groupCopies,
     groupName: groupNameOf(groupCopies.length ? groupCopies.map((c) => c.ownerId) : [r.owner_id, ...participantIds], r.created_by),
-    meetingId: r.meeting_id,
     recurringRuleId: r.recurring_rule_id,
     cadetId: r.cadet_id,
     cadetName: r.cadet_name,

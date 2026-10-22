@@ -25,7 +25,6 @@ export interface NewTaskInitial {
   trackId?: number | null;
   eventId?: number | null;
   parentId?: number | null;
-  meetingId?: number | null;
   domain?: string;
   priority?: Priority;
   description?: string;
@@ -303,7 +302,6 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
         trackId: trackId === 'auto' ? undefined : trackId === 'none' ? null : Number(trackId),
         eventId: initial.eventId ?? null,
         parentId: initial.parentId ?? null,
-        meetingId: initial.meetingId ?? null,
         requiresApproval,
         visibility,
         links: link.trim() ? [{ url: link.trim() }] : [],

@@ -7,7 +7,6 @@ import { createUser, getUserRow, type UserRow } from './auth';
 import { runAutomation } from './automation';
 import { clock, getSettings, updateSettings } from './core';
 import { db } from './db';
-import { endMeeting, startMeeting, updateMeeting } from './meetings';
 import { saveRule } from './recurring';
 import { createEvent } from './schedule';
 import { addDependency, addUpdate, createRequest, createTasks, respondOverdue, transition } from './taskService';
@@ -302,11 +301,8 @@ export function seedDemoData(PASSWORD = 'kks12345'): { tasks: number; weeks: num
   db().run('DELETE FROM recurring_instances');
   db().run('UPDATE recurring_rules SET start_date = ?', today);
 
-  // ---------------- a past staff meeting (sections 68-69) ----------------
-  const meeting = at(d(-2, '19:00'), () => startMeeting(cmd, 'ישיבת סגל שבועית'));
-  at(d(-2, '19:20'), () => createTasks(cmd, { title: 'בדיקת אפשרות להקדים את המטווח', ownerIds: [ids.s4], deadline: d(-1, '10:00'), meetingId: meeting }));
-  at(d(-2, '19:40'), () => updateMeeting(meeting, { decisions: 'מטווח הפעלת כוח נשאר ביום רביעי\nמפק"צ 2 אחראי על שבוע התקפה\nתדריך בטיחות יועבר על ידי קצין הבטיחות', followUps: 'אישור שטח לתרגיל התקפה\nתשובת המרפאה' }));
-  at(d(-2, '20:00'), () => endMeeting(cmd, meeting));
+  // ---------------- a task from two evenings ago, now late ----------------
+  at(d(-2, '19:20'), () => createTasks(cmd, { title: 'בדיקת אפשרות להקדים את המטווח', ownerIds: [ids.s4], deadline: d(-1, '10:00') }));
 
   // apply the activity template to the exercise for a realistic event page
   at(d(-6, '14:00'), () => applyTemplate(cmd, db().get<{ id: number }>("SELECT id FROM templates WHERE kind = 'activity'")!.id, { eventId: exercise, itemIndexes: [1, 2, 4, 6] }));

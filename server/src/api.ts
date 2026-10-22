@@ -30,7 +30,6 @@ import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound,
 import { db } from './db';
 import { getFile, putFile, removeFile, sendStoredFile, uploadName } from './files';
 import { changed, FINISHED, logActivity, NOTIFICATION_ROWS, notificationsChanged, notify, snoozeNotification, toNotification, unreadCount } from './journal';
-import { activeMeeting, addMeetingPoint, deleteMeetingPoint, endMeeting, getMeeting, listMeetings, meetingPoints, raiseMeetingPoint, startMeeting, updateMeeting } from './meetings';
 import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
@@ -919,35 +918,6 @@ export function apiRouter(): Router {
     const from = isDateKey(req.query.from) ? req.query.from : today;
     const to = isDateKey(req.query.to) && req.query.to >= from ? req.query.to : from;
     res.json(await externalEvents(from, to));
-  });
-
-  // ---------------- meetings ----------------
-
-  r.get('/meetings', (_req, res) => res.json(listMeetings()));
-  r.get('/meetings/active', (_req, res) => res.json(activeMeeting()));
-  r.post('/meetings', requireAbility('meetings'), (req, res) => {
-    const title = z.object({ title: z.string().max(120).optional() }).parse(req.body ?? {}).title;
-    res.json(getMeeting(startMeeting(me(req), title)));
-  });
-  r.get('/meetings/:id', (req, res) => res.json(getMeeting(id(req.params.id))));
-  r.patch('/meetings/:id', requireAbility('meetings'), (req, res) => {
-    updateMeeting(id(req.params.id), req.body);
-    res.json(getMeeting(id(req.params.id)));
-  });
-  r.post('/meetings/:id/end', requireAbility('meetings'), (req, res) => res.json(endMeeting(me(req), id(req.params.id))));
-  // points for the next staff meeting (ישב"ס): anyone on the staff adds one, the commander ticks them in the meeting
-  r.get('/meeting-points', (req, res) => res.json(meetingPoints(me(req))));
-  r.post('/meeting-points', (req, res) => {
-    addMeetingPoint(me(req), req.body);
-    res.json(meetingPoints(me(req)));
-  });
-  r.post('/meeting-points/:id/raise', requireAbility('meetings'), (req, res) => {
-    raiseMeetingPoint(id(req.params.id), z.object({ raised: z.boolean() }).parse(req.body).raised);
-    res.json(meetingPoints(me(req)));
-  });
-  r.delete('/meeting-points/:id', (req, res) => {
-    deleteMeetingPoint(me(req), id(req.params.id));
-    res.json(meetingPoints(me(req)));
   });
 
   // ---------------- views & reports ----------------

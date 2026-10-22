@@ -96,7 +96,6 @@ export interface Task {
   groupCopies: { id: number; ownerId: number; done: boolean }[];
   /** the group the task went to - its copies' people, or its owner with its participants (staffGroups.ts) */
   groupName: string | null;
-  meetingId: number | null;
   recurringRuleId: number | null;
   cadetId: number | null;
   cadetName: string | null;
@@ -681,39 +680,6 @@ export interface DayEndData {
   completedToday: Task[];
   stillOpen: Task[];
   tomorrow: Task[];
-}
-
-export interface Meeting {
-  id: number;
-  title: string;
-  startedAt: string;
-  endedAt: string | null;
-  decisions: string;
-  followUps: string;
-  createdBy: number;
-  createdByName: string;
-  summary: MeetingSummary | null;
-}
-
-export interface MeetingSummary {
-  newTasks: { id: number; title: string; ownerName: string; deadline: string }[];
-  closedTasks: { id: number; title: string; ownerName: string }[];
-  decisions: string[];
-  followUps: string[];
-  /** the points raised in it (ישב"ס); a meeting summed up before there were points has none */
-  points?: { body: string; authorName: string }[];
-}
-
-/** a point for the next staff meeting (נקודה לישב"ס): anyone on the staff adds one, the commander ticks it in the meeting */
-export interface MeetingPoint {
-  id: number;
-  body: string;
-  authorId: number;
-  authorName: string;
-  createdAt: string;
-  /** when it was raised in a meeting; null while it waits for the next one */
-  raisedAt: string | null;
-  canDelete: boolean;
 }
 
 export interface SearchResults {

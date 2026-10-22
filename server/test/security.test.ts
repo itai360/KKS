@@ -96,7 +96,6 @@ const READS = (p: { cadet: number; task: number; weekId: number }, ids: Ctx['ids
   `/api/team/${ids.cmd}`,
   '/api/templates',
   '/api/recurring',
-  '/api/meetings',
   '/api/calendar/sources',
   '/api/auth/sessions',
 ];

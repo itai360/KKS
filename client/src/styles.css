@@ -1890,7 +1890,7 @@ input::-webkit-date-and-time-value {
 .combo-input:focus {
   cursor: text;
 }
-/* the arrow's room, whatever padding the fields are given elsewhere (design-system.css) */
+/* the arrow's room, whatever padding the fields are given elsewhere */
 .combo-input:is(.select, .input) {
   padding-left: 30px;
 }
@@ -6852,30 +6852,6 @@ button.fab-missing {
 
 .talk-answer {
   white-space: pre-wrap;
-}
-
-/* the points for the staff meeting (pages/MeetingPage.tsx, components/MeetingPointAdd.tsx) */
-.meeting-point {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-.meeting-point .check {
-  align-items: flex-start;
-}
-.meeting-point-body {
-  overflow-wrap: anywhere;
-  transition: color 0.2s;
-}
-.meeting-point.is-raised .meeting-point-body {
-  color: var(--muted);
-  text-decoration: line-through;
-}
-.meeting-point-mine {
-  align-items: baseline;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--card-2);
 }
 
 /* a talk summed up from its recording (components/TalkRecording.tsx): a quiet box until it works, then blue */
@@ -11952,7 +11928,7 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 .weekly-swipe > .swipe-pad {
   border-radius: 8px;
 }
-/* added while the page is open - here, or by someone else in the meeting: it comes in */
+/* added while the page is open - here, or by someone else in the weekly: it comes in */
 .weekly-items > li.is-new {
   animation: item-in 0.45s var(--spring);
 }
@@ -12249,7 +12225,7 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   border-radius: var(--radius);
 }
 
-/* ---------------- a new arrival in a list (an announcement, a meeting's task, an order just sent): it comes in ---------------- */
+/* ---------------- a new arrival in a list (an announcement, an order just sent): it comes in ---------------- */
 .is-arrived {
   animation: item-in 0.45s var(--spring);
 }
@@ -12816,34 +12792,6 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 .brief-when {
   margin-inline-start: 8px;
   vertical-align: 2px;
-}
-
-/* ---------------- staff meeting: running for, kept as typed (pages/MeetingPage.tsx) ---------------- */
-.meeting-live {
-  gap: 6px;
-}
-.meeting-live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: live-dot 2s ease-in-out infinite;
-}
-@keyframes live-dot {
-  50% {
-    opacity: 0.35;
-  }
-}
-.meeting-saved {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: -8px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .meeting-live-dot {
-    animation: none;
-  }
 }
 
 /* ---------------- search: what was searched lately; what matched, marked ---------------- */
@@ -13414,12 +13362,6 @@ tr.is-finished.is-folding {
     grid-template-columns: 1fr;
     margin-inline-end: 0;
   }
-}
-/* a task from the meeting closed while it goes on (pages/MeetingPage.tsx): a moment ticked, then folded */
-.meeting-task.done .strong {
-  color: var(--muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--line-2);
 }
 /* a request waiting on the task (pages/TaskPage.tsx): decided, it folds away with the space above it */
 .task-request {

@@ -18,7 +18,7 @@ beforeEach(async () => {
 });
 
 describe('by default the staff do nearly everything', () => {
-  it('weeks, the schedule, tracks, templates, plans, meetings, teams, cadets, imports and announcements', async () => {
+  it('weeks, the schedule, tracks, templates, plans, the weekly, teams, cadets, imports and announcements', async () => {
     // s2 leads nothing and commands no team
     const s = c.s2;
     expect((await s.post('/api/weeks', { name: 'שבוע ניווטים', startDate: '2026-10-04', endDate: '2026-10-10' })).status).toBe(200);
@@ -28,7 +28,9 @@ describe('by default the staff do nearly everything', () => {
     expect((await s.post('/api/templates', { name: 'פתיחת שבוע', kind: 'week', items: [{ title: 'לו"ז מאושר', offsetDays: -3 }] })).status).toBe(200);
     expect((await s.post('/api/recurring', { title: 'דוח בוקר', frequency: 'daily', time: '08:00', assignee: 'all' })).status).toBe(200);
     expect((await s.patch(`/api/plans/${week}`, { goals: ['ניווט יום'] })).status).toBe(200);
-    expect((await s.post('/api/meetings', { title: 'ישיבת סגל' })).status).toBe(200);
+    // a topic of a weekly whose week s2 does not lead: settled by s2 too
+    const topic = (await c.s1.post('/api/weekly/items', { weekId: week, kind: 'topic', title: 'עומס שמירות' })).body.id;
+    expect((await s.patch(`/api/weekly/items/${topic}`, { done: true, outcome: 'פיצול השמירות' })).status).toBe(200);
     expect((await s.post('/api/teams', { name: 'צוות 2' })).status).toBe(200);
     expect((await s.post('/api/cadets', { firstName: 'אורי', teamId: team })).status).toBe(200);
     expect((await s.post('/api/cadets/import', { text: 'שם פרטי\tשם משפחה\nיהב\tגור' })).status).toBe(200);
@@ -98,7 +100,8 @@ describe('each switch closes its part', () => {
     expect((await s.post('/api/tracks', { name: 'x' })).status).toBe(403);
     expect((await s.post('/api/templates', { name: 'x', kind: 'week', items: [{ title: 'x', offsetDays: 0 }] })).status).toBe(403);
     expect((await s.get('/api/plans')).status).toBe(403);
-    expect((await s.post('/api/meetings', { title: 'x' })).status).toBe(403);
+    const topic = (await c.s1.post('/api/weekly/items', { weekId: week, kind: 'topic', title: 'x' })).body.id;
+    expect((await s.patch(`/api/weekly/items/${topic}`, { done: true })).status).toBe(403);
     expect((await s.post('/api/teams', { name: 'x' })).status).toBe(403);
     expect((await s.post('/api/cadets', { firstName: 'x', teamId: team })).status).toBe(403);
     expect((await s.post('/api/cadets/import', { text: 'שם פרטי\nx' })).status).toBe(403);

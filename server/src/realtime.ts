@@ -13,7 +13,6 @@ export type Topic =
   | 'recurring'
   | 'users'
   | 'settings'
-  | 'meetings'
   | 'requests'
   | 'cadets'
   | 'debriefs'

@@ -9,6 +9,7 @@ export const STAFF_ABILITIES = [
   'tracks',
   'templates',
   'plans',
+  // the weekly (שבועי) - the key's name is kept from before, as the commander's choices are stored under it
   'meetings',
   'cadets',
   'teams',
@@ -42,7 +43,7 @@ export const ABILITY_GROUPS: { title: string; abilities: AbilityInfo[] }[] = [
       { key: 'tracks', label: 'צירים', hint: 'הוספה, שם, אחראי ומחיקה', on: true },
       { key: 'templates', label: 'תבניות ומשימות חוזרות', hint: 'הוספה, עריכה ומחיקה - גם מלקח בתחקיר', on: true },
       { key: 'plans', label: 'הכנת אישור תוכניות ותלת שבועי', hint: 'צפייה ועריכה; האישור עצמו נשאר שלך', on: true },
-      { key: 'meetings', label: 'ישיבת סגל', hint: 'פתיחה, ניהול, סיום וסימון נקודות שעלו', on: true },
+      { key: 'meetings', label: 'השבועי', hint: 'סימון "טופל" ותוצאה לנושאים ולסגירות בשבועי של כל שבוע - לא רק בשבוע שהם אחראים עליו', on: true },
     ],
   },
   {

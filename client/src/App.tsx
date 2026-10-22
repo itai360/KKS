@@ -2,7 +2,6 @@ import { Suspense, useEffect } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout';
 import { NewTaskProvider } from './components/NewTask';
-import { MeetingPointAddHost } from './components/MeetingPointAdd';
 import { WeekDebriefAddHost } from './components/WeekDebriefAdd';
 import { WeeklyAddHost } from './components/WeeklyAdd';
 import { ToastProvider } from './components/Toasts';
@@ -29,7 +28,6 @@ const EvaluationsPage = lazyPage(() => import('./pages/EvaluationsPage'), 'Evalu
 const SociometricPage = lazyPage(() => import('./pages/SociometricPage'), 'SociometricPage');
 const ExperiencesPage = lazyPage(() => import('./pages/ExperiencesPage'), 'ExperiencesPage');
 const CommandPage = lazyPage(() => import('./pages/CommandPage'), 'CommandPage');
-const MeetingPage = lazyPage(() => import('./pages/MeetingPage'), 'MeetingPage');
 const MorePage = lazyPage(() => import('./pages/MorePage'), 'MorePage');
 const NotificationsPage = lazyPage(() => import('./pages/NotificationsPage'), 'NotificationsPage');
 const RecurringPage = lazyPage(() => import('./pages/RecurringPage'), 'RecurringPage');
@@ -99,8 +97,7 @@ function AuthedRoutes() {
             }
           >
             <Routes>
-              <Route path="/" element={isCommander ? <TasksPage /> : <MyTasksPage />} />
-              <Route path="/overview" element={isCommander ? <DashboardPage /> : <Navigate to="/" />} />
+              <Route path="/" element={isCommander ? <DashboardPage /> : <MyTasksPage />} />
               <Route path="/my" element={<MyTasksPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/tasks/:id" element={<TaskPage />} />
@@ -125,7 +122,6 @@ function AuthedRoutes() {
               <Route path="/day-end" element={<DayEndPage />} />
               <Route path="/activity" element={<ActivityPage />} />
               <Route path="/command" element={<CommandPage />} />
-              <Route path="/meeting" element={can('meetings') ? <MeetingPage /> : <Navigate to="/" />} />
               <Route path="/templates" element={<TemplatesPage />} />
               <Route path="/recurring" element={<RecurringPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
@@ -154,7 +150,6 @@ function AuthedRoutes() {
         </Layout>
         <WeeklyAddHost />
         <WeekDebriefAddHost />
-        <MeetingPointAddHost />
       </NewTaskProvider>
     </ToastProvider>
   );
