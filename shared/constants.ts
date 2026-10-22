@@ -51,6 +51,8 @@ export const DEFAULT_DOMAINS = [...sortHe(['בטיחות', 'הדרכה', 'הער
 
 /** the course's tracks (צירים בקורס) - each with a lead and its tasks, alongside the weeks; a course can add its own */
 export const COURSE_TRACKS = sortHe(['חינוך', 'אקדמיה', 'אימון גופני', 'שטח', 'ניווטים', 'דת', 'רכב', 'מסע פתיחה', 'מארס טורקי', 'תרגיל מסכם']);
+/** tracks added later (server/src/db.ts): both are areas too, so a task in the area goes in its track */
+export const ADDED_TRACKS = ['הדרכה', 'הערכה'];
 
 export const VISIBILITIES = ['normal', 'team', 'private'] as const;
 export type Visibility = (typeof VISIBILITIES)[number];

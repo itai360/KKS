@@ -2,7 +2,7 @@
 // and the tasks marked with it.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { COURSE_TRACKS } from '../../shared/constants';
+import { ADDED_TRACKS, COURSE_TRACKS } from '../../shared/constants';
 import type { Task, Track, TrackDetail } from '../../shared/types';
 import { Db, migrate } from '../src/db';
 import { at, setup, staffMay, type Ctx } from './helpers';
@@ -18,9 +18,15 @@ const newTask = async (body: Record<string, unknown>, who = c.cmd) => (await who
 const task = async (id: number) => (await c.cmd.get(`/api/tasks/${id}`)).body.task as Task;
 
 describe('course tracks', () => {
-  it('start with the course\'s ten tracks, in alphabetical order', async () => {
-    expect((await tracks()).map((t) => t.name)).toEqual(['אימון גופני', 'אקדמיה', 'דת', 'חינוך', 'מארס טורקי', 'מסע פתיחה', 'ניווטים', 'רכב', 'שטח', 'תרגיל מסכם']);
-    expect(COURSE_TRACKS).toHaveLength(10);
+  it('start with the course\'s twelve tracks - training and evaluation among them - in alphabetical order', async () => {
+    expect((await tracks()).map((t) => t.name)).toEqual(['אימון גופני', 'אקדמיה', 'דת', 'הדרכה', 'הערכה', 'חינוך', 'מארס טורקי', 'מסע פתיחה', 'ניווטים', 'רכב', 'שטח', 'תרגיל מסכם']);
+    expect(COURSE_TRACKS.length + ADDED_TRACKS.length).toBe(12);
+  });
+
+  it('a task in the area of training or evaluation goes in its track', async () => {
+    const a = await newTask({ domain: 'הדרכה' });
+    const b = await newTask({ domain: 'הערכה' });
+    expect([(await task(a)).trackName, (await task(b)).trackName]).toEqual(['הדרכה', 'הערכה']);
   });
 
   it('a task joins its track by its field - or by an area of the same name', async () => {
@@ -98,13 +104,15 @@ describe('course tracks', () => {
     task(1, 'ניווטים');
     task(2, 'לוגיסטיקה');
     task(3, '');
+    task(4, 'הערכה');
     migrate(before);
     expect(before.all<{ id: number; name: string | null }>('SELECT t.id, tr.name FROM tasks t LEFT JOIN tracks tr ON tr.id = t.track_id ORDER BY t.id')).toEqual([
       { id: 1, name: 'ניווטים' },
       { id: 2, name: null },
       { id: 3, name: null },
+      { id: 4, name: 'הערכה' },
     ]);
-    expect(before.get<{ n: number }>('SELECT count(*) AS n FROM tracks')?.n).toBe(10);
+    expect(before.get<{ n: number }>('SELECT count(*) AS n FROM tracks')?.n).toBe(12);
     before.close();
   });
 });

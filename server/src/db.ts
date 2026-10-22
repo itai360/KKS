@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { ADDED_DOMAINS, COURSE_TRACKS } from '../../shared/constants';
+import { ADDED_DOMAINS, ADDED_TRACKS, COURSE_TRACKS } from '../../shared/constants';
 
 export type Param = SQLInputValue | boolean | undefined;
 
@@ -1154,7 +1154,16 @@ ALTER TABLE debriefs ADD COLUMN submitted_at TEXT;
 ALTER TABLE debriefs ADD COLUMN submitted_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
 `;
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43];
+// two more tracks to give tasks in - training and evaluation. Both are areas already, so the tasks in
+// those areas without a track go in them.
+function V44_TRAINING_TRACKS(db: Db): void {
+  const now = new Date().toISOString();
+  for (const name of ADDED_TRACKS) db.run('INSERT OR IGNORE INTO tracks(name, created_at) VALUES (?, ?)', name, now);
+  const marks = ADDED_TRACKS.map(() => '?').join(', ');
+  db.run(`UPDATE tasks SET track_id = (SELECT id FROM tracks WHERE tracks.name = tasks.domain) WHERE track_id IS NULL AND domain IN (${marks})`, ...ADDED_TRACKS);
+}
+
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {
