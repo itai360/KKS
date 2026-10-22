@@ -914,7 +914,7 @@ function PlusMenu({
             <Icon name="tasks" />
           </span>
           <span className="grow">
-            <span className="plus-menu-title">משימות</span>
+            <span className="plus-menu-title">משימה</span>
             <span className="plus-menu-sub">משימה חדשה עם אחראי ודד-ליין</span>
           </span>
         </button>

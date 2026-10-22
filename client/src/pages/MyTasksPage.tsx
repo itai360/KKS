@@ -67,12 +67,12 @@ export function MyTasksPage() {
           <TodayOnSchedule />
           <DayProgress done={data.stats.doneToday} late={data.stats.overdue} today={data.stats.today} />
           {/* four zeros say nothing: with nothing open and nothing done today, the empty state says it */}
-          {(total > 0 || data.stats.doneToday > 0) && (
-            <div className="stats">
-              <MiniStat n={data.stats.today} label="היום" target="group-today" />
-              <MiniStat n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
-              <MiniStat n={data.stats.week} label="השבוע" target="group-week" />
-              <MiniStat n={data.stats.doneToday} label="הושלמו היום" target="my-done" />
+          {/* what was done today is in "היום שלך" above; these go to what is still open */}
+          {total > 0 && (
+            <div className="count-pills" role="group" aria-label="המשימות שלך במספרים">
+              <CountPill n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
+              <CountPill n={data.stats.today} label="היום" target="group-today" />
+              <CountPill n={data.stats.week} label="השבוע" target="group-week" />
             </div>
           )}
 
@@ -124,21 +124,20 @@ export function MyTasksPage() {
                   ))}
                 </div>
               )}
-              <div className="card">
-                <div className="card-head">
-                  <h3 className="grow">משימות כלליות של הפלוגה</h3>
-                  <span className="tiny mono muted">{data.teamTasks.length}</span>
-                </div>
-                <div className="card-body">
-                  {data.teamTasks.length === 0 ? (
-                    <p className="small muted">אין משימות כלליות פתוחות.</p>
-                  ) : (
+              {/* only when there are some: an empty card is one more thing to read */}
+              {data.teamTasks.length > 0 && (
+                <div className="card">
+                  <div className="card-head">
+                    <h3 className="grow">משימות כלליות של הפלוגה</h3>
+                    <span className="tiny mono muted">{data.teamTasks.length}</span>
+                  </div>
+                  <div className="card-body">
                     <div className="list">
                       {data.teamTasks.slice(0, 8).map((t) => (t.groupCopies.length > 1 ? <GroupTaskRow key={t.id} task={t} /> : <TaskRow key={t.id} task={t} />))}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -245,18 +244,19 @@ function DayProgress({ done, late, today }: { done: number; late: number; today:
 }
 
 /** A number at the top; a tap brings its group of tasks into view (when it has any). */
-function MiniStat({ n, label, alert, target }: { n: number; label: string; alert?: boolean; target: string }) {
+/** a count in one small pill - a tap goes to its section; the tasks themselves start right under them */
+function CountPill({ n, label, alert, target }: { n: number; label: string; alert?: boolean; target: string }) {
   // a drawer opens on the way (the done ones are tucked in one)
   const go = () => {
     revealDrawer(target);
     document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   return (
-    <button type="button" className={`card stat${alert ? ' alert' : ''}`} style={{ textAlign: 'start', cursor: n ? 'pointer' : 'default' }} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
-      <span className="stat-label">{label}</span>
-      <span className="stat-num">
+    <button type="button" className={`count-pill${alert ? ' is-alert' : ''}`} onClick={go} disabled={!n} aria-label={`${label}: ${n}`}>
+      <b className="count-pill-n">
         <CountUp value={n} />
-      </span>
+      </b>
+      <span>{label}</span>
     </button>
   );
 }

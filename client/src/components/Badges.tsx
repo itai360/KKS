@@ -20,6 +20,12 @@ export function StatusBadge({ status, overdue }: { status: TaskStatus; overdue?:
   );
 }
 
+/** in a list's row: only a state worth a word - "to do" is every row's, and lateness is the red deadline */
+export function RowStatus({ status }: { status: TaskStatus }) {
+  if (status === 'todo') return null;
+  return <span className={`badge t-${STATUS_TONE[status]}`}>{STATUS_LABELS[status]}</span>;
+}
+
 export function PriorityBadge({ priority, hideNormal = true }: { priority: Priority; hideNormal?: boolean }) {
   if (hideNormal && (priority === 'normal' || priority === 'low')) return null;
   const tone: Tone = priority === 'critical' ? 'red' : priority === 'high' ? 'orange' : 'gray';
@@ -27,7 +33,12 @@ export function PriorityBadge({ priority, hideNormal = true }: { priority: Prior
 }
 
 export function DeadlineText({ task }: { task: Pick<Task, 'deadline' | 'overdue' | 'dueSoon'> }) {
-  return <span className={`deadline${task.overdue ? ' late' : task.dueSoon ? ' soon' : ''}`}>{fmtDeadline(task.deadline)}</span>;
+  return (
+    <span className={`deadline${task.overdue ? ' late' : task.dueSoon ? ' soon' : ''}`}>
+      {fmtDeadline(task.deadline)}
+      {task.overdue && <span className="sr-only"> (באיחור)</span>}
+    </span>
+  );
 }
 
 export { STATUS_TONE };

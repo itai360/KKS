@@ -10,7 +10,7 @@ import { collapseGroups, expandUnits, foldTasks, groupView, isGrouped, peopleOf 
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { prefetch } from '../lib/useApi';
-import { DeadlineText, PriorityBadge, StatusBadge } from './Badges';
+import { DeadlineText, PriorityBadge, RowStatus } from './Badges';
 import { BulkCheck, bulkClick, BulkScope, SwipeRow, useBulk } from './Bulk';
 import { DoneDrawer } from './DoneDrawer';
 import { Icon } from './Icon';
@@ -251,7 +251,7 @@ export function TaskRow({
         {extra}
         <ProgressBadge task={task} />
         <PriorityBadge priority={task.priority} />
-        <StatusBadge status={task.status} overdue={task.overdue} />
+        <RowStatus status={task.status} />
       </div>
     </div>
     {menu.menu}

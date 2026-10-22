@@ -131,7 +131,6 @@ export function DashboardPage() {
             <DisciplineCard />
             <StaffHealth data={data} />
             <TracksCard />
-            <QuickActions />
           </div>
           <TwoStepNudge />
         </div>
@@ -618,30 +617,6 @@ function TodayEvents({ data }: { data: DashboardData }) {
         </button>
       )}
     </section>
-  );
-}
-
-function QuickActions() {
-  const newTask = useNewTask();
-  const navigate = useNavigate();
-  return (
-    <div className="card card-pad">
-      <div className="label-caps mb-12">פעולות מהירות</div>
-      <div className="grid-2" style={{ gap: 8 }}>
-        <button className="btn" onClick={() => newTask()}>
-          <Icon name="plus" /> משימה
-        </button>
-        <button className="btn" onClick={() => newTask({ allStaff: true, heading: 'משימה לכל הסגל' })}>
-          <Icon name="users" /> לכל הסגל
-        </button>
-        <button className="btn" onClick={() => navigate('/recurring?new=1')}>
-          <Icon name="repeat" /> משימה חוזרת
-        </button>
-        <button className="btn" onClick={() => navigate('/schedule?new=1')}>
-          <Icon name="calendar" /> עדכון לו"ז
-        </button>
-      </div>
-    </div>
   );
 }
 

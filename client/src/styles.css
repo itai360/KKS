@@ -2662,7 +2662,7 @@ input::-webkit-date-and-time-value {
   color: var(--ink-2);
 }
 
-.task-meta .deadline.late {
+:is(.task-meta, .next-up-meta) .deadline.late {
   color: var(--red-ink);
   font-weight: 600;
 }
@@ -13908,4 +13908,158 @@ tr.is-finished.is-folding {
 }
 .track-mark:active {
   transform: scale(0.94);
+}
+/* a row with no state worth a word keeps no empty line for it (components/TaskRow.tsx) */
+.task-side:empty {
+  display: none;
+}
+
+/* ---------------- counts in pills: a tap goes to the section (pages/MyTasksPage.tsx, DashboardPage.tsx) ---------------- */
+.count-pills {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.count-pills::-webkit-scrollbar {
+  display: none;
+}
+.count-pill {
+  display: inline-flex;
+  flex: 1 0 auto;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease-out,
+    background 0.15s,
+    border-color 0.15s;
+}
+.count-pill-n {
+  color: var(--ink);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.count-pill:hover:not(:disabled) {
+  border-color: var(--line-2);
+  background: var(--hover);
+}
+.count-pill:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.count-pill:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.count-pill.is-alert {
+  border-color: color-mix(in srgb, var(--red) 40%, var(--line));
+  background: var(--red-bg);
+  color: var(--red-ink);
+}
+.count-pill.is-alert .count-pill-n {
+  color: var(--red-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .count-pill:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ---------------- the commander's home on a phone: what needs you first, the counts in one row ---------------- */
+@media (max-width: 1100px) {
+  .dashboard-workspace {
+    grid-template-areas: 'attention' 'schedule' 'weeks';
+  }
+}
+@media (max-width: 600px) {
+  .dashboard-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .dashboard-stats .stat {
+    align-items: center;
+    gap: 2px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+  .dashboard-stats .stat-num {
+    order: -1;
+    font-size: 26px;
+  }
+  .dashboard-stats .stat-heading {
+    justify-content: center;
+  }
+  .dashboard-stats .stat-heading > svg,
+  .dashboard-stats .stat-footer {
+    display: none;
+  }
+  .dashboard-stats .stat-label {
+    font-size: 12px;
+    line-height: 1.25;
+  }
+}
+
+/* ---------------- done with a task: the next one a tap away (pages/TaskPage.tsx) ---------------- */
+.next-up {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border-inline-start: 4px solid var(--tone);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  animation: item-in 0.45s var(--spring);
+  transition: transform 0.12s ease-out;
+}
+.next-up:active {
+  transform: scale(0.985);
+}
+.next-up-label {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.next-up-title {
+  grid-column: 1;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.next-up-meta {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 13px;
+}
+.next-up-go {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-up {
+    animation: fade 0.2s ease-out;
+  }
+  .next-up:active {
+    transform: none;
+  }
 }

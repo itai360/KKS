@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { domainLabel, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
-import type { Task, TaskDetail, TaskRequest } from '@shared/types';
+import type { MyTasksData, Task, TaskDetail, TaskRequest } from '@shared/types';
 import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Decided, useDecision } from '../components/Decision';
 import { DoneDrawer } from '../components/DoneDrawer';
@@ -176,6 +176,8 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
           <TaskActions detail={detail} onChange={onChange} onDeleted={onDeleted} edit={edit} />
         </div>
       </div>
+
+      {(t.status === 'done' || t.status === 'pending_approval') && <NextUp after={t.id} />}
 
       {detail.group && <GroupCard group={detail.group} name={detail.task.groupName} />}
 
@@ -735,5 +737,25 @@ function ActivityLog({ detail }: { detail: TaskDetail }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** done with this one: the next of one's own still open, a tap away - so the work flows on instead of stopping here */
+function NextUp({ after }: { after: number }) {
+  const { user } = useSession();
+  const navigate = useNavigate();
+  const { data } = useApi<MyTasksData>('/api/my', ['tasks']);
+  const next = data ? [...data.overdue, ...data.today, ...data.important, ...data.week, ...data.later].find((x) => x.id !== after && x.ownerId === user.id) : undefined;
+  if (!next) return null;
+  return (
+    <button type="button" className={`card next-up t-${next.tone}`} onClick={() => navigate(`/tasks/${next.id}`)}>
+      <span className="next-up-label">הבאה בתור</span>
+      <span className="next-up-title">{next.title}</span>
+      <span className="next-up-meta">
+        <DeadlineText task={next} />
+        {next.weekName && <> · {next.weekName}</>}
+      </span>
+      <Icon name="chevronLeft" className="next-up-go" />
+    </button>
   );
 }
