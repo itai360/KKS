@@ -44,9 +44,6 @@ export function MyTasksPage() {
         actions={
           <>
             <BulkToggle />
-            <button className="btn" onClick={() => navigate('/day-end')}>
-              <Icon name="moon" /> סיכום יום
-            </button>
             <button className="btn" onClick={() => setGoogle(true)}>
               <Icon name="calendar" /> ביומן Google
             </button>
@@ -180,7 +177,6 @@ function TodayOnSchedule() {
  * they are done; when nothing is left for today, it says so, with a check (and a buzz, the moment it happens).
  */
 function DayProgress({ done, late, today }: { done: number; late: number; today: number }) {
-  const navigate = useNavigate();
   const left = late + today;
   const all = done + left;
   // the last one done while the page is open: that is the moment to mark
@@ -208,9 +204,6 @@ function DayProgress({ done, late, today }: { done: number; late: number; today:
               </svg>
             </span>
             <span className="grow strong">סיימת את כל מה שהיה להיום</span>
-            <button type="button" className="btn btn-sm" onClick={() => navigate('/day-end')}>
-              <Icon name="moon" size={14} /> סיכום יום
-            </button>
           </>
         ) : (
           <>

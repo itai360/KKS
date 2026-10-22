@@ -14063,3 +14063,29 @@ tr.is-finished.is-folding {
     transform: none;
   }
 }
+
+/* the screens out of the menu, in the settings (pages/SettingsPage.tsx) */
+.more-screens {
+  display: flex;
+  flex-direction: column;
+}
+.more-screen {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+.more-screen:last-child {
+  border-bottom: 0;
+}
+.more-screen > svg {
+  flex: none;
+  color: var(--muted);
+}
+.more-screen:active {
+  background: var(--hover);
+}

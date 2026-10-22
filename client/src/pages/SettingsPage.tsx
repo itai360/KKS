@@ -46,6 +46,7 @@ export function SettingsPage() {
           { key: 'permissions', label: 'הרשאות', node: <PermissionsCard /> },
           { key: 'guide', label: 'מדרג אכיפה', node: <GuideImportCard /> },
           { key: 'backups', label: 'גיבויים', node: <BackupCard /> },
+          { key: 'more', label: 'מסכים נוספים', node: <MoreScreensCard /> },
         ]
       : []),
     { key: 'contact', label: 'פרטי קשר', node: <ContactCard /> },
@@ -69,6 +70,42 @@ export function SettingsPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+/** the screens taken out of the menu to keep it short - still here, a tap away (recurring tasks keep opening) */
+const MORE_SCREENS: { to: string; label: string; icon: string; hint: string }[] = [
+  { to: '/recurring', label: 'משימות חוזרות', icon: 'repeat', hint: 'משימה שנפתחת כל יום או כל שבוע' },
+  { to: '/day-end', label: 'סיכום יום', icon: 'moon', hint: 'מה נסגר היום ומה נשאר למחר' },
+  { to: '/lookahead', label: 'מבט קדימה', icon: 'eye', hint: 'מה מגיע בשבועות הקרובים' },
+  { to: '/command', label: 'פקודות שלי', icon: 'zap', hint: 'משימה במשפט אחד' },
+  { to: '/activity', label: 'יומן פעילות', icon: 'history', hint: 'כל פעולה במערכת' },
+  { to: '/directory', label: 'אנשי קשר', icon: 'phone', hint: 'טלפונים ווואטסאפ של הסגל' },
+];
+
+function MoreScreensCard() {
+  return (
+    <section className="card">
+      <div className="card-head">
+        <Icon name="more" />
+        <h3 className="grow">מסכים נוספים</h3>
+      </div>
+      <div className="card-body col gap-6">
+        <p className="small muted">הוצאו מהתפריט כדי שיהיה קצר וממוקד. הם כאן אם צריך אותם.</p>
+        <div className="more-screens">
+          {MORE_SCREENS.map((m) => (
+            <Link key={m.to} to={m.to} className="more-screen">
+              <Icon name={m.icon} size={16} />
+              <span className="grow">
+                <span className="strong">{m.label}</span>
+                <span className="tiny muted"> · {m.hint}</span>
+              </span>
+              <Icon name="chevronLeft" size={14} />
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -100,7 +137,6 @@ function SetupChecklist() {
       { done: staff.length > 0, label: 'אנשי הסגל', hint: staff.length ? `${staff.length} אנשי סגל` : 'בכרטיס אנשי סגל' },
       { done: settings.domains.length > 0, label: 'תחומי אחריות', hint: `${settings.domains.length} תחומים` },
       { done: (templates.data?.length ?? 0) > 0, label: 'תבניות בסיסיות', hint: templates.data?.length ? `${templates.data.length} תבניות` : undefined, link: '/templates' },
-      { done: (recurring.data?.length ?? 0) > 0, label: 'משימות חוזרות', hint: recurring.data?.length ? `${recurring.data.length} משימות` : undefined, link: '/recurring' },
     ],
     [settings, weeks, staff, templates.data, recurring.data],
   );
