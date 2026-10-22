@@ -5,7 +5,7 @@ import { Link, useSearchParams } from 'react-router';
 import { diffDays, shortDate } from '@shared/dates';
 import { BROAD_EXPERIENCES, EXPERIENCE_KIND_LABELS, EXPERIENCE_SPANS, SPAN_LABELS, SPAN_SHORT, spanDates, type ExperienceKind, type ExperienceSpan } from '@shared/experiences';
 import { byHe } from '@shared/sort';
-import type { Cadet, Experience } from '@shared/types';
+import type { Cadet, Experience, Team } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { FeedbackDialog, FeedbackView, ScoreBadge } from '../components/ExperienceFeedback';
@@ -13,7 +13,7 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
 import { api } from '../lib/api';
-import { todayKey } from '../lib/format';
+import { dateKeyOf, todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
@@ -31,9 +31,27 @@ const PHASE_ORDER: Record<Experience['phase'], number> = { awaiting_feedback: 0,
 type Tab = 'all' | 'mine' | 'broad' | 'awaiting_feedback' | 'active' | 'planned' | 'done';
 const inTab = (t: Tab, x: Experience, userId: number) => (t === 'all' ? true : t === 'mine' ? x.mentorId === userId : t === 'broad' ? x.kind === 'broad' : x.phase === t);
 
+type ExpView = 'list' | 'table';
+// the view one chose is a convenience: storage can be missing or blocked
+function readView(): ExpView {
+  try {
+    return localStorage.getItem('kks.experiencesView') === 'table' ? 'table' : 'list';
+  } catch {
+    return 'list';
+  }
+}
+function saveView(v: ExpView): void {
+  try {
+    localStorage.setItem('kks.experiencesView', v);
+  } catch {
+    /* not kept */
+  }
+}
+
 export function ExperiencesPage() {
   const { user } = useSession();
   const { data, error, loading } = useApi<Experience[]>('/api/experiences', ['cadets', 'tasks']);
+  const [view, setView] = useState<ExpView>(readView);
   const [tab, setTab] = useState<Tab>('all');
   const [creating, setCreating] = useState(false);
   const cadets = useApi<Cadet[]>('/api/cadets', ['cadets']);
@@ -82,7 +100,7 @@ export function ExperiencesPage() {
         actions={
           canCreate && (
             <>
-              <BulkToggle />
+              {view === 'list' && <BulkToggle />}
               <button className="btn btn-primary" onClick={() => setCreating(true)}>
                 <Icon name="plus" /> התנסות
               </button>
@@ -90,6 +108,27 @@ export function ExperiencesPage() {
           )
         }
       />
+      <div className="exp-view">
+        <Seg<ExpView>
+          value={view}
+          onChange={(v) => {
+            setView(v);
+            saveView(v);
+          }}
+          options={[
+            { value: 'list', label: 'רשימה', icon: 'tasks' },
+            { value: 'table', label: 'טבלת מעקב', icon: 'board' },
+          ]}
+        />
+      </div>
+      {view === 'table' ? (
+        loading && !data ? (
+          <Loading rows={3} />
+        ) : (
+          <TrackingTable experiences={data ?? []} />
+        )
+      ) : (
+      <>
       <div className="tabs">
         {(
           [
@@ -132,6 +171,8 @@ export function ExperiencesPage() {
             </div>
           </DoneDrawer>
         </>
+      )}
+      </>
       )}
       {creating && <ExperienceForm onClose={() => setCreating(false)} />}
       {givingX && <FeedbackDialog x={givingX} onClose={() => setGiving(null)} />}
@@ -375,6 +416,322 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
       <div className="mt-12">
         <ErrorBox error={error} />
       </div>
+    </Modal>
+  );
+}
+
+// ---------------- the tracking table (טבלת מעקב) ----------------
+
+/**
+ * Each team's cadets with the experiences they were placed in - by their team commanders, and in the roles of
+ * the schedule's events (which move with their event) - where each stands, its mentor and a mark. A team
+ * commander starts on their own team; the commander chooses who follows every team.
+ */
+function TrackingTable({ experiences }: { experiences: Experience[] }) {
+  const { user, users, isCommander } = useSession();
+  const cadets = useApi<Cadet[]>('/api/cadets', ['cadets']);
+  const teams = useApi<Team[]>('/api/teams', ['cadets']);
+  const mine = teams.data?.find((t) => t.commanderId === user.id)?.id;
+  const [team, setTeam] = useState('');
+  const [mentor, setMentor] = useState('');
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [adding, setAdding] = useState<number | null>(null);
+  const teamF = team || (mine ? String(mine) : 'all');
+  const open = openId === null ? undefined : experiences.find((x) => x.id === openId);
+
+  const groups = useMemo(() => {
+    const byCadet = new Map<number, Experience[]>();
+    for (const x of [...experiences].sort((a, b) => a.startDate.localeCompare(b.startDate))) {
+      if (mentor && String(x.mentorId ?? '') !== mentor) continue;
+      byCadet.set(x.cadetId, [...(byCadet.get(x.cadetId) ?? []), x]);
+    }
+    const active = (cadets.data ?? []).filter((c) => c.status === 'active').sort((a, b) => byHe(a.fullName, b.fullName));
+    const rows = (list: Cadet[]) => list.map((c) => ({ cadet: c, xs: byCadet.get(c.id) ?? [] })).filter((r) => !mentor || r.xs.length > 0);
+    const out: { key: string; team: Team | null; rows: { cadet: Cadet; xs: Experience[] }[] }[] = (teams.data ?? [])
+      .filter((t) => teamF === 'all' || String(t.id) === teamF)
+      .map((t) => ({ key: String(t.id), team: t, rows: rows(active.filter((c) => c.teamId === t.id)) }));
+    if (teamF === 'all') out.push({ key: 'none', team: null, rows: rows(active.filter((c) => !c.teamId)) });
+    return out.filter((g) => g.rows.length > 0);
+  }, [experiences, cadets.data, teams.data, teamF, mentor]);
+
+  const mentors = useMemo(() => {
+    const ids = new Set(experiences.map((x) => x.mentorId).filter((v): v is number => v !== null));
+    return users.filter((u) => ids.has(u.id)).sort((a, b) => byHe(a.displayName, b.displayName));
+  }, [experiences, users]);
+
+  if ((cadets.loading && !cadets.data) || (teams.loading && !teams.data)) return <Loading rows={3} />;
+  return (
+    <div className="col gap-16 fade-in">
+      {isCommander && <TrackersLine />}
+      <div className="track-filters">
+        <Select value={teamF} onChange={(e) => setTeam(e.target.value)} aria-label="צוות">
+          <option value="all">כל הצוותים</option>
+          {(teams.data ?? []).map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+              {t.commanderName ? ` - ${t.commanderName}` : ''}
+            </option>
+          ))}
+        </Select>
+        <Select value={mentor} onChange={(e) => setMentor(e.target.value)} aria-label="מפקד חונך">
+          <option value="">כל החונכים</option>
+          {mentors.map((u) => (
+            <option key={u.id} value={u.id}>
+              חונך: {u.displayName}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {!groups.length ? (
+        <Empty icon="target" title={mentor ? 'אין התנסויות לחונך הזה' : 'אין צוערים בצוות הזה'} />
+      ) : (
+        groups.map((g) => <TrackingTeam key={g.key} team={g.team} rows={g.rows} onOpen={setOpenId} onAdd={setAdding} />)
+      )}
+      <div className="track-legend tiny muted">
+        {(['planned', 'active', 'awaiting_feedback', 'done'] as const).map((ph) => (
+          <span key={ph} className={`t-${PHASE[ph].tone}`}>
+            <i aria-hidden="true" /> {PHASE[ph].label}
+          </span>
+        ))}
+        <span>
+          <Icon name="check" size={12} /> מסומן
+        </span>
+      </div>
+      {open && <TrackingSheet x={open} onClose={() => setOpenId(null)} />}
+      {adding !== null && <ExperienceForm cadetId={adding} onClose={() => setAdding(null)} />}
+    </div>
+  );
+}
+
+function TrackingTeam({ team, rows, onOpen, onAdd }: { team: Team | null; rows: { cadet: Cadet; xs: Experience[] }[]; onOpen: (id: number) => void; onAdd: (cadetId: number) => void }) {
+  const all = rows.flatMap((r) => r.xs);
+  const waiting = all.filter((x) => x.phase === 'awaiting_feedback').length;
+  const done = all.filter((x) => x.status === 'done').length;
+  const none = rows.filter((r) => !r.xs.length).length;
+  return (
+    <section className="card track-team">
+      <div className="card-head">
+        <Icon name="users" />
+        <h3 className="grow">
+          {team ? team.name : 'בלי צוות'}
+          {team?.commanderName && <span className="muted track-cmd"> · {team.commanderName}</span>}
+        </h3>
+        <span className="tiny muted track-sum">
+          {rows.length} צוערים · {done}/{all.length} משובים
+          {waiting > 0 && <b className="text-orange"> · {waiting} ממתינות למשוב</b>}
+          {none > 0 && <> · {none} בלי התנסות</>}
+        </span>
+      </div>
+      <div className="track-rows">
+        {rows.map(({ cadet: c, xs }) => {
+          const late = xs.filter((x) => x.phase === 'awaiting_feedback').length;
+          return (
+            <div key={c.id} className={`track-row${xs.length ? '' : ' is-empty'}`}>
+              <div className="track-cadet">
+                <Link to={`/cadets/${c.id}`} className="strong">
+                  {c.fullName}
+                </Link>
+                <span className="tiny muted">
+                  {xs.length ? `${xs.filter((x) => x.status === 'done').length}/${xs.length} משובים` : 'אין התנסויות עדיין'}
+                  {late > 0 && <span className="text-orange"> · {late} ממתינות</span>}
+                </span>
+              </div>
+              <div className="track-chips">
+                {xs.map((x) => (
+                  <TrackChip key={x.id} x={x} onOpen={() => onOpen(x.id)} />
+                ))}
+                {c.canEdit && (
+                  <button type="button" className="track-add" onClick={() => onAdd(c.id)} aria-label={`שיבוץ התנסות ל${c.fullName}`} title="שיבוץ התנסות">
+                    <Icon name="plus" size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** one experience in the table: its role, days, mentor and where it stands - and its mark, a tap away */
+function TrackChip({ x, onOpen }: { x: Experience; onOpen: () => void }) {
+  const toast = useToast();
+  const p = PHASE[x.phase];
+  const mark = async () => {
+    try {
+      await api.post(`/api/experiences/${x.id}/mark`, { marked: !x.markedAt });
+      haptic('tick');
+      emitLocalChange('cadets');
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    }
+  };
+  const days = `${shortDate(x.startDate)}${x.endDate !== x.startDate ? `-${shortDate(x.endDate)}` : ''}`;
+  return (
+    <span className={`track-chip t-${p.tone}${x.markedAt ? ' is-marked' : ''}`}>
+      {x.canMark ? (
+        <button
+          type="button"
+          className="track-mark"
+          onClick={() => void mark()}
+          aria-pressed={!!x.markedAt}
+          aria-label={x.markedAt ? `ביטול הסימון: ${x.role} - ${x.cadetName}` : `סימון: ${x.role} - ${x.cadetName}`}
+          title={x.markedAt ? `סומן${x.markedByName ? ` - ${x.markedByName}` : ''}` : 'סימון'}
+        >
+          {x.markedAt && <Icon name="check" size={12} />}
+        </button>
+      ) : (
+        x.markedAt && (
+          <span className="track-mark is-static" title={`סומן${x.markedByName ? ` - ${x.markedByName}` : ''}`}>
+            <Icon name="check" size={12} />
+          </span>
+        )
+      )}
+      <button type="button" className="track-chip-body" onClick={onOpen} title={`${x.role} · ${days} · ${p.label}`}>
+        <span className="track-role">{x.role}</span>
+        <span className="track-meta">
+          {days} · {x.mentorName ?? 'בלי חונך'} · {p.label}
+        </span>
+      </button>
+    </span>
+  );
+}
+
+/** an experience opened from the table: the card itself, its mentor to change, and its mark */
+function TrackingSheet({ x, onClose }: { x: Experience; onClose: () => void }) {
+  const { users } = useSession();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const staff = users.filter((u) => u.active).sort((a, b) => byHe(a.displayName, b.displayName));
+  const setMentor = async (v: string) => {
+    setBusy(true);
+    try {
+      await api.patch(`/api/experiences/${x.id}`, { mentorId: v ? Number(v) : null });
+      emitLocalChange('cadets', 'tasks');
+      toast({ title: v ? `החונך: ${staff.find((u) => String(u.id) === v)?.displayName ?? ''}` : 'החונך הוסר', body: `${x.role} - ${x.cadetName}`, tone: 'green' });
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const mark = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/api/experiences/${x.id}/mark`, { marked: !x.markedAt });
+      emitLocalChange('cadets');
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal title={`${x.role} - ${x.cadetName}`} onClose={onClose}>
+      <div className="col gap-12">
+        <ExperienceCard x={x} compact />
+        {x.canEdit && x.status !== 'done' && (
+          <Field label="מפקד חונך" hint="משימת המשוב עוברת אליו">
+            <Select value={x.mentorId ? String(x.mentorId) : ''} onChange={(e) => void setMentor(e.target.value)} disabled={busy}>
+              <option value="">לא נקבע</option>
+              {staff.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.displayName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        {(x.canMark || x.markedAt) && (
+          <div className="row wrap gap-8 small">
+            {x.canMark && (
+              <button type="button" className={`btn btn-sm${x.markedAt ? '' : ' btn-primary'}`} onClick={() => void mark()} disabled={busy}>
+                <Icon name="check" /> {x.markedAt ? 'ביטול הסימון' : 'סימון'}
+              </button>
+            )}
+            {x.markedAt && <span className="muted">סומן{x.markedByName ? ` על ידי ${x.markedByName}` : ''} · {shortDate(dateKeyOf(x.markedAt))}</span>}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/** the commander's: who follows the experiences and feedback of every team (sees the feedback, marks) */
+function TrackersLine() {
+  const { users, settings } = useSession();
+  const [editing, setEditing] = useState(false);
+  const names = (settings.experienceTrackers ?? []).map((id) => users.find((u) => u.id === id)?.displayName).filter(Boolean);
+  return (
+    <div className="track-access small">
+      <Icon name="eye" size={15} />
+      <span className="grow">{names.length ? `עוקבים אחרי כל הצוותים: ${names.join(', ')}` : 'אפשר לתת לאנשי סגל לעקוב אחרי ההתנסויות והמשובים של כל הצוותים.'}</span>
+      <button type="button" className="link-btn tiny" onClick={() => setEditing(true)}>
+        {names.length ? 'שינוי' : 'בחירה'}
+      </button>
+      {editing && <TrackersDialog onClose={() => setEditing(false)} />}
+    </div>
+  );
+}
+
+function TrackersDialog({ onClose }: { onClose: () => void }) {
+  const { users, settings } = useSession();
+  const toast = useToast();
+  const [chosen, setChosen] = useState<Set<number>>(() => new Set(settings.experienceTrackers ?? []));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const staff = users.filter((u) => u.active && u.role !== 'commander').sort((a, b) => byHe(a.displayName, b.displayName));
+  const toggle = (id: number) =>
+    setChosen((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch('/api/settings', { experienceTrackers: [...chosen] });
+      emitLocalChange('settings', 'cadets');
+      toast({ title: 'נשמר', body: chosen.size ? `${chosen.size} עוקבים אחרי ההתנסויות` : 'אין עוקבים מעבר למפקדי הצוותים', tone: 'green' });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="מי עוקב אחרי ההתנסויות"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => void save()} disabled={busy}>
+            <Icon name="check" /> שמירה
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <p className="small muted">מי שנבחר רואה את ההתנסויות והמשובים של כל הצוותים ויכול לסמן אותם בטבלת המעקב. מפקד כל צוות עוקב ממילא אחרי הצוות שלו.</p>
+      <div className="col gap-6 mt-12">
+        {staff.map((u) => (
+          <label key={u.id} className="check track-pick">
+            <input type="checkbox" checked={chosen.has(u.id)} onChange={() => toggle(u.id)} />
+            <span>
+              {u.displayName}
+              {u.title && <span className="muted"> · {u.title}</span>}
+            </span>
+          </label>
+        ))}
+        {!staff.length && <p className="small muted">אין עדיין אנשי סגל במערכת - מוסיפים בהגדרות, משתמשים.</p>}
+      </div>
+      <ErrorBox error={error} />
     </Modal>
   );
 }

@@ -463,6 +463,7 @@ export function apiRouter(): Router {
       staffPermissions: z.partialRecord(z.enum(STAFF_ABILITIES), z.boolean()),
       entryCamp: z.string().trim().max(80),
       entryUnit: z.string().trim().max(80),
+      experienceTrackers: z.array(z.number().int().positive()).max(30),
     })
     .partial();
 

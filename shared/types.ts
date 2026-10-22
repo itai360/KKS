@@ -69,6 +69,8 @@ export interface CourseSettings {
   /** the entry requests' message (shared/entry.ts): the camp in its title, and the unit visitors come to */
   entryCamp: string;
   entryUnit: string;
+  /** who follows the experiences of every team (the tracking table): sees their feedback and marks them */
+  experienceTrackers: number[];
 }
 
 /** a visitor's entry to the base: asked for by anyone on the staff, sent on to the base by the commander */
@@ -814,6 +816,10 @@ export interface Experience {
   canEdit: boolean;
   canGiveFeedback: boolean;
   feedbackTaskId: number | null;
+  /** marked in the tracking table: by whom and when */
+  markedAt: string | null;
+  markedByName: string | null;
+  canMark: boolean;
 }
 
 // ---------------- evaluation files (תיקי הערכה) ----------------

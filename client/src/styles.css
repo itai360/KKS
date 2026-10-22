@@ -13725,3 +13725,187 @@ tr.is-finished.is-folding {
   align-items: center;
   gap: 4px;
 }
+
+/* ---------------- the experiences tracking table (pages/ExperiencesPage.tsx) ---------------- */
+.exp-view {
+  display: flex;
+  margin-bottom: 14px;
+}
+.track-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.track-filters > * {
+  flex: 0 1 240px;
+}
+.track-access {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.track-team .card-head {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.track-cmd {
+  font-size: 13px;
+  font-weight: 500;
+}
+.track-sum {
+  white-space: nowrap;
+}
+.track-rows {
+  display: flex;
+  flex-direction: column;
+}
+.track-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 210px) 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.track-row:last-child {
+  border-bottom: 0;
+}
+.track-row.is-empty .track-cadet .tiny {
+  color: var(--orange-ink);
+}
+.track-cadet {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 4px;
+}
+.track-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.track-chip {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 35%, var(--line));
+  border-radius: 10px;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+}
+.track-chip-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.track-role {
+  font-size: 13px;
+  font-weight: 600;
+}
+.track-meta {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.85;
+}
+.track-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  border: 0;
+  border-inline-end: 1px solid color-mix(in srgb, var(--tone) 30%, var(--line));
+  background: color-mix(in srgb, var(--card) 65%, transparent);
+  color: var(--green-ink);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.track-chip.is-marked .track-mark {
+  background: var(--green);
+  color: #fff;
+}
+.track-mark.is-static {
+  cursor: default;
+}
+.track-add {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px dashed var(--line-2);
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.track-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.track-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tone);
+  vertical-align: middle;
+}
+.track-pick {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+@media (max-width: 640px) {
+  .track-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 10px 14px;
+  }
+  .track-sum {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+  .track-chip-body {
+    padding: 7px 10px;
+  }
+  .track-mark {
+    width: 40px;
+  }
+  .track-add {
+    width: 38px;
+    height: 38px;
+  }
+  .track-filters > * {
+    flex: 1 1 140px;
+  }
+}
+/* not marked yet: a ring, so the place to tap reads at once */
+.track-chip:not(.is-marked) .track-mark:not(.is-static)::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid color-mix(in srgb, var(--tone) 55%, transparent);
+  border-radius: 50%;
+}
+.track-mark:active {
+  transform: scale(0.94);
+}

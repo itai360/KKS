@@ -785,11 +785,13 @@ interface ExperienceRow {
   evaluated_at: string | null;
   created_by: number;
   feedback_task_id: number | null;
+  marked_at: string | null;
+  marked_by_name: string | null;
 }
 
 const EXP_BASE = `
 SELECT x.*, trim(c.first_name || ' ' || c.last_name) AS cadet_name, tm.name AS team_name, tm.commander_id AS team_commander_id,
-  w.name AS week_name, e.title AS event_title, m.display_name AS mentor_name, ev.display_name AS evaluated_by_name,
+  w.name AS week_name, e.title AS event_title, m.display_name AS mentor_name, ev.display_name AS evaluated_by_name, mk.display_name AS marked_by_name,
   (SELECT t.id FROM tasks t WHERE t.experience_id = x.id ORDER BY t.id LIMIT 1) AS feedback_task_id
 FROM experiences x
 JOIN cadets c ON c.id = x.cadet_id
@@ -798,6 +800,7 @@ LEFT JOIN weeks w ON w.id = x.week_id
 LEFT JOIN events e ON e.id = x.event_id
 LEFT JOIN users m ON m.id = x.mentor_id
 LEFT JOIN users ev ON ev.id = x.evaluated_by
+LEFT JOIN users mk ON mk.id = x.marked_by
 `;
 
 function phaseOf(x: Pick<ExperienceRow, 'status' | 'start_date' | 'end_date'>): Experience['phase'] {
@@ -808,15 +811,20 @@ function phaseOf(x: Pick<ExperienceRow, 'status' | 'start_date' | 'end_date'>): 
   return 'awaiting_feedback';
 }
 
+/** whom the commander chose to follow the experiences of every team (settings) */
+export const isExperienceTracker = (actor: UserRow) => getSettings().experienceTrackers.includes(actor.id);
+
 function experiencePerms(actor: UserRow, x: ExperienceRow) {
   const teamCmd = x.team_commander_id === actor.id;
   // the feedback is the cadet's file; the placement is the cadets' handling
   const files = may(actor, 'cadetFiles');
-  const seeFeedback = files || teamCmd || x.mentor_id === actor.id || x.created_by === actor.id;
+  const tracker = isExperienceTracker(actor);
+  const seeFeedback = files || teamCmd || tracker || x.mentor_id === actor.id || x.created_by === actor.id;
   return {
     canSeeFeedback: seeFeedback,
     canEdit: teamCmd || x.created_by === actor.id || may(actor, 'cadets'),
     canGiveFeedback: files || teamCmd || x.mentor_id === actor.id,
+    canMark: isCommander(actor) || tracker || teamCmd || x.mentor_id === actor.id,
   };
 }
 
@@ -849,8 +857,51 @@ function toExperience(actor: UserRow, x: ExperienceRow): Experience {
     evaluatedByName: x.evaluated_by_name,
     evaluatedAt: x.evaluated_at,
     feedbackTaskId: x.feedback_task_id,
+    markedAt: x.marked_at,
+    markedByName: x.marked_by_name,
     ...p,
   };
+}
+
+/** marked in the tracking (or the mark taken off) - by the cadet's team commander, the mentor, the commander or a tracker */
+export function markExperience(actor: UserRow, id: number, marked: boolean): void {
+  const x = experienceRow(id);
+  if (!experiencePerms(actor, x).canMark) throw forbidden('מסמנים במעקב: מפקד הצוות, החונך, מפקד הקורס ומי שהמפקד בחר לעקוב');
+  db().run('UPDATE experiences SET marked_at = ?, marked_by = ? WHERE id = ?', marked ? nowIso() : null, marked ? actor.id : null, id);
+  changed('cadets');
+}
+
+/**
+ * An event in the schedule moved to another day: the roles cadets hold in it still to happen move with it,
+ * their feedback tasks too (in the caller's transaction).
+ */
+export function followEvent(actor: UserRow, eventId: number, days: number): number {
+  if (!days) return 0;
+  const moved = db().all<ExperienceRow>(`${EXP_BASE} WHERE x.event_id = ? AND x.status = 'planned'`, eventId);
+  for (const x of moved) {
+    const start = addDays(x.start_date, days);
+    const end = addDays(x.end_date, days);
+    db().run('UPDATE experiences SET start_date = ?, end_date = ?, week_id = ? WHERE id = ?', start, end, weekForDate(start), x.id);
+    keepFeedbackTask(actor, x.id, x.mentor_id, end, end !== x.end_date);
+  }
+  if (moved.length) changed('cadets', 'tasks');
+  return moved.length;
+}
+
+/** the open feedback task of an experience in step with its mentor and its end; then it may open now */
+function keepFeedbackTask(actor: UserRow, id: number, mentor: number | null, end: string, endMoved: boolean): void {
+  const task = db().get<{ id: number; status: string; owner_id: number; deadline: string }>(
+    "SELECT id, status, owner_id, deadline FROM tasks WHERE experience_id = ? AND status NOT IN ('done', 'cancelled') ORDER BY id LIMIT 1",
+    id,
+  );
+  if (task) {
+    const patch: { ownerId?: number; deadline?: string } = {};
+    if (mentor && mentor !== task.owner_id) patch.ownerId = mentor;
+    if (endMoved) patch.deadline = zonedIso(end, getSettings().defaultDeadlineTime, tz());
+    if (Object.keys(patch).length) updateTask(actor, task.id, patch, true, 'עדכון התנסות');
+  }
+  // its end moved within a week, or it was given a mentor: the feedback task may open now
+  openFeedbackTask(actor, experienceRow(id));
 }
 
 export function listExperiences(actor: UserRow, f: { cadetId?: number; mentorId?: number; weekId?: number } = {}): Experience[] {
@@ -1016,19 +1067,7 @@ export function updateExperience(actor: UserRow, id: number, raw: Partial<z.inpu
       id,
     );
     // keep the open feedback task in step with the mentor and the end date
-    const task = db().get<{ id: number; status: string; owner_id: number; deadline: string }>(
-      "SELECT id, status, owner_id, deadline FROM tasks WHERE experience_id = ? AND status NOT IN ('done', 'cancelled') ORDER BY id LIMIT 1",
-      id,
-    );
-    if (task) {
-      const patch: { ownerId?: number; deadline?: string } = {};
-      if (next.mentor && next.mentor !== task.owner_id) patch.ownerId = next.mentor;
-      const deadline = zonedIso(next.end, getSettings().defaultDeadlineTime, tz());
-      if (next.end !== cur.end_date) patch.deadline = deadline;
-      if (Object.keys(patch).length) updateTask(actor, task.id, patch, true, 'עדכון התנסות');
-    }
-    // its end moved within a week, or it was given a mentor: the feedback task may open now
-    openFeedbackTask(actor, experienceRow(id));
+    keepFeedbackTask(actor, id, next.mentor, next.end, next.end !== cur.end_date);
   });
   changed('cadets', 'tasks');
 }

@@ -2,7 +2,8 @@
 
 import { z } from 'zod';
 import { isOpenStatus } from '../../shared/constants';
-import { isDateKey, shortDate, zonedToUtc } from '../../shared/dates';
+import { diffDays, isDateKey, shortDate, zonedToUtc } from '../../shared/dates';
+import { followEvent } from './cadets';
 import type { EventDetail, ScheduleEvent, Task } from '../../shared/types';
 import { getUserRow, type UserRow } from './auth';
 import { badRequest, forbidden, notFound, nowIso, patchSchema, tz } from './core';
@@ -196,6 +197,8 @@ export function updateEvent(actor: UserRow, id: number, raw: Partial<z.input<typ
     if (next.ownerId !== cur.owner_id) changes.push(`אחראי: ${next.ownerId ? getUserRow(next.ownerId)?.display_name : 'ללא'}`);
     if (next.title !== cur.title) changes.push(`שם: ${next.title}`);
     logActivity({ eventId: id, userId: actor.id, action: 'event_updated', text: `${actor.display_name} עדכן את "${next.title}"${changes.length ? `: ${changes.join(', ')}` : ''}` });
+    // the roles cadets hold in it (experiences) go with it to its new day
+    if (next.date !== cur.date) followEvent(actor, id, diffDays(next.date, cur.date));
     if (deltaMinutes !== 0 || next.location !== cur.location) {
       const owners = queryTasks("t.event_id = ? AND t.status NOT IN ('done', 'cancelled')", id).map((t) => t.owner_id);
       notify(

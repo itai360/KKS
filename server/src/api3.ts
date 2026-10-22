@@ -24,6 +24,7 @@ import {
   feedbackAxes,
   giveFeedback,
   importCadets,
+  markExperience,
   listCadets,
   listExemptions,
   listExperiences,
@@ -359,6 +360,11 @@ export function v3Router(): Router {
   r.post('/experiences/:id/feedback', (req, res) => {
     giveFeedback(me(req), id(req.params.id), req.body);
     res.json(listExperiences(me(req)).find((x) => x.id === id(req.params.id)));
+  });
+  // the tracking table's mark
+  r.post('/experiences/:id/mark', (req, res) => {
+    markExperience(me(req), id(req.params.id), z.object({ marked: z.boolean() }).parse(req.body ?? {}).marked);
+    res.json({ ok: true });
   });
   r.delete('/experiences/:id', (req, res) => {
     deleteExperience(me(req), id(req.params.id));

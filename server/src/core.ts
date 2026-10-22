@@ -70,6 +70,7 @@ const DEFAULT_SETTINGS: CourseSettings = {
   staffPermissions: {},
   entryCamp: '',
   entryUnit: '',
+  experienceTrackers: [],
 };
 
 let settingsCache: CourseSettings | null = null;
