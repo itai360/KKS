@@ -73,6 +73,7 @@ import {
   isoDateTime,
   addDependency,
   addUpdate,
+  attachToTask,
   createRequest,
   createTasks,
   decideRequest,
@@ -564,6 +565,12 @@ export function apiRouter(): Router {
   r.delete('/tasks/:id', (req, res) => {
     deleteTask(me(req), id(req.params.id));
     res.json({ ok: true });
+  });
+
+  // attaching people beside the owner ("צרפו אותי", "+ צירוף") and taking them off
+  r.post('/tasks/:id/attach', (req, res) => {
+    attachToTask(me(req), id(req.params.id), req.body ?? {});
+    res.json(taskDetail(me(req), id(req.params.id)));
   });
 
   r.post('/tasks/:id/transition', (req, res) => {

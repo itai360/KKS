@@ -218,6 +218,8 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   const [ownerIds, setOwnerIds] = useState<number[]>(initial.ownerIds ?? (isCommander ? [] : [user.id]));
   const [allStaff, setAllStaff] = useState(!!initial.allStaff);
   const [mode, setMode] = useState<'shared' | 'copies'>('shared');
+  // attached beside the owners: the commander following a staff member's task, or the commander following one he gave
+  const [attach, setAttach] = useState(false);
   const [date, setDate] = useState(initDate);
   const [time, setTime] = useState(initTime);
   const [more, setMore] = useState(false);
@@ -277,6 +279,13 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   // a task in an area named like a track (שטח, ניווטים...) goes in that track unless another is chosen
   const autoTrack = domain ? tracks.find((t) => t.name === domain) : undefined;
   const hasMany = !allStaff && ownerIds.length > 1;
+  // who can be attached here: the commander (for a staff member), or the commander himself (for a task he gives
+  // others) - on a single task, not one copied to each person
+  const attachTargets = allStaff || (hasMany && mode === 'copies') || !ownerIds.length
+    ? []
+    : isCommander
+      ? ownerIds.includes(user.id) ? [] : [user.id]
+      : users.filter((u) => u.active && u.role === 'commander' && !ownerIds.includes(u.id)).map((u) => u.id);
   // what the form holds now - picked by hand or read from the sentence
   const ownerNames = allStaff ? ['כל הסגל'] : ownerIds.map((id) => users.find((u) => u.id === id)?.displayName ?? '');
   const missing = [!title.trim() && 'שם', !allStaff && !ownerIds.length && 'אחראי', !deadlineIso && 'דד-ליין'].filter((x): x is string => !!x);
@@ -294,6 +303,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
         description,
         assignMode: allStaff ? 'all' : mode,
         ownerIds: allStaff ? [] : ownerIds,
+        attachIds: attach ? attachTargets : [],
         deadline: deadlineIso,
         priority,
         domain,
@@ -408,6 +418,15 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
           />
         )}
         {allStaff && <div className="info-box">תיפתח משימה נפרדת לכל איש סגל, ותוכל לראות מי השלים ומי עדיין לא.</div>}
+        {attachTargets.length > 0 && (
+          <label className="check new-task-attach">
+            <input type="checkbox" checked={attach} onChange={(e) => setAttach(e.target.checked)} />
+            <span>
+              {isCommander ? 'לצרף אותי' : 'לצרף את מפקד הקורס'}
+              <span className="tiny muted"> - {isCommander ? 'תופיע אצלי ואקבל עליה עדכונים' : 'יראה אותה אצלו ויקבל עליה עדכונים'}</span>
+            </span>
+          </label>
+        )}
 
         <Field label="דד-ליין" required>
           <DateTimeInputs date={date} time={time} onDate={setDate} onTime={setTime} />

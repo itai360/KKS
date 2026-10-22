@@ -212,6 +212,8 @@ export interface TaskPermissions {
   canCancel: boolean;
   canRequestDeadline: boolean;
   canRequestTransfer: boolean;
+  /** attach others to it (anyone who sees it may attach themselves) */
+  canAttach: boolean;
 }
 
 export interface GroupProgress {

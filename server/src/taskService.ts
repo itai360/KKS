@@ -24,6 +24,7 @@ import { changed, logActivity, notify } from './journal';
 import {
   approverIds,
   canApprove,
+  canAttach,
   canChangeDeadline,
   canChangeOwner,
   canDelete,
@@ -57,6 +58,8 @@ export const createTaskSchema = z.object({
   description: z.string().max(5000).optional().default(''),
   assignMode: z.enum(['shared', 'copies', 'all']).optional().default('shared'),
   ownerIds: z.array(z.number().int().positive()).optional().default([]),
+  /** attached beside its owners (the commander following it): told of it and of what happens to it */
+  attachIds: z.array(z.number().int().positive()).max(20).optional().default([]),
   deadline: isoDateTime,
   priority: z.enum(PRIORITIES).optional().default('normal'),
   domain: z.string().trim().max(60).optional().default(''),
@@ -169,9 +172,12 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
   // copies/all -> a separate copy for each person, tracked together (section 64)
   const asCopies = input.assignMode === 'all' || (input.assignMode === 'copies' && owners.length > 1);
   const groupId = asCopies ? randomUUID() : null;
+  // the attached go on a single task (a copy for each person stays each one's own)
+  const attached = asCopies ? [] : [...new Set(input.attachIds)].filter((a) => !owners.includes(a));
+  attached.forEach(requireActiveUser);
   const units: { owner: number; participants: number[] }[] = asCopies
     ? owners.map((o) => ({ owner: o, participants: [] }))
-    : [{ owner: owners[0], participants: owners.slice(1) }];
+    : [{ owner: owners[0], participants: [...owners.slice(1), ...attached] }];
 
   const ids: number[] = [];
   db().tx(() => {
@@ -232,12 +238,24 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
       });
       if (!opts.silent) {
         notify(
-          [unit.owner, ...unit.participants],
+          [unit.owner, ...unit.participants.filter((p) => !attached.includes(p))],
           {
             type: 'task_assigned',
             category: 'action',
             title: `נוספה לך משימה חדשה: "${input.title}"`,
             body: `מאת ${actor.display_name} · דד-ליין ${fmt(input.deadline)}`,
+            taskId: id,
+          },
+          actor.id,
+        );
+        // the attached follow it: told so, not handed it
+        notify(
+          attached,
+          {
+            type: 'task_assigned',
+            category: 'info',
+            title: `צורפת למשימה: "${input.title}"`,
+            body: `מאת ${actor.display_name} · אחראי: ${getUserRow(unit.owner)?.display_name ?? ''} · דד-ליין ${fmt(input.deadline)}`,
             taskId: id,
           },
           actor.id,
@@ -1098,4 +1116,28 @@ export function listActivity(where: string, params: (string | number)[], limit =
       text: a.text,
       createdAt: a.created_at,
     }));
+}
+
+export const attachSchema = z.object({
+  add: z.array(z.number().int().positive()).max(20).optional().default([]),
+  remove: z.array(z.number().int().positive()).max(20).optional().default([]),
+});
+
+/**
+ * Attaching people to a task beside its owner (and taking them off). Anyone who sees it attaches themselves
+ * ("צרפו אותי") and leaves it; the ones on it, its creator and the commander attach others; taking someone
+ * else off is for its owner, its creator and the commander.
+ */
+export function attachToTask(actor: UserRow, id: number, raw: z.input<typeof attachSchema>): void {
+  const p = attachSchema.parse(raw);
+  const t = mustTaskRow(id);
+  if (!canView(actor, t)) throw notFound('המשימה לא נמצאה');
+  const others = p.add.filter((u) => u !== actor.id);
+  if (others.length && !canAttach(actor, t)) throw forbidden('לצרף אחרים יכולים מי שעל המשימה, מי שיצר אותה ומפקד הקורס');
+  const removesOthers = p.remove.some((u) => u !== actor.id);
+  if (removesOthers && !(canEdit(actor, t) || t.owner_id === actor.id)) throw forbidden('להסיר אחרים יכולים האחראי, מי שיצר את המשימה ומפקד הקורס');
+  const prev = participantsOf(t);
+  const next = [...new Set([...prev, ...p.add])].filter((u) => !p.remove.includes(u) && u !== t.owner_id);
+  // the participants' edit, its log and its notice - the permission was checked here
+  updateTask(actor, id, { participantIds: next }, true);
 }

@@ -14089,3 +14089,17 @@ tr.is-finished.is-folding {
 .more-screen:active {
   background: var(--hover);
 }
+
+/* the ones attached to a task beside its owner (pages/TaskPage.tsx) */
+.attached {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.attached-me {
+  min-height: 32px;
+}
+.new-task-attach {
+  align-items: flex-start;
+}

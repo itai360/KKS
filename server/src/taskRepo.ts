@@ -230,7 +230,13 @@ export function permissionsFor(u: UserRow, t: TaskRow): TaskPermissions {
     canCancel: canEdit(u, t),
     canRequestDeadline: open && !deadline && involved,
     canRequestTransfer: open && !owner && involved,
+    canAttach: canAttach(u, t),
   };
+}
+
+/** who attaches others to a task (the commander, say, to follow it): the ones on it, its creator and the commander */
+export function canAttach(u: UserRow, t: TaskRow): boolean {
+  return canEdit(u, t) || t.owner_id === u.id || participantsOf(t).includes(u.id);
 }
 
 export function visibleTasks(u: UserRow, where = '1=1', ...params: (string | number | null)[]): Task[] {

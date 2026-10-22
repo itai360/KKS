@@ -1,7 +1,7 @@
 // Section 9 (task page), 20 (activity log), 41-46 (receiving, updating, blocking,
 // completing), 59-60 (dependencies, subtasks), 64 (all-staff progress).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { domainLabel, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
 import type { MyTasksData, Task, TaskDetail, TaskRequest } from '@shared/types';
@@ -9,7 +9,7 @@ import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Decided, useDecision } from '../components/Decision';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
-import { useNewTask } from '../components/NewTask';
+import { UserPicker, useNewTask } from '../components/NewTask';
 import { TaskActions, useTaskMutation, type EditField } from '../components/TaskActions';
 import { OpenTaskList } from '../components/TaskRow';
 import { Bar, ErrorBox, PageError, Loading, Modal } from '../components/ui';
@@ -200,7 +200,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
           <Attachments detail={detail} onChange={onChange} />
         </div>
         <div className="col gap-16 sticky-side">
-          <Details task={t} onEdit={onEdit} canChange={canChange} />
+          <Details task={t} onEdit={onEdit} canChange={canChange} attach={<Attached detail={detail} onChange={onChange} />} />
           <ActivityLog detail={detail} />
         </div>
       </div>
@@ -292,8 +292,7 @@ function GroupCard({ group, name }: { group: NonNullable<TaskDetail['group']>; n
   );
 }
 
-function Details({ task: t, onEdit, canChange }: { task: Task; onEdit: (f: EditField) => void; canChange: (f: EditField) => boolean }) {
-  const { userName } = useSession();
+function Details({ task: t, onEdit, canChange, attach }: { task: Task; onEdit: (f: EditField) => void; canChange: (f: EditField) => boolean; attach: ReactNode }) {
   const open = t.status !== 'done' && t.status !== 'cancelled';
   const pen = (f: EditField, what: string) =>
     open &&
@@ -314,15 +313,8 @@ function Details({ task: t, onEdit, canChange }: { task: Task; onEdit: (f: EditF
             <Link to={`/team/${t.ownerId}`}>{t.ownerName}</Link>
             {pen('owner', 'אחראי')}
           </dd>
-          {t.participantIds.length > 0 && (
-            <>
-              <dt>משתתפים</dt>
-              <dd>
-                {t.participantIds.map((p) => userName(p)).join(', ')}
-                {pen('participants', 'משתתפים')}
-              </dd>
-            </>
-          )}
+          <dt>מצורפים</dt>
+          <dd>{attach}</dd>
           <dt>נוצר על ידי</dt>
           <dd>
             {t.createdByName} <span className="muted tiny">· {fmtAgo(t.createdAt)}</span>
@@ -757,5 +749,73 @@ function NextUp({ after }: { after: number }) {
       </span>
       <Icon name="chevronLeft" className="next-up-go" />
     </button>
+  );
+}
+
+/**
+ * The ones attached beside the owner - the commander following it, say. Anyone who sees the task attaches
+ * themselves in a tap ("צרפו אותי") and leaves it; the ones on it, its creator and the commander attach others.
+ */
+function Attached({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
+  const { user, userName } = useSession();
+  const t = detail.task;
+  const m = useTaskMutation(t.id, onChange);
+  const [picking, setPicking] = useState(false);
+  const open = isOpenStatus(t.status);
+  const mine = t.participantIds.includes(user.id);
+  const owner = t.ownerId === user.id;
+  const send = (body: { add?: number[]; remove?: number[] }, done: string) => void m.run(() => api.post<TaskDetail>(`/api/tasks/${t.id}/attach`, body), done);
+  return (
+    <span className="attached">
+      {t.participantIds.length ? t.participantIds.map((p) => userName(p)).join(', ') : <span className="muted">אף אחד עדיין</span>}
+      {open && !owner && !mine && (
+        <button type="button" className="btn btn-sm attached-me" onClick={() => send({ add: [user.id] }, 'צורפת למשימה - תופיע אצלך ותקבל עליה עדכונים')} disabled={m.busy}>
+          <Icon name="plus" size={14} /> צרפו אותי
+        </button>
+      )}
+      {open && detail.permissions.canAttach && (
+        <button type="button" className="link-btn tiny" onClick={() => setPicking(true)}>
+          צירוף
+        </button>
+      )}
+      {mine && (
+        <button type="button" className="link-btn tiny muted" onClick={() => send({ remove: [user.id] }, 'יצאת מהמשימה')} disabled={m.busy}>
+          יציאה
+        </button>
+      )}
+      {picking && <AttachDialog detail={detail} onClose={() => setPicking(false)} onSave={(ids) => {
+        const add = ids.filter((i) => !t.participantIds.includes(i));
+        const remove = t.participantIds.filter((i) => !ids.includes(i));
+        setPicking(false);
+        if (add.length || remove.length) send({ add, remove }, add.length ? `צורפו: ${add.map((i) => userName(i)).join(', ')}` : 'עודכן');
+      }} />}
+    </span>
+  );
+}
+
+function AttachDialog({ detail, onClose, onSave }: { detail: TaskDetail; onClose: () => void; onSave: (ids: number[]) => void }) {
+  const { user } = useSession();
+  const t = detail.task;
+  const [ids, setIds] = useState<number[]>(t.participantIds);
+  // taking someone else off: its owner, its creator and the commander
+  const mayRemove = detail.permissions.canEdit || t.ownerId === user.id;
+  return (
+    <Modal
+      title="צירוף למשימה"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => onSave(mayRemove ? ids : [...new Set([...t.participantIds, ...ids])])}>
+            <Icon name="check" /> שמירה
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <p className="small muted mb-12">מי שמצורף רואה את המשימה אצלו ומקבל עדכונים עליה. האחראי נשאר {t.ownerName}.</p>
+      <UserPicker value={ids.filter((i) => i !== t.ownerId)} onChange={setIds} />
+    </Modal>
   );
 }
