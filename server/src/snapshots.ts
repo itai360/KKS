@@ -141,7 +141,7 @@ interface AccountSafety {
   calendar_token: string | null;
   active: number;
 }
-const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment', 'plans'];
+const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment', 'plans', 'weekly', 'entries'];
 
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`;
 

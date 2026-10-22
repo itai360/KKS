@@ -1163,7 +1163,34 @@ function V44_TRAINING_TRACKS(db: Db): void {
   db.run(`UPDATE tasks SET track_id = (SELECT id FROM tracks WHERE tracks.name = tasks.domain) WHERE track_id IS NULL AND domain IN (${marks})`, ...ADDED_TRACKS);
 }
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS];
+// visitors' entry to the base (entries.ts): asked for by the staff, sent on by the commander. Personal
+// details - kept only until a week after the visit (automation.ts, housekeeping). An id is never given
+// again, so a deleted request's notifications do not come back with a new one.
+const SCHEMA_V45 = `
+CREATE TABLE entry_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  visit_date TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  phone TEXT NOT NULL DEFAULT '',
+  visitor_kind TEXT NOT NULL DEFAULT 'civilian' CHECK (visitor_kind IN ('civilian', 'soldier')),
+  rank TEXT NOT NULL DEFAULT '',
+  clearance TEXT NOT NULL DEFAULT '',
+  id_number TEXT NOT NULL DEFAULT '',
+  escort INTEGER NOT NULL DEFAULT 0,
+  by_car INTEGER NOT NULL DEFAULT 0,
+  car_number TEXT NOT NULL DEFAULT '',
+  car_kind TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent')),
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  sent_at TEXT,
+  sent_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX entry_requests_date ON entry_requests(visit_date);
+`;
+
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

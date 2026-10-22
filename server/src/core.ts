@@ -68,6 +68,8 @@ const DEFAULT_SETTINGS: CourseSettings = {
   domains: DEFAULT_DOMAINS,
   staffGroups: DEFAULT_STAFF_GROUPS,
   staffPermissions: {},
+  entryCamp: '',
+  entryUnit: '',
 };
 
 let settingsCache: CourseSettings | null = null;

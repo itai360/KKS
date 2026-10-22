@@ -33,6 +33,7 @@ import {
   updateExperience,
 } from './cadets';
 import { badRequest, clock, config, notFound, tz } from './core';
+import { createEntry, deleteEntry, listEntries, markEntrySent, updateEntry } from './entries';
 import { db } from './db';
 import {
   addItem,
@@ -256,6 +257,22 @@ export function v3Router(): Router {
     res.json({ ok: true });
   });
   r.get('/cadets/:id/sociometric', (req, res) => res.json(socioOfCadet(me(req), id(req.params.id))));
+
+  // ---------------- visitors' entry to the base (אישור כניסה) ----------------
+  r.get('/entries', (req, res) => res.json(listEntries(me(req))));
+  r.post('/entries', (req, res) => res.json({ id: createEntry(me(req), req.body) }));
+  r.patch('/entries/:id', (req, res) => {
+    updateEntry(me(req), id(req.params.id), req.body);
+    res.json({ ok: true });
+  });
+  r.post('/entries/:id/sent', requireCommander, (req, res) => {
+    markEntrySent(me(req), id(req.params.id), z.object({ sent: z.boolean().optional().default(true) }).parse(req.body ?? {}).sent);
+    res.json({ ok: true });
+  });
+  r.delete('/entries/:id', (req, res) => {
+    deleteEntry(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
 
   // ---------------- the weekly (שבועי) ----------------
   // each course week's staff meeting: anyone adds to it during the week, the commander holds it

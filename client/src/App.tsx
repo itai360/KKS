@@ -3,6 +3,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout';
 import { NewTaskProvider } from './components/NewTask';
 import { WeekDebriefAddHost } from './components/WeekDebriefAdd';
+import { EntryAddHost } from './components/EntryAdd';
 import { WeeklyAddHost } from './components/WeeklyAdd';
 import { ToastProvider } from './components/Toasts';
 import { Empty, Loading } from './components/ui';
@@ -36,6 +37,7 @@ const DayEndPage = lazyPage(() => import('./pages/ReportsPage'), 'DayEndPage');
 const LookAheadPage = lazyPage(() => import('./pages/ReportsPage'), 'LookAheadPage');
 const WeeklyReportPage = lazyPage(() => import('./pages/ReportsPage'), 'WeeklyReportPage');
 const RequestsPage = lazyPage(() => import('./pages/RequestsPage'), 'RequestsPage');
+const EntriesPage = lazyPage(() => import('./pages/EntriesPage'), 'EntriesPage');
 const SchedulePage = lazyPage(() => import('./pages/SchedulePage'), 'SchedulePage');
 const SearchPage = lazyPage(() => import('./pages/SearchPage'), 'SearchPage');
 const SettingsPage = lazyPage(() => import('./pages/SettingsPage'), 'SettingsPage');
@@ -116,6 +118,7 @@ function AuthedRoutes() {
               <Route path="/team" element={isCommander ? <TeamPage /> : <Navigate to="/" />} />
               <Route path="/team/:id" element={<StaffPage />} />
               <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/entries" element={<EntriesPage />} />
               <Route path="/briefing" element={<BriefingPage />} />
               <Route path="/reports/weekly" element={<WeeklyReportPage />} />
               <Route path="/lookahead" element={<LookAheadPage />} />
@@ -150,6 +153,7 @@ function AuthedRoutes() {
         </Layout>
         <WeeklyAddHost />
         <WeekDebriefAddHost />
+        <EntryAddHost />
       </NewTaskProvider>
     </ToastProvider>
   );

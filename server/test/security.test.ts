@@ -49,6 +49,8 @@ async function plantSecrets() {
   await ok(c.s1.post(`/api/evaluations/${cadet}/points`, { period: 'שבוע 2', description: `${SECRET}7b אירוע` }));
   // another person's absence note
   await ok(c.s1.post('/api/absences', { startDate: '2026-10-05', endDate: '2026-10-06', reason: 'sick', note: `${SECRET}10 בדיקה רפואית` }));
+  // a visitor someone else asked to let into the base
+  await ok(c.s1.post('/api/entries', { visitDate: '2026-10-06', fullName: `${SECRET}13 מבקר`, phone: '0501234567', visitorKind: 'civilian', idNumber: '123456782', reason: 'הרצאה' }));
   return { cadet, task, weekId, team };
 }
 
@@ -96,6 +98,7 @@ const READS = (p: { cadet: number; task: number; weekId: number }, ids: Ctx['ids
   `/api/team/${ids.cmd}`,
   '/api/templates',
   '/api/recurring',
+  '/api/entries',
   '/api/calendar/sources',
   '/api/auth/sessions',
 ];

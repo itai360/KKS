@@ -460,6 +460,8 @@ export function apiRouter(): Router {
         .max(20)
         .refine((gs) => new Set(gs.map((g) => g.id)).size === gs.length && new Set(gs.map((g) => g.name)).size === gs.length, 'יש שתי קבוצות באותו שם'),
       staffPermissions: z.partialRecord(z.enum(STAFF_ABILITIES), z.boolean()),
+      entryCamp: z.string().trim().max(80),
+      entryUnit: z.string().trim().max(80),
     })
     .partial();
 

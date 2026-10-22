@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
-import type { Task, TaskRequest } from '@shared/types';
+import type { EntryRequest, Task, TaskRequest } from '@shared/types';
 import { pendingRequests, reportIssue } from '../lib/api';
 import { onNotification, onStatus } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -13,6 +13,7 @@ import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
+import { addEntry } from './EntryAdd';
 import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
 import { CommandPalette } from './CommandPalette';
@@ -132,6 +133,8 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
   const requests = useApi<TaskRequest[]>(isCommander ? '/api/requests' : null, ['requests', 'tasks']);
   const approvals = useApi<Task[]>(isCommander ? '/api/tasks?status=pending_approval' : null, ['tasks']);
   const pending = (requests.data?.length ?? 0) + (approvals.data?.length ?? 0);
+  // visitors' entry still to send on to the base
+  const entries = useApi<EntryRequest[]>(isCommander ? '/api/entries' : null, ['entries']).data?.filter((e) => e.status === 'pending').length ?? 0;
   // messages from the staff's WhatsApp group that came in since this person last looked
   const alignment = useApi<{ n: number }>('/api/alignment/unseen', ['alignment', 'alignment-seen']).data?.n ?? 0;
 
@@ -171,6 +174,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         title: 'בקרה',
         items: [
           { to: '/requests', label: 'אישורים ובקשות', icon: 'inbox', count: pending },
+          { to: '/entries', label: 'אישורי כניסה', icon: 'stamp', count: entries, keywords: 'מבקר כניסה לבסיס ש"ג' },
           { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
           { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
           { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
@@ -231,6 +235,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       title: 'בקרה',
       items: [
         { to: '/requests', label: 'הבקשות שלי', icon: 'inbox' },
+        { to: '/entries', label: 'אישורי כניסה', icon: 'stamp', keywords: 'מבקר כניסה לבסיס ש"ג' },
         { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
         { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
         { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
@@ -811,6 +816,10 @@ export function Layout({ children }: { children: ReactNode }) {
             setPlusOpen(false);
             addToWeekDebrief();
           }}
+          onEntry={() => {
+            setPlusOpen(false);
+            addEntry();
+          }}
           onEvent={
             canEvent
               ? () => {
@@ -835,6 +844,7 @@ function PlusMenu({
   onTask,
   onWeekly,
   onDebrief,
+  onEntry,
   onEvent,
   leaving,
 }: {
@@ -843,6 +853,7 @@ function PlusMenu({
   onTask: () => void;
   onWeekly: () => void;
   onDebrief: () => void;
+  onEntry: () => void;
   onEvent?: () => void;
   leaving: boolean;
 }) {
@@ -934,6 +945,15 @@ function PlusMenu({
           <span className="grow">
             <span className="plus-menu-title">לתחקיר השבוע</span>
             <span className="plus-menu-sub">לשימור, לשיפור או לקח - לתחקיר השבועי של השבוע הזה</span>
+          </span>
+        </button>
+        <button type="button" role="menuitem" onClick={onEntry}>
+          <span className="plus-menu-icon">
+            <Icon name="stamp" />
+          </span>
+          <span className="grow">
+            <span className="plus-menu-title">אישור כניסה</span>
+            <span className="plus-menu-sub">מבקר שמגיע לבסיס - הבקשה מגיעה למפקד הקורס</span>
           </span>
         </button>
       </div>

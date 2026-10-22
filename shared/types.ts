@@ -1,6 +1,7 @@
 // API data shapes shared by the server (producer) and the client (consumer).
 
 import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
+import type { EntryFields } from './entry';
 import type { ExperienceFeedbackForm } from './experienceFeedback';
 import type { ExperienceKind, ExperienceSpan } from './experiences';
 import type { StaffPermissions } from './permissions';
@@ -65,6 +66,22 @@ export interface CourseSettings {
   staffGroups: StaffGroupDef[];
   /** what the staff may do beyond their own work (shared/permissions.ts); what is not set is at its default */
   staffPermissions: StaffPermissions;
+  /** the entry requests' message (shared/entry.ts): the camp in its title, and the unit visitors come to */
+  entryCamp: string;
+  entryUnit: string;
+}
+
+/** a visitor's entry to the base: asked for by anyone on the staff, sent on to the base by the commander */
+export interface EntryRequest extends EntryFields {
+  id: number;
+  status: 'pending' | 'sent';
+  createdBy: number | null;
+  createdByName: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  sentByName: string | null;
+  /** its writer while it waits; the commander always */
+  canEdit: boolean;
 }
 
 export interface Task {

@@ -13635,3 +13635,86 @@ tr.is-finished.is-folding {
     border: 1px solid #000;
   }
 }
+
+/* ---------------- visitors' entry to the base (pages/EntriesPage.tsx, components/EntryAdd.tsx) ---------------- */
+.entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 90px;
+}
+.entry-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.entry-name {
+  font-size: 15.5px;
+  overflow-wrap: anywhere;
+}
+.entry-card.is-sent .entry-name {
+  color: var(--muted);
+}
+.entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.entry-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.entry-msg {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.entry-state {
+  white-space: nowrap;
+}
+.entry-state.is-sent {
+  color: var(--green-ink);
+  background: var(--green-bg);
+}
+.entry-place {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.entry-privacy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.entry-missing {
+  margin-inline-start: auto;
+  align-self: center;
+}
+@media (max-width: 640px) {
+  .entry-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 44px;
+  }
+  .entry-missing {
+    flex-basis: 100%;
+    margin-inline-start: 0;
+  }
+}
+.entry-foot .text-red {
+  color: var(--red);
+}

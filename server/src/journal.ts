@@ -87,7 +87,7 @@ interface NotificationRow {
 // ---------------- what is finished leaves the bell ----------------
 
 /** the news of something done (completed, approved, cancelled, closed, summed up): finished as it comes */
-const NEWS_OF_DONE = ['task_done', 'group_done', 'approved', 'cancelled', 'deleted', 'week_closed', 'week_approved', 'weekly_summary', 'event_cancelled'];
+const NEWS_OF_DONE = ['task_done', 'group_done', 'approved', 'cancelled', 'deleted', 'week_closed', 'week_approved', 'weekly_summary', 'event_cancelled', 'entry_sent'];
 /** the kinds about one task: once the task is gone (deleted, done, cancelled), so are they */
 const TASK_KINDS = [
   'task_assigned',
@@ -155,6 +155,7 @@ export const FINISHED = `coalesce((CASE
   WHEN n.task_id IS NOT NULL THEN t.id IS NULL OR t.status IN ('done', 'cancelled')
   WHEN n.ref LIKE 'announcement:%' THEN NOT EXISTS (SELECT 1 FROM announcements a WHERE a.id = ${REF_ID} AND NOT ${ANNOUNCEMENT_DONE})
   WHEN n.type = 'announcement' THEN NOT EXISTS (SELECT 1 FROM announcements a WHERE a.created_at <= n.created_at AND NOT ${ANNOUNCEMENT_DONE})
+  WHEN n.ref LIKE 'entry:%' THEN NOT EXISTS (SELECT 1 FROM entry_requests er WHERE er.id = ${REF_ID} AND er.status = 'pending')
   WHEN n.ref LIKE 'weekly-item:%' THEN NOT EXISTS (SELECT 1 FROM weekly_items wi WHERE wi.id = ${REF_ID} AND wi.done = 0 AND wi.owner_id = n.user_id)
   WHEN n.type = 'weekly_closure' THEN NOT EXISTS (SELECT 1 FROM weekly_items wi WHERE wi.kind = 'closure' AND wi.done = 0 AND wi.owner_id = n.user_id AND n.link = '/weekly/' || wi.week_id)
   WHEN n.type = 'committee' AND n.category = 'info' THEN 1

@@ -16,6 +16,7 @@ import { involvedIds, queryTasks } from './taskRepo';
 import { applyTemplate } from './templates';
 import { weeklyDebriefTasks } from './weeklyDebriefTask';
 import { experienceFeedbackTasks } from './cadets';
+import { ENTRY_KEEP_DAYS } from './entries';
 
 export interface AutomationResult {
   overdue: number;
@@ -185,6 +186,8 @@ export function housekeeping(now: Date): number {
     removed += db().run('DELETE FROM login_lockouts WHERE until < ?', now.getTime()).changes;
     // reminders and briefs sent once: their marks outlive what they were about
     removed += db().run('DELETE FROM automation_marks WHERE at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
+    // a visitor's details, a week after the visit
+    removed += db().run('DELETE FROM entry_requests WHERE visit_date < ?', addDays(today, -ENTRY_KEEP_DAYS)).changes;
   });
   return removed;
 }
