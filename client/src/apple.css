@@ -27,11 +27,13 @@
   --rail-2: rgba(118, 118, 128, 0.12);
   --rail-ink: #000000;
   --rail-muted: #8a8a8e;
-  --focus: #007aff;
+  --focus: #1c3f7a;
   /* the tint, and the fills of controls */
-  --tint: #007aff;
-  --tint-press: #0062cc;
-  --tint-bg: rgba(0, 122, 255, 0.12);
+  --tint: #1c3f7a;
+  /* the tint as a fill under white words (a button, the chosen screen) */
+  --tint-fill: #1c3f7a;
+  --tint-press: #142e5a;
+  --tint-bg: rgba(28, 63, 122, 0.1);
   --fill: rgba(118, 118, 128, 0.12);
   --fill-2: rgba(118, 118, 128, 0.2);
   --thumb: #ffffff;
@@ -49,8 +51,8 @@
   --green-bg: #e2f7e7;
   --gray: #8e8e93;
   --gray-bg: #efeff4;
-  --blue: #007aff;
-  --blue-bg: #e3efff;
+  --blue: #1c3f7a;
+  --blue-bg: #e3e9f4;
   --purple: #af52de;
   --purple-bg: #f4e7fb;
   /* the same tones dark enough for small text on white */
@@ -71,11 +73,11 @@
   --top-h: 56px;
 
   --topbar-bg: var(--material);
-  --primary-hover: #0066d6;
+  --primary-hover: #16335f;
   --hover: rgba(0, 0, 0, 0.04);
   --hover-2: rgba(0, 0, 0, 0.08);
   --field: rgba(118, 118, 128, 0.12);
-  --field-ring: rgba(0, 122, 255, 0.25);
+  --field-ring: rgba(28, 63, 122, 0.22);
   --board-col: rgba(229, 229, 234, 0.6);
   --done-line: rgba(60, 60, 67, 0.3);
   --event-bg: #dceaff;
@@ -99,10 +101,11 @@
     --rail-2: rgba(118, 118, 128, 0.24);
     --rail-ink: #ffffff;
     --rail-muted: #98989f;
-    --focus: #0a84ff;
-    --tint: #0a84ff;
-    --tint-press: #409cff;
-    --tint-bg: rgba(10, 132, 255, 0.2);
+    --focus: #84a7e6;
+    --tint: #84a7e6;
+    --tint-fill: #2b5197;
+    --tint-press: #a3bdee;
+    --tint-bg: rgba(132, 167, 230, 0.18);
     --fill: rgba(118, 118, 128, 0.24);
     --fill-2: rgba(118, 118, 128, 0.32);
     --thumb: #636366;
@@ -120,8 +123,8 @@
     --green-bg: #10321a;
     --gray: #8e8e93;
     --gray-bg: #2c2c2e;
-    --blue: #0a84ff;
-    --blue-bg: #0b2a4b;
+    --blue: #84a7e6;
+    --blue-bg: #14233f;
     --purple: #bf5af2;
     --purple-bg: #2f1940;
     --red-ink: #ff6961;
@@ -133,14 +136,14 @@
     --shadow: none;
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
     --topbar-bg: var(--material);
-    --primary-hover: #409cff;
+    --primary-hover: #34599f;
     --hover: rgba(255, 255, 255, 0.05);
     --hover-2: rgba(255, 255, 255, 0.1);
     --field: rgba(118, 118, 128, 0.24);
-    --field-ring: rgba(10, 132, 255, 0.35);
+    --field-ring: rgba(132, 167, 230, 0.32);
     --board-col: rgba(28, 28, 30, 0.8);
     --done-line: rgba(235, 235, 245, 0.3);
-    --event-bg: #0b2a4b;
+    --event-bg: #14233f;
     --event-ink: #9ccaff;
     color-scheme: dark;
   }
@@ -162,10 +165,11 @@
     --rail-2: rgba(118, 118, 128, 0.24);
     --rail-ink: #ffffff;
     --rail-muted: #98989f;
-    --focus: #0a84ff;
-    --tint: #0a84ff;
-    --tint-press: #409cff;
-    --tint-bg: rgba(10, 132, 255, 0.2);
+    --focus: #84a7e6;
+    --tint: #84a7e6;
+    --tint-fill: #2b5197;
+    --tint-press: #a3bdee;
+    --tint-bg: rgba(132, 167, 230, 0.18);
     --fill: rgba(118, 118, 128, 0.24);
     --fill-2: rgba(118, 118, 128, 0.32);
     --thumb: #636366;
@@ -183,8 +187,8 @@
     --green-bg: #10321a;
     --gray: #8e8e93;
     --gray-bg: #2c2c2e;
-    --blue: #0a84ff;
-    --blue-bg: #0b2a4b;
+    --blue: #84a7e6;
+    --blue-bg: #14233f;
     --purple: #bf5af2;
     --purple-bg: #2f1940;
     --red-ink: #ff6961;
@@ -196,14 +200,14 @@
     --shadow: none;
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
     --topbar-bg: var(--material);
-    --primary-hover: #409cff;
+    --primary-hover: #34599f;
     --hover: rgba(255, 255, 255, 0.05);
     --hover-2: rgba(255, 255, 255, 0.1);
     --field: rgba(118, 118, 128, 0.24);
-    --field-ring: rgba(10, 132, 255, 0.35);
+    --field-ring: rgba(132, 167, 230, 0.32);
     --board-col: rgba(28, 28, 30, 0.8);
     --done-line: rgba(235, 235, 245, 0.3);
-    --event-bg: #0b2a4b;
+    --event-bg: #14233f;
     --event-ink: #9ccaff;
     color-scheme: dark;
   }
@@ -357,7 +361,7 @@ h4 {
 /* the app's icon: a rounded square in the tint, the course's letters in white */
 .brand-mark {
   font-family: var(--display);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 80%, #fff) 0%, var(--tint) 100%);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tint-fill) 80%, #fff) 0%, var(--tint-fill) 100%);
   color: #fff;
   border-radius: 10px;
   font-size: 15px;
@@ -390,7 +394,7 @@ h4 {
   }
 }
 .rail-link.active {
-  background: var(--tint);
+  background: var(--tint-fill);
   color: #fff;
 }
 .rail-link.active svg {
@@ -455,7 +459,7 @@ html[data-scrolled] .topbar {
   box-shadow: none;
 }
 .top-brand .brand-mark {
-  background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 80%, #fff) 0%, var(--tint) 100%);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tint-fill) 80%, #fff) 0%, var(--tint-fill) 100%);
   color: #fff;
   border-radius: 9px;
   font-size: 14px;
@@ -549,8 +553,8 @@ html[data-scrolled] .topbar {
   opacity: 0.85;
 }
 .btn-primary {
-  background: var(--tint);
-  border-color: var(--tint);
+  background: var(--tint-fill);
+  border-color: var(--tint-fill);
   color: #fff;
 }
 @media (hover: hover) {
@@ -736,8 +740,8 @@ input[type='radio'] {
   }
 }
 .chip.on {
-  background: var(--tint);
-  border-color: var(--tint);
+  background: var(--tint-fill);
+  border-color: var(--tint-fill);
   color: #fff;
 }
 .chip.on.t-red {
@@ -840,8 +844,8 @@ input[type='radio'] {
 }
 .task-check.checked,
 .task-row.done .task-check {
-  background: var(--tint);
-  border-color: var(--tint);
+  background: var(--tint-fill);
+  border-color: var(--tint-fill);
   color: #fff;
 }
 
@@ -1132,13 +1136,13 @@ input[type='radio'] {
 
 /* the computer's "+": a round button in the tint */
 .top-plus {
-  background: var(--tint);
+  background: var(--tint-fill);
   color: #fff;
   box-shadow: none;
 }
 @media (hover: hover) {
   .top-plus:hover {
-    background: color-mix(in srgb, var(--tint) 88%, #000);
+    background: color-mix(in srgb, var(--tint-fill) 88%, #000);
   }
 }
 
@@ -1180,8 +1184,8 @@ input[type='radio'] {
   line-height: 1;
   letter-spacing: -0.02em;
   color: #fff;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 72%, #fff), var(--tint));
-  box-shadow: 0 12px 28px -14px color-mix(in srgb, var(--tint) 80%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint-fill) 72%, #fff), var(--tint-fill));
+  box-shadow: 0 12px 28px -14px color-mix(in srgb, var(--tint-fill) 80%, transparent);
 }
 .login-tag {
   max-width: 330px;
@@ -1307,9 +1311,9 @@ input[type='radio'] {
   .bottom-nav.compact .plus {
     width: 44px;
     height: 44px;
-    background: var(--tint);
+    background: var(--tint-fill);
     color: #fff;
-    box-shadow: 0 4px 12px color-mix(in srgb, var(--tint) 35%, transparent);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--tint-fill) 35%, transparent);
   }
   .bottom-nav.compact .plus svg {
     scale: 1;
