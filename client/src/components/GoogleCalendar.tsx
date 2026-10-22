@@ -32,7 +32,7 @@ export function GoogleCalendarModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** The schedule in the user's own Google Calendar. */
+/** The schedule, and one's own tasks still open, in the user's own Google Calendar. */
 function MyFeed() {
   const toast = useToast();
   const feed = useApi<CalendarFeed>('/api/calendar/feed', []);
@@ -60,8 +60,10 @@ function MyFeed() {
 
   return (
     <section className="col gap-6">
-      <h3>הלו"ז ביומן Google שלך</h3>
-      <div className="small muted">כל אירועי הלו"ז יופיעו ביומן Google שלך ויתעדכנו מעצמם. Google בודק שינויים כמה פעמים ביום, כך ששינוי חדש מופיע שם באיחור של עד כמה שעות. הכי נוח להוסיף מהמחשב, ומשם היומן מופיע גם באפליקציה בטלפון.</div>
+      <h3>הלו"ז והמשימות ביומן Google שלך</h3>
+      <div className="small muted">
+        כל אירועי הלו"ז, וכל משימה פתוחה שלך בשעת הדד-ליין שלה, יופיעו ביומן Google שלך ויתעדכנו מעצמם - משימה שהושלמה יורדת משם. Google בודק שינויים כמה פעמים ביום, כך ששינוי חדש מופיע שם באיחור של עד כמה שעות (למשימה אחת עכשיו: "ליומן Google" בדף המשימה). הכי נוח להוסיף מהמחשב, ומשם היומן מופיע גם באפליקציה בטלפון.
+      </div>
       <ErrorBox error={error ?? feed.error} />
       {!feed.data ? (
         <Loading rows={1} />
@@ -84,7 +86,7 @@ function MyFeed() {
             </div>
           </details>
           <div className="row wrap gap-6 tiny muted">
-            <span className="grow">הקישור אישי: מי שמחזיק בו רואה את הלו"ז. אל תשתפו אותו.</span>
+            <span className="grow">הקישור אישי: מי שמחזיק בו רואה את הלו"ז ואת המשימות שלך. אל תשתפו אותו.</span>
             <button className="btn btn-ghost btn-sm" onClick={() => void rotate()}>
               יצירת קישור חדש
             </button>

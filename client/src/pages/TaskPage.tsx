@@ -17,6 +17,7 @@ import { api } from '../lib/api';
 import { haptic } from '../lib/haptics';
 import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
+import { taskGoogleUrl } from '../lib/googleCalendar';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
 import { useDraft } from '../lib/draft';
@@ -116,6 +117,11 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
                 <DeadlineText task={t} />
               </span>
               {t.status !== 'done' && t.status !== 'cancelled' && <span className={t.overdue ? 'text-red strong' : 'muted'}>{fmtTimeLeft(t.deadline)}</span>}
+              {t.status !== 'done' && t.status !== 'cancelled' && (
+                <a className="muted task-gcal" href={taskGoogleUrl(t)} target="_blank" rel="noopener noreferrer" title="הדד-ליין כאירוע ביומן Google שלך">
+                  <Icon name="calendar" size={14} /> ליומן Google
+                </a>
+              )}
               {t.weekName && (
                 <Link to={`/weeks/${t.weekId}`} className="muted">
                   {t.weekName}

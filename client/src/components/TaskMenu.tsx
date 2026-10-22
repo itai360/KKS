@@ -12,6 +12,7 @@ import { isGrouped } from '../lib/taskGroups';
 import { useSession } from '../lib/session';
 import { useRowMenu, type RowMenuItem } from './RowMenu';
 import { useToast } from './Toasts';
+import { taskGoogleUrl } from '../lib/googleCalendar';
 import type { useTaskTick } from './TaskRow';
 
 export { unlessHeld } from './RowMenu';
@@ -74,6 +75,7 @@ export function useTaskMenu(task: Task, tick: ReturnType<typeof useTaskTick>, di
     ...(moves ? [{ key: 'week', label: 'דחייה בשבוע', icon: 'calendar', run: () => void shift(7) }] : []),
     { key: 'open', label: 'פתיחת המשימה', icon: 'chevronLeft', run: () => navigate(`/tasks/${task.id}`) },
     { key: 'copy', label: 'העתקת קישור', icon: 'link', run: () => void copy() },
+    ...(tick.open && task.deadline ? [{ key: 'gcal', label: 'הוספה ליומן Google', icon: 'calendar', run: () => void window.open(taskGoogleUrl(task), '_blank', 'noopener') }] : []),
   ];
   return useRowMenu({ title: task.title, items, disabled });
 }

@@ -6,6 +6,7 @@ import { shortDate } from '@shared/dates';
 import type { MyTasksData, ScheduleEvent } from '@shared/types';
 import { UpNext } from '../components/Agenda';
 import { DisciplineCard } from '../components/DisciplineCard';
+import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { PendingAnnouncements } from '../components/Announcements';
 import { Icon } from '../components/Icon';
 import { PhoneNudge } from '../components/InstallApp';
@@ -24,6 +25,8 @@ export function MyTasksPage() {
   const { data, error, loading } = useApi<MyTasksData>('/api/my', ['tasks', 'weeks']);
   const navigate = useNavigate();
   const newTask = useNewTask();
+  // the tasks (and the schedule) in one's own Google Calendar
+  const [google, setGoogle] = useState(false);
   useTick();
 
   const total = data ? data.overdue.length + data.today.length + data.important.length + data.week.length + data.later.length + data.waiting.length : 0;
@@ -43,6 +46,9 @@ export function MyTasksPage() {
             <BulkToggle />
             <button className="btn" onClick={() => navigate('/day-end')}>
               <Icon name="moon" /> סיכום יום
+            </button>
+            <button className="btn" onClick={() => setGoogle(true)}>
+              <Icon name="calendar" /> ביומן Google
             </button>
             <button className="btn btn-primary" onClick={() => newTask({ ownerIds: [user.id] })}>
               <Icon name="plus" /> משימה לעצמי
@@ -137,6 +143,7 @@ export function MyTasksPage() {
           </div>
         </div>
       ) : null}
+      {google && <GoogleCalendarModal onClose={() => setGoogle(false)} />}
     </div>
     </TaskBulkScope>
   );

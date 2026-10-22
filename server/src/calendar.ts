@@ -16,6 +16,7 @@ import { readLimited, safeFetch } from './netguard';
 import { db } from './db';
 import { getFile, putFile, removeFile } from './files';
 import { listEvents } from './schedule';
+import { queryTasks, type TaskRow } from './taskRepo';
 import { createWeek, inferWeekNumber, listWeeks, updateWeek } from './weeks';
 
 // ---------------- out: the schedule as an iCal feed ----------------
@@ -89,8 +90,40 @@ function eventLines(e: ScheduleEvent, origin: string, zone: string, stamp: strin
   ];
 }
 
-/** The course schedule from two months back to a year ahead. */
-export function scheduleIcs(origin: string): string {
+/** one of the feed's owner's tasks still open: half an hour that ends at its deadline - not "busy" time */
+function taskLines(t: TaskRow, origin: string, stamp: string): string[] {
+  const end = new Date(t.deadline);
+  const start = new Date(end.getTime() - 30 * 60_000);
+  const link = `${origin}/tasks/${t.id}`;
+  const about = t.description.length > 400 ? `${t.description.slice(0, 400)}…` : t.description;
+  return [
+    'BEGIN:VEVENT',
+    `UID:kks-task-${t.id}@${new URL(origin).host}`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART:${utcStamp(start)}`,
+    `DTEND:${utcStamp(end)}`,
+    `SUMMARY:${escapeText(`משימה: ${t.title}`)}`,
+    `DESCRIPTION:${escapeText([about, link].filter(Boolean).join('\n'))}`,
+    `URL:${link}`,
+    'TRANSP:TRANSPARENT',
+    'END:VEVENT',
+  ];
+}
+
+/** what is still open on someone - theirs, or one they take part in - from a month back (late) to a year ahead */
+function openTasksOf(userId: number, today: string, zone: string): TaskRow[] {
+  return queryTasks(
+    `t.status NOT IN ('done', 'cancelled') AND t.deadline >= ? AND t.deadline < ?
+     AND (t.owner_id = ? OR EXISTS (SELECT 1 FROM task_participants tp WHERE tp.task_id = t.id AND tp.user_id = ?))`,
+    zonedToUtc(addDays(today, -30), '00:00', zone).toISOString(),
+    zonedToUtc(addDays(today, 366), '00:00', zone).toISOString(),
+    userId,
+    userId,
+  );
+}
+
+/** The course schedule from two months back to a year ahead, with the tasks of the one the link is theirs. */
+export function scheduleIcs(origin: string, user: UserRow): string {
   const zone = tz();
   const today = localDateKey(clock.now(), zone);
   const s = getSettings();
@@ -101,11 +134,12 @@ export function scheduleIcs(origin: string): string {
     'PRODID:-//KKS//Course schedule//HE',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    `X-WR-CALNAME:${escapeText(`${s.courseSymbol || s.courseName || 'קורס'} - לו"ז`)}`,
+    `X-WR-CALNAME:${escapeText(`${s.courseSymbol || s.courseName || 'קורס'} - לו"ז ומשימות`)}`,
     `X-WR-TIMEZONE:${zone}`,
     'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
     'X-PUBLISHED-TTL:PT1H',
     ...listEvents(addDays(today, -60), addDays(today, 365)).flatMap((e) => eventLines(e, origin, zone, stamp)),
+    ...openTasksOf(user.id, today, zone).flatMap((t) => taskLines(t, origin, stamp)),
     'END:VCALENDAR',
   ];
   return lines.map(fold).join('\r\n') + '\r\n';

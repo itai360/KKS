@@ -148,12 +148,13 @@ export function apiRouter(): Router {
     res.json({ ok: true });
   });
 
-  // the schedule for calendar apps: Google Calendar subscribes to this link, and the token in it is the permission
+  // the schedule and one's own open tasks for calendar apps: Google Calendar subscribes to this link, and the token in it is the permission
   r.get('/ics/:file', (req, res) => {
-    if (!userForFeedToken(String(req.params.file).replace(/\.ics$/, ''))) throw notFound('הקישור ליומן אינו בתוקף');
+    const user = userForFeedToken(String(req.params.file).replace(/\.ics$/, ''));
+    if (!user) throw notFound('הקישור ליומן אינו בתוקף');
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'inline; filename="schedule.ics"');
-    res.send(scheduleIcs(origin(req)));
+    res.send(scheduleIcs(origin(req), user));
   });
 
   const setupSchema = z.object({

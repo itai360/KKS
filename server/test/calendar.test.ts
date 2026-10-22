@@ -6,7 +6,7 @@ import ICAL from 'ical.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { calendarReadsSettled, setCalendarFetcher, setCalendarWaits, trimCalendar } from '../src/calendar';
 import { db } from '../src/db';
-import { setup, type Ctx } from './helpers';
+import { at, newTask, setup, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -110,6 +110,24 @@ describe('the schedule in Google Calendar', () => {
     expect(unfolded).toContain('להביא אטמי אוזניים\\nולא לשכוח מים');
     expect(unfolded).toContain(`UID:kks-event-${ev.body.event.id}@`);
     for (const line of ics.split('\r\n')) expect(Buffer.byteLength(line)).toBeLessThanOrEqual(75);
+  });
+
+  it("carries one's own open tasks at their deadline - not another's, and not one done", async () => {
+    const mine = await newTask(c.cmd, { title: 'הזמנת הסעות, לשבוע ניווטים', ownerIds: [c.ids.s1], deadline: at('2026-10-05', '18:00') });
+    const shared = await newTask(c.cmd, { title: 'תיאום מטווח', ownerIds: [c.ids.s2, c.ids.s1], assignMode: 'shared', deadline: at('2026-10-06', '12:00') });
+    await newTask(c.cmd, { title: 'משימה של אחר', ownerIds: [c.ids.s2], deadline: at('2026-10-05', '18:00') });
+    const done = await newTask(c.cmd, { title: 'כבר הושלמה', ownerIds: [c.ids.s1], deadline: at('2026-10-04', '18:00') });
+    await c.s1.post(`/api/tasks/${done}/transition`, { action: 'complete' });
+    const ics = (await request(c.app).get(new URL((await c.s1.get('/api/calendar/feed')).body.url).pathname)).text.replace(/\r\n /g, '');
+    expect(ics).toContain('X-WR-CALNAME:');
+    expect(ics).toContain('SUMMARY:משימה: הזמנת הסעות\\, לשבוע ניווטים');
+    expect(ics).toContain(`UID:kks-task-${mine}@`);
+    expect(ics).toContain('DTSTART:20261005T143000Z'); // half an hour ending at 18:00 in Israel
+    expect(ics).toContain('DTEND:20261005T150000Z');
+    expect(ics).toContain(`/tasks/${mine}`);
+    expect(ics).toContain(`UID:kks-task-${shared}@`); // one they take part in
+    expect(ics).not.toContain('משימה של אחר');
+    expect(ics).not.toContain('כבר הושלמה');
   });
 
   it('a new link replaces the old one, and a deactivated user loses it', async () => {

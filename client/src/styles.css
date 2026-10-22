@@ -13718,3 +13718,10 @@ tr.is-finished.is-folding {
 .entry-foot .text-red {
   color: var(--red);
 }
+
+/* a task's deadline to Google Calendar, beside it (pages/TaskPage.tsx) */
+.task-gcal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
