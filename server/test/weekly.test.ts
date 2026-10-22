@@ -44,6 +44,38 @@ describe('the weekly', () => {
     expect((await c.s1.get('/api/weekly/target')).body.counts.point).toBe(0);
   });
 
+  it('several at once from the "+": all of them, in their order - or none of them', async () => {
+    const r = await c.s1.post('/api/weekly/items/batch', {
+      items: [
+        { kind: 'topic', title: 'נושא א' },
+        { kind: 'topic', title: 'נושא ב', details: 'פירוט' },
+        { kind: 'closure', title: 'סגירה א', ownerId: c.ids.s3 },
+        { kind: 'closure', title: 'סגירה ב' },
+        { kind: 'schedule', title: 'הערה ליום שלישי', eventDate: '2026-09-29' },
+      ],
+    });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ weekId: w1 });
+    expect(r.body.ids).toHaveLength(5);
+    const v = await view(c.s1, w1);
+    expect(titles(v)).toEqual(['נושא א', 'נושא ב', 'סגירה א', 'סגירה ב', 'הערה ליום שלישי']);
+    expect(v.items.find((i) => i.title === 'נושא ב')).toMatchObject({ details: 'פירוט' });
+    expect(v.items.find((i) => i.title === 'סגירה א')).toMatchObject({ ownerId: c.ids.s3 });
+    expect(v.items.find((i) => i.title === 'הערה ליום שלישי')).toMatchObject({ eventDate: '2026-09-29' });
+    expect(notificationsOf(c.ids.s3).filter((n) => n.type === 'weekly_closure')).toHaveLength(1);
+    // one that may not be added stops them all: trying again never adds the same one twice
+    const mixed = { weekId: w2, items: [{ kind: 'topic', title: 'נושא ג' }, { kind: 'point', title: 'דגש' }] };
+    expect((await c.s1.post('/api/weekly/items/batch', mixed)).status).toBe(403);
+    expect(titles(await view(c.s1, w2))).toEqual([]);
+    // the commander's points go in with the rest
+    expect((await c.cmd.post('/api/weekly/items/batch', mixed)).status).toBe(200);
+    expect(titles(await view(c.cmd, w2))).toEqual(['נושא ג', 'דגש']);
+    // nothing to add, or too many at once
+    expect((await c.s1.post('/api/weekly/items/batch', { items: [] })).status).toBe(400);
+    const flood = Array.from({ length: 61 }, (_, i) => ({ kind: 'topic', title: `נושא ${i}` }));
+    expect((await c.s1.post('/api/weekly/items/batch', { items: flood })).status).toBe(400);
+  });
+
   it('who may change what: the one who raised it, the commander, the week’s team commander, the closure’s owner', async () => {
     const topic = (await c.s1.post('/api/weekly/items', { kind: 'topic', title: 'נושא' })).body.id;
     const closure = (await c.s1.post('/api/weekly/items', { kind: 'closure', title: 'סגירה', ownerId: c.ids.s3 })).body.id;

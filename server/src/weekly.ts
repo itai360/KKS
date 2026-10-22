@@ -225,6 +225,27 @@ export function addWeeklyItem(actor: UserRow, raw: z.input<typeof weeklyItemSche
   return { id, weekId };
 }
 
+/** at most this many in one go from the dialog */
+export const MAX_WEEKLY_BATCH = 60;
+
+export const weeklyItemsSchema = z.object({
+  weekId: z.number().int().positive().optional(),
+  items: z
+    .array(weeklyItemSchema.omit({ weekId: true }))
+    .min(1, 'כתבו על מה מדובר')
+    .max(MAX_WEEKLY_BATCH, `עד ${MAX_WEEKLY_BATCH} פריטים בפעם אחת`),
+});
+
+/** several at once - a few topics, a few closures...: all of them are added, or none (so trying
+ *  again after an error never adds the same one twice) */
+export function addWeeklyItems(actor: UserRow, raw: z.input<typeof weeklyItemsSchema>): { ids: number[]; weekId: number } {
+  const p = weeklyItemsSchema.parse(raw);
+  return db().tx(() => {
+    const added = p.items.map((item) => addWeeklyItem(actor, { ...item, weekId: p.weekId }));
+    return { ids: added.map((a) => a.id), weekId: added[0].weekId };
+  });
+}
+
 export const weeklyPatchSchema = z
   .object({
     title: z.string().trim().min(1, 'חובה לכתוב על מה מדובר').max(300),

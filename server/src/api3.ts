@@ -78,7 +78,7 @@ import { createFileDocument, createLinkDocument, deleteDocument, documentRow, li
 import { getFile, sendStoredFile, uploadName } from './files';
 import { cadetsFromSpreadsheet, downloadGoogleSheet, downloadGoogleSheetNamed } from './sheets';
 import { deleteSocioRound, importSocio, previewSocio, readSocioSheets, socioOfCadet, socioRound, updateSocioRound } from './sociometric';
-import { addWeeklyItem, deleteWeeklyItem, holdWeekly, reopenWeekly, updateWeeklyItem, weeklyTarget, weeklyView } from './weekly';
+import { addWeeklyItem, addWeeklyItems, deleteWeeklyItem, holdWeekly, reopenWeekly, updateWeeklyItem, weeklyTarget, weeklyView } from './weekly';
 import { deleteGuide, disciplineLog, disciplineOverview, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
 import { bulkSchema, runBulk } from './bulk';
 import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
@@ -260,6 +260,7 @@ export function v3Router(): Router {
   r.get('/weekly/target', (req, res) => res.json(weeklyTarget(me(req))));
   r.get('/weekly/:weekId', (req, res) => res.json(weeklyView(me(req), id(req.params.weekId))));
   r.post('/weekly/items', (req, res) => res.json(addWeeklyItem(me(req), req.body)));
+  r.post('/weekly/items/batch', (req, res) => res.json(addWeeklyItems(me(req), req.body)));
   r.patch('/weekly/items/:id', (req, res) => {
     updateWeeklyItem(me(req), id(req.params.id), req.body);
     res.json({ ok: true });

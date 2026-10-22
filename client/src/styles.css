@@ -1890,6 +1890,10 @@ input::-webkit-date-and-time-value {
 .combo-input:focus {
   cursor: text;
 }
+/* the arrow's room, whatever padding the fields are given elsewhere (design-system.css) */
+.combo-input:is(.select, .input) {
+  padding-left: 30px;
+}
 /* a short list is only tapped: the field is a button showing the choice (pickers.tsx) */
 .select-button {
   display: inline-flex;
@@ -9244,6 +9248,132 @@ button.weekly-item-title:hover {
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   background: var(--card-2);
+}
+/* adding to the weekly: a few rows in each kind, numbered once there is more than one */
+.weekly-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.weekly-entries[hidden] {
+  display: none;
+}
+.weekly-entries-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.weekly-entries-label .req {
+  color: var(--red-ink);
+}
+.weekly-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: weekly-entry-in 0.24s var(--spring) both;
+}
+@keyframes weekly-entry-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.weekly-entry-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.weekly-entry-line .input {
+  flex: 1;
+  min-width: 0;
+}
+.weekly-entry-n {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.weekly-entry-x {
+  flex: none;
+}
+.weekly-entry-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.weekly-entries.is-many :is(.weekly-entry-extra, .weekly-entry-details) {
+  margin-inline-start: 24px;
+}
+.weekly-entry-more.btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.weekly-entry-more.has {
+  color: var(--accent-ink, var(--blue));
+}
+.weekly-entry-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.weekly-entry-pick > .tiny {
+  white-space: nowrap;
+}
+/* as wide as the row, less the numbers' column (the column stretches it) */
+.weekly-entry-details.textarea {
+  width: auto;
+  min-height: 64px;
+}
+.weekly-entries-more {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* the keyboard's way to the next row, where there is a keyboard */
+.weekly-entries-keys {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .weekly-entries-keys {
+    display: inline;
+  }
+}
+.weekly-add-also {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--green-bg);
+  color: var(--green-ink);
+  font-weight: 600;
+}
+/* how many are written in a kind, on its tab */
+.seg-n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent, var(--blue));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .weekly-entry {
+    animation: none;
+  }
 }
 @media (max-width: 860px) {
   .weekly-agenda {
