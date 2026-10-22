@@ -1,11 +1,11 @@
 // Personal talks filled in as forms (shared/talks.ts): the form, the talk as it shows in the
 // cadet's file, and what to keep in mind about the cadet from the latest talks.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { TALK_COURSE_ORDER, TALK_TYPES } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
-import { numberedSections, TALK_FORMS, TALK_HIGHLIGHTS, type TalkAnswers, type TalkType } from '@shared/talks';
+import { numberedSections, TALK_FORMS, TALK_HIGHLIGHTS, talkFields, type TalkAnswers, type TalkType } from '@shared/talks';
 import type { Cadet, CadetDetail, CadetRecord } from '@shared/types';
 import { api } from '../lib/api';
 import { useDraft } from '../lib/draft';
@@ -13,6 +13,7 @@ import { isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { Icon } from './Icon';
+import { TalkRecording } from './TalkRecording';
 import { useToast } from './Toasts';
 import { DateInput, ErrorBox, Field, Modal, Select } from './ui';
 
@@ -49,6 +50,8 @@ interface Draft {
   type: TalkType;
   date: string;
   answers: TalkAnswers;
+  /** the talk's transcript, from its recording or pasted - kept with the draft, never saved */
+  transcript?: string;
 }
 
 export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; records: CadetRecord[]; record?: CadetRecord; onClose: () => void }) {
@@ -62,7 +65,7 @@ export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; 
     : (() => {
         try {
           const d = JSON.parse(stored) as Draft;
-          if (d && d.answers) return { type: asType(d.type), date: d.date || todayKey(), answers: d.answers };
+          if (d && d.answers) return { type: asType(d.type), date: d.date || todayKey(), answers: d.answers, transcript: typeof d.transcript === 'string' ? d.transcript : '' };
         } catch {
           /* nothing kept */
         }
@@ -76,9 +79,35 @@ export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; 
   const [busy, setBusy] = useState(false);
   const update = (d: Draft) => {
     setDraftState(d);
-    if (!record) setStored(Object.values(d.answers).some((v) => v.trim()) ? JSON.stringify(d) : '');
+    if (!record) setStored(Object.values(d.answers).some((v) => v.trim()) || d.transcript?.trim() ? JSON.stringify(d) : '');
   };
-  const answer = (id: string, value: string) => update({ ...draft, answers: { ...draft.answers, [id]: value } });
+  // the fields the recording's summary filled: marked until the commander goes over them
+  const [fromRec, setFromRec] = useState<ReadonlySet<string>>(new Set());
+  const answer = (id: string, value: string) => {
+    if (fromRec.has(id)) setFromRec((s) => new Set([...s].filter((x) => x !== id)));
+    update({ ...draft, answers: { ...draft.answers, [id]: value } });
+  };
+  // the summary arrives after a while: it goes into the draft as it is by then, filling only empty fields
+  const latest = useRef(draft);
+  latest.current = draft;
+  const fillFromSummary = (found: TalkAnswers) => {
+    const d = latest.current;
+    const answers = { ...d.answers };
+    const filled: string[] = [];
+    let kept = 0;
+    const ids = new Set(talkFields(d.type).map((f) => f.id));
+    for (const [id, v] of Object.entries(found)) {
+      if (!ids.has(id) || typeof v !== 'string' || !v.trim()) continue;
+      if (answers[id]?.trim()) kept++;
+      else {
+        answers[id] = v;
+        filled.push(id);
+      }
+    }
+    update({ ...d, answers });
+    setFromRec((s) => new Set([...s, ...filled]));
+    return { filled: filled.length, kept };
+  };
   const last = talks[0];
   const filled = Object.values(draft.answers).some((v) => v.trim());
 
@@ -141,6 +170,14 @@ export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; 
           <b>{cadet.fullName}</b> · {cadet.teamName ?? 'ללא צוות'} · השיחה גלויה רק לך, למפקד הצוות ולמפקד הקורס
         </div>
 
+        <TalkRecording
+          cadetId={cadet.id}
+          type={draft.type}
+          transcript={draft.transcript ?? ''}
+          onTranscript={(text) => update({ ...latest.current, transcript: text })}
+          onSummary={fillFromSummary}
+        />
+
         {last && (last.talk?.focus || last.talk?.next) && (
           <div className="info-box small talk-last">
             <b>
@@ -158,11 +195,18 @@ export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; 
               {section.title}
             </legend>
             {section.fields.length === 1 ? (
-              <textarea className="textarea" rows={section.id === 'summary' ? 3 : 2} value={draft.answers[section.fields[0].id] ?? ''} placeholder={section.fields[0].hint} aria-label={section.title} onChange={(e) => answer(section.fields[0].id, e.target.value)} />
+              <textarea
+                className={`textarea${fromRec.has(section.fields[0].id) ? ' from-rec' : ''}`}
+                rows={section.id === 'summary' ? 3 : 2}
+                value={draft.answers[section.fields[0].id] ?? ''}
+                placeholder={section.fields[0].hint}
+                aria-label={section.title}
+                onChange={(e) => answer(section.fields[0].id, e.target.value)}
+              />
             ) : (
               section.fields.map((f) => (
                 <Field key={f.id} label={f.label}>
-                  <textarea className="textarea" rows={section.id === 'after' ? 1 : 2} value={draft.answers[f.id] ?? ''} placeholder={f.hint} onChange={(e) => answer(f.id, e.target.value)} />
+                  <textarea className={`textarea${fromRec.has(f.id) ? ' from-rec' : ''}`} rows={section.id === 'after' ? 1 : 2} value={draft.answers[f.id] ?? ''} placeholder={f.hint} onChange={(e) => answer(f.id, e.target.value)} />
                 </Field>
               ))
             )}

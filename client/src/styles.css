@@ -6807,6 +6807,106 @@ button.fab-missing {
   white-space: pre-wrap;
 }
 
+/* the points for the staff meeting (pages/MeetingPage.tsx, components/MeetingPointAdd.tsx) */
+.meeting-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.meeting-point .check {
+  align-items: flex-start;
+}
+.meeting-point-body {
+  overflow-wrap: anywhere;
+  transition: color 0.2s;
+}
+.meeting-point.is-raised .meeting-point-body {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.meeting-point-mine {
+  align-items: baseline;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+}
+
+/* a talk summed up from its recording (components/TalkRecording.tsx): a quiet box until it works, then blue */
+.talk-rec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+  transition: background-color 0.25s, border-color 0.25s;
+}
+.talk-rec.is-busy {
+  border-style: solid;
+  border-color: var(--blue);
+  background: var(--blue-bg);
+}
+.talk-rec-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.talk-rec-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+.talk-rec.is-busy .talk-rec-icon {
+  background: var(--card);
+}
+.talk-rec-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.talk-rec-bar {
+  width: 96px;
+}
+.talk-rec-bar i {
+  background: var(--blue);
+}
+.talk-rec-done {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--green-ink);
+}
+.talk-rec-done svg {
+  flex: none;
+  margin-top: 2px;
+}
+.talk-rec-text {
+  font-size: 13px;
+  background: var(--card);
+}
+.talk-rec-off {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+/* a field the recording's summary filled: marked until it is edited */
+.textarea.from-rec {
+  border-color: color-mix(in srgb, var(--blue) 55%, var(--line-2));
+  background: color-mix(in srgb, var(--blue-bg) 55%, var(--field));
+}
+@media (max-width: 760px) {
+  .talk-rec-bar {
+    display: none;
+  }
+}
+
 .theme-btn svg {
   transition: transform 0.35s ease;
 }

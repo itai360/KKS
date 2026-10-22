@@ -1,14 +1,15 @@
-// Sections 68-69: open tasks during a staff meeting, then save a summary to the history.
+// Sections 68-69: open tasks during a staff meeting, then save a summary to the history. The points the
+// staff put in for the meeting (נקודות לישב"ס, from the "+") wait here, ticked as each comes up.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { parseTaskText } from '@shared/parser';
-import type { Meeting } from '@shared/types';
+import type { Meeting, MeetingPoint } from '@shared/types';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
-import { fmtDateTime, fmtDeadline, getTz } from '../lib/format';
+import { fmtAgo, fmtDateTime, fmtDeadline, getTz } from '../lib/format';
 import { useFresh } from '../lib/fresh';
 import { haptic } from '../lib/haptics';
 import { leaveClass, useLeaving } from '../lib/leaving';
@@ -60,7 +61,10 @@ export function MeetingPage() {
       ) : active.data ? (
         <ActiveMeeting meeting={active.data} onEnded={() => toast({ title: 'סיכום הישיבה נשמר', tone: 'green' })} />
       ) : (
-        <Empty icon="message" title="אין ישיבה פתוחה" text="פתחו ישיבה כדי לרשום משימות והחלטות תוך כדי." />
+        <>
+          <Empty icon="message" title="אין ישיבה פתוחה" text="פתחו ישיבה כדי לרשום משימות והחלטות תוך כדי." />
+          <MeetingPoints live={false} />
+        </>
       )}
       <div className="section-title">
         <h2>ישיבות קודמות</h2>
@@ -228,6 +232,7 @@ function ActiveMeeting({ meeting, onEnded }: { meeting: Meeting; onEnded: () => 
             <ErrorBox error={error} />
           </div>
         </div>
+        <MeetingPoints live />
         <div className="card">
           <div className="card-head">
             <h3 className="grow">משימות חדשות מהישיבה</h3>
@@ -300,6 +305,18 @@ function SummaryView({ meeting }: { meeting: Meeting }) {
   return (
     <div className="card-body grid-2">
       <div>
+        {s.points && s.points.length > 0 && (
+          <>
+            <div className="label-caps">נקודות שעלו ({s.points.length})</div>
+            <ul className="small">
+              {s.points.map((p, i) => (
+                <li key={i}>
+                  {p.body} <span className="muted">· {p.authorName}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         <div className="label-caps">החלטות</div>
         <ul className="small">{s.decisions.length ? s.decisions.map((d, i) => <li key={i}>{d}</li>) : <li className="muted">-</li>}</ul>
         <div className="label-caps">נקודות למעקב</div>
@@ -320,6 +337,91 @@ function SummaryView({ meeting }: { meeting: Meeting }) {
             <li key={t.id}>{t.title}</li>
           ))}
         </ul>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The points for the staff meeting (ישב"ס): what the staff put in from the "+". In a meeting each is
+ * ticked as it comes up - and goes into the meeting's summary; between meetings, ticking one marks it
+ * dealt with and it leaves the list.
+ */
+function MeetingPoints({ live }: { live: boolean }) {
+  const points = useApi<MeetingPoint[]>('/api/meeting-points', ['meetings']);
+  const [line, setLine] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const list = points.data ?? [];
+  const waiting = list.filter((p) => !p.raisedAt).length;
+  const act = async (send: () => Promise<MeetingPoint[]>) => {
+    setError(null);
+    try {
+      points.setData(await send());
+      emitLocalChange('meetings');
+    } catch (e) {
+      setError((e as Error).message);
+      void points.reload(); // what is really there, instead of what was shown ahead
+    }
+  };
+  // a tick shows at once; the server's answer follows
+  const tick = (p: MeetingPoint, raised: boolean) => {
+    haptic('tick');
+    points.setData(list.map((x) => (x.id === p.id ? { ...x, raisedAt: raised ? new Date().toISOString() : null } : x)));
+    void act(() => api.post<MeetingPoint[]>(`/api/meeting-points/${p.id}/raise`, { raised }));
+  };
+  const add = () => {
+    const body = line.trim();
+    if (!body) return;
+    setLine('');
+    void act(() => api.post<MeetingPoint[]>('/api/meeting-points', { body }));
+  };
+  return (
+    <div className="card meeting-points">
+      <div className="card-head">
+        <Icon name="message" />
+        <h3 className="grow">נקודות לישב"ס</h3>
+        <span className="mono tiny muted" title="מחכות">
+          {waiting}
+        </span>
+      </div>
+      <div className="card-body col gap-6">
+        {!list.length && <p className="small muted">{live ? 'אין נקודות לישיבה הזו.' : 'אין נקודות שמחכות. כל אחד בסגל מוסיף מה"+", מכל מסך.'}</p>}
+        {list.map((p) => (
+          <div key={p.id} className={`meeting-point${p.raisedAt ? ' is-raised' : ''}`}>
+            <label className="check grow" title={live ? 'עלתה בישיבה' : 'טופלה - יורדת מהרשימה'}>
+              <input
+                type="checkbox"
+                checked={!!p.raisedAt}
+                onChange={(e) => tick(p, e.target.checked)}
+              />
+              <span className="grow">
+                <span className="meeting-point-body">{p.body}</span>
+                <span className="tiny muted">
+                  {' '}
+                  · {p.authorName} · {fmtAgo(p.createdAt)}
+                </span>
+              </span>
+            </label>
+            {p.canDelete && (
+              <button type="button" className="icon-btn" onClick={() => void act(() => api.del<MeetingPoint[]>(`/api/meeting-points/${p.id}`))} aria-label={`מחיקת הנקודה: ${p.body}`} title="מחיקה">
+                <Icon name="x" size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+        <form
+          className="row gap-6 mt-8"
+          onSubmit={(e) => {
+            e.preventDefault();
+            add();
+          }}
+        >
+          <input className="input" value={line} maxLength={1000} onChange={(e) => setLine(e.target.value)} placeholder="נקודה חדשה לישיבה" aria-label='נקודה חדשה לישב"ס' />
+          <button className="btn btn-sm" disabled={!line.trim()}>
+            <Icon name="plus" /> הוספה
+          </button>
+        </form>
+        <ErrorBox error={error} />
       </div>
     </div>
   );

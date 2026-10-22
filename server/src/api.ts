@@ -30,7 +30,7 @@ import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound,
 import { db } from './db';
 import { getFile, putFile, removeFile, sendStoredFile, uploadName } from './files';
 import { changed, FINISHED, logActivity, NOTIFICATION_ROWS, notificationsChanged, notify, snoozeNotification, toNotification, unreadCount } from './journal';
-import { activeMeeting, endMeeting, getMeeting, listMeetings, startMeeting, updateMeeting } from './meetings';
+import { activeMeeting, addMeetingPoint, deleteMeetingPoint, endMeeting, getMeeting, listMeetings, meetingPoints, raiseMeetingPoint, startMeeting, updateMeeting } from './meetings';
 import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
@@ -929,6 +929,20 @@ export function apiRouter(): Router {
     res.json(getMeeting(id(req.params.id)));
   });
   r.post('/meetings/:id/end', requireCommander, (req, res) => res.json(endMeeting(me(req), id(req.params.id))));
+  // points for the next staff meeting (ישב"ס): anyone on the staff adds one, the commander ticks them in the meeting
+  r.get('/meeting-points', (req, res) => res.json(meetingPoints(me(req))));
+  r.post('/meeting-points', (req, res) => {
+    addMeetingPoint(me(req), req.body);
+    res.json(meetingPoints(me(req)));
+  });
+  r.post('/meeting-points/:id/raise', requireCommander, (req, res) => {
+    raiseMeetingPoint(id(req.params.id), z.object({ raised: z.boolean() }).parse(req.body).raised);
+    res.json(meetingPoints(me(req)));
+  });
+  r.delete('/meeting-points/:id', (req, res) => {
+    deleteMeetingPoint(me(req), id(req.params.id));
+    res.json(meetingPoints(me(req)));
+  });
 
   // ---------------- views & reports ----------------
 

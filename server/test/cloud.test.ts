@@ -223,6 +223,49 @@ describe('serverless storage', () => {
     expect((await call('POST', '/api/admin/snapshots/999/restore', {}, cookie)).statusCode).toBe(404);
   });
 
+  it('sums a talk up outside the queue: requests behind it are not held while the outside service works', async () => {
+    const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
+    const cadet = (await call('POST', '/api/cadets', { firstName: 'יעל', lastName: 'שחר' }, cookie)).json().cadet.id;
+    process.env.ANTHROPIC_API_KEY = 'test-claude';
+    process.env.KKS_AI_MODEL = 'x-set-model';
+    const { setTalkAiFetch } = await import('../src/talkAi');
+    // Claude answers only when released
+    let release = () => undefined as void;
+    const gate = new Promise<void>((r) => (release = r));
+    const form = { reason: 'שיחת היכרות קצרה', raised: 'התאקלמות בצוות', agreed: 'שיחה נוספת בעוד שבועיים', remember: '', focus: '', next: '' };
+    const events = [
+      { type: 'message_start', message: { id: 'm', type: 'message', role: 'assistant', model: 'x-set-model', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } } },
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: JSON.stringify(form) } },
+      { type: 'content_block_stop', index: 0 },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 5 } },
+      { type: 'message_stop' },
+    ];
+    setTalkAiFetch(async () => {
+      await gate;
+      return new Response(events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
+    });
+    try {
+      let summed = false;
+      const summary = call('POST', '/api/talks/ai/summarize', { cadetId: cadet, type: 'שיחה יזומה', transcript: 'שלום, מה שלומך?' }, cookie).then((r) => {
+        summed = true;
+        return r;
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      // the summary waits on Claude; a request behind it on the same instance does not
+      expect((await call('GET', '/api/tasks', undefined, cookie)).statusCode).toBe(200);
+      expect(summed).toBe(false);
+      release();
+      const res = await summary;
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ answers: { reason: form.reason, raised: form.raised, agreed: form.agreed } });
+    } finally {
+      setTalkAiFetch(null);
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.KKS_AI_MODEL;
+    }
+  });
+
   it('ends a course into storage and reads it back, read only, on the next request', async () => {
     const cookie = String((await call('POST', '/api/auth/login', { username: 'boss', password: 'secret123' })).headers['set-cookie']).split(';')[0];
     await call('POST', '/api/tasks', { title: 'במחזור שהסתיים', ownerIds: [1], deadline: '2026-12-01T16:00:00.000Z' }, cookie);

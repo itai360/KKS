@@ -24,6 +24,7 @@
     "build:vercel": "npm run build && node scripts/vercel-output.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@vercel/functions": "^3.9.9",
     "express": "^5.1.0",
     "ical.js": "^2.2.1",

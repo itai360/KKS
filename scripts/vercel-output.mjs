@@ -34,8 +34,9 @@ writeFileSync(
       handler: 'index.js',
       launcherType: 'Nodejs',
       shouldAddHelpers: false,
-      // a big Google calendar is read in the background after the request (calendar.ts)
-      maxDuration: 60,
+      // a big Google calendar is read in the background after the request (calendar.ts), and a talk's
+      // recording is written out and summed up by outside services (talkAi.ts) - up to a few minutes
+      maxDuration: 300,
       memory: 1024,
       regions: ['fra1'],
     },

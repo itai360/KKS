@@ -43,6 +43,13 @@ const out = await build({
   inject: [shim('globals.ts')],
   plugins: [
     {
+      // no Claude in a page: the SDK (and its helpers) stand in, never called (talkAi.ts)
+      name: 'demo-no-claude',
+      setup(b) {
+        b.onResolve({ filter: /^@anthropic-ai\/sdk(\/|$)/ }, () => ({ path: shim('anthropic.ts') }));
+      },
+    },
+    {
       // the page's frame cannot download by itself: saving goes through the viewer
       name: 'demo-download',
       setup(b) {

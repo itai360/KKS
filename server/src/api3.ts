@@ -18,6 +18,7 @@ import {
   deleteExperience,
   deleteRecord,
   disciplinePreview,
+  talkCadet,
   updateTalk,
   deleteTeam,
   feedbackAxes,
@@ -88,6 +89,8 @@ import { copyPreviousCycleTasks, coursesOverview, previousCycleWeek, startNewCou
 import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
+import { MAX_PART_BYTES, MAX_TRANSCRIPT_CHARS, summarizeTalk, talkAiStatus, transcribePart } from './talkAi';
+import { TALK_TYPES } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
 import { approvePlan, approveThreeWeek, planDocument, plansOverview, savePlan, saveThreeWeek, threeWeekPlan } from './plans';
 
@@ -154,6 +157,24 @@ export function v3Router(): Router {
   });
   r.delete('/exemptions/:id', (req, res) => res.json(cadetDetail(me(req), deleteExemption(me(req), id(req.params.id)))));
   r.patch('/records/:id', (req, res) => res.json(cadetDetail(me(req), updateTalk(me(req), id(req.params.id), req.body))));
+
+  // ---------------- a personal talk from its recording (talkAi.ts) ----------------
+
+  // what the site can do: write out a recording, sum up a transcript
+  r.get('/talks/ai', (_req, res) => res.json(talkAiStatus()));
+  // one short part of the recording (WAV from the browser), written out; nothing of it is kept
+  r.post('/talks/ai/transcribe', express.raw({ type: () => true, limit: MAX_PART_BYTES }), async (req, res) => {
+    talkCadet(me(req), num(req.query.cadet));
+    res.json({ text: await transcribePart(req.body as Buffer, String(req.headers['content-type'] ?? '')) });
+  });
+  // the transcript summed up in the fields of the talk's form, for the commander to correct and save
+  r.post('/talks/ai/summarize', async (req, res) => {
+    const p = z
+      .object({ cadetId: z.number().int().positive(), type: z.enum(TALK_TYPES), transcript: z.string().max(MAX_TRANSCRIPT_CHARS, 'התמליל ארוך מדי לסיכום אחד') })
+      .parse(req.body);
+    const c = talkCadet(me(req), p.cadetId);
+    res.json({ answers: await summarizeTalk(p.type, p.transcript, c.first_name) });
+  });
   r.delete('/records/:id', (req, res) => {
     deleteRecord(me(req), id(req.params.id));
     res.json({ ok: true });

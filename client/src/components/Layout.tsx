@@ -11,6 +11,7 @@ import { slideTabIndicators } from '../lib/tabIndicator';
 import { Count } from './Count';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
+import { addMeetingPoint } from './MeetingPointAdd';
 import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
 import { ScreenBoundary } from './ScreenBoundary';
@@ -805,6 +806,10 @@ export function Layout({ children }: { children: ReactNode }) {
             setPlusOpen(false);
             addToWeekDebrief();
           }}
+          onMeetingPoint={() => {
+            setPlusOpen(false);
+            addMeetingPoint();
+          }}
           onEvent={
             canEvent
               ? () => {
@@ -829,6 +834,7 @@ function PlusMenu({
   onTask,
   onWeekly,
   onDebrief,
+  onMeetingPoint,
   onEvent,
   leaving,
 }: {
@@ -837,6 +843,7 @@ function PlusMenu({
   onTask: () => void;
   onWeekly: () => void;
   onDebrief: () => void;
+  onMeetingPoint: () => void;
   onEvent?: () => void;
   leaving: boolean;
 }) {
@@ -928,6 +935,15 @@ function PlusMenu({
           <span className="grow">
             <span className="plus-menu-title">לתחקיר השבוע</span>
             <span className="plus-menu-sub">לשימור, לשיפור או לקח - לתחקיר השבועי של השבוע הזה</span>
+          </span>
+        </button>
+        <button type="button" role="menuitem" onClick={onMeetingPoint}>
+          <span className="plus-menu-icon">
+            <Icon name="message" />
+          </span>
+          <span className="grow">
+            <span className="plus-menu-title">נקודה לישב"ס</span>
+            <span className="plus-menu-sub">משהו להעלות בישיבת הסגל הבאה</span>
           </span>
         </button>
       </div>

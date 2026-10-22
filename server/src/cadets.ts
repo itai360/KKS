@@ -134,6 +134,13 @@ export function canManageCadet(actor: UserRow, c: Pick<CadetRow, 'team_commander
   return isCommander(actor) || (c.team_commander_id !== null && c.team_commander_id === actor.id);
 }
 
+/** The cadet whose talk the actor may write (from a recording too): their team commander, or the course commander. */
+export function talkCadet(actor: UserRow, cadetId: number | undefined): CadetRow {
+  const c = cadetRow(cadetId ?? 0);
+  if (!canManageCadet(actor, c)) throw forbidden('שיחות אישיות נרשמות על ידי מפקד הצוות או מפקד הקורס');
+  return c;
+}
+
 /** Talks and discipline are always restricted; any record can be marked private. */
 export function canViewRecord(actor: UserRow, r: Pick<RecordRow, 'author_id' | 'private' | 'kind'>, c: Pick<CadetRow, 'team_commander_id'>): boolean {
   if (canManageCadet(actor, c) || r.author_id === actor.id) return true;

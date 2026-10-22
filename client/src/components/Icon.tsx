@@ -53,6 +53,7 @@ const paths: Record<string, string> = {
   filter: 'M3 5h18l-7 8v6l-4 2v-8z',
   lock: 'M6 11h12v10H6zM8.5 11V7.5a3.5 3.5 0 0 1 7 0V11',
   upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
+  mic: 'M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM19 11a7 7 0 0 1-14 0M12 18v3M8 21h8',
   download: 'M12 4v12M7 11l5 5 5-5M4 20h16',
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',

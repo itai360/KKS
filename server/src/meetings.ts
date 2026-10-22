@@ -1,12 +1,13 @@
-// Sections 68-69: tasks opened during a staff meeting and the meeting summary.
+// Sections 68-69: tasks opened during a staff meeting and the meeting summary; and the points anyone on
+// the staff adds for the next meeting (נקודות לישב"ס).
 
 import { z } from 'zod';
-import type { Meeting, MeetingSummary } from '../../shared/types';
+import type { Meeting, MeetingPoint, MeetingSummary } from '../../shared/types';
 import type { UserRow } from './auth';
-import { badRequest, nowIso } from './core';
+import { badRequest, forbidden, notFound, nowIso } from './core';
 import { db } from './db';
 import { changed, logActivity } from './journal';
-import { queryTasks } from './taskRepo';
+import { isCommander, queryTasks } from './taskRepo';
 
 interface MeetingRow {
   id: number;
@@ -52,6 +53,9 @@ function liveSummary(r: MeetingRow, until = nowIso()): MeetingSummary {
     })),
     decisions: lines(r.decisions),
     followUps: lines(r.follow_ups),
+    points: db()
+      .all<{ body: string; author_name: string }>(`${POINT_BASE} WHERE p.raised_in = ? ORDER BY p.raised_at, p.id`, r.id)
+      .map((p) => ({ body: p.body, authorName: p.author_name })),
   };
 }
 
@@ -116,4 +120,60 @@ export function endMeeting(actor: UserRow, id: number): Meeting {
   });
   changed('meetings');
   return getMeeting(id);
+}
+
+// ---------------- points for the next staff meeting (ישב"ס) ----------------
+
+interface PointRow {
+  id: number;
+  body: string;
+  author_id: number;
+  author_name: string;
+  created_at: string;
+  raised_at: string | null;
+  raised_in: number | null;
+}
+
+const POINT_BASE = 'SELECT p.*, u.display_name AS author_name FROM meeting_points p JOIN users u ON u.id = p.author_id';
+
+const toPoint = (viewer: UserRow, r: PointRow): MeetingPoint => ({
+  id: r.id,
+  body: r.body,
+  authorId: r.author_id,
+  authorName: r.author_name,
+  createdAt: r.created_at,
+  raisedAt: r.raised_at,
+  canDelete: isCommander(viewer) || r.author_id === viewer.id,
+});
+
+/** what waits for the next staff meeting - and, while one goes on, what was raised in it */
+export function meetingPoints(viewer: UserRow): MeetingPoint[] {
+  const active = activeMeeting();
+  return db()
+    .all<PointRow>(`${POINT_BASE} WHERE p.raised_at IS NULL${active ? ' OR p.raised_in = ?' : ''} ORDER BY p.created_at, p.id`, ...(active ? [active.id] : []))
+    .map((r) => toPoint(viewer, r));
+}
+
+export const meetingPointSchema = z.object({ body: z.string().trim().min(1, 'מה להעלות בישיבת הסגל?').max(1000, 'הנקודה - עד 1000 תווים') });
+
+export function addMeetingPoint(actor: UserRow, raw: unknown): number {
+  const { body } = meetingPointSchema.parse(raw);
+  const id = db().run('INSERT INTO meeting_points(body, author_id, created_at) VALUES (?, ?, ?)', body, actor.id, nowIso()).id;
+  changed('meetings');
+  return id;
+}
+
+/** raised in the meeting going on (the commander ticks it), or back to waiting for the next one */
+export function raiseMeetingPoint(id: number, raised: boolean): void {
+  if (!db().get('SELECT 1 FROM meeting_points WHERE id = ?', id)) throw notFound('הנקודה לא נמצאה');
+  db().run('UPDATE meeting_points SET raised_at = ?, raised_in = ? WHERE id = ?', raised ? nowIso() : null, raised ? (activeMeeting()?.id ?? null) : null, id);
+  changed('meetings');
+}
+
+export function deleteMeetingPoint(actor: UserRow, id: number): void {
+  const p = db().get<{ author_id: number }>('SELECT author_id FROM meeting_points WHERE id = ?', id);
+  if (!p) throw notFound('הנקודה לא נמצאה');
+  if (!isCommander(actor) && p.author_id !== actor.id) throw forbidden('את הנקודה מוחק מי שכתב אותה, או מפקד הקורס');
+  db().run('DELETE FROM meeting_points WHERE id = ?', id);
+  changed('meetings');
 }

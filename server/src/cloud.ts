@@ -278,6 +278,28 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, late]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * A request that waits on an outside service for long seconds - a recording's part written out, a
+ * talk summed up (talkAi.ts). It reads the database only to know who asks; it takes a fresh copy in
+ * the queue like any request, then runs outside it, so nobody waits behind it.
+ */
+async function outsideQueue(req: IncomingMessage, res: ServerResponse, body: Buffer | undefined, seen: number): Promise<void> {
+  const headers = { ...req.headers };
+  delete headers['content-length'];
+  delete headers['transfer-encoding'];
+  const run = () => inject(app!, { method: req.method as 'POST', url: req.url ?? '/', headers, payload: body });
+  await serialized(() => prepare(Number.isFinite(seen) && seen > version ? 0 : FRESH_MS));
+  let out = await run();
+  // a session made a moment ago on another instance (refused before anything ran): check storage, once more
+  if (out.statusCode === 401) {
+    await serialized(() => ensureFresh(0));
+    out = await run();
+  }
+  send(res, out.statusCode, out.headers, out.rawPayload);
+}
+
+const isOutside = (req: IncomingMessage) => req.method === 'POST' && (req.url ?? '').startsWith('/api/talks/ai/');
+
 export async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   req.url = originalUrl(req.url ?? '/');
   // no long-lived connections here; 204 tells a browser's EventSource not to reconnect
@@ -289,8 +311,10 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
   const body = ['GET', 'HEAD'].includes(req.method ?? 'GET') ? undefined : await readBody(req);
   const arrived = Date.now();
   let started = 0;
+  const outside = isOutside(req);
   try {
-    await serialized(async () => {
+    if (outside) await outsideQueue(req, res, body, seen);
+    else await serialized(async () => {
       started = Date.now();
       storageMs = 0;
       const isSync = (req.url ?? '').startsWith('/api/sync');
@@ -327,7 +351,8 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
     if (!res.headersSent) json(res, 503, { error: 'השרת לא זמין כרגע. נסו שוב בעוד רגע.' });
   }
   const total = Date.now() - arrived;
-  if (total > 1500) console.warn(`[slow] ${req.method} ${req.url} ${res.statusCode} ${total}ms (queued ${started ? started - arrived : total}ms, storage ${storageMs}ms)`);
+  if (outside) console.log(`[talk-ai] ${req.method} ${req.url} ${res.statusCode} ${total}ms`);
+  else if (total > 1500) console.warn(`[slow] ${req.method} ${req.url} ${res.statusCode} ${total}ms (queued ${started ? started - arrived : total}ms, storage ${storageMs}ms)`);
   try {
     const { waitUntil } = await import('@vercel/functions');
     // web pushes still going out, and big Google calendars still being read in the background
