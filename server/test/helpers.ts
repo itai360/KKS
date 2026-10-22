@@ -2,6 +2,7 @@ import { crc32 } from 'node:zlib';
 import request from 'supertest';
 import type { Express } from 'express';
 import { zonedIso } from '../../shared/dates';
+import type { StaffPermissions } from '../../shared/permissions';
 import { createApp } from '../src/app';
 import { createUser, resetLoginThrottle } from '../src/auth';
 import { clock, resetSettingsCache } from '../src/core';
@@ -60,6 +61,12 @@ export async function setup(): Promise<Ctx> {
     s2: await login(app, 's2'),
     s3: await login(app, 's3'),
   };
+}
+
+/** the commander sets what the staff may do beyond their own work (settings - permissions) */
+export async function staffMay(c: Ctx, perms: StaffPermissions): Promise<void> {
+  const r = await c.cmd.patch('/api/settings', { staffPermissions: perms });
+  if (r.status !== 200) throw new Error(`setting the staff's permissions: ${r.status} ${JSON.stringify(r.body)}`);
 }
 
 export async function newTask(agent: Agent, body: Record<string, unknown>): Promise<number> {

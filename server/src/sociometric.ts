@@ -13,10 +13,10 @@ import { badRequest, forbidden, notFound, nowIso } from './core';
 import { db } from './db';
 import { changed, logActivity } from './journal';
 import { readSpreadsheet } from './sheets';
-import { isCommander } from './taskRepo';
+import { may } from './abilities';
 
 const requireCommanderActor = (actor: UserRow) => {
-  if (!isCommander(actor)) throw forbidden('ייבוא סוציומטרי הוא של מפקד הקורס');
+  if (!may(actor, 'cadetFiles')) throw forbidden('ייבוא סוציומטרי הוא של מפקד הקורס');
 };
 
 // ---------------- reading a sheet ----------------
@@ -325,7 +325,7 @@ function computed(list: SocioRound[], index: number): { round: SocioRound; scale
 
 /** whose results a person sees: the commander everyone's, a team commander the team's */
 function visibleTeams(actor: UserRow): Set<number> | 'all' {
-  if (isCommander(actor)) return 'all';
+  if (may(actor, 'cadetFiles')) return 'all';
   return new Set(db().all<{ id: number }>('SELECT id FROM teams WHERE commander_id = ?', actor.id).map((t) => t.id));
 }
 
@@ -350,7 +350,7 @@ export function socioOfCadet(actor: UserRow, cadetId: number): SocioCadetRound[]
     cadetId,
   );
   if (!c) throw notFound('הצוער לא נמצא');
-  if (!isCommander(actor) && c.team_commander_id !== actor.id) throw forbidden('הסוציומטרי פתוח למפקד הקורס ולמפקד הצוות');
+  if (!may(actor, 'cadetFiles') && c.team_commander_id !== actor.id) throw forbidden('הסוציומטרי פתוח למפקד הקורס ולמפקד הצוות');
   const list = rounds();
   const out: SocioCadetRound[] = [];
   list.forEach((_, i) => {

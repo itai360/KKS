@@ -5673,6 +5673,21 @@ button.stat:disabled {
   gap: 10px;
   border-top: 3px solid var(--tone);
 }
+/* a weekly debrief sent for the commander's approval */
+.dform-waiting {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--blue-bg);
+  color: var(--blue-ink, var(--blue));
+  font-weight: 600;
+}
+.dform-waiting svg {
+  flex: none;
+  margin-top: 2px;
+}
 
 .dsec-num {
   display: inline-grid;
@@ -12335,6 +12350,60 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 .rule-row.is-paused .rule-days i.on {
   background: var(--card-2);
   color: var(--muted);
+}
+
+/* the staff's permissions: a switch for each ability, and what stays the commander's (settings) */
+.perm-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.perm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.perm-row:last-child {
+  border-bottom: none;
+}
+.perm-row .grow {
+  min-width: 0;
+  gap: 2px;
+}
+.perm-state {
+  flex: none;
+  min-width: 46px;
+  text-align: end;
+}
+.perm-row.is-on .perm-state {
+  color: var(--green-ink);
+}
+.perm-locked {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--card-2);
+}
+.perm-locked .label-caps {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.perm-locked-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.perm-list {
+  margin: 0;
+  padding-inline-start: 16px;
+  color: var(--ink-2);
+  display: grid;
+  gap: 2px;
 }
 
 /* an on / off switch: the knob slides, the track fills */

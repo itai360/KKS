@@ -9,7 +9,7 @@ import type { CourseArchive, CoursesOverview, PreviousCycleWeek, SnapshotInfo } 
 import { config } from '../src/core';
 import { db } from '../src/db';
 import { setSnapshotProvider, toPrune } from '../src/snapshots';
-import { newTask, setup, type Ctx } from './helpers';
+import { newTask, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -191,6 +191,8 @@ describe('the same week in the previous course', () => {
     expect(prev.tasks.map((t) => t.title).sort()).toEqual(['הזמנת תחמושת', 'הכנת שטח האימונים', 'קריאת נוהל בטיחות'].sort());
     expect(prev.tasks.find((t) => t.title === 'קריאת נוהל בטיחות')).toMatchObject({ people: 2, assigneeName: null });
     const ids = prev.tasks.map((t) => t.id);
+    // another week's lead copies too where the commander lets the staff manage the weeks; here he does not
+    await staffMay(c, { weeks: false });
     expect((await c.s3.post(`/api/weeks/${nextId}/previous-cycle/copy`, { archiveId: prev.archiveId, taskIds: ids })).status).toBe(403);
     const copied = await c.s2.post(`/api/weeks/${nextId}/previous-cycle/copy`, { archiveId: prev.archiveId, taskIds: ids });
     expect(copied.body).toEqual({ created: ids.length, skipped: 0 });

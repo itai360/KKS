@@ -39,7 +39,7 @@ const newCount = (n: number) => (n === 1 ? 'נוספה הודעה חדשה אח�
 const added = (r: AlignmentImport) => (r.added ? `${newCount(r.added)}${r.existing ? ` (${r.existing} כבר היו)` : ''}` : 'כל ההודעות כבר היו כאן');
 
 export function AlignmentPage() {
-  const { isCommander, viewing } = useSession();
+  const { can, viewing } = useSession();
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
@@ -50,7 +50,7 @@ export function AlignmentPage() {
   const [importing, setImporting] = useState(false);
   const toast = useToast();
   const newTask = useNewTask();
-  const canManage = isCommander && !viewing;
+  const canManage = can('alignment') && !viewing;
   // an instruction in the group becomes a task: the message is read like a typed task (who, by when)
   const toTask = (m: AlignmentMessage) =>
     newTask({

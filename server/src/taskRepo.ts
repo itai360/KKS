@@ -7,6 +7,7 @@ import type { UserRow } from './auth';
 import { clock, getSettings, notFound } from './core';
 import { db } from './db';
 import { groupNameOf } from './staffGroups';
+import { may } from './abilities';
 
 export interface TaskRow {
   id: number;
@@ -171,6 +172,7 @@ export const isCommander = (u: Pick<UserRow, 'role'>) => u.role === 'commander';
 
 export function canView(u: UserRow, t: TaskRow): boolean {
   if (isCommander(u)) return true;
+  if (t.visibility !== 'private' && may(u, 'tasks')) return true;
   if (t.owner_id === u.id || t.created_by === u.id) return true;
   if (participantsOf(t).includes(u.id)) return true;
   if (t.visibility === 'team') return true;

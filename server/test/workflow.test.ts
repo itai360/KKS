@@ -3,7 +3,7 @@ import { zonedIso } from '../../shared/dates';
 import { runAutomation } from '../src/automation';
 import { clock } from '../src/core';
 import { db } from '../src/db';
-import { at, newTask, notificationsOf, setup, TZ, type Ctx } from './helpers';
+import { at, newTask, notificationsOf, setup, staffMay, TZ, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -64,8 +64,10 @@ describe('recurring tasks (section 15)', () => {
     expect(db().get<{ n: number }>('SELECT count(*) AS n FROM tasks')!.n).toBe(0);
   });
 
-  it('only the commander manages recurring rules', async () => {
-    expect((await c.s1.post('/api/recurring', { title: 'x', frequency: 'daily', time: '20:00', assignee: 'all' })).status).toBe(403);
+  it('the commander manages recurring rules - and the staff, where he lets them', async () => {
+    expect((await c.s1.post('/api/recurring', { title: 'x', frequency: 'daily', time: '20:00', assignee: 'all' })).status).toBe(200);
+    await staffMay(c, { templates: false });
+    expect((await c.s1.post('/api/recurring', { title: 'y', frequency: 'daily', time: '20:00', assignee: 'all' })).status).toBe(403);
   });
 });
 
@@ -121,7 +123,8 @@ describe('weeks (sections 36-38, 53-56)', () => {
         { title: 'בטיחות מאושרת', offsetDays: -1 },
       ],
     });
-    // staff who do not lead the week cannot open it
+    // staff who do not lead the week cannot open it - unless the commander lets the staff manage the weeks
+    await staffMay(c, { weeks: false, templates: false });
     expect((await c.s2.post(`/api/weeks/${w.id}/open`, { templateId: tpl.body.id })).status).toBe(403);
     const res = await c.s1.post(`/api/weeks/${w.id}/open`, { templateId: tpl.body.id, itemIndexes: [0, 1] });
     expect(res.body.ids).toHaveLength(2);
@@ -260,8 +263,10 @@ describe('schedule <-> tasks (sections 22-23, 66-67)', () => {
     expect(d.body.event).toMatchObject({ taskTotal: 2, taskDone: 0 });
   });
 
-  it('staff cannot add events outside their week', async () => {
-    expect((await c.s1.post('/api/events', { date: '2026-10-07', startTime: '10:00', title: 'x' })).status).toBe(403);
+  it('staff add events outside their week only where the commander lets them', async () => {
+    expect((await c.s1.post('/api/events', { date: '2026-10-07', startTime: '10:00', title: 'x' })).status).toBe(200);
+    await staffMay(c, { schedule: false });
+    expect((await c.s1.post('/api/events', { date: '2026-10-07', startTime: '10:00', title: 'y' })).status).toBe(403);
   });
 });
 
@@ -319,6 +324,9 @@ describe('dashboard and reports', () => {
     expect(r.weeks).toHaveLength(1);
     expect(r.events).toHaveLength(1);
     expect((await c.cmd.get(`/api/search?q=${encodeURIComponent('מפק"צ 2')}`)).body.users).toHaveLength(1);
+    // a staff member finds what they may see: every task where the commander opened them, else not another's
+    expect((await c.s1.get(`/api/search?q=${encodeURIComponent('מטווח')}`)).body.tasks).toHaveLength(1);
+    await staffMay(c, { tasks: false });
     expect((await c.s1.get(`/api/search?q=${encodeURIComponent('מטווח')}`)).body.tasks).toHaveLength(0);
   });
 

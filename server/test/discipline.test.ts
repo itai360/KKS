@@ -6,7 +6,7 @@ import type { Cadet, CadetDetail, CommitteeDetail, DisciplineGuide, DisciplineLo
 import { db, Db, migrate } from '../src/db';
 import { guideFromFile, htmlBlocks, ordinalOf } from '../src/discipline';
 import { setSheetFetcher } from '../src/sheets';
-import { notificationsOf, setup, zip, type Ctx } from './helpers';
+import { notificationsOf, setup, staffMay, zip, type Ctx } from './helpers';
 
 // like a Google Docs export: merged category cells, a step over two columns, a footnote, wordings under headings
 const exported = `<html><head><style>.c1{color:#000}</style></head><body>
@@ -106,6 +106,8 @@ describe('the ladder in the system', () => {
 
   it('the commander imports it - pasted, from a file, or from a shared link - and every staff member reads it', async () => {
     const paste = (agent: Ctx['cmd'], body: string, name = 'pasted.html') => agent.post('/api/discipline/guide/file').set('content-type', 'text/html').set('x-filename', name).send(body);
+    // the staff import it too where the commander lets them (imports); here he keeps it
+    await staffMay(c, { imports: false });
     expect((await paste(c.s1, exported)).status).toBe(403);
     const saved = (await paste(c.cmd, exported)).body as DisciplineGuide;
     expect(saved).toMatchObject({ source: 'הדבקה מהמסמך', importedByName: 'מפקד הקורס' });
@@ -296,6 +298,8 @@ describe('exemptions', () => {
   const shaving = { subject: 'דיגום', details: 'פטור גילוח', reason: 'אישור רפואי', until: '2026-10-15' };
 
   it('the team commander records one; every staff member sees it and hears of it, the reason stays with the commanders', async () => {
+    // another team's commander records it where the commander lets the staff handle every team's cadets
+    await staffMay(c, { cadets: false });
     expect((await c.s2.post(`/api/cadets/${cadet}/exemptions`, shaving)).status).toBe(403);
     expect((await c.s1.post(`/api/cadets/${cadet}/exemptions`, { ...shaving, until: '2026-09-01' })).status).toBe(400);
     const d = (await c.s1.post(`/api/cadets/${cadet}/exemptions`, shaving)).body as CadetDetail;

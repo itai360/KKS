@@ -17,6 +17,7 @@ import { isCommander, mustTaskRow, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime } from './taskService';
 import { applyTemplate, listTemplates } from './templates';
 import { followWeekLead } from './weeklyDebriefTask';
+import { may } from './abilities';
 
 interface WeekRow {
   id: number;
@@ -103,7 +104,8 @@ export function domainReadiness(where: string, ...params: (string | number)[]): 
   return rows.map((r) => ({ domain: r.domain, total: r.total, done: r.done, readiness: readinessPct(r.done, r.total) }));
 }
 
-const canManage = (actor: UserRow, w: Pick<Week, 'leadId'>) => isCommander(actor) || w.leadId === actor.id;
+/** the commander, the week's lead - or the staff, where the commander lets them manage the weeks */
+const canManage = (actor: UserRow, w: Pick<Week, 'leadId'>) => may(actor, 'weeks') || w.leadId === actor.id;
 
 export const weekSchema = z.object({
   number: z.number().int().min(0).max(100).optional(),
@@ -174,8 +176,8 @@ export function updateWeek(actor: UserRow, id: number, raw: Partial<z.input<type
   const cur = getWeek(id);
   if (!canManage(actor, cur)) throw forbidden();
   const patch = patchSchema(weekSchema).parse(raw);
-  // The lead may update goals/topic; dates, name and lead belong to the commander.
-  if (!isCommander(actor) && (patch.startDate || patch.endDate || patch.leadId !== undefined || patch.name || patch.number !== undefined)) {
+  // The lead may update goals/topic; dates, name and lead belong to the commander (and the staff he lets).
+  if (!may(actor, 'weeks') && (patch.startDate || patch.endDate || patch.leadId !== undefined || patch.name || patch.number !== undefined)) {
     throw forbidden('רק מפקד הקורס יכול לשנות תאריכים, שם ומפק"צ אחראי');
   }
   checkLead(patch.leadId);

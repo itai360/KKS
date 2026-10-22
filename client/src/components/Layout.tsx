@@ -128,7 +128,7 @@ function ThemeButton() {
 }
 
 export function useNavSections(): { title?: string; items: NavItem[] }[] {
-  const { isCommander } = useSession();
+  const { isCommander, can } = useSession();
   const requests = useApi<TaskRequest[]>(isCommander ? '/api/requests' : null, ['requests', 'tasks']);
   const approvals = useApi<Task[]>(isCommander ? '/api/tasks?status=pending_approval' : null, ['tasks']);
   const pending = (requests.data?.length ?? 0) + (approvals.data?.length ?? 0);
@@ -210,6 +210,13 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
         { to: '/weekly', label: 'שבועי', icon: 'weekly' },
         { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
+        // what the commander opened to the staff (settings - permissions)
+        ...(can('plans')
+          ? [
+              { to: '/plans', label: 'אישור תוכניות', icon: 'stamp' },
+              { to: '/three-week', label: 'אישור תוכניות תלת שבועי', icon: 'threeWeeks', keywords: 'תלת שבועי תלת-שבועי שלושה שבועות ארבעה שבועות תוכנית' },
+            ]
+          : []),
       ],
     },
     {
@@ -237,6 +244,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
     {
       title: 'כלים',
       items: [
+        ...(can('meetings') ? [{ to: '/meeting', label: 'ישיבת סגל', icon: 'message' }] : []),
         { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
         { to: '/documents', label: 'מסמכים', icon: 'file' },
         { to: '/templates', label: 'תבניות', icon: 'template' },
@@ -259,9 +267,9 @@ function readRailPref(): 'collapsed' | 'expanded' | null {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, settings, unread, logout, isCommander, viewing, weeks } = useSession();
+  const { user, settings, unread, logout, isCommander, can, viewing, weeks } = useSession();
   // the commander and the week leads add to the schedule from anywhere, as they add a task
-  const canEvent = !viewing && (isCommander || weeks.some((w) => w.leadId === user.id));
+  const canEvent = !viewing && (can('schedule') || weeks.some((w) => w.leadId === user.id));
   const sections = useNavSections();
   const palettePages = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const newTask = useNewTask();

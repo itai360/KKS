@@ -53,7 +53,7 @@ import { TalkDialog, TalkHighlights, TalkView } from '../components/Talks';
 import { SocioCard } from '../components/SocioCard';
 
 export function CadetsPage() {
-  const { isCommander, user, viewing } = useSession();
+  const { isCommander, can, user, viewing } = useSession();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const team = params.get('team') ?? '';
@@ -66,7 +66,9 @@ export function CadetsPage() {
   const [dialog, setDialog] = useState<null | 'cadet' | 'import' | 'teams' | 'guide' | 'discipline'>(null);
   const guide = useGuide();
   const myTeams = (teams.data ?? []).filter((t) => t.commanderId === user.id);
-  const canAdd = isCommander || myTeams.length > 0;
+  // every team's cadets - the commander's, and the staff's where the commander lets them
+  const allTeams = can('cadets');
+  const canAdd = allTeams || myTeams.length > 0;
 
   const shown = (cadets.data ?? []).filter((c) => matchesSearch(q, c.fullName, c.personalNumber) && (!notesOnly || c.disciplineNotes > 0) && (!exemptOnly || c.exemptions.length > 0));
   const grouped = useMemo(() => {
@@ -90,7 +92,7 @@ export function CadetsPage() {
       topics={['cadets']}
       ids={shown.map((c) => c.id)}
       actions={[
-        { key: 'team', label: 'העברה לצוות', icon: 'users', ask: { title: 'העברה לצוות', label: 'צוות', options: [...(isCommander ? (teams.data ?? []) : myTeams).map((t) => ({ value: String(t.id), label: t.name })), ...(isCommander ? [{ value: '', label: 'ללא צוות' }] : [])] } },
+        { key: 'team', label: 'העברה לצוות', icon: 'users', ask: { title: 'העברה לצוות', label: 'צוות', options: [...(allTeams ? (teams.data ?? []) : myTeams).map((t) => ({ value: String(t.id), label: t.name })), ...(allTeams ? [{ value: '', label: 'ללא צוות' }] : [])] } },
         { key: 'status', label: 'סטטוס', ask: { title: 'שינוי סטטוס', label: 'סטטוס', options: CADET_STATUSES.map((x) => ({ value: x, label: CADET_STATUS_LABELS[x] })) } },
         { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, show: isCommander, confirm: 'למחוק {n} צוערים וכל התיקים שלהם? לסיום קורס או הדחה עדיף לשנות סטטוס.' },
       ]}
@@ -139,15 +141,15 @@ export function CadetsPage() {
                 <Icon name="shield" /> מדרג אכיפה
               </button>
             )}
-            {isCommander && (
-              <>
-                <button className="btn" onClick={() => setDialog('teams')}>
-                  <Icon name="users" /> צוותים
-                </button>
-                <button className="btn" onClick={() => setDialog('import')}>
-                  <Icon name="upload" /> ייבוא רשימה
-                </button>
-              </>
+            {can('teams') && (
+              <button className="btn" onClick={() => setDialog('teams')}>
+                <Icon name="users" /> צוותים
+              </button>
+            )}
+            {can('imports') && (
+              <button className="btn" onClick={() => setDialog('import')}>
+                <Icon name="upload" /> ייבוא רשימה
+              </button>
             )}
             {canAdd && (
               <button className="btn btn-primary" onClick={() => setDialog('cadet')}>
@@ -188,7 +190,7 @@ export function CadetsPage() {
       {cadets.loading && !cadets.data ? (
         <Loading rows={4} />
       ) : !shown.length ? (
-        <Empty icon="users" title="אין צוערים" text={isCommander ? 'הוסיפו צוערים אחד-אחד או הדביקו רשימה מאקסל בעזרת "ייבוא רשימה".' : undefined} />
+        <Empty icon="users" title="אין צוערים" text={canAdd ? 'הוסיפו צוערים אחד-אחד או הדביקו רשימה מאקסל בעזרת "ייבוא רשימה".' : undefined} />
       ) : (
         grouped.map(([teamName, list]) => {
           const t = (teams.data ?? []).find((x) => x.name === teamName);
@@ -205,7 +207,7 @@ export function CadetsPage() {
           );
         })
       )}
-      {dialog === 'cadet' && <CadetForm teams={isCommander ? (teams.data ?? []) : myTeams} defaultTeam={team ? Number(team) : undefined} onClose={() => setDialog(null)} />}
+      {dialog === 'cadet' && <CadetForm teams={allTeams ? (teams.data ?? []) : myTeams} defaultTeam={team ? Number(team) : undefined} onClose={() => setDialog(null)} />}
       {dialog === 'import' && <ImportCadets teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'teams' && <TeamsDialog teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'guide' && guide.data && <GuideModal guide={guide.data} onClose={() => setDialog(null)} />}
@@ -267,7 +269,7 @@ function CadetRow({ c, onExempt }: { c: Cadet; onExempt: () => void }) {
           {c.avgScore.toFixed(1)}
         </span>
       )}
-      {c.canManage && !bulk?.active && (
+      {c.canEdit && !bulk?.active && (
         <button
           type="button"
           className="icon-btn exemption-add"
@@ -302,7 +304,7 @@ function useCadetMenuItems(c: Cadet, onExempt: () => void): RowMenuItem[] {
     ...(may('talk') ? [{ key: 'talk', label: 'שיחה אישית', icon: 'message', run: () => write('talk') }] : []),
     ...(may('discipline') ? [{ key: 'discipline', label: 'רישום משמעת', icon: 'shield', run: () => write('discipline') }] : []),
     ...(may('evaluation') ? [{ key: 'evaluation', label: 'הערכה', icon: 'chart', run: () => write('evaluation') }] : []),
-    ...(c.canManage && !viewing ? [{ key: 'exempt', label: 'הוספת פטור', icon: 'flag', run: onExempt }] : []),
+    ...(c.canEdit && !viewing ? [{ key: 'exempt', label: 'הוספת פטור', icon: 'flag', run: onExempt }] : []),
     ...(tel ? [{ key: 'call', label: 'חיוג', icon: 'phone', run: () => void (location.href = tel) }] : []),
     ...(wa ? [{ key: 'wa', label: 'וואטסאפ', icon: 'message', run: () => void window.open(wa, '_blank', 'noopener') }] : []),
     ...(c.canManage ? [{ key: 'eval', label: 'תיק הערכה', icon: 'folder', run: () => navigate(`/evaluations/${c.id}`) }] : []),
@@ -313,7 +315,7 @@ function useCadetMenuItems(c: Cadet, onExempt: () => void): RowMenuItem[] {
 function CadetForm({ cadet, teams, defaultTeam, onClose }: { cadet?: Cadet; teams: Team[]; defaultTeam?: number; onClose: () => void }) {
   const toast = useToast();
   const navigate = useNavigate();
-  const { isCommander } = useSession();
+  const isCommander = useSession().can('cadets');
   const [firstName, setFirstName] = useState(cadet?.firstName ?? '');
   const [lastName, setLastName] = useState(cadet?.lastName ?? '');
   const [personalNumber, setPersonalNumber] = useState(cadet?.personalNumber ?? '');
@@ -324,7 +326,9 @@ function CadetForm({ cadet, teams, defaultTeam, onClose }: { cadet?: Cadet; team
   const [error, setError] = useState<string | null>(null);
   const save = async () => {
     setError(null);
-    const body = { firstName, lastName, personalNumber, phone, notes, status, ...(isCommander || !cadet ? { teamId: teamId ? Number(teamId) : null } : {}) };
+    // the notes are the personal file's: whoever does not see them does not send them
+    const seesNotes = !cadet || cadet.canManage;
+    const body = { firstName, lastName, personalNumber, phone, ...(seesNotes ? { notes } : {}), status, ...(isCommander || !cadet ? { teamId: teamId ? Number(teamId) : null } : {}) };
     try {
       if (cadet) {
         const patch = changedFields<typeof body>(cadet, body);
@@ -389,9 +393,11 @@ function CadetForm({ cadet, teams, defaultTeam, onClose }: { cadet?: Cadet; team
             </Select>
           </Field>
         )}
-        <Field label="הערות כלליות (גלויות למפקד הצוות ולמפקד הקורס)" className="span-2">
-          <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </Field>
+        {(!cadet || cadet.canManage) && (
+          <Field label="הערות כלליות (גלויות למפקד הצוות ולמפקד הקורס)" className="span-2">
+            <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </Field>
+        )}
       </div>
       <div className="mt-12">
         <ErrorBox error={error} />
@@ -674,7 +680,7 @@ export function CadetPage() {
                 <Icon name="message" /> שיחה אישית
               </button>
             )}
-            {c.canManage && (
+            {c.canEdit && (
               <button className="btn" onClick={() => setDialog('edit')}>
                 <Icon name="edit" /> עריכה
               </button>
@@ -684,7 +690,7 @@ export function CadetPage() {
                 <Icon name="folder" /> תיק הערכה
               </Link>
             )}
-            {c.canManage && (
+            {c.canEdit && (
               <button className="btn" onClick={() => setDialog('experience')}>
                 <Icon name="target" /> שיבוץ להתנסות
               </button>
@@ -728,7 +734,7 @@ export function CadetPage() {
           {(c.canManage || c.disciplineNotes > 0) && (
             <DisciplineSummary count={c.disciplineNotes} committee={c.notesCommittee} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
           )}
-          {(c.canManage || data.exemptions.length > 0) && <ExemptionsCard cadet={c} exemptions={data.exemptions} />}
+          {(c.canEdit || data.exemptions.length > 0) && <ExemptionsCard cadet={c} exemptions={data.exemptions} />}
           {c.canManage && <SocioCard cadetId={c.id} />}
           {c.status === 'active' && <AttendanceCard cadetId={c.id} />}
           <Development detail={data} />
@@ -789,7 +795,7 @@ function StatusPill({ cadet }: { cadet: Cadet }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const tone = `status-pill t-${CADET_STATUS_TONES[cadet.status]}`;
-  if (!cadet.canManage) return <span className={tone}>{CADET_STATUS_LABELS[cadet.status]}</span>;
+  if (!cadet.canEdit) return <span className={tone}>{CADET_STATUS_LABELS[cadet.status]}</span>;
   const change = async (status: CadetStatus) => {
     if (
       status === 'dropped' &&
@@ -900,7 +906,7 @@ function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemp
       <div className="card-head">
         <Icon name="flag" />
         <h3 className="grow">פטורים</h3>
-        {cadet.canManage && (
+        {cadet.canEdit && (
           <button className="btn btn-sm" onClick={() => setAdding(true)}>
             <Icon name="plus" size={14} /> פטור
           </button>

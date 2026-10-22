@@ -22,7 +22,9 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
 export function AnnouncementsPage() {
-  const { isCommander } = useSession();
+  const { can } = useSession();
+  // the commander - or the staff, where the commander lets them post to everyone
+  const isCommander = can('announcements');
   const { data, error, loading, setData } = useApi<Announcement[]>('/api/announcements', ['announcements']);
   const toast = useToast();
   const seen = useRef(new Set<number>());

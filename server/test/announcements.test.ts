@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { notificationsOf, setup, type Ctx } from './helpers';
+import { notificationsOf, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -8,6 +8,8 @@ beforeEach(async () => {
 
 describe('announcements to the staff', () => {
   it('goes to everyone, stays pending until confirmed, and the commander sees who has not', async () => {
+    // the staff post to everyone too where the commander lets them; kept to the commander here
+    await staffMay(c, { announcements: false });
     expect((await c.s1.post('/api/announcements', { title: 'שינוי בלו"ז' })).status).toBe(403);
     const res = await c.cmd.post('/api/announcements', { title: 'מסדר מפקד ביום חמישי 07:00', body: 'כל הסגל במדים א', urgent: true });
     expect(res.status).toBe(200);

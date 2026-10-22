@@ -67,6 +67,7 @@ const DEFAULT_SETTINGS: CourseSettings = {
   readinessWarnThreshold: 70,
   domains: DEFAULT_DOMAINS,
   staffGroups: DEFAULT_STAFF_GROUPS,
+  staffPermissions: {},
 };
 
 let settingsCache: CourseSettings | null = null;

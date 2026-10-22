@@ -53,7 +53,7 @@ const SCOPES: [string, string][] = [
 
 export function TasksPage() {
   const [params, setParams] = useSearchParams();
-  const { staff, users, weeks, tracks, settings, isCommander, user, userName, viewing } = useSession();
+  const { staff, users, weeks, tracks, settings, can, user, userName, viewing } = useSession();
   const newTask = useNewTask();
   const toast = useToast();
   const [view, setView] = useState<View>(() => {
@@ -101,7 +101,7 @@ export function TasksPage() {
     setView(v);
     writePref('kks.workBoardView', v);
   };
-  const people = isCommander ? users : staff;
+  const people = can('tasks') ? users : staff;
   const active = [f.owner, f.week, f.track, f.domain, f.status, f.priority, f.routine === '1' ? 'routine' : ''].filter(Boolean).length;
   const filtered = active > 0 || Boolean(f.q);
   const clearFilters = () => setParams(f.scope !== 'all' ? { scope: f.scope } : {}, { replace: true });

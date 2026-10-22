@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { hashPassword } from '../src/auth';
 import { db } from '../src/db';
 import { assertPublicUrl, isPrivateAddress, isPushEndpoint, readLimited, safeFetch } from '../src/netguard';
-import { at, newTask, setup, type Ctx } from './helpers';
+import { at, newTask, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -173,7 +173,6 @@ describe('nobody changes what is not theirs', () => {
       ['mark an absence for another', () => c.s3.post('/api/absences', { userId: c.ids.s1, startDate: '2026-10-10', endDate: '2026-10-11' })],
       ['delete a restricted document', () => c.s3.del(`/api/documents/${doc}`)],
       ['read a restricted document', () => c.s3.get(`/api/documents/${doc}/file`)],
-      ['delete an exemption', () => c.s3.del(`/api/exemptions/${exemption}`)],
       ['decide on another\'s request', () => c.s3.post(`/api/requests/${req}/decide`, { approve: true })],
       ['remove a link from a private task', () => c.s3.del(`/api/attachments/${link}`)],
       ['delete an announcement', () => c.s3.del(`/api/announcements/${ann}`)],
@@ -185,6 +184,11 @@ describe('nobody changes what is not theirs', () => {
       if (res.status < 400) allowed.push(`${what}: ${res.status}`);
     }
     expect(allowed).toEqual([]);
+    // an exemption of another team's cadet: the cadets of every team are the staff's where the commander lets them
+    await staffMay(c, { cadets: false });
+    expect((await c.s3.del(`/api/exemptions/${exemption}`)).status).toBe(403);
+    await staffMay(c, {});
+    expect((await c.s3.del(`/api/exemptions/${exemption}`)).status).toBe(200);
     // and nothing changed
     expect(db().get<{ title: string }>('SELECT title FROM tasks WHERE id = ?', p.task)!.title).toContain('ZQX1');
     expect(db().get('SELECT 1 FROM cadet_records WHERE id = ?', talk)).toBeTruthy();

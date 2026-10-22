@@ -67,6 +67,7 @@ import {
   updateEvent,
 } from './schedule';
 import { subscriptionCounts } from './push';
+import { requireAbility } from './abilities';
 import { staffGroups } from './staffGroups';
 import { canEdit, canView, getTaskRow, isCommander, mustTaskRow, visibleTasks } from './taskRepo';
 import {
@@ -89,6 +90,7 @@ import {
 } from './taskService';
 import { applyTemplate, deleteTemplate, getTemplate, listTemplates, saveTemplate } from './templates';
 import { matchesSearch } from '../../shared/search';
+import { STAFF_ABILITIES } from '../../shared/permissions';
 import {
   addLesson,
   approveWeek,
@@ -458,6 +460,7 @@ export function apiRouter(): Router {
         )
         .max(20)
         .refine((gs) => new Set(gs.map((g) => g.id)).size === gs.length && new Set(gs.map((g) => g.name)).size === gs.length, 'יש שתי קבוצות באותו שם'),
+      staffPermissions: z.partialRecord(z.enum(STAFF_ABILITIES), z.boolean()),
     })
     .partial();
 
@@ -748,8 +751,8 @@ export function apiRouter(): Router {
   // ---------------- weeks & lessons ----------------
 
   r.get('/weeks', (_req, res) => res.json(listWeeks()));
-  r.post('/weeks', requireCommander, (req, res) => res.json(getWeek(createWeek(me(req), req.body))));
-  r.post('/weeks/generate', requireCommander, (req, res) => {
+  r.post('/weeks', requireAbility('weeks'), (req, res) => res.json(getWeek(createWeek(me(req), req.body))));
+  r.post('/weeks/generate', requireAbility('weeks'), (req, res) => {
     generateWeeks(me(req), req.body);
     res.json(listWeeks());
   });
@@ -786,13 +789,13 @@ export function apiRouter(): Router {
   });
   // ---------------- course tracks ----------------
   r.get('/tracks', (_req, res) => res.json(listTracks()));
-  r.post('/tracks', requireCommander, (req, res) => res.json(getTrack(createTrack(me(req), req.body))));
+  r.post('/tracks', requireAbility('tracks'), (req, res) => res.json(getTrack(createTrack(me(req), req.body))));
   r.get('/tracks/:id', (req, res) => res.json(trackDetail(me(req), id(req.params.id))));
   r.patch('/tracks/:id', (req, res) => {
     updateTrack(me(req), id(req.params.id), req.body);
     res.json(getTrack(id(req.params.id)));
   });
-  r.delete('/tracks/:id', requireCommander, (req, res) => {
+  r.delete('/tracks/:id', requireAbility('tracks'), (req, res) => {
     deleteTrack(me(req), id(req.params.id));
     res.json({ ok: true });
   });
@@ -832,24 +835,24 @@ export function apiRouter(): Router {
 
   r.get('/templates', (req, res) => res.json(listTemplates(str(req.query.kind))));
   r.get('/templates/:id', (req, res) => res.json(getTemplate(id(req.params.id))));
-  r.post('/templates', requireCommander, (req, res) => res.json(getTemplate(saveTemplate(me(req), req.body))));
-  r.put('/templates/:id', requireCommander, (req, res) => res.json(getTemplate(saveTemplate(me(req), req.body, id(req.params.id)))));
-  r.delete('/templates/:id', requireCommander, (req, res) => {
+  r.post('/templates', requireAbility('templates'), (req, res) => res.json(getTemplate(saveTemplate(me(req), req.body))));
+  r.put('/templates/:id', requireAbility('templates'), (req, res) => res.json(getTemplate(saveTemplate(me(req), req.body, id(req.params.id)))));
+  r.delete('/templates/:id', requireAbility('templates'), (req, res) => {
     deleteTemplate(id(req.params.id));
     res.json({ ok: true });
   });
   r.post('/templates/:id/apply', (req, res) => res.json({ ids: applyTemplate(me(req), id(req.params.id), req.body) }));
 
   r.get('/recurring', (_req, res) => res.json(listRules()));
-  r.post('/recurring', requireCommander, (req, res) => {
+  r.post('/recurring', requireAbility('templates'), (req, res) => {
     saveRule(me(req), req.body);
     res.json(listRules());
   });
-  r.put('/recurring/:id', requireCommander, (req, res) => {
+  r.put('/recurring/:id', requireAbility('templates'), (req, res) => {
     saveRule(me(req), req.body, id(req.params.id));
     res.json(listRules());
   });
-  r.delete('/recurring/:id', requireCommander, (req, res) => {
+  r.delete('/recurring/:id', requireAbility('templates'), (req, res) => {
     deleteRule(id(req.params.id));
     res.json(listRules());
   });
@@ -922,23 +925,23 @@ export function apiRouter(): Router {
 
   r.get('/meetings', (_req, res) => res.json(listMeetings()));
   r.get('/meetings/active', (_req, res) => res.json(activeMeeting()));
-  r.post('/meetings', requireCommander, (req, res) => {
+  r.post('/meetings', requireAbility('meetings'), (req, res) => {
     const title = z.object({ title: z.string().max(120).optional() }).parse(req.body ?? {}).title;
     res.json(getMeeting(startMeeting(me(req), title)));
   });
   r.get('/meetings/:id', (req, res) => res.json(getMeeting(id(req.params.id))));
-  r.patch('/meetings/:id', requireCommander, (req, res) => {
+  r.patch('/meetings/:id', requireAbility('meetings'), (req, res) => {
     updateMeeting(id(req.params.id), req.body);
     res.json(getMeeting(id(req.params.id)));
   });
-  r.post('/meetings/:id/end', requireCommander, (req, res) => res.json(endMeeting(me(req), id(req.params.id))));
+  r.post('/meetings/:id/end', requireAbility('meetings'), (req, res) => res.json(endMeeting(me(req), id(req.params.id))));
   // points for the next staff meeting (ישב"ס): anyone on the staff adds one, the commander ticks them in the meeting
   r.get('/meeting-points', (req, res) => res.json(meetingPoints(me(req))));
   r.post('/meeting-points', (req, res) => {
     addMeetingPoint(me(req), req.body);
     res.json(meetingPoints(me(req)));
   });
-  r.post('/meeting-points/:id/raise', requireCommander, (req, res) => {
+  r.post('/meeting-points/:id/raise', requireAbility('meetings'), (req, res) => {
     raiseMeetingPoint(id(req.params.id), z.object({ raised: z.boolean() }).parse(req.body).raised);
     res.json(meetingPoints(me(req)));
   });

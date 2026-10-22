@@ -53,7 +53,13 @@ describe('weekly debrief form', () => {
 
     await c.s1.patch(`/api/debrief-items/${lessonId}`, { ownerId: c.ids.s2, dueDate: '2026-10-12' });
     await c.s1.post(`/api/debriefs/${id}/items`, { kind: 'lesson', horizon: 'next', body: 'להקדים את תרגיל ההגנה ליום שני' });
-    const done = await sumUp();
+    const sent = await sumUp();
+    expect(sent.status).toBe(200);
+    // the lead sends it; the commander's approval is what sums it up
+    expect(sent.body.debrief).toMatchObject({ status: 'draft', canSumUp: false, submittedByName: 'מפק"צ 1' });
+    expect(notificationsOf(c.ids.cmd).some((n) => n.type === 'debrief' && n.title.includes('מחכה לאישורך'))).toBe(true);
+    expect(db().get<{ n: number }>('SELECT count(*) AS n FROM tasks WHERE debrief_id = ?', id)!.n).toBe(0);
+    const done = await c.cmd.patch(`/api/debriefs/${id}`, { status: 'final' });
     expect(done.status).toBe(200);
     expect(done.body.debrief.status).toBe('final');
 
@@ -69,7 +75,9 @@ describe('weekly debrief form', () => {
 
     // the debrief was about another week after all: its next-cycle lesson follows
     const other = await week('שבוע מטווחים', '2026-10-11', '2026-10-15');
-    await c.s1.patch(`/api/debriefs/${id}`, { status: 'draft' });
+    // taking the approval back is the commander's too
+    expect((await c.s1.patch(`/api/debriefs/${id}`, { status: 'draft' })).status).toBe(403);
+    await c.cmd.patch(`/api/debriefs/${id}`, { status: 'draft' });
     const moved = (await c.s1.patch(`/api/debriefs/${id}`, { weekId: other })).body;
     expect(moved.debrief.weekId).toBe(other);
     expect(moved.items.find((l: { horizon: string }) => l.horizon === 'next').target).toContain('שבוע מטווחים');

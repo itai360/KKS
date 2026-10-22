@@ -6,7 +6,7 @@ import type { PlanDocument, PlansOverview, ThreeWeekPlan } from '../../shared/ty
 import { classify, joinHe, readEvents } from '../src/plans';
 import { calendarReadsSettled, forgetCalendarCopies, setCalendarFetcher, setCalendarWaits } from '../src/calendar';
 import { db } from '../src/db';
-import { at, newTask, setup, type Ctx } from './helpers';
+import { at, newTask, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 const weekIds: number[] = [];
@@ -68,11 +68,17 @@ describe('reading the schedule', () => {
 });
 
 describe('plan approval', () => {
-  it('is the commander\'s only', async () => {
+  it('is prepared by the staff where the commander lets them - and approved by the commander only', async () => {
+    expect((await c.s1.get('/api/plans')).status).toBe(200);
+    expect((await c.s1.patch(`/api/plans/${weekIds[0]}`, { goals: ['x'] })).status).toBe(200);
+    // approving, and taking an approval back, are the commander's
+    expect((await c.s1.post(`/api/plans/${weekIds[0]}/approve`, { by: 'מח"ט', on: '2026-10-01' })).status).toBe(403);
+    expect((await c.cmd.post(`/api/plans/${weekIds[0]}/approve`, { by: 'מח"ט', on: '2026-10-01' })).status).toBe(200);
+    expect((await c.s1.patch(`/api/plans/${weekIds[0]}`, { status: 'ready' })).status).toBe(403);
+    await staffMay(c, { plans: false });
     expect((await c.s1.get('/api/plans')).status).toBe(403);
     expect((await c.s1.get(`/api/plans/${weekIds[0]}`)).status).toBe(403);
     expect((await c.s1.patch(`/api/plans/${weekIds[0]}`, { goals: ['x'] })).status).toBe(403);
-    expect((await c.s1.post(`/api/plans/${weekIds[0]}/approve`, { by: 'מח"ט', on: '2026-10-01' })).status).toBe(403);
   });
 
   it('drafts the week from the schedule: key activities, the three weeks after, goals, achievements, emphases, risks', async () => {
@@ -142,11 +148,14 @@ describe('plan approval', () => {
 describe('the three-week plan', () => {
   const tw = async (path = '') => (await c.cmd.get(`/api/three-week${path}`)).body as ThreeWeekPlan;
 
-  it("is the commander's only", async () => {
+  it('is prepared by the staff where the commander lets them - and approved by the commander only', async () => {
+    expect((await c.s1.get('/api/three-week')).status).toBe(200);
+    expect((await c.s1.patch(`/api/three-week/${weekIds[0]}`, { bluf: 'x' })).status).toBe(200);
+    expect((await c.s1.post(`/api/three-week/${weekIds[0]}/approve`, { by: 'מח"ט', on: '2026-10-01' })).status).toBe(403);
+    await staffMay(c, { plans: false });
     expect((await c.s1.get('/api/three-week')).status).toBe(403);
     expect((await c.s1.get(`/api/three-week/${weekIds[0]}`)).status).toBe(403);
     expect((await c.s1.patch(`/api/three-week/${weekIds[0]}`, { bluf: 'x' })).status).toBe(403);
-    expect((await c.s1.post(`/api/three-week/${weekIds[0]}/approve`, { by: 'מח"ט', on: '2026-10-01' })).status).toBe(403);
   });
 
   it('shows the week now and the three after it: day by day, the milestones, readiness, the risks with their week', async () => {

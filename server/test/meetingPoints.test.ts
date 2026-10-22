@@ -2,7 +2,7 @@
 // it in the meeting, which keeps it in the meeting's summary; the writer or the commander can take it back.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { setup, type Ctx } from './helpers';
+import { setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -28,6 +28,8 @@ describe('points for the staff meeting', () => {
   it('is ticked in the meeting by the commander, and goes into its summary', async () => {
     const [first] = (await c.s1.post('/api/meeting-points', { body: 'שינוי בשעת ההשכמה' })).body;
     const [, second] = (await c.s2.post('/api/meeting-points', { body: 'חלוקת תורנויות' })).body;
+    // whoever runs the staff meetings ticks them: the commander, and the staff where he lets them
+    await staffMay(c, { meetings: false });
     expect((await c.s1.post(`/api/meeting-points/${first.id}/raise`, { raised: true })).status).toBe(403);
     const meeting = (await c.cmd.post('/api/meetings', { title: 'ישיבת סגל' })).body;
     const ticked = (await c.cmd.post(`/api/meeting-points/${first.id}/raise`, { raised: true })).body;

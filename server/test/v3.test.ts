@@ -6,7 +6,7 @@ import { clock } from '../src/core';
 import { db } from '../src/db';
 import { setJwksFetcher } from '../src/google';
 import { setPushSender, type PushTarget } from '../src/push';
-import { at, newTask, notificationsOf, setup, type Ctx } from './helpers';
+import { at, newTask, notificationsOf, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -39,11 +39,18 @@ async function teamWithCadets() {
 describe('cadets and teams (section 31)', () => {
   it('commander manages teams; team commander adds cadets only to their team', async () => {
     const { teamId } = await teamWithCadets();
+    // open to the staff by default: teams, and the cadets of every team (details only - not the personal files)
+    expect((await c.s2.post('/api/teams', { name: 'צוות 9' })).status).toBe(200);
+    expect((await c.s2.post('/api/cadets', { firstName: 'אורי', teamId })).status).toBe(200);
+    const theirs = (await c.s2.get('/api/cadets')).body as { canManage: boolean; canEdit: boolean }[];
+    expect(theirs.every((x) => x.canEdit && !x.canManage)).toBe(true);
+    // kept to the commander
+    await staffMay(c, { teams: false, cadets: false });
     expect((await c.s1.post('/api/teams', { name: 'x' })).status).toBe(403);
     expect((await c.s1.post('/api/cadets', { firstName: 'נועם', teamId })).status).toBe(200);
     expect((await c.s2.post('/api/cadets', { firstName: 'נועם', teamId })).status).toBe(403);
     const list = (await c.s2.get('/api/cadets')).body;
-    expect(list).toHaveLength(3);
+    expect(list).toHaveLength(4);
     expect(list.every((x: { canManage: boolean }) => !x.canManage)).toBe(true);
     expect((await c.s1.get('/api/cadets')).body.every((x: { canManage: boolean }) => x.canManage)).toBe(true);
   });
@@ -148,9 +155,13 @@ describe('experiences (section 31)', () => {
     const { a } = await teamWithCadets();
     const x = (await c.s1.post('/api/experiences', { cadetId: a, role: 'מ"מ בתרגיל התקפה', startDate: '2026-10-04', endDate: '2026-10-06', goals: 'קבלת החלטות תחת לחץ', mentorId: c.ids.s2 })).body;
     expect(x).toMatchObject({ phase: 'planned', mentorName: 'מפק"צ 2', canGiveFeedback: true });
+    // another staff member places and edits experiences (the cadets of every team), but gives no feedback
+    expect((await c.s3.get('/api/experiences')).body[0]).toMatchObject({ canGiveFeedback: false, canEdit: true });
+    await staffMay(c, { cadets: false });
     const asOther = (await c.s3.get('/api/experiences')).body[0];
     expect(asOther).toMatchObject({ canGiveFeedback: false, canEdit: false });
     expect((await c.s3.post('/api/experiences', { cadetId: a, role: 'x', startDate: '2026-10-04', endDate: '2026-10-04' })).status).toBe(403);
+    await staffMay(c, {});
 
     const mentorTasks = (await c.s2.get('/api/my')).body;
     const feedbackTask = [...mentorTasks.week, ...mentorTasks.later, ...mentorTasks.important].find((t: { experienceId: number }) => t.experienceId === x.id);
@@ -331,7 +342,10 @@ describe('debriefs (sections 31, 57)', () => {
     expect(withTask.tasks[0]).toMatchObject({ ownerId: c.ids.s3, debriefTitle: 'תחקיר מטווח' });
     expect(notificationsOf(c.ids.s3).some((n) => n.type === 'task_assigned')).toBe(true);
 
+    // a recurring task from a lesson: whoever manages the recurring tasks
+    await staffMay(c, { templates: false });
     expect((await c.s2.post(`/api/debrief-items/${lesson.id}/recurring`, { title: 'x', frequency: 'daily', time: '20:00', assignee: 'all' })).status).toBe(403);
+    await staffMay(c, {});
     const rec = await c.cmd.post(`/api/debrief-items/${lesson.id}/recurring`, { title: 'שיחת תיאום עם מדריכים', frequency: 'weekly', weekdays: [0], time: '10:00', assignee: 'week_lead' });
     expect(rec.body.items.find((i: { id: number }) => i.id === lesson.id).recurringTitle).toBe('שיחת תיאום עם מדריכים');
 

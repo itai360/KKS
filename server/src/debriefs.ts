@@ -37,6 +37,7 @@ import { isCommander, visibleTasks } from './taskRepo';
 import { createTasks, isoDateTime, weekForDate } from './taskService';
 import { getTemplate, saveTemplate } from './templates';
 import { closeWeeklyDebriefTask } from './weeklyDebriefTask';
+import { may } from './abilities';
 
 interface DebriefRow {
   id: number;
@@ -54,6 +55,9 @@ interface DebriefRow {
   participants: string;
   summary: string;
   status: 'draft' | 'final';
+  /** a weekly debrief its lead sent for the commander's approval */
+  submitted_at: string | null;
+  submitted_by_name: string | null;
   created_by: number;
   created_by_name: string;
   created_at: string;
@@ -63,13 +67,18 @@ interface DebriefRow {
 
 const BASE = `
 SELECT d.*, coalesce(e.title, nullif(d.activity, '')) AS event_title, w.name AS week_name, f.display_name AS facilitator_name, c.display_name AS created_by_name,
+  sb.display_name AS submitted_by_name,
   (SELECT count(*) FROM tasks t WHERE t.debrief_id = d.id AND t.status NOT IN ('done', 'cancelled')) AS open_tasks
 FROM debriefs d
 JOIN users c ON c.id = d.created_by
 LEFT JOIN events e ON e.id = d.event_id
 LEFT JOIN weeks w ON w.id = d.week_id
 LEFT JOIN users f ON f.id = d.facilitator_id
+LEFT JOIN users sb ON sb.id = d.submitted_by
 `;
+
+/** the weekly debrief is summed up - approved - by the commander; its lead sends it for approval */
+const needsApproval = (actor: UserRow, d: Pick<DebriefRow, 'kind'>) => d.kind === 'weekly' && !isCommander(actor);
 
 const canEditDebrief = (actor: UserRow, d: Pick<DebriefRow, 'created_by' | 'facilitator_id'>) =>
   isCommander(actor) || d.created_by === actor.id || d.facilitator_id === actor.id;
@@ -157,6 +166,9 @@ function toDebrief(actor: UserRow, d: DebriefRow): Debrief {
     participants: d.participants,
     summary: d.summary,
     status: d.status,
+    submittedAt: d.status === 'draft' ? d.submitted_at : null,
+    submittedByName: d.status === 'draft' ? d.submitted_by_name : null,
+    canSumUp: canEditDebrief(actor, d) && !needsApproval(actor, d),
     createdBy: d.created_by,
     createdByName: d.created_by_name,
     createdAt: d.created_at,
@@ -260,8 +272,13 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
   const answers = p.answers ? { ...parseAnswers(cur.answers), ...tidyAnswers(cur.kind, p.answers) } : parseAnswers(cur.answers);
   if (JSON.stringify(answers).length > 40000) throw badRequest('התחקיר ארוך מדי');
   const weekId = isWeekDebrief(cur.kind) ? (p.weekId ? weekRow(p.weekId).id : cur.week_id) : weekForDate(occurredOn);
-  const summingUp = p.status === 'final' && cur.status !== 'final';
-  if (summingUp && cur.kind !== 'general') checkReady(cur, answers);
+  // taking the approval of a weekly debrief back is the commander's, as giving it is
+  if (p.status === 'draft' && cur.status === 'final' && needsApproval(actor, cur)) throw forbidden('את אישור התחקיר השבועי מבטל מפקד הקורס');
+  const asked = p.status === 'final' && cur.status !== 'final';
+  // the lead of a weekly debrief sends it to the commander, whose approval sums it up
+  const sending = asked && needsApproval(actor, cur);
+  const summingUp = asked && !sending;
+  if (asked && cur.kind !== 'general') checkReady(cur, answers);
   db().tx(() => {
     db().run(
       'UPDATE debriefs SET answers = ?, title = ?, occurred_on = ?, event_id = ?, activity = ?, week_id = ?, facilitator_id = ?, participants = ?, summary = ?, status = ?, updated_at = ? WHERE id = ?',
@@ -274,16 +291,32 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
       p.facilitatorId !== undefined ? p.facilitatorId : cur.facilitator_id,
       p.participants ?? cur.participants,
       p.summary ?? cur.summary,
-      p.status ?? cur.status,
+      sending ? cur.status : (p.status ?? cur.status),
       nowIso(),
       id,
     );
+    // returned to a draft by the commander: it waits to be sent again
+    if (p.status === 'draft' && cur.status === 'final') db().run('UPDATE debriefs SET submitted_at = NULL, submitted_by = NULL WHERE id = ?', id);
+    if (sending) {
+      db().run('UPDATE debriefs SET submitted_at = ?, submitted_by = ? WHERE id = ?', nowIso(), actor.id, id);
+      // the lead's part is done: their task to write it closes
+      if (weekId) closeWeeklyDebriefTask(actor, weekId);
+      logActivity({ userId: actor.id, action: 'debrief_sent', text: `${actor.display_name} שלח לאישור את התחקיר "${cur.title}"` });
+      const lessons = counts(id).lesson;
+      notify(
+        commanderIds(),
+        { type: 'debrief', category: 'action', title: `התחקיר השבועי מחכה לאישורך: ${cur.title}`, body: `${actor.display_name} שלח · ${lessons} לקחים`, link: `/debriefs/${id}`, ref: `debrief-approval:${id}` },
+        actor.id,
+      );
+    }
     // the week or event it is about changed: the lessons kept for the next cycle follow it
     if (p.weekId !== undefined || p.eventId !== undefined || p.activity !== undefined || p.title !== undefined) {
       const t = lessonTarget(debriefRow(id));
       db().run("UPDATE debrief_items SET target = ?, target_key = ?, target_week = ? WHERE debrief_id = ? AND horizon = 'next'", t.target, t.key, t.week, id);
     }
     if (summingUp) {
+      // the approval it waited for is given
+      finishNotifications(true, 'ref = ?', `debrief-approval:${id}`);
       const opened = cur.kind === 'general' ? 0 : lessonsToTasks(actor, cur);
       // the week's lead had it as a task: done
       if (cur.kind === 'weekly' && weekId) closeWeeklyDebriefTask(actor, weekId);
@@ -615,7 +648,7 @@ export function itemToTask(actor: UserRow, itemId: number, raw: z.input<typeof i
 
 /** A lesson that should happen every time becomes a recurring task (commander only, like all recurring tasks). */
 export function itemToRecurring(actor: UserRow, itemId: number, raw: z.input<typeof recurringSchema>): number {
-  if (!isCommander(actor)) throw forbidden('משימות חוזרות מוגדרות על ידי מפקד הקורס');
+  if (!may(actor, 'templates')) throw forbidden('משימות חוזרות מוגדרות על ידי מפקד הקורס');
   itemRow(itemId);
   let ruleId = 0;
   db().tx(() => {
@@ -636,7 +669,7 @@ export const itemTemplateSchema = z.object({
 
 /** "שיחת תיאום עם מדריך - 48 שעות לפני כל פעילות": the lesson becomes a step of an activity template. */
 export function itemToTemplate(actor: UserRow, itemId: number, raw: z.input<typeof itemTemplateSchema>): void {
-  if (!isCommander(actor)) throw forbidden('תבניות מנוהלות על ידי מפקד הקורס');
+  if (!may(actor, 'templates')) throw forbidden('תבניות מנוהלות על ידי מפקד הקורס');
   const i = itemRow(itemId);
   const input = itemTemplateSchema.parse(raw);
   const tpl = getTemplate(input.templateId);

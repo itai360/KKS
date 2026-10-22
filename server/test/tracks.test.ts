@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { COURSE_TRACKS } from '../../shared/constants';
 import type { Task, Track, TrackDetail } from '../../shared/types';
 import { Db, migrate } from '../src/db';
-import { at, setup, type Ctx } from './helpers';
+import { at, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -64,6 +64,9 @@ describe('course tracks', () => {
   });
 
   it('the commander adds, names and gives a lead; the lead writes the goals; a deleted track leaves its tasks', async () => {
+    // the staff add tracks too where the commander lets them manage the tracks; here he keeps them
+    expect((await c.s1.post('/api/tracks', { name: 'ציר של הסגל' })).status).toBe(200);
+    await staffMay(c, { tracks: false });
     expect((await c.s1.post('/api/tracks', { name: 'ציר חדש' })).status).toBe(403);
     const created = (await c.cmd.post('/api/tracks', { name: 'טקסים', leadId: c.ids.s1 })).body as Track;
     expect(created).toMatchObject({ name: 'טקסים', leadName: expect.any(String) });
@@ -71,6 +74,7 @@ describe('course tracks', () => {
     // the lead heard about it
     expect(((await c.s1.get('/api/notifications')).body as { title: string }[]).some((n) => n.title.includes('טקסים'))).toBe(true);
     expect((await c.s1.patch(`/api/tracks/${created.id}`, { goals: 'טקס פתיחה וטקס סיום' })).status).toBe(200);
+    // the name and the lead: the commander's - and the staff's where he lets them manage the tracks
     expect((await c.s1.patch(`/api/tracks/${created.id}`, { name: 'טקסים וכנסים' })).status).toBe(403);
     expect((await c.s2.patch(`/api/tracks/${created.id}`, { goals: 'לא שלי' })).status).toBe(403);
     expect((await c.cmd.get(`/api/tracks/${created.id}`)).body.track.goals).toBe('טקס פתיחה וטקס סיום');

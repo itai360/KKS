@@ -16,12 +16,12 @@ import { db } from './db';
 import { examValue, gradeValue, setExamValue, setGrade, touched } from './evaluations';
 import { changed, logActivity } from './journal';
 import { readSpreadsheet } from './sheets';
-import { isCommander } from './taskRepo';
+import { may } from './abilities';
 
 type ExamKey = keyof EvaluationExams;
 
 const requireCommanderActor = (actor: UserRow) => {
-  if (!isCommander(actor)) throw forbidden('ייבוא ציונים לכל הקורס הוא של מפקד הקורס');
+  if (!may(actor, 'imports')) throw forbidden('ייבוא ציונים לכל הקורס הוא של מפקד הקורס');
 };
 
 // ---------------- reading the sheet ----------------

@@ -22,7 +22,7 @@ import { useSession } from '../lib/session';
 import { prefetch, useApi } from '../lib/useApi';
 
 export function WeeksPage() {
-  const { weeks, isCommander, staff } = useSession();
+  const { weeks, isCommander, can, staff } = useSession();
   const { data, loading } = useApi<Week[]>('/api/weeks', ['weeks', 'tasks']);
   const list = data ?? weeks;
   const [creating, setCreating] = useState(false);
@@ -37,8 +37,9 @@ export function WeeksPage() {
       topics={['weeks', 'tasks']}
       ids={list.map((w) => w.id)}
       actions={[
-        { key: 'lead', label: 'מפק"צ אחראי', icon: 'users', ask: { title: 'מפק"צ אחראי לשבועות', label: 'מפק"צ', options: [{ value: '', label: 'ללא מפק"צ' }, ...staff.map((u) => ({ value: String(u.id), label: u.displayName }))] } },
-        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} שבועות? המשימות שלהם יישארו, בלי שיוך לשבוע.' },
+        ...(can('weeks') ? [{ key: 'lead', label: 'מפק"צ אחראי', icon: 'users', ask: { title: 'מפק"צ אחראי לשבועות', label: 'מפק"צ', options: [{ value: '', label: 'ללא מפק"צ' }, ...staff.map((u) => ({ value: String(u.id), label: u.displayName }))] } }] : []),
+        // deleting weeks stays the commander's
+        ...(isCommander ? [{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} שבועות? המשימות שלהם יישארו, בלי שיוך לשבוע.' }] : []),
       ]}
     >
     <div className="page">
@@ -50,12 +51,15 @@ export function WeeksPage() {
             <Link to="/tracks" className="btn btn-ghost">
               <Icon name="route" /> צירים בקורס
             </Link>
-            {isCommander && (
+            {can('weeks') && (
             <>
               <BulkToggle />
-              <button className="btn" onClick={() => setFromCalendar(true)}>
-                <Icon name="calendar" /> מיומן Google
-              </button>
+              {/* the course's Google calendar is the commander's connection */}
+              {isCommander && (
+                <button className="btn" onClick={() => setFromCalendar(true)}>
+                  <Icon name="calendar" /> מיומן Google
+                </button>
+              )}
               <button className="btn" onClick={() => setGenerating(true)}>
                 <Icon name="layers" /> יצירת שבועות
               </button>
@@ -70,7 +74,7 @@ export function WeeksPage() {
       {loading && !list.length ? (
         <Loading rows={3} />
       ) : !list.length ? (
-        <Empty icon="layers" title="עדיין אין שבועות" text={isCommander ? 'צרו את רשימת שבועות הקורס - שם, נושא ומפק"צ אחראי לכל שבוע.' : 'מפקד הקורס עדיין לא הגדיר שבועות.'} />
+        <Empty icon="layers" title="עדיין אין שבועות" text={can('weeks') ? 'צרו את רשימת שבועות הקורס - שם, נושא ומפק"צ אחראי לכל שבוע.' : 'מפקד הקורס עדיין לא הגדיר שבועות.'} />
       ) : (
         <WeekCards list={list} today={today} />
       )}
@@ -181,7 +185,8 @@ function PrepBadge({ prep }: { prep: NonNullable<Week['staffPrep']> }) {
 }
 
 export function WeekForm({ week, onClose }: { week?: Week; onClose: () => void }) {
-  const { staff, isCommander, weeks } = useSession();
+  const { staff, can, weeks } = useSession();
+  const isCommander = can('weeks');
   const toast = useToast();
   const last = weeks[weeks.length - 1];
   const defaultStart = week?.startDate ?? (last ? addDays(last.endDate, 1) : todayKey());
@@ -439,7 +444,7 @@ function PreviousCycle({ week: w, canCopy }: { week: Week; canCopy: boolean }) {
 export function WeekPage() {
   const { id } = useParams();
   const { data, error, loading, status } = useApi<WeekDetail>(`/api/weeks/${id}`, ['weeks', 'tasks', 'events']);
-  const { isCommander, user } = useSession();
+  const { isCommander, can, user } = useSession();
   const newTask = useNewTask();
   const toast = useToast();
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -458,7 +463,7 @@ export function WeekPage() {
       </div>
     );
   const w = data.week;
-  const canManage = isCommander || w.leadId === user.id;
+  const canManage = can('weeks') || w.leadId === user.id;
   const today = todayKey();
   const until = diffDays(w.startDate, today);
 
@@ -1001,10 +1006,10 @@ function CloseWeek({ detail, onClose }: { detail: WeekDetail; onClose: () => voi
 }
 
 function Lessons({ detail }: { detail: WeekDetail }) {
-  const { isCommander, user, staff, users } = useSession();
+  const { can, user, staff, users } = useSession();
   const toast = useToast();
   const w = detail.week;
-  const canAssign = isCommander || w.leadId === user.id;
+  const canAssign = can('weeks') || w.leadId === user.id;
   const [kind, setKind] = useState<LessonKind>('change');
   const [body, setBody] = useState('');
   const [withTask, setWithTask] = useState(false);

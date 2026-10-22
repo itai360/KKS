@@ -38,7 +38,7 @@ const PRESETS: Omit<RecurringRule, 'id' | 'createdAt' | 'lastGeneratedDate' | 'a
 ];
 
 export function RecurringPage() {
-  const { isCommander } = useSession();
+  const isCommander = useSession().can('templates');
   const [params, setParams] = useSearchParams();
   const { data, error, loading } = useApi<RecurringRule[]>('/api/recurring', ['recurring']);
   const [editing, setEditing] = useState<{ rule: RecurringRule | null; from?: RecurringRule } | null>(params.get('new') === '1' && isCommander ? { rule: null } : null);
@@ -117,7 +117,7 @@ export function RecurringPage() {
 
 /** one rule: when it opens next, on which days; paused or resumed at once; held or right-clicked, what is done with it */
 function RuleRow({ r, onEdit, onCopy }: { r: RecurringRule; onEdit: () => void; onCopy: () => void }) {
-  const { isCommander } = useSession();
+  const isCommander = useSession().can('templates');
   const toast = useToast();
   const bulk = useBulk();
   // switched at once; the server's answer takes over when it comes

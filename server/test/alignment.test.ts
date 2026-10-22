@@ -7,7 +7,7 @@ import type { AlignmentFeed, AlignmentImport } from '../../shared/types';
 import { db } from '../src/db';
 import { multipartParts } from '../src/alignment';
 import { parseWhatsAppChat } from '../src/whatsapp';
-import { setup, TZ, zip, type Ctx } from './helpers';
+import { setup, staffMay, TZ, zip, type Ctx } from './helpers';
 
 const LRM = '‎';
 const RLM = '‏';
@@ -100,6 +100,8 @@ describe('the יישור קו page', () => {
   it('the commander pins and removes messages', async () => {
     await c.s1.post('/api/alignment/import', { text: ANDROID });
     const [msg] = (await feed()).messages;
+    // the staff pin too where the commander lets them; kept to the commander here
+    await staffMay(c, { alignment: false });
     expect((await c.s1.post(`/api/alignment/${msg.id}/pin`, { pinned: true })).status).toBe(403);
     await c.cmd.post(`/api/alignment/${msg.id}/pin`, { pinned: true });
     expect((await feed()).pinned.map((m) => m.id)).toEqual([msg.id]);

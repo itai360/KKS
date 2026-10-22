@@ -114,7 +114,8 @@ export function SchedulePage() {
   const date = params.get('date') ?? today;
   const eventId = params.get('event');
   const view = fitView(asView(params.get('view')) ?? savedView() ?? (phone ? 'agenda' : 'week'), phone);
-  const { isCommander, weeks, user, viewing } = useSession();
+  const { can, weeks, user, viewing } = useSession();
+  const isCommander = can('schedule');
   const navigate = useNavigate();
   const toast = useToast();
   useTick(60_000);
@@ -779,7 +780,8 @@ function ShiftTasks({ tasks, delta, id, onClose }: { tasks: Task[]; delta: numbe
 function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void; onEdit: (e: ScheduleEvent) => void }) {
   const { data, error } = useApi<EventDetail>(`/api/events/${id}`, ['events', 'tasks', 'debriefs']);
   const navigate = useNavigate();
-  const { isCommander, user, weeks } = useSession();
+  const { can, user, weeks } = useSession();
+  const isCommander = can('schedule');
   const newTask = useNewTask();
   const toast = useToast();
   const [cancelOpen, setCancelOpen] = useState(false);

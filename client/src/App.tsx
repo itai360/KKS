@@ -82,7 +82,7 @@ function NotFound() {
 }
 
 function AuthedRoutes() {
-  const { isCommander } = useSession();
+  const { isCommander, can } = useSession();
   useEffect(() => {
     prefetchPages();
   }, []);
@@ -111,10 +111,10 @@ function AuthedRoutes() {
               <Route path="/weekly/:weekId" element={<WeeklyPage />} />
               <Route path="/tracks" element={<TracksPage />} />
               <Route path="/tracks/:id" element={<TrackPage />} />
-              <Route path="/plans" element={isCommander ? <PlansPage /> : <Navigate to="/" />} />
-              <Route path="/plans/:id" element={isCommander ? <PlanPage /> : <Navigate to="/" />} />
-              <Route path="/three-week" element={isCommander ? <ThreeWeekPage /> : <Navigate to="/" />} />
-              <Route path="/three-week/:weekId" element={isCommander ? <ThreeWeekPage /> : <Navigate to="/" />} />
+              <Route path="/plans" element={can('plans') ? <PlansPage /> : <Navigate to="/" />} />
+              <Route path="/plans/:id" element={can('plans') ? <PlanPage /> : <Navigate to="/" />} />
+              <Route path="/three-week" element={can('plans') ? <ThreeWeekPage /> : <Navigate to="/" />} />
+              <Route path="/three-week/:weekId" element={can('plans') ? <ThreeWeekPage /> : <Navigate to="/" />} />
               <Route path="/schedule" element={<SchedulePage />} />
               <Route path="/team" element={isCommander ? <TeamPage /> : <Navigate to="/" />} />
               <Route path="/team/:id" element={<StaffPage />} />
@@ -125,7 +125,7 @@ function AuthedRoutes() {
               <Route path="/day-end" element={<DayEndPage />} />
               <Route path="/activity" element={<ActivityPage />} />
               <Route path="/command" element={<CommandPage />} />
-              <Route path="/meeting" element={isCommander ? <MeetingPage /> : <Navigate to="/" />} />
+              <Route path="/meeting" element={can('meetings') ? <MeetingPage /> : <Navigate to="/" />} />
               <Route path="/templates" element={<TemplatesPage />} />
               <Route path="/recurring" element={<RecurringPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />

@@ -191,7 +191,7 @@ function Horizon({ doc }: { doc: PlanDocument }) {
 export function PlanPage() {
   const { id } = useParams();
   const toast = useToast();
-  const { settings, weeks, viewing } = useSession();
+  const { settings, weeks, viewing, isCommander } = useSession();
   const { data: doc, error, status, loading, setData } = useApi<PlanDocument>(`/api/plans/${id}`, TOPICS);
   const [editing, setEditing] = useState<PlanSectionKey | 'bluf' | null>(null);
   const [approving, setApproving] = useState(false);
@@ -311,12 +311,13 @@ export function PlanPage() {
             חזרה לטיוטה
           </button>
         )}
-        {canEdit && doc.status === 'approved' && (
+        {/* approving - and taking an approval back - is the commander's */}
+        {canEdit && isCommander && doc.status === 'approved' && (
           <button className="btn btn-ghost" onClick={() => setStatus('ready', 'האישור בוטל')}>
             ביטול האישור
           </button>
         )}
-        {canEdit && (
+        {canEdit && isCommander && (
           <button className="btn" onClick={() => setApproving(true)}>
             <Icon name="shield" /> {doc.status === 'approved' ? 'עדכון האישור' : 'רישום אישור'}
           </button>

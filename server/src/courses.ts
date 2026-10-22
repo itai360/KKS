@@ -25,6 +25,7 @@ import type { Topic } from './realtime';
 import { fetchSnapshot, takeSnapshot } from './snapshots';
 import { keepPrepForNextCourse, prepForNextCourse } from './staffPrep';
 import { createTasks } from './taskService';
+import { may } from './abilities';
 
 export const COURSE_COOKIE = 'kks_course';
 
@@ -253,6 +254,7 @@ export function setCourseCookie(res: Response, id: number | null): void {
 export async function courseScope(req: Request, res: Response, next: NextFunction): Promise<void> {
   const id = viewingCourse(req);
   if (id === null) return next();
+  // the commander's alone: in an archive the users are that course's, so no other check holds there
   if (req.user?.role !== 'commander') {
     if (req.user) setCourseCookie(res, null);
     return next();
@@ -406,7 +408,7 @@ export const copyPreviousSchema = z.object({
 export async function copyPreviousCycleTasks(actor: UserRow, weekId: number, raw: unknown): Promise<{ created: number; skipped: number }> {
   const p = copyPreviousSchema.parse(raw);
   const w = liveWeek(weekId);
-  if (actor.role !== 'commander' && w.lead_id !== actor.id) throw forbidden('מעתיקים משימות מהמחזור הקודם - מפקד הקורס או מפק"צ השבוע');
+  if (!may(actor, 'weeks') && w.lead_id !== actor.id) throw forbidden('מעתיקים משימות מהמחזור הקודם - מפקד הקורס או מפק"צ השבוע');
   const a = archiveRow(p.archiveId);
   if (!a) throw notFound('הקורס הקודם לא נמצא');
   const prev = await archiveDb(a);

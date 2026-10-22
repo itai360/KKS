@@ -8,9 +8,10 @@ import { getUserRow, type UserRow } from './auth';
 import { badRequest, forbidden, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
-import { isCommander, queryTasks, toTask, visibleTasks } from './taskRepo';
+import { queryTasks, toTask, visibleTasks } from './taskRepo';
 import { listAttachments, updateTask, weekForDate } from './taskService';
 import { listDebriefs } from './debriefs';
+import { may } from './abilities';
 
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -112,7 +113,7 @@ function weekLeadOn(dateKey: string): number | null {
 
 /** Commander, the week's lead, the event owner or its creator manage an event. */
 export function canManageEvent(actor: UserRow, e: Pick<EventRow, 'date' | 'owner_id' | 'created_by'>): boolean {
-  return isCommander(actor) || e.owner_id === actor.id || e.created_by === actor.id || weekLeadOn(e.date) === actor.id;
+  return may(actor, 'schedule') || e.owner_id === actor.id || e.created_by === actor.id || weekLeadOn(e.date) === actor.id;
 }
 
 export const eventSchema = z.object({
@@ -127,7 +128,7 @@ export const eventSchema = z.object({
 
 export function createEvent(actor: UserRow, raw: z.input<typeof eventSchema>): number {
   const e = eventSchema.parse(raw);
-  if (!isCommander(actor) && weekLeadOn(e.date) !== actor.id && e.ownerId !== actor.id) {
+  if (!may(actor, 'schedule') && weekLeadOn(e.date) !== actor.id && e.ownerId !== actor.id) {
     throw forbidden('רק מפקד הקורס או מפק"צ השבוע יכולים להוסיף אירועים ללו"ז');
   }
   if (e.ownerId && !getUserRow(e.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');

@@ -206,7 +206,9 @@ export function UserPicker({
 }
 
 function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial; onClose: () => void; onCreated: (ids: number[]) => void }) {
-  const { user, isCommander, settings, users, weeks, tracks } = useSession();
+  const { user, isCommander, can, settings, users, weeks, tracks } = useSession();
+  // a task for anyone - the course commander, or all the staff at once (the staff, where the commander lets them)
+  const forAnyone = can('tasks');
   const toast = useToast();
   const defaultTime = settings.defaultDeadlineTime;
   const initDate = initial.deadline ? dateKeyOf(initial.deadline) : '';
@@ -249,7 +251,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
       });
       setParsed(p);
       if (p.title) setTitle(p.title);
-      if (p.allStaff && isCommander) setAllStaff(true);
+      if (p.allStaff && forAnyone) setAllStaff(true);
       else if (p.ownerIds.length) {
         setAllStaff(false);
         setOwnerIds(p.ownerIds);
@@ -261,7 +263,7 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
       if (p.weekId) setWeekId(String(p.weekId));
       if (p.priority || p.domain) setMore(true);
     },
-    [users, weeks, settings.domains, defaultTime, isCommander],
+    [users, weeks, settings.domains, defaultTime, forAnyone],
   );
 
   useEffect(() => {
@@ -393,8 +395,8 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
           </Select>
         </Field>
 
-        <Field label="אחראי" required hint={!isCommander ? 'אפשר לבחור את עצמך או כל איש סגל אחר; משימה למפקד הקורס - רק בשבוע שבאחריותך' : undefined}>
-          <UserPicker value={ownerIds} onChange={setOwnerIds} allowAll={isCommander} all={allStaff} onAll={setAllStaff} date={date || undefined} />
+        <Field label="אחראי" required hint={!forAnyone ? 'אפשר לבחור את עצמך או כל איש סגל אחר; משימה למפקד הקורס - רק בשבוע שבאחריותך' : undefined}>
+          <UserPicker value={ownerIds} onChange={setOwnerIds} allowAll={forAnyone} all={allStaff} onAll={setAllStaff} date={date || undefined} />
         </Field>
         {hasMany && (
           <Seg

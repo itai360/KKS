@@ -20,7 +20,7 @@ type View = 'summary' | 'criteria';
 type Sort = 'outliers' | 'team' | 'company';
 
 export function SociometricPage() {
-  const { isCommander } = useSession();
+  const { isCommander, can } = useSession();
   const [params, setParams] = useSearchParams();
   const roundParam = params.get('round');
   const { data, error, loading, status } = useApi<SocioRoundView>(`/api/sociometric${roundParam ? `?round=${roundParam}` : ''}`, ['cadets']);
@@ -93,9 +93,10 @@ export function SociometricPage() {
             : 'תוצאות הסוציומטרי לפי סבבים: מיקום בצוות ובפלוגה, ממוצע ותבחינים - והחריגים קודם.'
         }
         actions={
-          isCommander && (
+          can('cadetFiles') && (
             <>
-              {round && (
+              {/* deleting a round is the commander's */}
+              {round && isCommander && (
                 <button className="btn btn-ghost" onClick={() => void removeRound()}>
                   <Icon name="trash" /> מחיקת הסבב
                 </button>
@@ -228,7 +229,7 @@ export function SociometricPage() {
           </p>
         </>
       )}
-      {importing && isCommander && <SocioImport rounds={data.rounds} onClose={() => set('import', '')} onDone={(id) => set('round', String(id))} />}
+      {importing && can('cadetFiles') && <SocioImport rounds={data.rounds} onClose={() => set('import', '')} onDone={(id) => set('round', String(id))} />}
     </div>
   );
 }

@@ -189,7 +189,7 @@ function WeekDays({ part, next, all, today }: { part: ThreeWeekWeek; next: Week 
 export function ThreeWeekPage() {
   const { weekId } = useParams();
   const toast = useToast();
-  const { settings, weeks, viewing } = useSession();
+  const { settings, weeks, viewing, isCommander } = useSession();
   const { data: doc, error, status, loading, setData, reload } = useApi<ThreeWeekPlan>(weeks.length ? (weekId ? `/api/three-week/${weekId}` : '/api/three-week') : null, TOPICS);
   // a big Google calendar still on its way: the document asks again until its blocks are in
   useReloadWhileLoading(!!doc?.calendars.some((c) => c.loading), reload, doc);
@@ -301,12 +301,13 @@ export function ThreeWeekPage() {
             חזרה לטיוטה
           </button>
         )}
-        {canEdit && doc.status === 'approved' && (
+        {/* approving - and taking an approval back - is the commander's */}
+        {canEdit && isCommander && doc.status === 'approved' && (
           <button className="btn btn-ghost" onClick={() => setStatus('ready', 'האישור בוטל')}>
             ביטול האישור
           </button>
         )}
-        {canEdit && (
+        {canEdit && isCommander && (
           <button className="btn" onClick={() => setApproving(true)}>
             <Icon name="shield" /> {doc.status === 'approved' ? 'עדכון האישור' : 'רישום אישור'}
           </button>
@@ -337,7 +338,8 @@ export function ThreeWeekPage() {
             <>הנתונים נמשכים מהלו"ז של הקורס בלבד. כדי למשוך גם את הלבנות העיקריות מיומן Google - בחרו יומן לתוכנית.</>
           )}
         </span>
-        {canEdit && (
+        {/* connecting a Google calendar is the commander's */}
+        {canEdit && isCommander && (
           <button type="button" className={`btn btn-sm${doc.calendarsFrom === 'plan' ? ' btn-ghost' : ''}`} onClick={() => setCalendars(true)}>
             {doc.calendarsFrom === 'plan' ? 'יומן התוכנית' : 'בחירת יומן לתוכנית'}
           </button>

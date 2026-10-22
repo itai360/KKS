@@ -21,7 +21,9 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
 export function CommandPage() {
-  const { users, weeks, settings, user, isCommander } = useSession();
+  const { users, weeks, settings, user, can } = useSession();
+  // a task for all the staff at once: the commander's - and the staff's, where the commander lets them
+  const forAnyone = can('tasks');
   const toast = useToast();
   const [text, setText] = useState('');
   const [owners, setOwners] = useState<number[] | null>(null);
@@ -48,7 +50,7 @@ export function CommandPage() {
   );
 
   const ownerIds = owners ?? parsed?.ownerIds ?? [];
-  const allStaff = all ?? (!!parsed?.allStaff && isCommander);
+  const allStaff = all ?? (!!parsed?.allStaff && forAnyone);
   const dDate = date ?? parsed?.deadlineDate ?? '';
   const dTime = time ?? parsed?.deadlineTime ?? settings.defaultDeadlineTime;
   const ready = !!parsed?.title && (allStaff || ownerIds.length > 0) && !!dDate;
@@ -139,7 +141,7 @@ export function CommandPage() {
               </div>
             </div>
             <Field label={ownerIds.length || allStaff ? 'אחראי' : 'למי?'} required>
-              <UserPicker value={ownerIds} onChange={(v) => setOwners(v)} allowAll={isCommander} all={allStaff} onAll={(v) => setAll(v)} date={dDate || undefined} />
+              <UserPicker value={ownerIds} onChange={(v) => setOwners(v)} allowAll={forAnyone} all={allStaff} onAll={(v) => setAll(v)} date={dDate || undefined} />
             </Field>
             <Field label="דד-ליין" required>
               <DateTimeInputs date={dDate} time={dTime} onDate={setDate} onTime={setTime} />

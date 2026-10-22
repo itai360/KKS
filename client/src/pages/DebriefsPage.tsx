@@ -535,7 +535,8 @@ type ItemDialog = null | { item: DebriefItem; to: 'task' | 'recurring' | 'templa
 export function DebriefPage() {
   const { id } = useParams();
   const { data, error, loading, setData, status } = useApi<DebriefDetail>(`/api/debriefs/${id}`, ['debriefs', 'tasks']);
-  const { isCommander } = useSession();
+  // a lesson into a recurring task or a template: whoever manages those
+  const isCommander = useSession().can('templates');
   const toast = useToast();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -770,7 +771,8 @@ function ItemColumn({
 }
 
 function ItemToTask({ item, onClose, onDone }: { item: DebriefItem; onClose: () => void; onDone: (d: DebriefDetail) => void }) {
-  const { isCommander, settings } = useSession();
+  const { can, settings } = useSession();
+  const isCommander = can('tasks');
   const toast = useToast();
   const [title, setTitle] = useState(item.body.length <= 80 ? item.body : '');
   const [owners, setOwners] = useState<number[]>([]);

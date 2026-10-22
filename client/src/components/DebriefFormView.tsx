@@ -36,7 +36,7 @@ import { OpenTaskList } from './TaskRow';
 import { useToast } from './Toasts';
 import { Bar, DateInput, PageHead, Select } from './ui';
 import { api } from '../lib/api';
-import { todayKey } from '../lib/format';
+import { fmtAgo, todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -234,27 +234,41 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
     el?.querySelector<HTMLElement>('input, textarea, select, button')?.focus({ preventScroll: true });
   };
 
+  // the weekly debrief is approved by the commander: its lead sends it, and the approval sums it up
+  const sending = !d.canSumUp;
+  const approving = !sending && !!d.submittedAt;
   const sumUp = async () => {
     if (missing.length) {
-      toast({ title: `כדי לסכם חסר: ${missing.map((m) => m.label).join(', ')}`, tone: 'red' });
+      toast({ title: `${sending ? 'כדי לשלוח לאישור' : 'כדי לסכם'} חסר: ${missing.map((m) => m.label).join(', ')}`, tone: 'red' });
       goTo(missing[0].anchor);
       return;
     }
     const toOpen = ofHorizon('now').filter((l) => !l.taskId).length;
     const kept = ofHorizon('next').length;
-    const ok = await ask({
-      title: 'לסכם את התחקיר?',
-      body: [toOpen ? `${toOpen === 1 ? 'לקח אחד ייפתח כמשימה' : `${toOpen} לקחים ייפתחו כמשימות`} לאחראים, לפי התאריכים שנקבעו.` : '', kept ? `${kept === 1 ? 'לקח אחד יישמר' : `${kept} לקחים יישמרו`} בבנק הלקחים למחזור הבא.` : '', all.safetyEvent === true ? 'מפקד הקורס יקבל התראה על אירוע הבטיחות.' : '']
-        .filter(Boolean)
-        .join(' '),
-      confirm: 'סיכום התחקיר',
-    });
+    const outcome = [toOpen ? `${toOpen === 1 ? 'לקח אחד ייפתח כמשימה' : `${toOpen} לקחים ייפתחו כמשימות`} לאחראים, לפי התאריכים שנקבעו.` : '', kept ? `${kept === 1 ? 'לקח אחד יישמר' : `${kept} לקחים יישמרו`} בבנק הלקחים למחזור הבא.` : ''];
+    const ok = await ask(
+      sending
+        ? {
+            title: 'לשלוח את התחקיר לאישור מפקד הקורס?',
+            body: ['מפקד הקורס יקבל התראה, ובאישור שלו התחקיר יסוכם:', ...outcome, 'עד אז אפשר להמשיך לעדכן אותו.'].filter(Boolean).join(' '),
+            confirm: 'שליחה לאישור',
+          }
+        : {
+            title: approving ? 'לאשר ולסכם את התחקיר?' : 'לסכם את התחקיר?',
+            body: [...outcome, all.safetyEvent === true ? 'מפקד הקורס יקבל התראה על אירוע הבטיחות.' : ''].filter(Boolean).join(' '),
+            confirm: approving ? 'אישור וסיכום' : 'סיכום התחקיר',
+          },
+    );
     if (!ok) return;
     setBusy(true);
     await flush();
-    await run(() => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'final' }), toOpen ? `התחקיר סוכם · ${toOpen === 1 ? 'נפתחה משימה אחת' : `נפתחו ${toOpen} משימות`}` : 'התחקיר סוכם');
+    await run(
+      () => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'final' }),
+      sending ? 'התחקיר נשלח לאישור מפקד הקורס' : toOpen ? `התחקיר סוכם · ${toOpen === 1 ? 'נפתחה משימה אחת' : `נפתחו ${toOpen} משימות`}` : 'התחקיר סוכם',
+    );
     setBusy(false);
   };
+  const waiting = d.status === 'draft' && !!d.submittedAt;
 
   const about = isWeekDebrief(d.kind) ? (data.week ? `שבוע ${data.week.number} · ${data.week.name}` : d.weekName) : d.eventTitle;
   // what earlier cycles kept for this week or event - decided about on the week page, or here by the commander
@@ -276,7 +290,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
           shortDate(d.occurredOn),
           d.presenterName && `מעביר: ${d.presenterName}`,
           d.facilitatorName && `${d.kind === 'company' ? 'אחראי מהסגל' : 'מנחה'}: ${d.facilitatorName}`,
-          d.status === 'final' ? 'סוכם' : 'טיוטה',
+          d.status === 'final' ? 'סוכם' : waiting ? 'ממתין לאישור מפקד הקורס' : 'טיוטה',
         ]
           .filter(Boolean)
           .join(' · ')}
@@ -291,7 +305,8 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
                 <button className="btn" onClick={onEdit}>
                   <Icon name="edit" /> פרטים
                 </button>
-                {d.status === 'final' && (
+                {/* taking an approved weekly debrief back is the commander's */}
+                {d.status === 'final' && d.canSumUp && (
                   <button className="btn" onClick={() => void run(() => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'draft' }), 'התחקיר חזר לטיוטה')}>
                     החזר לטיוטה
                   </button>
@@ -320,7 +335,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
           <div className={`card card-pad dform-intro ${tone}${justFinal ? ' just-cleared' : ''}`}>
             <div className="row wrap gap-6">
               <span className={`badge ${tone}`}>{DEBRIEF_KIND_LABELS[d.kind]}</span>
-              {d.status === 'final' ? <span className="badge t-green">סוכם</span> : <span className="badge t-yellow">טיוטה</span>}
+              {d.status === 'final' ? <span className="badge t-green">סוכם</span> : waiting ? <span className="badge t-blue">ממתין לאישור</span> : <span className="badge t-yellow">טיוטה</span>}
               <span className="grow" />
               <span className="tiny muted mono">
                 {done}/{total}
@@ -328,6 +343,16 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
             </div>
             <Bar value={(done / total) * 100} tone={done === total ? 'green' : 'blue'} label="התקדמות מילוי הטופס" />
             <p className="small muted">{d.status === 'final' ? 'התחקיר סוכם: הלקחים להמשך המחזור נפתחו כמשימות, והלקחים למחזור הבא שמורים בבנק הלקחים.' : DEBRIEF_KIND_HINTS[d.kind]}</p>
+            {waiting && (
+              <div className="dform-waiting small" role="status">
+                <Icon name="shield" size={15} />
+                <span>
+                  {approving
+                    ? `${d.submittedByName ?? 'המפק"צ'} שלח את התחקיר לאישורך ${fmtAgo(d.submittedAt!)}. באישור - הלקחים להמשך המחזור נפתחים כמשימות.`
+                    : `נשלח לאישור מפקד הקורס ${fmtAgo(d.submittedAt!)}${d.submittedByName ? ` (${d.submittedByName})` : ''}. אפשר להמשיך לעדכן אותו עד שיאושר.`}
+                </span>
+              </div>
+            )}
             {d.kind === 'company' && (
               <div className="small">
                 {d.presenterName ? (
@@ -408,7 +433,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
             </button>
           )}
           <button className={`btn btn-primary fab-send${missing.length ? ' incomplete' : ''}`} onClick={() => void sumUp()} disabled={busy}>
-            <Icon name="check" /> {busy ? 'מסכם...' : 'סיכום התחקיר'}
+            <Icon name={sending ? 'shield' : 'check'} /> {busy ? (sending ? 'שולח...' : 'מסכם...') : sending ? (waiting ? 'שליחה שוב לאישור' : 'שליחה לאישור מפקד הקורס') : approving ? 'אישור וסיכום התחקיר' : 'סיכום התחקיר'}
             {missing.length > 0 && <span className="fab-count">חסרים {missing.length}</span>}
           </button>
         </div>

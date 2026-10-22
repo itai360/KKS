@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db';
-import { at, newTask, notificationsOf, setup, type Ctx } from './helpers';
+import { at, newTask, notificationsOf, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -40,8 +40,10 @@ describe('creating tasks', () => {
     const my = (await c.cmd.get('/api/my')).body;
     expect(my.teamTasks.filter((t: { groupId: string }) => t.groupId === groupId)).toHaveLength(1);
     expect(my.groupProgress[groupId]).toEqual({ done: 1, total: 3 });
-    // staff cannot open an all-staff task
-    expect((await c.s1.post('/api/tasks', { title: 'x', assignMode: 'all', deadline: at('2026-10-05') })).status).toBe(403);
+    // the staff open an all-staff task too - unless the commander keeps that to himself
+    expect((await c.s1.post('/api/tasks', { title: 'x', assignMode: 'all', deadline: at('2026-10-05') })).status).toBe(200);
+    await staffMay(c, { tasks: false });
+    expect((await c.s1.post('/api/tasks', { title: 'y', assignMode: 'all', deadline: at('2026-10-05') })).status).toBe(403);
   });
 
   it('a shared task has one owner and closes once for everyone (sections 65, 78)', async () => {
@@ -54,6 +56,9 @@ describe('creating tasks', () => {
   });
 
   it('staff open tasks for themselves and for other staff; for the course commander only within the week they lead', async () => {
+    // with "every task" open to the staff they open one for the commander anywhere; kept to the commander, as below
+    expect((await c.s1.post('/api/tasks', { title: 'למפקד בכל שבוע', ownerIds: [c.ids.cmd], deadline: at('2026-10-05') })).status).toBe(200);
+    await staffMay(c, { tasks: false });
     expect((await c.s1.post('/api/tasks', { title: 'שלי', ownerIds: [c.ids.s1], deadline: at('2026-10-05') })).status).toBe(200);
     const other = await c.s1.post('/api/tasks', { title: 'לאחר', ownerIds: [c.ids.s2], deadline: at('2026-10-05') });
     expect(other.status).toBe(200);
@@ -80,6 +85,14 @@ describe('visibility (section 21)', () => {
     const inWeek = await newTask(c.cmd, { title: 'בשבוע שלי', ownerIds: [c.ids.s2], deadline: at('2026-10-07') });
     const privateInWeek = await newTask(c.cmd, { title: 'אישי', ownerIds: [c.ids.s2], deadline: at('2026-10-07'), visibility: 'private' });
 
+    // the commander lets the staff see every task (the default): all but the private ones
+    const open = (await c.s1.get('/api/tasks')).body.map((t: { id: number }) => t.id);
+    expect(open).toEqual(expect.arrayContaining([own, other, team, inWeek]));
+    expect(open).not.toContain(privateInWeek);
+    expect((await c.s3.get(`/api/tasks/${inWeek}`)).status).toBe(200);
+
+    // kept to the commander: their own, the team-wide ones and their week's
+    await staffMay(c, { tasks: false });
     const ids = (await c.s1.get('/api/tasks')).body.map((t: { id: number }) => t.id);
     expect(ids).toEqual(expect.arrayContaining([own, team, inWeek]));
     expect(ids).not.toContain(other);
@@ -240,6 +253,8 @@ describe('subtasks and dependencies (sections 59-60)', () => {
 
 describe('attachments', () => {
   it('uploads a file and protects the download', async () => {
+    // whoever does not see the task does not get its files
+    await staffMay(c, { tasks: false });
     const id = await newTask(c.cmd, { title: 'x', ownerIds: [c.ids.s1] });
     const res = await c.s1
       .post(`/api/tasks/${id}/files`)

@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db';
-import { at, newTask, setup, type Ctx } from './helpers';
+import { at, newTask, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 beforeEach(async () => {
@@ -66,6 +66,7 @@ describe('bulk actions', () => {
     expect(db().get<{ n: number }>('SELECT count(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL', c.ids.s1)!.n).toBe(0);
 
     const rule = (await c.cmd.post('/api/recurring', { title: 'דוח בוקר', frequency: 'daily', time: '08:00', assignee: 'all' })).body[0].id;
+    await staffMay(c, { templates: false });
     expect((await bulk(c.s1, 'recurring', 'active', [rule], false)).status).toBe(403);
     await bulk(c.cmd, 'recurring', 'active', [rule], false);
     expect((await c.cmd.get('/api/recurring')).body[0].active).toBe(false);

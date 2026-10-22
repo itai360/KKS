@@ -18,7 +18,8 @@ import { ask } from '../components/Confirm';
 const KIND_LABELS: Record<Template['kind'], string> = { week: 'פתיחת שבוע', activity: 'הכנת פעילות', general: 'כללית' };
 
 export function TemplatesPage() {
-  const { isCommander, weeks, user } = useSession();
+  const { can, weeks, user } = useSession();
+  const isCommander = can('templates');
   const { data, error, loading } = useApi<Template[]>('/api/templates', ['templates']);
   const [editing, setEditing] = useState<Template | 'new' | null>(null);
   const [applying, setApplying] = useState<Template | null>(null);
@@ -283,7 +284,8 @@ function TemplateEditor({ template, onClose }: { template: Template | null; onCl
 }
 
 function ApplyTemplate({ template, onClose }: { template: Template; onClose: () => void }) {
-  const { weeks, isCommander, user } = useSession();
+  const { weeks, can, user } = useSession();
+  const isCommander = can('templates');
   const toast = useToast();
   const myWeeks = isCommander ? weeks : weeks.filter((w) => w.leadId === user.id);
   const upcoming = myWeeks.find((w) => w.endDate >= todayKey());

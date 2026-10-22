@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { staffMay, type StaffAbility } from '@shared/permissions';
 import { sortHe } from '@shared/sort';
 import type { CourseSettings, Track, User, Week } from '@shared/types';
 import { api, setReauthHandler, setUnauthorizedHandler } from './api';
@@ -32,6 +33,8 @@ export interface Session {
   /** the course's tracks (צירים), in alphabetical order */
   tracks: Track[];
   isCommander: boolean;
+  /** the commander - or the staff, where the commander lets them (settings - permissions) */
+  can: (ability: StaffAbility) => boolean;
   /** a previous course open for reading: every screen shows it, and nothing can be changed */
   viewing: { id: number; name: string } | null;
   /** backup codes left for two-step sign-in (null: it is off) */
@@ -151,6 +154,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
       weeks: weeks.data ?? [],
       tracks: tracks.data ?? [],
       isCommander: me.user.role === 'commander',
+      can: (ability) => me.user.role === 'commander' || staffMay(currentSettings.staffPermissions, ability),
       viewing: me.course ?? null,
       recoveryLeft: me.recoveryLeft ?? null,
       loaded: !!users.data && !!weeks.data && !!tracks.data && !!settings.data,

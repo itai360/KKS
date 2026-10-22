@@ -41,7 +41,7 @@ export const OPEN_PALETTE = 'kks:palette';
  * each, for the top bar's list.
  */
 export function useFindItems(q: string, pages: FindPage[], { capped = false }: { capped?: boolean } = {}): FindItem[] {
-  const { isCommander, weeks, users, settings } = useSession();
+  const { isCommander, can, weeks, users, settings } = useSession();
   const navigate = useNavigate();
   const newTask = useNewTask();
   const [found, setFound] = useState<SearchResults | null>(null);
@@ -85,12 +85,8 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
       { id: 'a:weeklynow', group: 'פעולות', label: 'השבועי הקרוב', icon: 'weekly', run: go('/weekly') },
       { id: 'a:weekly', group: 'פעולות', label: 'תחקיר שבועי חדש', icon: 'calendar', run: go('/debriefs?new=weekly') },
       { id: 'a:eventdebrief', group: 'פעולות', label: 'תחקיר מופע עצים חדש', icon: 'zap', run: go('/debriefs?new=event') },
-      ...(isCommander
-        ? [
-            { id: 'a:event', group: 'פעולות', label: 'אירוע חדש בלו"ז', icon: 'calendar', run: go('/schedule?new=1') },
-            { id: 'a:announce', group: 'פעולות', label: 'הודעה לסגל', icon: 'flag', run: go('/announcements') },
-          ]
-        : []),
+      ...(can('schedule') ? [{ id: 'a:event', group: 'פעולות', label: 'אירוע חדש בלו"ז', icon: 'calendar', run: go('/schedule?new=1') }] : []),
+      ...(can('announcements') ? [{ id: 'a:announce', group: 'פעולות', label: 'הודעה לסגל', icon: 'flag', run: go('/announcements') }] : []),
       { id: 'a:roll', group: 'פעולות', label: 'מצבה להיום', icon: 'check', run: go('/attendance') },
       { id: 'a:away', group: 'פעולות', label: 'סימון היעדרות (חופשה, מחלה, השתלמות)', icon: 'calendar', run: go('/settings#absences') },
       { id: 'a:bank', group: 'פעולות', label: 'בנק לקחים', icon: 'history', run: go('/debriefs?tab=bank') },
@@ -130,7 +126,7 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
       ...found.documents.slice(0, capped ? 3 : 4).map((d) => ({ id: `doc:${d.id}`, group: 'מסמכים', label: d.title, sub: d.category, icon: 'file', run: go(`/search?q=${encodeURIComponent(d.title)}`) })),
     ];
     return [...near, ...fromSearch, { id: 'all', group: 'חיפוש', label: `כל התוצאות עבור "${q.trim()}"`, icon: 'search', run: go(`/search?q=${encodeURIComponent(q.trim())}`) }];
-  }, [q, found, pages, weeks, users, settings.domains, isCommander, navigate, newTask, capped]);
+  }, [q, found, pages, weeks, users, settings.domains, isCommander, can, navigate, newTask, capped]);
 }
 
 export function CommandPalette({ pages }: { pages: FindPage[] }) {

@@ -11,8 +11,9 @@ import { getUserRow, type UserRow } from './auth';
 import { badRequest, forbidden, notFound, nowIso, patchSchema } from './core';
 import { db } from './db';
 import { changed, logActivity, notify } from './journal';
-import { isCommander, visibleTasks } from './taskRepo';
+import { visibleTasks } from './taskRepo';
 import { domainReadiness } from './weeks';
+import { may } from './abilities';
 
 interface TrackRow {
   id: number;
@@ -71,7 +72,7 @@ export function getTrack(id: number): Track {
   return toTrack(r);
 }
 
-const canManage = (actor: UserRow, t: Pick<Track, 'leadId'>) => isCommander(actor) || t.leadId === actor.id;
+const canManage = (actor: UserRow, t: Pick<Track, 'leadId'>) => may(actor, 'tracks') || t.leadId === actor.id;
 
 export const trackSchema = z.object({
   name: z.string().trim().min(1, 'חובה לתת שם לציר').max(60),
@@ -94,7 +95,7 @@ function notifyLead(actor: UserRow, id: number, leadId: number, name: string): v
 }
 
 export function createTrack(actor: UserRow, raw: z.input<typeof trackSchema>): number {
-  if (!isCommander(actor)) throw forbidden('רק מפקד הקורס מוסיף צירים');
+  if (!may(actor, 'tracks')) throw forbidden('רק מפקד הקורס מוסיף צירים');
   const t = trackSchema.parse(raw);
   checkName(t.name);
   checkLead(t.leadId);
@@ -110,7 +111,7 @@ export function updateTrack(actor: UserRow, id: number, raw: Partial<z.input<typ
   if (!canManage(actor, cur)) throw forbidden();
   const patch = patchSchema(trackSchema).parse(raw);
   // the lead writes the goals; the name and the lead belong to the commander
-  if (!isCommander(actor) && (patch.name !== undefined || patch.leadId !== undefined)) throw forbidden('רק מפקד הקורס יכול לשנות את שם הציר ואת האחראי');
+  if (!may(actor, 'tracks') && (patch.name !== undefined || patch.leadId !== undefined)) throw forbidden('רק מפקד הקורס יכול לשנות את שם הציר ואת האחראי');
   if (patch.name !== undefined) checkName(patch.name, id);
   checkLead(patch.leadId);
   const next = { name: patch.name ?? cur.name, leadId: patch.leadId !== undefined ? patch.leadId : cur.leadId, goals: patch.goals ?? cur.goals };
@@ -122,7 +123,7 @@ export function updateTrack(actor: UserRow, id: number, raw: Partial<z.input<typ
 
 /** A track goes; its tasks stay, without a track. */
 export function deleteTrack(actor: UserRow, id: number): void {
-  if (!isCommander(actor)) throw forbidden('רק מפקד הקורס מוחק צירים');
+  if (!may(actor, 'tracks')) throw forbidden('רק מפקד הקורס מוחק צירים');
   const t = getTrack(id);
   db().run('DELETE FROM tracks WHERE id = ?', id);
   logActivity({ userId: actor.id, action: 'track_deleted', text: `${actor.display_name} מחק את הציר "${t.name}"` });

@@ -13,6 +13,7 @@ import { db } from './db';
 import { changed, logActivity, notify } from './journal';
 import { listEvents } from './schedule';
 import { isCommander, visibleTasks } from './taskRepo';
+import { may } from './abilities';
 
 interface WeekRow {
   id: number;
@@ -95,7 +96,7 @@ function targetWeekId(): number | null {
   return (weeks.find((w) => w.endDate >= t && !w.heldAt) ?? weeks.find((w) => w.endDate >= t) ?? weeks[weeks.length - 1]).id;
 }
 
-const canManage = (actor: UserRow, w: Pick<WeekRow, 'lead_id'>) => isCommander(actor) || w.lead_id === actor.id;
+const canManage = (actor: UserRow, w: Pick<WeekRow, 'lead_id'>) => may(actor, 'meetings') || w.lead_id === actor.id;
 // a point is its writer's alone
 const canEdit = (actor: UserRow, i: Pick<ItemRow, 'created_by' | 'kind'>) => (i.kind === 'point' ? i.created_by === actor.id : isCommander(actor) || i.created_by === actor.id);
 const canSettle = (actor: UserRow, w: Pick<WeekRow, 'lead_id'>, i: Pick<ItemRow, 'created_by' | 'kind' | 'owner_id'>) =>

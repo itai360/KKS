@@ -11,7 +11,7 @@ import { addDays, diffDays, isDateKey, localDateKey, shortDate, weekdayName } fr
 import { goalsFromText } from '../../shared/debriefForms';
 import type { Absence, BankLesson, ExternalEvent, PlanDocument, PlanEvent, PlanEventKind, PlanHorizonWeek, PlanListItem, PlanRisk, PlanSection, PlanSectionKey, PlansOverview, PlanStatus, ScheduleEvent, ThreeWeekPlan, Week } from '../../shared/types';
 import type { UserRow } from './auth';
-import { badRequest, clock, getSettings, notFound, nowIso, tz } from './core';
+import { badRequest, clock, forbidden, getSettings, notFound, nowIso, tz } from './core';
 import { db } from './db';
 import { listAbsences } from './absences';
 import { readPlanCalendars, type CalendarRead } from './calendar';
@@ -19,6 +19,7 @@ import { lessonBank } from './debriefs';
 import { changed } from './journal';
 import { listEvents } from './schedule';
 import { getWeek, listWeeks } from './weeks';
+import { isCommander } from './taskRepo';
 
 const SECTIONS: PlanSectionKey[] = ['goals', 'achievements', 'emphases', 'requests'];
 /** from this weight an activity is a key one */
@@ -534,6 +535,10 @@ function ensureRow(weekId: number, actor: UserRow): void {
 export function savePlan(actor: UserRow, weekId: number, raw: unknown): void {
   getWeek(weekId);
   const p = saveSchema.parse(raw);
+  // taking an approval back is the commander's, as giving it is
+  if (p.status && !isCommander(actor) && db().get<{ status: string }>('SELECT status FROM plan_docs WHERE week_id = ?', weekId)?.status === 'approved') {
+    throw forbidden('ביטול אישור הוא של מפקד הקורס');
+  }
   db().tx(() => {
     ensureRow(weekId, actor);
     if (p.bluf !== undefined) db().run('UPDATE plan_docs SET bluf = ? WHERE week_id = ?', p.bluf, weekId);
@@ -730,6 +735,9 @@ function ensureWindow(weekId: number, actor: UserRow): void {
 export function saveThreeWeek(actor: UserRow, weekId: number, raw: unknown): void {
   getWeek(weekId);
   const p = windowSchema.parse(raw);
+  if (p.status && !isCommander(actor) && db().get<{ status: string }>('SELECT status FROM plan_windows WHERE week_id = ?', weekId)?.status === 'approved') {
+    throw forbidden('ביטול אישור הוא של מפקד הקורס');
+  }
   db().tx(() => {
     ensureWindow(weekId, actor);
     if (p.bluf !== undefined) db().run('UPDATE plan_windows SET bluf = ? WHERE week_id = ?', p.bluf, weekId);

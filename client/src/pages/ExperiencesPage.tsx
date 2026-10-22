@@ -37,7 +37,7 @@ export function ExperiencesPage() {
   const [tab, setTab] = useState<Tab>('all');
   const [creating, setCreating] = useState(false);
   const cadets = useApi<Cadet[]>('/api/cadets', ['cadets']);
-  const canCreate = (cadets.data ?? []).some((c) => c.canManage);
+  const canCreate = (cadets.data ?? []).some((c) => c.canEdit);
   // what needs action first: missing feedback, then running, then upcoming - and the done ones (outside their
   // own tab) in a drawer under them; one given its feedback goes there, a moment marked, then folded away
   const list = useMemo(
@@ -321,7 +321,7 @@ export function ExperienceForm({ cadetId, experience, onClose }: { cadetId?: num
             <Select className="select" value={cadet} onChange={(e) => setCadet(e.target.value)}>
               <option value="">בחירת צוער...</option>
               {(cadets.data ?? [])
-                .filter((c) => c.canManage)
+                .filter((c) => c.canEdit)
                 .sort((a, b) => byHe(a.fullName, b.fullName))
                 .map((c) => (
                   <option key={c.id} value={c.id}>

@@ -29,6 +29,7 @@ import { isCommander, visibleTasks } from './taskRepo';
 import { matchesSearch } from '../../shared/search';
 import { cleanAnswers, isTalkType, talkText } from '../../shared/talks';
 import { createTasks, isoDateTime, updateTask, weekForDate } from './taskService';
+import { may } from './abilities';
 
 const today = () => localDateKey(clock.now(), tz());
 
@@ -129,9 +130,16 @@ FROM cadet_records r JOIN users u ON u.id = r.author_id
 LEFT JOIN tasks t ON t.id = r.task_id LEFT JOIN weeks w ON w.id = r.week_id
 `;
 
-/** Commander or the commander of the cadet's team. */
+/** The cadet's personal file (talks, restricted records, notes, evaluation, committees): the commander, the
+ *  commander of the cadet's team - or the staff, where the commander opened every team's files to them. */
 export function canManageCadet(actor: UserRow, c: Pick<CadetRow, 'team_commander_id'>): boolean {
-  return isCommander(actor) || (c.team_commander_id !== null && c.team_commander_id === actor.id);
+  return may(actor, 'cadetFiles') || (c.team_commander_id !== null && c.team_commander_id === actor.id);
+}
+
+/** The cadet's details (name, phone, team, status), exemptions and experiences: whoever manages the file - or
+ *  the staff, where the commander lets them handle the cadets of every team. */
+export function canEditCadet(actor: UserRow, c: Pick<CadetRow, 'team_commander_id'>): boolean {
+  return canManageCadet(actor, c) || may(actor, 'cadets');
 }
 
 /** The cadet whose talk the actor may write (from a recording too): their team commander, or the course commander. */
@@ -185,6 +193,7 @@ export function toCadet(actor: UserRow, c: CadetRow, records: RecordRow[]): Cade
       : null,
     talkCount: visible.filter((r) => r.kind === 'talk').length,
     canManage: canManageCadet(actor, c),
+    canEdit: canEditCadet(actor, c),
   };
 }
 
@@ -293,7 +302,7 @@ function teamCommander(teamId: number | null | undefined): number | null {
 
 export function createCadet(actor: UserRow, raw: z.input<typeof cadetSchema>): number {
   const c = cadetSchema.parse(raw);
-  if (!isCommander(actor) && teamCommander(c.teamId) !== actor.id) throw forbidden('ניתן להוסיף צוערים רק לצוות שבפיקודך');
+  if (!may(actor, 'cadets') && teamCommander(c.teamId) !== actor.id) throw forbidden('ניתן להוסיף צוערים רק לצוות שבפיקודך');
   const at = nowIso();
   const id = db().run(
     'INSERT INTO cadets(first_name, last_name, personal_number, team_id, phone, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -313,10 +322,12 @@ export function createCadet(actor: UserRow, raw: z.input<typeof cadetSchema>): n
 
 export function updateCadet(actor: UserRow, id: number, raw: Partial<z.input<typeof cadetSchema>>): void {
   const cur = cadetRow(id);
-  if (!canManageCadet(actor, cur)) throw forbidden();
+  if (!canEditCadet(actor, cur)) throw forbidden();
   const p = patchSchema(cadetSchema).parse(raw);
-  // moving a cadet between teams is the commander's call
-  if (p.teamId !== undefined && p.teamId !== cur.team_id && !isCommander(actor)) throw forbidden('העברת צוער בין צוותים שמורה למפקד הקורס');
+  // the notes are the file's: whoever does not see them does not overwrite them either
+  if (!canManageCadet(actor, cur)) delete p.notes;
+  // moving a cadet between teams is the commander's call (and the staff's he lets)
+  if (p.teamId !== undefined && p.teamId !== cur.team_id && !may(actor, 'cadets')) throw forbidden('העברת צוער בין צוותים שמורה למפקד הקורס');
   if (p.teamId) teamCommander(p.teamId);
   db().run(
     'UPDATE cadets SET first_name = ?, last_name = ?, personal_number = ?, team_id = ?, phone = ?, notes = ?, status = ?, updated_at = ? WHERE id = ?',
@@ -718,7 +729,7 @@ export const exemptionSchema = z.object({
 /** Records an exemption; every staff member hears of it, so nobody remarks on what was allowed. */
 export function addExemption(actor: UserRow, cadetId: number, raw: z.input<typeof exemptionSchema>): number {
   const c = cadetRow(cadetId);
-  if (!canManageCadet(actor, c)) throw forbidden('פטורים נרשמים על ידי מפקד הצוות או מפקד הקורס');
+  if (!canEditCadet(actor, c)) throw forbidden('פטורים נרשמים על ידי מפקד הצוות או מפקד הקורס');
   const x = exemptionSchema.parse(raw);
   if (x.until && x.until < today()) throw badRequest('תאריך הסיום כבר עבר');
   const name = `${c.first_name} ${c.last_name}`.trim();
@@ -737,7 +748,7 @@ export function addExemption(actor: UserRow, cadetId: number, raw: z.input<typeo
 export function deleteExemption(actor: UserRow, id: number): number {
   const r = db().get<ExemptionRow>(`${EXEMPTION_BASE} WHERE x.id = ?`, id);
   if (!r) throw notFound('הפטור לא נמצא');
-  if (!canManageCadet(actor, r)) throw forbidden();
+  if (!canEditCadet(actor, r)) throw forbidden();
   db().run('DELETE FROM exemptions WHERE id = ?', id);
   changed('cadets');
   return r.cadet_id;
@@ -799,11 +810,13 @@ function phaseOf(x: Pick<ExperienceRow, 'status' | 'start_date' | 'end_date'>): 
 
 function experiencePerms(actor: UserRow, x: ExperienceRow) {
   const teamCmd = x.team_commander_id === actor.id;
-  const seeFeedback = isCommander(actor) || teamCmd || x.mentor_id === actor.id || x.created_by === actor.id;
+  // the feedback is the cadet's file; the placement is the cadets' handling
+  const files = may(actor, 'cadetFiles');
+  const seeFeedback = files || teamCmd || x.mentor_id === actor.id || x.created_by === actor.id;
   return {
     canSeeFeedback: seeFeedback,
-    canEdit: isCommander(actor) || teamCmd || x.created_by === actor.id,
-    canGiveFeedback: isCommander(actor) || teamCmd || x.mentor_id === actor.id,
+    canEdit: teamCmd || x.created_by === actor.id || may(actor, 'cadets'),
+    canGiveFeedback: files || teamCmd || x.mentor_id === actor.id,
   };
 }
 
@@ -932,7 +945,7 @@ export function experienceFeedbackTasks(now: Date = clock.now()): number {
 export function createExperience(actor: UserRow, raw: z.input<typeof experienceSchema>): number {
   const x = experienceSchema.parse(raw);
   const c = cadetRow(x.cadetId);
-  if (!canManageCadet(actor, c)) throw forbidden('רק מפקד הצוות או מפקד הקורס יכולים לשבץ התנסות');
+  if (!canEditCadet(actor, c)) throw forbidden('רק מפקד הצוות או מפקד הקורס יכולים לשבץ התנסות');
   checkBroad(x.kind, x.role, x.span);
   const span = x.kind === 'broad' ? x.span : null;
   if (x.mentorId && !getUserRow(x.mentorId)?.active) throw badRequest('המפקד החונך אינו פעיל');

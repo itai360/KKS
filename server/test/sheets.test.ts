@@ -3,7 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cadetsFromSpreadsheet, googleDownloadUrls, readCsv, setSheetFetcher } from '../src/sheets';
-import { setup, zip, type Ctx } from './helpers';
+import { setup, staffMay, zip, type Ctx } from './helpers';
 
 /** A minimal .xlsx (stored zip entries): one sheet per array of rows. */
 function xlsx(sheets: Record<string, (string | number)[][]>): Buffer {
@@ -97,6 +97,7 @@ describe('importing cadets from a spreadsheet', () => {
     const res = await c.cmd.post('/api/cadets/import/file').set('content-type', 'application/octet-stream').send(gradeSheet);
     expect(res.status).toBe(200);
     expect(res.body.cadets).toBe(3);
+    await staffMay(c, { imports: false });
     expect((await c.s1.post('/api/cadets/import/file').set('content-type', 'application/octet-stream').send(gradeSheet)).status).toBe(403);
     expect((await c.cmd.post('/api/cadets/import', { text: res.body.text })).body).toEqual({ imported: 3, updated: 0, skipped: 0 });
   });

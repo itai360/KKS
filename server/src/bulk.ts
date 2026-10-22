@@ -20,9 +20,12 @@ import { isCommander, mustTaskRow } from './taskRepo';
 import { decideRequest, deleteTask, transition, updateTask } from './taskService';
 import { deleteTemplate } from './templates';
 import { deleteWeek, updateWeek } from './weeks';
+import { may } from './abilities';
+import type { StaffAbility } from '../../shared/permissions';
 
 type Value = string | number | boolean | null | undefined;
-type Op = { commander?: boolean; run: (actor: UserRow, id: number, value: Value) => void };
+/** commander: the commander's alone; ability: the commander's, and the staff's where he lets them */
+type Op = { commander?: boolean; ability?: StaffAbility; run: (actor: UserRow, id: number, value: Value) => void };
 
 const toId = (v: Value) => (v === null || v === undefined || v === '' ? null : Number(v));
 const days = (v: Value) => {
@@ -77,7 +80,7 @@ const OPS: Record<string, Record<string, Op>> = {
   },
   weeks: {
     delete: { commander: true, run: (_a, id) => deleteWeek(id) },
-    lead: { commander: true, run: (a, id, v) => updateWeek(a, id, { leadId: toId(v) }) },
+    lead: { ability: 'weeks', run: (a, id, v) => updateWeek(a, id, { leadId: toId(v) }) },
   },
   documents: {
     delete: { run: (a, id) => deleteDocument(a, id) },
@@ -86,12 +89,12 @@ const OPS: Record<string, Record<string, Op>> = {
     restricted: { run: (a, id, v) => updateDocument(a, id, { restricted: !!v }) },
   },
   templates: {
-    delete: { commander: true, run: (_a, id) => deleteTemplate(id) },
+    delete: { ability: 'templates', run: (_a, id) => deleteTemplate(id) },
   },
   recurring: {
-    delete: { commander: true, run: (_a, id) => deleteRule(id) },
+    delete: { ability: 'templates', run: (_a, id) => deleteRule(id) },
     active: {
-      commander: true,
+      ability: 'templates',
       run: (_a, id, v) => {
         db().run('UPDATE recurring_rules SET active = ? WHERE id = ?', v ? 1 : 0, id);
         changed('recurring');
@@ -159,6 +162,7 @@ export function runBulk(actor: UserRow, raw: z.input<typeof bulkSchema>): BulkRe
   const op = Object.hasOwn(OPS, entity) && Object.hasOwn(OPS[entity], action) ? OPS[entity][action] : undefined;
   if (!op) throw badRequest('פעולה לא מוכרת');
   if (op.commander && !isCommander(actor)) throw forbidden('הפעולה הזו שמורה למפקד הקורס');
+  if (op.ability && !may(actor, op.ability)) throw forbidden('מפקד הקורס לא פתח את הפעולה הזו לסגל');
   const result: BulkResult = { done: 0, failed: [] };
   db().tx(() => {
     for (const id of [...new Set(ids)]) {

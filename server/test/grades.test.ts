@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { EvaluationChange, EvaluationFile } from '../../shared/types';
 import { db } from '../src/db';
-import { setup, type Ctx } from './helpers';
+import { setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 let a = 0;
@@ -31,6 +31,7 @@ const file = async (id: number) => (await c.cmd.get(`/api/evaluations/${id}`)).b
 describe('the grade sheet', () => {
   it('shows what goes where before anything is written - for the course commander only', async () => {
     const rows = sheet(['85.0', '', '92', '100', '120', '88.5'], ['70', '', '', '95', '', '']);
+    await staffMay(c, { imports: false });
     expect((await c.s1.post('/api/evaluations/grades/preview', { rows })).status).toBe(403);
     const p = (await c.cmd.post('/api/evaluations/grades/preview', { rows })).body;
     expect(p.headerRow).toBe(1);

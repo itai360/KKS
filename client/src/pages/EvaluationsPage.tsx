@@ -46,7 +46,7 @@ export function EvaluationsPage() {
   const team = params.get('team') ?? '';
   const view = params.get('view') ?? '';
   const [q, setQ] = useState('');
-  const { isCommander } = useSession();
+  const { isCommander, can } = useSession();
   const list = useApi<EvaluationListItem[]>('/api/evaluations', ['cadets']);
   const teams = useApi<Team[]>('/api/teams', ['cadets']);
   const navigate = useNavigate();
@@ -79,7 +79,7 @@ export function EvaluationsPage() {
         sub={'תיק חי שמלווה כל צוער לאורך הקורס - פתוח למ"פ ולמפק"צ האחראי על הצוער בלבד. אפשר להשלים ולעדכן כל סעיף בכל שלב.'}
         actions={
           <>
-          {isCommander && (
+          {can('imports') && (
             <button className="btn btn-primary" onClick={() => set('import', '1')}>
               <Icon name="upload" /> ייבוא ציונים
             </button>
@@ -115,7 +115,7 @@ export function EvaluationsPage() {
           </>
         }
       />
-      {isCommander && params.get('import') === '1' && <GradesImport onClose={() => set('import', '')} />}
+      {can('imports') && params.get('import') === '1' && <GradesImport onClose={() => set('import', '')} />}
       {myTeams.length > 1 && (
         <div className="chips chips-scroll mb-12">
           <button className={`chip${!team ? ' on' : ''}`} onClick={() => set('team', '')}>

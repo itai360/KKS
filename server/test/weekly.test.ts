@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { weeklySummaryText, type WeeklyItem, type WeeklyView } from '../../shared/weekly';
-import { newTask, notificationsOf, setup, type Ctx } from './helpers';
+import { newTask, notificationsOf, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
 let w1 = 0;
@@ -79,7 +79,8 @@ describe('the weekly', () => {
   it('who may change what: the one who raised it, the commander, the week’s team commander, the closure’s owner', async () => {
     const topic = (await c.s1.post('/api/weekly/items', { kind: 'topic', title: 'נושא' })).body.id;
     const closure = (await c.s1.post('/api/weekly/items', { kind: 'closure', title: 'סגירה', ownerId: c.ids.s3 })).body.id;
-    // someone else's topic: not to be renamed or deleted
+    // someone else's topic: not to be renamed or deleted (unless the commander lets the staff run the meetings)
+    await staffMay(c, { meetings: false });
     expect((await c.s3.patch(`/api/weekly/items/${topic}`, { title: 'אחר' })).status).toBe(403);
     expect((await c.s3.del(`/api/weekly/items/${topic}`)).status).toBe(403);
     expect((await c.s3.patch(`/api/weekly/items/${topic}`, { done: true })).status).toBe(403);

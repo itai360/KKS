@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
+import { ABILITY_GROUPS, COMMANDER_ONLY, staffMay, type AbilityInfo, type StaffAbility } from '@shared/permissions';
 import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Template, User } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GuideImportCard } from '../components/Discipline';
@@ -647,45 +648,83 @@ function StaffGroupsCard() {
   );
 }
 
+/** what the staff (team commanders and the lateral staff) may do beyond their own work: a switch for each,
+ *  and beside them what stays the commander's whatever is set (shared/permissions.ts) */
 function PermissionsCard() {
-  const rows: [string, boolean, boolean][] = [
-    ['יצירת משימות לכל אחד ולכל הסגל', true, false],
-    ['יצירת משימות לעצמו ולשאר הסגל', true, true],
-    ['פתיחת משימה למפקד הקורס בשבוע שבאחריותו', true, true],
-    ['צפייה בכל המשימות', true, false],
-    ['צפייה במשימות שלו, הכלליות ומשימות השבוע שלו', true, true],
-    ['עדכון סטטוס, עדכונים, קבצים וסימון הושלם', true, true],
-    ['שינוי דד-ליין שקבע מפקד הקורס', true, false],
-    ['העברת משימה לאחר ללא אישור', true, false],
-    ['מחיקת משימה שהמפקד הקצה', true, false],
-    ['אישור סגירה, הארכות והעברות', true, false],
-    ['שבועות, תבניות, משימות חוזרות והגדרות', true, false],
-  ];
+  const { settings } = useSession();
+  const toast = useToast();
+  // a switch moves at once; it settles when the saved settings come back (or moves back if saving failed)
+  const [pending, setPending] = useState<Partial<Record<StaffAbility, boolean>>>({});
+  useEffect(() => {
+    setPending((p) => {
+      const left = Object.entries(p).filter(([k, v]) => staffMay(settings.staffPermissions, k as StaffAbility) !== v);
+      return left.length === Object.keys(p).length ? p : Object.fromEntries(left);
+    });
+  }, [settings.staffPermissions]);
+  const set = async (a: AbilityInfo, on: boolean) => {
+    setPending((p) => ({ ...p, [a.key]: on }));
+    try {
+      // what was switched just before and is still saving goes in too
+      await api.patch('/api/settings', { staffPermissions: { ...settings.staffPermissions, ...pending, [a.key]: on } });
+      emitLocalChange('settings');
+      toast({ title: on ? `פתוח לסגל: ${a.label}` : `רק שלך: ${a.label}`, tone: 'green' });
+    } catch (e) {
+      setPending((p) => Object.fromEntries(Object.entries(p).filter(([k]) => k !== a.key)));
+      toast({ title: (e as Error).message, tone: 'red' });
+    }
+  };
   return (
     <div className="card">
       <div className="card-head">
         <Icon name="lock" />
-        <h3>הרשאות</h3>
+        <h3 className="grow">הרשאות הסגל</h3>
       </div>
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>פעולה</th>
-              <th className="num-cell">מפקד הקורס</th>
-              <th className="num-cell">מפק"צ / איש סגל</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(([label, c, s]) => (
-              <tr key={label}>
-                <td className="small">{label}</td>
-                <td className="num-cell">{c ? <Icon name="check" size={16} className="text-green" /> : '-'}</td>
-                <td className="num-cell">{s ? <Icon name="check" size={16} className="text-green" /> : <span className="muted tiny">בבקשה / לא</span>}</td>
-              </tr>
+      <div className="card-body col gap-16">
+        <p className="small">
+          מה המפק"צים והסגל הרוחבי יכולים לעשות מעבר לעבודה שלהם. כל אחד תמיד מנהל את מה שבאחריותו - המשימות שפתח, הצוות שלו, השבוע או הציר שהוא אחראי עליהם.
+        </p>
+        {ABILITY_GROUPS.map((g) => (
+          <div key={g.title} className="perm-group">
+            <span className="label-caps">{g.title}</span>
+            {g.abilities.map((a) => {
+              const on = pending[a.key] ?? staffMay(settings.staffPermissions, a.key);
+              return (
+                <div key={a.key} className={`perm-row${on ? ' is-on' : ''}`}>
+                  <div className="grow col">
+                    <span className="small strong">{a.label}</span>
+                    <span className="tiny muted">{a.hint}</span>
+                  </div>
+                  <span className="tiny muted perm-state" aria-hidden="true">
+                    {on ? 'גם הסגל' : 'רק אני'}
+                  </span>
+                  <label className="switch" title={on ? 'פתוח לסגל - לחיצה סוגרת' : 'רק שלך - לחיצה פותחת לסגל'}>
+                    <input type="checkbox" role="switch" checked={on} onChange={(e) => void set(a, e.target.checked)} />
+                    <span className="switch-track" aria-hidden="true" />
+                    <span className="sr-only">{a.label} - פתוח לסגל</span>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        <div className="perm-locked">
+          <span className="label-caps">
+            <Icon name="lock" size={12} /> נשאר שלך בלבד
+          </span>
+          <div className="perm-locked-groups">
+            {COMMANDER_ONLY.map((g) => (
+              <div key={g.title} className="col gap-6">
+                <span className="small strong">{g.title}</span>
+                <ul className="perm-list tiny">
+                  {g.items.map((i) => (
+                    <li key={i}>{i}</li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+          <p className="tiny muted">משימה שסימנת בה "נדרש אישור מפקד לסגירת המשימה" נסגרת רק באישור שלך - גם כשכל השאר פתוח לסגל.</p>
+        </div>
       </div>
     </div>
   );

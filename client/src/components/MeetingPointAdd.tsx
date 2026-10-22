@@ -32,7 +32,7 @@ export function MeetingPointAddHost() {
 
 function MeetingPointModal({ onClose }: { onClose: () => void }) {
   const toast = useToast();
-  const { user, isCommander } = useSession();
+  const { user, can } = useSession();
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,7 +55,7 @@ function MeetingPointModal({ onClose }: { onClose: () => void }) {
       const list = await api.post<MeetingPoint[]>('/api/meeting-points', { body: body.trim() });
       emitLocalChange('meetings');
       const waiting = list.filter((p) => !p.raisedAt).length;
-      toast({ title: 'הנקודה נוספה לישב"ס הבא', body: waiting > 1 ? `${waiting} נקודות מחכות לישיבה` : body.trim(), tone: 'green', link: isCommander ? '/meeting' : undefined });
+      toast({ title: 'הנקודה נוספה לישב"ס הבא', body: waiting > 1 ? `${waiting} נקודות מחכות לישיבה` : body.trim(), tone: 'green', link: can('meetings') ? '/meeting' : undefined });
       onClose();
     } catch (e) {
       setError((e as Error).message);

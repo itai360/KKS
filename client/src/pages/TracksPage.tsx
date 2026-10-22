@@ -20,7 +20,8 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
 export function TracksPage() {
-  const { tracks, isCommander } = useSession();
+  const { tracks, can } = useSession();
+  const isCommander = can('tracks');
   const { data, loading } = useApi<Track[]>('/api/tracks', ['weeks', 'tasks']);
   const list = data ?? tracks;
   const [creating, setCreating] = useState(false);
@@ -167,7 +168,7 @@ function LeadsDialog({ tracks, onClose }: { tracks: Track[]; onClose: () => void
 }
 
 function TrackForm({ track, onClose }: { track?: Track; onClose: () => void }) {
-  const { isCommander } = useSession();
+  const isCommander = useSession().can('tracks');
   const toast = useToast();
   const [name, setName] = useState(track?.name ?? '');
   const [lead, setLead] = useState<number[]>(track?.leadId ? [track.leadId] : []);
@@ -230,7 +231,7 @@ type GroupBy = 'week' | 'status' | 'owner';
 export function TrackPage() {
   const { id } = useParams();
   const { data, error, loading, status } = useApi<TrackDetail>(`/api/tracks/${id}`, ['weeks', 'tasks']);
-  const { isCommander } = useSession();
+  const isCommander = useSession().can('tracks');
   const newTask = useNewTask();
   const toast = useToast();
   const navigate = useNavigate();

@@ -558,7 +558,7 @@ function ExamInput({ field, saver, file }: { field: keyof EvaluationExams; saver
 
 function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile: (f: EvaluationFile) => void; saver: Saver }) {
   const toast = useToast();
-  const { isCommander } = useSession();
+  const { isCommander, can } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const addable = TEST_ORDER.filter((t) => !EXAM_TESTS[t].always && !file.tests.includes(t));
@@ -711,7 +711,7 @@ function ExamsSection({ file, setFile, saver }: { file: EvaluationFile; setFile:
           </div>
         </div>
       )}
-      {isCommander && (
+      {can('imports') && (
         <p className="tiny muted" style={{ margin: 0 }}>
           <Icon name="upload" size={12} /> אחרי כל מבחן או כש"ג אפשר להכניס את הציונים של כל הצוערים בבת אחת:{' '}
           <Link to="/evaluations?import=1">ייבוא מגליון הציונים</Link>.

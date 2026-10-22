@@ -8,8 +8,8 @@ import { getUserRow, type UserRow } from './auth';
 import { badRequest, forbidden, getSettings, notFound, nowIso, tz } from './core';
 import { db } from './db';
 import { changed, logActivity } from './journal';
-import { isCommander } from './taskRepo';
 import { createTasks, weekForDate } from './taskService';
+import { may } from './abilities';
 
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -142,7 +142,7 @@ export function applyTemplate(actor: UserRow, templateId: number, raw: z.input<t
     : undefined;
   if (weekId && !week) throw badRequest('השבוע לא נמצא');
 
-  if (!automatic && !opts.trusted && !isCommander(actor)) {
+  if (!automatic && !opts.trusted && !may(actor, 'templates')) {
     const allowed = (week && week.lead_id === actor.id) || (event && event.owner_id === actor.id);
     if (!allowed) throw forbidden('רק מפקד הקורס או המפק"צ האחראי יכולים להפעיל תבנית');
   }

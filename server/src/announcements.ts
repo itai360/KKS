@@ -9,6 +9,7 @@ import { forbidden, notFound, nowIso } from './core';
 import { db } from './db';
 import { changed, notify } from './journal';
 import { isCommander } from './taskRepo';
+import { may } from './abilities';
 
 interface Row {
   id: number;
@@ -71,7 +72,7 @@ export const announcementSchema = z.object({
 });
 
 export function postAnnouncement(actor: UserRow, raw: z.input<typeof announcementSchema>): number {
-  if (!isCommander(actor)) throw forbidden('הודעה לכל הסגל מפרסם מפקד הקורס');
+  if (!may(actor, 'announcements')) throw forbidden('הודעה לכל הסגל מפרסם מפקד הקורס');
   const a = announcementSchema.parse(raw);
   const id = db().run(
     'INSERT INTO announcements(title, body, require_ack, urgent, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',

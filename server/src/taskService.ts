@@ -40,6 +40,7 @@ import {
   toTask,
   type TaskRow,
 } from './taskRepo';
+import { may } from './abilities';
 
 export const isoDateTime = z
   .string()
@@ -143,7 +144,7 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
 
   let owners: number[];
   if (input.assignMode === 'all') {
-    if (!commander && !opts.system) throw forbidden('רק מפקד הקורס יכול לפתוח משימה לכל הסגל');
+    if (!commander && !opts.system && !may(actor, 'tasks')) throw forbidden('רק מפקד הקורס יכול לפתוח משימה לכל הסגל');
     owners = staffIds().filter((id) => id !== actor.id);
     if (!owners.length) throw badRequest('אין אנשי סגל פעילים');
   } else {
@@ -154,7 +155,7 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
 
   // Section 2: staff open tasks for themselves and for other staff members; for the course
   // commander only within the week they lead.
-  if (!commander && !opts.system) {
+  if (!commander && !opts.system && !may(actor, 'tasks')) {
     const lead = weekLead(weekId);
     const above = owners.filter((id) => id !== actor.id && getUserRow(id)?.role !== 'staff');
     if (above.length && lead !== actor.id) {

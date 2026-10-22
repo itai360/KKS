@@ -3,6 +3,7 @@
 import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
 import type { ExperienceFeedbackForm } from './experienceFeedback';
 import type { ExperienceKind, ExperienceSpan } from './experiences';
+import type { StaffPermissions } from './permissions';
 import type { StaffGroupDef } from './staffGroups';
 import type {
   AbsenceReason,
@@ -62,6 +63,8 @@ export interface CourseSettings {
   domains: string[];
   /** the groups tasks go to together (staffGroups.ts) */
   staffGroups: StaffGroupDef[];
+  /** what the staff may do beyond their own work (shared/permissions.ts); what is not set is at its default */
+  staffPermissions: StaffPermissions;
 }
 
 export interface Task {
@@ -756,7 +759,10 @@ export interface Cadet {
   /** the evaluation committee the third discipline note opened (deleting a note before it decides cancels it) */
   notesCommittee: { id: number; decision: CommitteeDecision | null } | null;
   talkCount: number;
+  /** the personal file: talks, restricted records, notes, evaluation */
   canManage: boolean;
+  /** the details, exemptions and experiences */
+  canEdit: boolean;
 }
 
 export interface CadetRecord {
@@ -1196,6 +1202,11 @@ export interface Debrief {
   participants: string;
   summary: string;
   status: 'draft' | 'final';
+  /** a weekly debrief its lead sent for the commander's approval (still a draft until approved) */
+  submittedAt: string | null;
+  submittedByName: string | null;
+  /** may sum it up now - for a weekly debrief, the commander's approval; its lead sends it instead */
+  canSumUp: boolean;
   createdBy: number;
   createdByName: string;
   createdAt: string;

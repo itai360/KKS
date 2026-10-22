@@ -90,6 +90,7 @@ import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
 import { changed } from './journal';
+import { requireAbility } from './abilities';
 import { MAX_PART_BYTES, MAX_TRANSCRIPT_CHARS, summarizeTalk, talkAiStatus, transcribePart } from './talkAi';
 import { TALK_TYPES } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
@@ -110,11 +111,11 @@ export function v3Router(): Router {
   // ---------------- teams & cadets ----------------
 
   r.get('/teams', (_req, res) => res.json(listTeams()));
-  r.post('/teams', requireCommander, (req, res) => {
+  r.post('/teams', requireAbility('teams'), (req, res) => {
     saveTeam(me(req), req.body);
     res.json(listTeams());
   });
-  r.put('/teams/:id', requireCommander, (req, res) => {
+  r.put('/teams/:id', requireAbility('teams'), (req, res) => {
     saveTeam(me(req), req.body, id(req.params.id));
     res.json(listTeams());
   });
@@ -127,13 +128,13 @@ export function v3Router(): Router {
     res.json(listCadets(me(req), { teamId: num(req.query.team), status: str(req.query.status) ?? 'active', q: str(req.query.q) })),
   );
   r.post('/cadets', (req, res) => res.json(cadetDetail(me(req), createCadet(me(req), req.body))));
-  r.post('/cadets/import', requireCommander, (req, res) => res.json(importCadets(me(req), req.body)));
+  r.post('/cadets/import', requireAbility('imports'), (req, res) => res.json(importCadets(me(req), req.body)));
   // a spreadsheet becomes the text of the paste import, which the commander reviews before importing
-  r.post('/cadets/import/file', requireCommander, express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+  r.post('/cadets/import/file', requireAbility('imports'), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
     res.json(cadetsFromSpreadsheet(req.body));
   });
-  r.post('/cadets/import/link', requireCommander, async (req, res) => {
+  r.post('/cadets/import/link', requireAbility('imports'), async (req, res) => {
     const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
     res.json(cadetsFromSpreadsheet(await downloadGoogleSheet(url, config.maxUploadMb * 1024 * 1024)));
   });
@@ -189,12 +190,12 @@ export function v3Router(): Router {
     const day = (v: unknown) => (isDateKey(v) ? v : undefined);
     res.json(disciplineLog(me(req), day(req.query.from), day(req.query.to)));
   });
-  r.post('/discipline/guide/link', requireCommander, async (req, res) => {
+  r.post('/discipline/guide/link', requireAbility('imports'), async (req, res) => {
     const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
     res.json(saveGuide(me(req), await guideFromLink(url, config.maxUploadMb * 1024 * 1024), url));
   });
   // a Word file, or the document pasted (its HTML)
-  r.post('/discipline/guide/file', requireCommander, express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+  r.post('/discipline/guide/file', requireAbility('imports'), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
     const name = req.headers['x-filename'] ? uploadName(req.headers['x-filename']) : '';
     res.json(saveGuide(me(req), guideFromFile(req.body), name && name !== 'pasted.html' ? `קובץ: ${name}` : 'הדבקה מהמסמך'));
@@ -218,16 +219,16 @@ export function v3Router(): Router {
 
   r.get('/evaluations', (req, res) => res.json(listEvaluations(me(req))));
   // the grade sheet, after an exam or a fitness test: read it, see what it changes, import it
-  r.post('/evaluations/grades/file', requireCommander, express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+  r.post('/evaluations/grades/file', requireAbility('imports'), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
     res.json(readGradeSheets(me(req), req.body));
   });
-  r.post('/evaluations/grades/link', requireCommander, async (req, res) => {
+  r.post('/evaluations/grades/link', requireAbility('imports'), async (req, res) => {
     const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
     res.json(readGradeSheets(me(req), await downloadGoogleSheet(url, config.maxUploadMb * 1024 * 1024)));
   });
-  r.post('/evaluations/grades/preview', requireCommander, (req, res) => res.json(previewGrades(me(req), req.body)));
-  r.post('/evaluations/grades/import', requireCommander, (req, res) => res.json(importGrades(me(req), req.body)));
+  r.post('/evaluations/grades/preview', requireAbility('imports'), (req, res) => res.json(previewGrades(me(req), req.body)));
+  r.post('/evaluations/grades/import', requireAbility('imports'), (req, res) => res.json(importGrades(me(req), req.body)));
   r.delete('/evaluations/grade-items/:id', requireCommander, (req, res) => {
     removeGradeItem(me(req), id(req.params.id));
     res.json({ ok: true });
@@ -235,18 +236,18 @@ export function v3Router(): Router {
   // ---------------- the sociometric ----------------
   // each team's sheet into a round; the results for the commander, a team's for its commander
   r.get('/sociometric', (req, res) => res.json(socioRound(me(req), req.query.round ? id(String(req.query.round)) : undefined)));
-  r.post('/sociometric/file', requireCommander, express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+  r.post('/sociometric/file', requireAbility('cadetFiles'), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
     res.json(readSocioSheets(me(req), req.body));
   });
-  r.post('/sociometric/link', requireCommander, async (req, res) => {
+  r.post('/sociometric/link', requireAbility('cadetFiles'), async (req, res) => {
     const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
     const { buf, name } = await downloadGoogleSheetNamed(url, config.maxUploadMb * 1024 * 1024);
     res.json({ name, sheets: readSocioSheets(me(req), buf) });
   });
-  r.post('/sociometric/preview', requireCommander, (req, res) => res.json(previewSocio(me(req), req.body)));
-  r.post('/sociometric/import', requireCommander, (req, res) => res.json(importSocio(me(req), req.body)));
-  r.patch('/sociometric/rounds/:id', requireCommander, (req, res) => {
+  r.post('/sociometric/preview', requireAbility('cadetFiles'), (req, res) => res.json(previewSocio(me(req), req.body)));
+  r.post('/sociometric/import', requireAbility('cadetFiles'), (req, res) => res.json(importSocio(me(req), req.body)));
+  r.patch('/sociometric/rounds/:id', requireAbility('cadetFiles'), (req, res) => {
     updateSocioRound(me(req), id(req.params.id), req.body);
     res.json({ ok: true });
   });
@@ -541,11 +542,11 @@ export function v3Router(): Router {
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
     res.json(importAlignment(me(req), exportText(req.body)));
   });
-  r.post('/alignment/:id/pin', requireCommander, (req, res) => {
+  r.post('/alignment/:id/pin', requireAbility('alignment'), (req, res) => {
     pinMessage(id(req.params.id), req.body);
     res.json({ ok: true });
   });
-  r.delete('/alignment/:id', requireCommander, (req, res) => {
+  r.delete('/alignment/:id', requireAbility('alignment'), (req, res) => {
     deleteMessage(id(req.params.id));
     res.json({ ok: true });
   });
@@ -569,9 +570,9 @@ export function v3Router(): Router {
 
   // ---------------- plan approval: the commander's documents for the commander above ----------------
 
-  r.get('/plans', requireCommander, async (_req, res) => res.json(await plansOverview()));
-  r.get('/plans/:weekId', requireCommander, async (req, res) => res.json(await planDocument(id(req.params.weekId))));
-  r.patch('/plans/:weekId', requireCommander, async (req, res) => {
+  r.get('/plans', requireAbility('plans'), async (_req, res) => res.json(await plansOverview()));
+  r.get('/plans/:weekId', requireAbility('plans'), async (req, res) => res.json(await planDocument(id(req.params.weekId))));
+  r.patch('/plans/:weekId', requireAbility('plans'), async (req, res) => {
     savePlan(me(req), id(req.params.weekId), req.body);
     res.json(await planDocument(id(req.params.weekId)));
   });
@@ -580,9 +581,9 @@ export function v3Router(): Router {
     res.json(await planDocument(id(req.params.weekId)));
   });
   // the three-week plan: the week now and the three after it (or from a given week)
-  r.get('/three-week', requireCommander, async (_req, res) => res.json(await threeWeekPlan(null)));
-  r.get('/three-week/:weekId', requireCommander, async (req, res) => res.json(await threeWeekPlan(id(req.params.weekId))));
-  r.patch('/three-week/:weekId', requireCommander, async (req, res) => {
+  r.get('/three-week', requireAbility('plans'), async (_req, res) => res.json(await threeWeekPlan(null)));
+  r.get('/three-week/:weekId', requireAbility('plans'), async (req, res) => res.json(await threeWeekPlan(id(req.params.weekId))));
+  r.patch('/three-week/:weekId', requireAbility('plans'), async (req, res) => {
     saveThreeWeek(me(req), id(req.params.weekId), req.body);
     res.json(await threeWeekPlan(id(req.params.weekId)));
   });
