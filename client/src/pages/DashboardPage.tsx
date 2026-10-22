@@ -1,4 +1,4 @@
-// Sections 4, 5, 32, 49 - the commander's home: understand the course in 10 seconds.
+// The course overview: current workload, pending decisions, and the day's schedule.
 
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -17,11 +17,12 @@ import { useNewTask } from '../components/NewTask';
 import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from '../components/ui';
 import { api } from '../lib/api';
 import { endMinutes, inMinutes, leftMinutes, nowAndNext } from '../lib/agenda';
-import { fmtDeadline, fmtLongDate, fmtTime, greetName, greeting, todayKey } from '../lib/format';
+import { fmtDeadline, fmtLongDate, fmtTime, todayKey } from '../lib/format';
 import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { useSession } from '../lib/session';
 import { useApi, useTick } from '../lib/useApi';
 import { shortDate } from '@shared/dates';
+import './DashboardPage.css';
 
 const KIND_LABEL: Record<AttentionKind, string> = {
   overdue: 'באיחור',
@@ -39,32 +40,34 @@ const KIND_LABEL: Record<AttentionKind, string> = {
 };
 
 export function DashboardPage() {
-  const { user } = useSession();
+  const { settings } = useSession();
   const { data, error, loading, reload } = useApi<DashboardData>('/api/dashboard', ['tasks', 'weeks', 'events', 'requests', 'cadets']);
-  const navigate = useNavigate();
   const newTask = useNewTask();
   const [cmd, setCmd] = useState('');
   useTick();
 
   return (
-    <div className="page dashboard-page">
+    <div className="page dashboard-page dashboard-overview">
       <PageHead
-        eyebrow={fmtLongDate(todayKey())}
-        title={`${greeting()}, ${greetName(user.displayName)}`}
-        docTitle="דף הבית"
-        sub="תמונת המצב של הקורס, והדברים שצריכים אותך היום."
+        title="סקירה כללית"
+        docTitle="סקירה כללית"
+        sub={`${settings.courseName || 'ניהול הקורס'} · ${fmtLongDate(todayKey())}`}
         actions={
           <>
-            <button className="btn" onClick={() => navigate('/briefing')}>
-              <Icon name="sun" /> תדריך בוקר
+            <button className="btn dashboard-create" onClick={() => newTask()}>
+              <Icon name="plus" size={17} /> משימה חדשה
             </button>
-            <Link className="btn" to="/my">
-              <Icon name="my" /> המשימות שלי
-            </Link>
+            <Link className="btn btn-primary" to="/">ללוח הקורס <Icon name="chevronLeft" size={16} /></Link>
           </>
         }
       />
-      {/* on a phone still in its browser: the app for its home screen */}
+      <nav className="dashboard-tools" aria-label="כלים לניהול הקורס">
+        <Link to="/briefing"><Icon name="sun" size={16} /> תדריך בוקר</Link>
+        <Link to="/my"><Icon name="my" size={16} /> המשימות שלי</Link>
+        <Link to="/schedule"><Icon name="calendar" size={16} /> יומן הקורס</Link>
+        <Link to="/team"><Icon name="users" size={16} /> אנשי הסגל</Link>
+        <Link to="/weeks"><Icon name="layers" size={16} /> שבועות הקורס</Link>
+      </nav>
       <InstallNudge />
       <ErrorBox error={error} />
       {error && (
@@ -73,66 +76,69 @@ export function DashboardPage() {
         </button>
       )}
       {loading && !data ? (
-        <Loading rows={4} />
+        <div className="dashboard-loading" aria-label="טוען את תמונת המצב"><Loading rows={4} /></div>
       ) : data ? (
-        <div className="fade-in col gap-16">
+        <div className="dashboard-content">
           <SetupNudge />
           <PendingAnnouncements />
           <div className="stats dashboard-stats" aria-label="סיכום המשימות">
-            <Stat n={data.stats.today} icon="sun" label="לביצוע היום" hint="משימות לסיום היום" to="/tasks?scope=today" />
-            <Stat n={data.stats.overdue} icon="clock" label="באיחור" hint="עבר המועד, נדרש טיפול" alert={data.stats.overdue > 0} to="/tasks?scope=overdue" />
-            <Stat n={data.stats.week} icon="calendar" label="לביצוע השבוע" hint="ב-7 הימים הקרובים" to="/tasks?scope=week" />
-            <Stat n={data.stats.doneThisWeek} icon="check" label="הושלמו השבוע" hint="נסגרו מתחילת השבוע" to="/tasks?scope=done" />
+            <Stat n={data.stats.today} icon="sun" label="להיום" tone="blue" to="/tasks?scope=today" />
+            <Stat n={data.stats.overdue} icon="clock" label="באיחור" tone="red" alert={data.stats.overdue > 0} to="/tasks?scope=overdue" />
+            <Stat n={data.stats.week} icon="calendar" label="לשבוע הקרוב" tone="purple" to="/tasks?scope=week" />
+            <Stat n={data.stats.doneThisWeek} icon="check" label="הושלמו השבוע" tone="green" to="/tasks?scope=done" />
+          </div>
+
+          <div className="dashboard-workspace">
+            <Attention items={data.attention} />
+            <TodayEvents data={data} />
+            <WeekCard data={data} />
           </div>
 
           <details className="dashboard-command-details">
             <summary>
-              <Icon name="zap" />
-              <span className="grow strong">משימה במשפט אחד</span>
-              <span className="small muted hide-mobile">מי, מה ועד מתי</span>
-              <Icon name="chevronDown" />
+              <span className="dashboard-command-icon"><Icon name="zap" /></span>
+              <span className="grow"><strong>יצירת משימה במשפט אחד</strong><span className="dashboard-summary-sub">אחראי, משימה ותאריך יעד</span></span>
+              <Icon name="plus" />
             </summary>
             <form
               className="dashboard-command"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!cmd.trim()) return newTask();
-                newTask({ text: cmd.trim(), heading: 'פקודה מהירה' }, () => setCmd(''));
+                newTask({ text: cmd.trim(), heading: 'משימה במשפט אחד' }, () => setCmd(''));
               }}
             >
-              <label htmlFor="dashboard-command" className="sr-only">
-                משימה במשפט אחד
-              </label>
+              <label htmlFor="dashboard-command" className="sr-only">משימה במשפט אחד</label>
               <input
                 id="dashboard-command"
                 className="input"
                 value={cmd}
                 onChange={(e) => setCmd(e.target.value)}
-                placeholder='למשל: מפק"צ 2 להכין תדריך עד מחר ב-12:00'
+                placeholder='למשל: מפק״צ 2 להכין תדריך עד מחר ב־12:00'
                 aria-describedby="command-hint"
               />
-              <button className="btn btn-primary" type="submit">
-                <Icon name="plus" /> יצירת משימה
-              </button>
-              <span id="command-hint" className="tiny muted">
-                כותבים מי, מה ועד מתי. אפשר לבדוק ולערוך לפני השליחה.
-              </span>
+              <button className="btn btn-primary" type="submit"><Icon name="plus" /> יצירת משימה</button>
+              <span id="command-hint" className="tiny muted">כותבים מי, מה ועד מתי. אפשר לבדוק ולערוך לפני השליחה.</span>
             </form>
           </details>
 
-          <div className="dashboard-workspace">
-            <TodayEvents data={data} />
-            <Attention items={data.attention} />
-            <WeekCard data={data} />
-          </div>
           <div className="dashboard-support">
             <WeeklyCard />
             {data.roll && <RollCard roll={data.roll} />}
             <DisciplineCard />
-            <StaffHealth data={data} />
-            <TracksCard />
-            <QuickActions />
           </div>
+          <details className="dashboard-context">
+            <summary>
+              <span className="dashboard-command-icon"><Icon name="chart" /></span>
+              <span className="grow"><strong>סגל וצירי הקורס</strong><span className="dashboard-summary-sub">עומסים, התקדמות ופעולות נוספות</span></span>
+              <Icon name="chevronDown" />
+            </summary>
+            <div className="dashboard-support">
+              <StaffHealth data={data} />
+              <TracksCard />
+              <QuickActions />
+            </div>
+          </details>
           <TwoStepNudge />
         </div>
       ) : null}
@@ -140,9 +146,9 @@ export function DashboardPage() {
   );
 }
 
-function Stat({ n, icon, label, hint, alert, to }: { n: number; icon: string; label: string; hint: string; alert?: boolean; to: string }) {
+function Stat({ n, icon, label, tone, alert, to }: { n: number; icon: string; label: string; tone: string; alert?: boolean; to: string }) {
   return (
-    <Link className={`card stat${alert ? ' alert' : ''}`} to={to}>
+    <Link className={`card stat stat-${tone}${alert ? ' alert' : ''}`} to={to}>
       <span className="stat-heading">
         <span className="stat-label">{label}</span>
         <Icon name={icon} />
@@ -150,10 +156,7 @@ function Stat({ n, icon, label, hint, alert, to }: { n: number; icon: string; la
       <span className="stat-num">
         <CountUp value={n} />
       </span>
-      <span className="stat-footer">
-        <span className="stat-hint">{hint}</span>
-        <Icon name="chevronLeft" size={16} />
-      </span>
+      <Icon name="chevronLeft" className="stat-arrow" size={15} />
     </Link>
   );
 }
@@ -189,6 +192,7 @@ const PASSING: ReadonlySet<AttentionKind> = new Set(['away', 'overload', 'readin
 function Attention({ items }: { items: AttentionItem[] }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('all');
+  const [showAllGroups, setShowAllGroups] = useState(false);
   // decided here: out of the counts once its row has folded away (the list catches up a moment later)
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [cleared, setCleared] = useState(false);
@@ -212,7 +216,8 @@ function Attention({ items }: { items: AttentionItem[] }) {
     const phases = n ? [] : rows.map((x) => leaving.phaseOf(x.key)).filter(Boolean);
     return { ...l, items: rows, left: n, phase: phases.length ? (phases.includes('done') ? ('done' as const) : ('fold' as const)) : undefined };
   });
-  const visible = lanes.filter((l) => (l.left || l.phase) && (filter === 'all' || l.key === filter));
+  const matching = lanes.filter((l) => (l.left || l.phase) && (filter === 'all' || l.key === filter));
+  const visible = filter === 'all' && !showAllGroups ? matching.slice(0, 2) : matching;
   const decided = (key: string) =>
     setTimeout(() => {
       setGone((g) => {
@@ -229,8 +234,7 @@ function Attention({ items }: { items: AttentionItem[] }) {
           <Icon name="target" />
         </span>
         <div className="grow">
-          <h2 id="attn-title">לטיפול שלך</h2>
-          <p className="small muted">מהדחוף ביותר ועד הדברים שכדאי לעקוב אחריהם</p>
+          <h2 id="attn-title">ממתין לטיפול</h2>
         </div>
         <span className="badge" aria-label={`${left.length} פריטים לטיפול`} key={left.length}>
           {left.length}
@@ -263,7 +267,7 @@ function Attention({ items }: { items: AttentionItem[] }) {
           <div className={cleared ? 'just-cleared attention-cleared' : undefined}>
             <Empty
               mark={cleared ? <CheckMark size={44} /> : undefined}
-              title="הכל מתקדם כמתוכנן"
+              title="אין נושאים פתוחים לטיפול"
               text={cleared ? 'טיפלת בכל מה שחיכה לך. דברים חדשים יופיעו כאן כשיגיעו.' : 'אין חריגות שמחייבות את התערבותך כרגע.'}
             />
           </div>
@@ -280,7 +284,8 @@ function Attention({ items }: { items: AttentionItem[] }) {
         ) : (
           visible.map((l) => {
             const all = !!expanded[l.key];
-            const list = all ? l.items : l.items.slice(0, LANE_LIMIT);
+            const limit = filter === 'all' && !showAllGroups ? 2 : LANE_LIMIT;
+            const list = all ? l.items : l.items.slice(0, limit);
             return (
               <div key={l.key} className={leaveClass(l.phase)}>
                 <div id={`lane-${l.key}`} className="attn">
@@ -293,9 +298,9 @@ function Attention({ items }: { items: AttentionItem[] }) {
                   {list.map(({ i, key }) => (
                     <AttentionRow key={key} i={i} onDecided={() => decided(key)} leaving={leaving.phaseOf(key)} />
                   ))}
-                  {l.items.length > LANE_LIMIT && (
+                  {l.items.length > limit && (
                     <button className="btn btn-ghost attention-more" aria-expanded={all} onClick={() => setExpanded({ ...expanded, [l.key]: !all })}>
-                      {all ? 'הצג פחות' : `הצג עוד ${l.items.length - LANE_LIMIT}`}
+                      {all ? 'הצג פחות' : `הצג עוד ${l.items.length - limit}`}
                     </button>
                   )}
                 </div>
@@ -304,6 +309,12 @@ function Attention({ items }: { items: AttentionItem[] }) {
           })
         )}
       </div>
+      {filter === 'all' && matching.length > 2 && (
+        <button className="btn btn-ghost dashboard-attention-expand" aria-expanded={showAllGroups} onClick={() => setShowAllGroups(!showAllGroups)}>
+          {showAllGroups ? 'חזרה לתצוגה מקוצרת' : `לכל ${left.length} הנושאים לתשומת הלב`}
+          <Icon name={showAllGroups ? 'chevronDown' : 'chevronLeft'} size={16} />
+        </button>
+      )}
     </section>
   );
 }
@@ -404,7 +415,7 @@ function WeekCard({ data }: { data: DashboardData }) {
         <Link key={w.id} className="row week-summary" style={{ borderTop: i ? '1px solid var(--line)' : undefined }} to={`/weeks/${w.id}`}>
           <div className="grow">
             <div className="label-caps">{label}</div>
-            <div className="strong" style={{ fontSize: 17 }}>
+            <div className="strong">
               {w.name}
             </div>
             <div className="tiny muted">
@@ -415,7 +426,7 @@ function WeekCard({ data }: { data: DashboardData }) {
             </div>
           </div>
           <div className="week-readiness">
-            <Ring value={w.readiness} size={64} tone={w.totalTasks === 0 ? 'gray' : undefined} />
+            <Ring value={w.readiness} size={48} tone={w.totalTasks === 0 ? 'gray' : undefined} />
             <span className="tiny muted">מוכנות</span>
           </div>
         </Link>

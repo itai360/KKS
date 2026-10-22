@@ -99,7 +99,8 @@ function AuthedRoutes() {
             }
           >
             <Routes>
-              <Route path="/" element={isCommander ? <DashboardPage /> : <MyTasksPage />} />
+              <Route path="/" element={isCommander ? <TasksPage /> : <MyTasksPage />} />
+              <Route path="/overview" element={isCommander ? <DashboardPage /> : <Navigate to="/" />} />
               <Route path="/my" element={<MyTasksPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/tasks/:id" element={<TaskPage />} />

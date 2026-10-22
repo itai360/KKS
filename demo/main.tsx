@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import '../client/src/styles.css';
+import '../client/src/design-system.css';
 import { AppShell } from '../client/src/App';
 import { applyTheme } from '../client/src/lib/theme';
 import { boot } from './bridge';
