@@ -126,7 +126,7 @@ function formOutline(type: TalkType): string {
   return numberedSections(type)
     .map(({ section, number }) => {
       const head = `${number ? `${number}. ` : ''}${section.title}`;
-      return [head, ...section.fields.map((f) => `- ${f.id}: ${f.label}${f.hint ? ` (${f.hint})` : ''}`)].join('\n');
+      return [head, ...section.fields.map((f) => `- ${f.id}: ${f.label}${f.hint ? ` (${f.hint})` : ''}${f.points ? ' - נקודות, כל נקודה בשורה משלה' : ''}`)].join('\n');
     })
     .join('\n\n');
 }

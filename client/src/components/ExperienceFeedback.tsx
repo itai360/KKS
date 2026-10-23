@@ -1,7 +1,7 @@
 // The feedback after an experience in the course's format (shared/experienceFeedback.ts): the form the
 // mentor fills in - laid out as the paper one: the cadet, the experience and its dates on top, a general
-// reference, two points to keep and two to improve, and the score on its legend - and the feedback as it
-// shows once given.
+// reference, a point to keep and a point to improve (more of either added with a button), and the score on
+// its legend - and the feedback as it shows once given.
 
 import { useState } from 'react';
 import { fmtDateIL, shortDate } from '@shared/dates';
@@ -9,10 +9,15 @@ import {
   asFeedbackForm,
   axisAbout,
   emptyFeedback,
+  emptyPoint,
   FEEDBACK_AXES,
   FEEDBACK_AXIS_GROUPS,
+  FEEDBACK_POINTS,
+  FEEDBACK_POINTS_MAX,
   axisValue,
   feedbackMissing,
+  isBlankPoint,
+  pointName,
   POINT_LABELS,
   SCORE_BANDS,
   SCORE_MAX,
@@ -20,6 +25,7 @@ import {
   type ExperienceFeedbackForm,
   type FeedbackPoint,
   type PointKind,
+  tidyFeedback,
 } from '@shared/experienceFeedback';
 import { experienceName } from '@shared/experiences';
 import { DOCX_TYPE, feedbackDocName, feedbackDocx } from '@shared/feedbackDocx';
@@ -28,6 +34,7 @@ import { api } from '../lib/api';
 import { shareOrSave } from '../lib/download';
 import { useDraft } from '../lib/draft';
 import { emitLocalChange } from '../lib/realtime';
+import { ask } from './Confirm';
 import { Icon } from './Icon';
 import { Select } from './pickers';
 import { useToast } from './Toasts';
@@ -88,6 +95,21 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
   };
   const setPoint = (kind: PointKind, i: number, patch: Partial<FeedbackPoint>) =>
     update({ ...draft, form: { ...draft.form, [kind]: draft.form[kind].map((p, j) => (j === i ? { ...p, ...patch } : p)) } });
+  // another point of a kind: it opens empty under the others, ready to write in
+  const addPoint = (kind: PointKind) => {
+    const at = draft.form[kind].length;
+    if (at >= FEEDBACK_POINTS_MAX) return;
+    update({ ...draft, form: { ...draft.form, [kind]: [...draft.form[kind], emptyPoint()] } });
+    requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`[data-point="${kind}-${at}"] input`)?.focus());
+  };
+  // a point added can go again (the first of each kind stays) - asked first when something is written in it
+  const removePoint = async (kind: PointKind, i: number) => {
+    const p = draft.form[kind][i];
+    const name = pointName(kind, i, draft.form[kind].length);
+    if (!isBlankPoint(p) && !(await ask({ title: `להסיר את ${name}?`, body: 'מה שנכתב בה יימחק.', confirm: 'הסרה', cancel: 'ביטול', danger: true }))) return;
+    update({ ...draft, form: { ...draft.form, [kind]: draft.form[kind].filter((_, j) => j !== i) } });
+    requestAnimationFrame(() => document.getElementById(`fb-add-${kind}`)?.focus());
+  };
   const score = parseScore(draft.score);
   const badScore = draft.score !== '' && score === null;
   const band = score === null ? null : scoreBand(score);
@@ -98,7 +120,7 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
     setBusy(true);
     setError(null);
     try {
-      await api.post(`/api/experiences/${x.id}/feedback`, { ...draft.form, score });
+      await api.post(`/api/experiences/${x.id}/feedback`, { ...tidyFeedback(draft.form), score });
       setStored('');
       toast({ title: 'המשוב נשמר ונכנס לתיק הצוער', tone: 'green' });
       emitLocalChange('cadets', 'tasks');
@@ -166,30 +188,42 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
 
         <AxesGuide />
 
-        {KINDS.map((kind) =>
-          draft.form[kind].map((p, i) => {
-            const name = `${POINT_LABELS[kind]} ${i + 1}`;
-            return (
-              <fieldset key={`${kind}-${i}`} className={`fb-point ${KIND_TONE[kind]}`}>
-                <legend>
-                  <Icon name={KIND_ICON[kind]} size={14} /> {name}
-                </legend>
-                <div className="fb-point-row">
-                  <Field label="הנקודה" required className="grow">
-                    <input className="input" value={p.title} maxLength={300} onChange={(e) => setPoint(kind, i, { title: e.target.value })} placeholder={i === 0 ? TITLE_HINT[kind] : undefined} aria-label={name} />
+        {KINDS.map((kind) => (
+          <div key={kind} className="col gap-12 fb-kind">
+            {draft.form[kind].map((p, i) => {
+              const name = pointName(kind, i, draft.form[kind].length);
+              return (
+                <fieldset key={`${kind}-${i}`} className={`fb-point ${KIND_TONE[kind]}`} data-point={`${kind}-${i}`}>
+                  <legend>
+                    <Icon name={KIND_ICON[kind]} size={14} /> {name}
+                  </legend>
+                  {i >= FEEDBACK_POINTS && (
+                    <button type="button" className="icon-btn fb-point-remove" onClick={() => void removePoint(kind, i)} aria-label={`הסרת ${name}`} title={`הסרת ${name}`}>
+                      <Icon name="x" size={15} />
+                    </button>
+                  )}
+                  <div className="fb-point-row">
+                    <Field label="הנקודה" required className="grow">
+                      <input className="input" value={p.title} maxLength={300} onChange={(e) => setPoint(kind, i, { title: e.target.value })} placeholder={i === 0 ? TITLE_HINT[kind] : undefined} aria-label={name} />
+                    </Field>
+                    <Field label="ציר" required className="fb-axis">
+                      <AxisSelect value={p.axis} onChange={(v) => setPoint(kind, i, { axis: v })} label={`הציר של ${name}`} />
+                    </Field>
+                  </div>
+                  {axisAbout(p.axis) && <p className="tiny muted fb-axis-about">{axisAbout(p.axis)}</p>}
+                  <Field label="פירוט">
+                    <textarea className="textarea" rows={2} value={p.text} maxLength={2000} onChange={(e) => setPoint(kind, i, { text: e.target.value })} placeholder="מה ראית, ומתי" aria-label={`פירוט ${name}`} />
                   </Field>
-                  <Field label="ציר" required className="fb-axis">
-                    <AxisSelect value={p.axis} onChange={(v) => setPoint(kind, i, { axis: v })} label={`הציר של ${name}`} />
-                  </Field>
-                </div>
-                {axisAbout(p.axis) && <p className="tiny muted fb-axis-about">{axisAbout(p.axis)}</p>}
-                <Field label="פירוט">
-                  <textarea className="textarea" rows={2} value={p.text} maxLength={2000} onChange={(e) => setPoint(kind, i, { text: e.target.value })} placeholder="מה ראית, ומתי" aria-label={`פירוט ${name}`} />
-                </Field>
-              </fieldset>
-            );
-          }),
-        )}
+                </fieldset>
+              );
+            })}
+            {draft.form[kind].length < FEEDBACK_POINTS_MAX && (
+              <button type="button" id={`fb-add-${kind}`} className={`fb-add ${KIND_TONE[kind]}`} onClick={() => addPoint(kind)}>
+                <Icon name="plus" size={16} /> הוספת {POINT_LABELS[kind]}
+              </button>
+            )}
+          </div>
+        ))}
 
         <div className="field fb-score" role="group" aria-labelledby="fb-score-l">
           <span id="fb-score-l">

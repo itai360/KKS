@@ -10,6 +10,7 @@ import { numberedSections, type TalkType } from '@shared/talks';
 import type { CadetDetail } from '@shared/types';
 import { DocPager, ShareButton, useDocNav, type DocLink, WordButton } from '../components/DocNav';
 import { Icon } from '../components/Icon';
+import { PointsView } from '../components/PointsInput';
 import { SectionRail } from '../components/SectionRail';
 import { Loading, PageError } from '../components/ui';
 import { todayKey } from '../lib/format';
@@ -106,14 +107,18 @@ export function TalkPage() {
                 {section.title}
               </h2>
               {section.fields.length === 1 ? (
-                <p className="talk-answer">{answers[section.fields[0].id]}</p>
+                section.fields[0].points ? (
+                  <PointsView value={answers[section.fields[0].id]} className="talk-answer" />
+                ) : (
+                  <p className="talk-answer">{answers[section.fields[0].id]}</p>
+                )
               ) : (
                 <ul className="doc-list">
                   {section.fields
                     .filter((f) => answers[f.id])
                     .map((f) => (
                       <li key={f.id}>
-                        <b>{f.label}:</b> <span className="talk-answer">{answers[f.id]}</span>
+                        <b>{f.label}:</b> {f.points ? <PointsView value={answers[f.id]} className="talk-answer" /> : <span className="talk-answer">{answers[f.id]}</span>}
                       </li>
                     ))}
                 </ul>

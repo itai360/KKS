@@ -1,9 +1,11 @@
 // The feedback after an experience (משוב לאחר התנסות), one format for every experience - a role or a
-// broad one: a general written reference, two points to keep and two to improve - each the point, the
-// axis (ציר) it belongs to and a few words on it - and a score from 0 to 100, read on the legend below.
+// broad one: a general written reference, a point to keep and a point to improve - more of either may be
+// added - each the point, the axis (ציר) it belongs to and a few words on it - and a score from 0 to 100,
+// read on the legend below.
 
-/** how many points of each kind the format asks for */
-export const FEEDBACK_POINTS = 2;
+/** how many points of each kind the format asks for: one - and more may be added, up to the most */
+export const FEEDBACK_POINTS = 1;
+export const FEEDBACK_POINTS_MAX = 6;
 
 export interface FeedbackPoint {
   /** the point itself, in a few words */
@@ -128,13 +130,27 @@ export const emptyFeedback = (): ExperienceFeedbackForm => ({
   improve: Array.from({ length: FEEDBACK_POINTS }, emptyPoint),
 });
 
+/** nothing written in it */
+export const isBlankPoint = (p: FeedbackPoint) => !p.title.trim() && !p.axis.trim() && !p.text.trim();
+
+/** a point's name: "נקודה לשימור", numbered once there are more of its kind - "נקודה לשימור 2" */
+export const pointName = (kind: PointKind, i: number, of: number) => (of > 1 ? `${POINT_LABELS[kind]} ${i + 1}` : POINT_LABELS[kind]);
+
+/** the points as kept: one added and left empty is dropped - the first of each kind always stays */
+export function tidyFeedback(f: ExperienceFeedbackForm): ExperienceFeedbackForm {
+  const kept = (list: FeedbackPoint[]) => list.filter((p, i) => i === 0 || !isBlankPoint(p));
+  return { ...f, keep: kept(f.keep), improve: kept(f.improve) };
+}
+
 /** what the feedback still lacks, in words: the general reference, each point and its axis, the score */
-export function feedbackMissing(f: ExperienceFeedbackForm, score: number | null): string[] {
+export function feedbackMissing(raw: ExperienceFeedbackForm, score: number | null): string[] {
+  const f = tidyFeedback(raw);
   const out: string[] = [];
   if (!f.general.trim()) out.push('התייחסות כללית');
   for (const kind of ['keep', 'improve'] as const) {
+    if (!f[kind].length) out.push(POINT_LABELS[kind]);
     f[kind].forEach((p, i) => {
-      const name = `${POINT_LABELS[kind]} ${i + 1}`;
+      const name = pointName(kind, i, f[kind].length);
       if (!p.title.trim()) out.push(name);
       else if (!p.axis.trim()) out.push(`הציר של ${name}`);
     });
@@ -167,16 +183,16 @@ export function feedbackText(f: ExperienceFeedbackForm, score: number | null): s
     .join('\n\n');
 }
 
-/** anything as a form (null when it is not one): two points of each kind, every field a string */
+/** anything as a form (null when it is not one): one point of each kind at least, every field a string */
 export function asFeedbackForm(v: unknown): ExperienceFeedbackForm | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Partial<Record<keyof ExperienceFeedbackForm, unknown>>;
   const str = (s: unknown) => (typeof s === 'string' ? s : '');
-  const points = (list: unknown) =>
-    Array.from({ length: FEEDBACK_POINTS }, (_, i) => {
-      const p = (Array.isArray(list) ? list[i] : null) as Partial<Record<keyof FeedbackPoint, unknown>> | null;
-      return { title: str(p?.title), axis: str(p?.axis), text: str(p?.text) };
-    });
+  const points = (list: unknown) => {
+    const given = (Array.isArray(list) ? list : []).slice(0, FEEDBACK_POINTS_MAX) as (Partial<Record<keyof FeedbackPoint, unknown>> | null)[];
+    const read = given.map((p) => ({ title: str(p?.title), axis: str(p?.axis), text: str(p?.text) }));
+    return read.length >= FEEDBACK_POINTS ? read : [...read, ...Array.from({ length: FEEDBACK_POINTS - read.length }, emptyPoint)];
+  };
   return { general: str(o.general), keep: points(o.keep), improve: points(o.improve) };
 }
 

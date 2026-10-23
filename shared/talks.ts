@@ -11,6 +11,8 @@ export interface TalkField {
   id: string;
   label: string;
   hint?: string;
+  /** a list of points (strengths, what to improve): written a point at a time, more added with a button - kept a point a line */
+  points?: boolean;
 }
 
 export interface TalkSection {
@@ -25,6 +27,8 @@ export interface TalkSection {
 export type TalkAnswers = Record<string, string>;
 
 const one = (id: string, title: string, hint?: string, numbered = true): TalkSection => ({ id, title, numbered, fields: [{ id, label: title, hint }] });
+/** a numbered part that is a list of points */
+const points = (id: string, title: string): TalkSection => ({ id, title, numbered: true, fields: [{ id, label: title, points: true }] });
 
 const after = (...extra: TalkField[]): TalkSection => ({
   id: 'after',
@@ -77,8 +81,8 @@ export const TALK_FORMS: Record<TalkType, TalkSection[]> = {
       numbered: true,
       fields: [
         { id: 'goals', label: 'מול היעדים מהשיחה הקודמת' },
-        { id: 'strength', label: 'חוזקות שבאו לידי ביטוי' },
-        { id: 'improve', label: 'נקודות לשיפור' },
+        { id: 'strength', label: 'חוזקות שבאו לידי ביטוי', points: true },
+        { id: 'improve', label: 'נקודות לשיפור', points: true },
       ],
     },
     one('ahead', 'יעדים להמשך הקורס'),
@@ -93,8 +97,8 @@ export const TALK_FORMS: Record<TalkType, TalkSection[]> = {
       title: 'המשוב',
       numbered: true,
       fields: [
-        { id: 'good', label: 'מה היה טוב' },
-        { id: 'improve', label: 'מה לשפר' },
+        { id: 'good', label: 'מה היה טוב', points: true },
+        { id: 'improve', label: 'מה לשפר', points: true },
         { id: 'view', label: 'איך הצוער רואה את זה' },
       ],
     },
@@ -105,8 +109,8 @@ export const TALK_FORMS: Record<TalkType, TalkSection[]> = {
   'שיחה יזומה': [one('reason', 'סיבת השיחה', undefined, false), one('raised', 'מה עלה בשיחה'), one('agreed', 'מה סוכם'), after()],
   'שיחת סיום': [
     one('look', 'מבט לאחור על הקורס', undefined, false),
-    one('strengths', 'חוזקות להמשך'),
-    one('develop', 'נקודות לפיתוח בתפקיד הבא'),
+    points('strengths', 'חוזקות להמשך'),
+    points('develop', 'נקודות לפיתוח בתפקיד הבא'),
     one('personal', 'מילה אישית'),
     after(),
   ],

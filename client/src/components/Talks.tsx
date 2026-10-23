@@ -5,7 +5,7 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { TALK_COURSE_ORDER, TALK_TYPES } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
-import { numberedSections, TALK_FORMS, TALK_HIGHLIGHTS, talkFields, type TalkAnswers, type TalkType } from '@shared/talks';
+import { numberedSections, TALK_FORMS, TALK_HIGHLIGHTS, talkFields, type TalkAnswers, type TalkField, type TalkType } from '@shared/talks';
 import type { Cadet, CadetDetail, CadetRecord } from '@shared/types';
 import { api } from '../lib/api';
 import { useDraft } from '../lib/draft';
@@ -13,11 +13,18 @@ import { isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { Icon } from './Icon';
+import { PointsInput, PointsView } from './PointsInput';
 import { TalkRecording } from './TalkRecording';
 import { useToast } from './Toasts';
 import { DateInput, ErrorBox, Field, Modal, Select } from './ui';
 
 const asType = (s: string): TalkType => ((TALK_TYPES as readonly string[]).includes(s) ? (s as TalkType) : 'שיחה יזומה');
+
+/** an answer as it reads: a list of points as a list, any other as its text */
+function TalkAnswer({ field, value, className = '' }: { field: TalkField; value: string; className?: string }) {
+  return field.points ? <PointsView value={value} className={className} /> : <span className={className}>{value}</span>;
+}
+
 const byDate = (a: CadetRecord, b: CadetRecord) => b.occurredOn.localeCompare(a.occurredOn) || b.id - a.id;
 
 /** the talks filled in as forms, newest first */
@@ -195,20 +202,32 @@ export function TalkDialog({ cadet, records, record, onClose }: { cadet: Cadet; 
               {section.title}
             </legend>
             {section.fields.length === 1 ? (
-              <textarea
-                className={`textarea${fromRec.has(section.fields[0].id) ? ' from-rec' : ''}`}
-                rows={section.id === 'summary' ? 3 : 2}
-                value={draft.answers[section.fields[0].id] ?? ''}
-                placeholder={section.fields[0].hint}
-                aria-label={section.title}
-                onChange={(e) => answer(section.fields[0].id, e.target.value)}
-              />
+              section.fields[0].points ? (
+                <PointsInput className={fromRec.has(section.fields[0].id) ? 'from-rec' : ''} value={draft.answers[section.fields[0].id] ?? ''} label={section.title} onChange={(v) => answer(section.fields[0].id, v)} />
+              ) : (
+                <textarea
+                  className={`textarea${fromRec.has(section.fields[0].id) ? ' from-rec' : ''}`}
+                  rows={section.id === 'summary' ? 3 : 2}
+                  value={draft.answers[section.fields[0].id] ?? ''}
+                  placeholder={section.fields[0].hint}
+                  aria-label={section.title}
+                  onChange={(e) => answer(section.fields[0].id, e.target.value)}
+                />
+              )
             ) : (
-              section.fields.map((f) => (
-                <Field key={f.id} label={f.label}>
-                  <textarea className={`textarea${fromRec.has(f.id) ? ' from-rec' : ''}`} rows={section.id === 'after' ? 1 : 2} value={draft.answers[f.id] ?? ''} placeholder={f.hint} onChange={(e) => answer(f.id, e.target.value)} />
-                </Field>
-              ))
+              section.fields.map((f) =>
+                f.points ? (
+                  // points: a group of their own - a label around them would send its taps to the first button
+                  <div key={f.id} className="field" role="group" aria-labelledby={`talk-${f.id}`}>
+                    <span id={`talk-${f.id}`}>{f.label}</span>
+                    <PointsInput className={fromRec.has(f.id) ? 'from-rec' : ''} value={draft.answers[f.id] ?? ''} label={f.label} onChange={(v) => answer(f.id, v)} />
+                  </div>
+                ) : (
+                  <Field key={f.id} label={f.label}>
+                    <textarea className={`textarea${fromRec.has(f.id) ? ' from-rec' : ''}`} rows={section.id === 'after' ? 1 : 2} value={draft.answers[f.id] ?? ''} placeholder={f.hint} onChange={(e) => answer(f.id, e.target.value)} />
+                  </Field>
+                ),
+              )
             )}
           </fieldset>
         ))}
@@ -259,14 +278,18 @@ export function TalkView({ record, cadet, records }: { record: CadetRecord; cade
                   {section.title}
                 </div>
                 {section.fields.length === 1 ? (
-                  <p>{answers[section.fields[0].id]}</p>
+                  section.fields[0].points ? (
+                    <TalkAnswer field={section.fields[0]} value={answers[section.fields[0].id]} />
+                  ) : (
+                    <p>{answers[section.fields[0].id]}</p>
+                  )
                 ) : (
                   <ul>
                     {section.fields
                       .filter((f) => answers[f.id])
                       .map((f) => (
                         <li key={f.id}>
-                          <b>{f.label}:</b> {answers[f.id]}
+                          <b>{f.label}:</b> <TalkAnswer field={f} value={answers[f.id]} />
                         </li>
                       ))}
                   </ul>

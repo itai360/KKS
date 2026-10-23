@@ -17,7 +17,7 @@ import {
 } from '../../shared/constants';
 import { addDays, isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import { byHe, byTeamAndName } from '../../shared/sort';
-import { FEEDBACK_POINTS, feedbackMissing, feedbackText, pointsText, readFeedbackForm, SCORE_MAX, scoreText } from '../../shared/experienceFeedback';
+import { FEEDBACK_POINTS, FEEDBACK_POINTS_MAX, feedbackMissing, feedbackText, pointsText, readFeedbackForm, SCORE_MAX, scoreText, tidyFeedback } from '../../shared/experienceFeedback';
 import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, experienceName, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
 import type { Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
@@ -961,7 +961,7 @@ function openFeedbackTask(actor: UserRow | null, x: ExperienceRow, now: string =
     {
       title: `משוב התנסות: ${x.cadet_name} - ${experienceName(x.kind, x.role, x.span)}`,
       description: [
-        `ההתנסות של ${x.cadet_name} מסתיימת ב-${x.end_date.split('-').reverse().join('.')}: להוריד משוב על ההתנסות בפורמט המשוב - התייחסות כללית, שתי נקודות לשימור ושתיים לשיפור (כל אחת עם הציר שלה) וציון 0-100. המשימה נסגרת מעצמה כשהמשוב נמסר.`,
+        `ההתנסות של ${x.cadet_name} מסתיימת ב-${x.end_date.split('-').reverse().join('.')}: להוריד משוב על ההתנסות בפורמט המשוב - התייחסות כללית, נקודה לשימור ונקודה לשיפור - ועוד אם צריך (כל אחת עם הציר שלה) וציון 0-100. המשימה נסגרת מעצמה כשהמשוב נמסר.`,
         x.goals && `מטרות ההתנסות:\n${x.goals}`,
       ]
         .filter(Boolean)
@@ -1077,14 +1077,17 @@ const pointSchema = z.object({
   axis: z.string().trim().max(60, 'ציר - עד 60 תווים'),
   text: z.string().trim().max(2000, 'פירוט נקודה - עד 2000 תווים').optional().default(''),
 });
-const twoPoints = z.array(pointSchema).length(FEEDBACK_POINTS, 'במשוב שתי נקודות לשימור ושתי נקודות לשיפור');
+const points = z
+  .array(pointSchema)
+  .min(FEEDBACK_POINTS, 'במשוב לפחות נקודה אחת לשימור ונקודה אחת לשיפור')
+  .max(FEEDBACK_POINTS_MAX, `במשוב עד ${FEEDBACK_POINTS_MAX} נקודות לשימור ועד ${FEEDBACK_POINTS_MAX} לשיפור`);
 
 /** the feedback in the course's format (shared/experienceFeedback.ts): nothing of it may be missing but the words under a point */
 export const feedbackSchema = z
   .object({
     general: z.string().trim().max(4000, 'ההתייחסות הכללית - עד 4000 תווים'),
-    keep: twoPoints,
-    improve: twoPoints,
+    keep: points,
+    improve: points,
     score: z.number().int('ציון שלם בין 0 ל-100').min(0, 'ציון בין 0 ל-100').max(SCORE_MAX, 'ציון בין 0 ל-100'),
   })
   .superRefine((f, ctx) => {
@@ -1107,14 +1110,15 @@ export function giveFeedback(actor: UserRow, id: number, raw: z.input<typeof fee
   const x = experienceRow(id);
   if (!experiencePerms(actor, x).canGiveFeedback) throw forbidden('רק החונך, מפקד הצוות או מפקד הקורס נותנים משוב');
   const f = feedbackSchema.parse(raw);
-  const form = { general: f.general, keep: f.keep, improve: f.improve };
+  // a point added and left empty is not kept
+  const form = tidyFeedback({ general: f.general, keep: f.keep, improve: f.improve });
   const at = nowIso();
   db().tx(() => {
     // the form whole, and its parts as text where feedback was read before it (the evaluation file, search)
     db().run(
       "UPDATE experiences SET status = 'done', strengths = ?, improvements = ?, feedback = ?, feedback_form = ?, score = ?, evaluated_by = ?, evaluated_at = ? WHERE id = ?",
-      pointsText(f.keep),
-      pointsText(f.improve),
+      pointsText(form.keep),
+      pointsText(form.improve),
       f.general,
       JSON.stringify(form),
       f.score,

@@ -96,8 +96,8 @@ describe('the feedback as a Word file', () => {
   it('before the feedback is given: the form, its details filled in and the rest to write', () => {
     const xml = readZip(feedbackDocx({ ...doc, form: null, score: null })).get('word/document.xml')!;
     expect(xml).toContain('נועם לוי');
-    expect(xml.match(/נקודה לשימור: /g)).toHaveLength(2);
-    expect(xml.match(/נקודה לשיפור: /g)).toHaveLength(2);
+    expect(xml.match(/נקודה לשימור: /g)).toHaveLength(1);
+    expect(xml.match(/נקודה לשיפור: /g)).toHaveLength(1);
     expect(xml).toContain('(ציר:                    ) ');
     expect(xml).not.toContain('C9D6EC');
     expect(xml).not.toContain('פקודות ברורות');

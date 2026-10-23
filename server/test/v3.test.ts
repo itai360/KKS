@@ -262,18 +262,23 @@ describe('the feedback task of an experience', () => {
 });
 
 describe("the feedback after an experience, in the course's format", () => {
-  it('asks for the general reference, two points to keep and two to improve with their axes, and a score of 0-100', async () => {
+  it('asks for the general reference, a point to keep and a point to improve (more may be added) with their axes, and a score of 0-100', async () => {
     const { a } = await teamWithCadets();
     const x = (await c.s1.post('/api/experiences', { cadetId: a, kind: 'broad', role: 'קב"ט', span: 'first_half', startDate: '2026-09-01', endDate: '2026-10-04', mentorId: c.ids.s2 })).body;
     const give = (body: object) => c.s2.post(`/api/experiences/${x.id}/feedback`, body);
     // what is missing, by name - the words under a point may stay empty
     const blank = { title: '', axis: '', text: '' };
+    // a point added and left empty does not count; one with words in it needs its point and axis
     const res = await give(feedback(70, { general: ' ', keep: [{ title: 'יוזמה', axis: '', text: '' }, blank] }));
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('חסר במשוב: התייחסות כללית, הציר של נקודה לשימור 1, נקודה לשימור 2');
+    expect(res.body.error).toBe('חסר במשוב: התייחסות כללית, הציר של נקודה לשימור');
+    const half = await give(feedback(70, { improve: [feedback().improve[0], { title: '', axis: '', text: 'רק פירוט' }] }));
+    expect(half.body.error).toBe('חסר במשוב: נקודה לשיפור 2');
     expect((await give(feedback(101))).body.error).toBe('ציון בין 0 ל-100');
     expect((await give(feedback(80.5))).body.error).toBe('ציון שלם בין 0 ל-100');
-    expect((await give(feedback(80, { improve: [feedback().improve[0]] }))).body.error).toBe('במשוב שתי נקודות לשימור ושתי נקודות לשיפור');
+    expect((await give(feedback(80, { improve: [] }))).body.error).toBe('במשוב לפחות נקודה אחת לשימור ונקודה אחת לשיפור');
+    const many = Array.from({ length: 7 }, (_, i) => ({ title: `נקודה ${i + 1}`, axis: 'עבודת צוות', text: '' }));
+    expect((await give(feedback(80, { keep: many }))).body.error).toBe('במשוב עד 6 נקודות לשימור ועד 6 לשיפור');
     // the experience stays open until the feedback is whole
     expect((await c.s2.get('/api/experiences')).body.find((e: { id: number }) => e.id === x.id)).toMatchObject({ status: 'planned', score: null, feedbackForm: null });
 
@@ -287,6 +292,20 @@ describe("the feedback after an experience, in the course's format", () => {
     expect((await c.s1.get(`/api/cadets/${a}`)).body.records[0].title).toBe('משוב התנסות: רוחב - קב"ט (חצי קורס ראשון)');
     // an axis typed for a point is offered next time, beside the evaluation criteria
     expect((await c.s3.get('/api/experiences/feedback-axes')).body).toEqual(['עבודת צוות', 'פיקוד והובלה', 'ציר אישי']);
+  });
+
+  it('takes one point of each kind, and more when added - one added and left empty is dropped', async () => {
+    const { a } = await teamWithCadets();
+    const make = async (startDate: string, endDate: string) => (await c.s1.post('/api/experiences', { cadetId: a, role: 'נווט', startDate, endDate, mentorId: c.ids.s2 })).body;
+    const first = await make('2026-09-01', '2026-09-10');
+    const one = feedback(80, { keep: [feedback().keep[0]], improve: [feedback().improve[0]] });
+    const saved = (await c.s2.post(`/api/experiences/${first.id}/feedback`, one)).body;
+    expect(saved.feedbackForm).toMatchObject({ keep: [{ title: 'החלטיות' }], improve: [{ title: 'שיתוף הסגנים' }] });
+    expect(saved.feedbackForm.keep).toHaveLength(1);
+    const second = await make('2026-09-20', '2026-09-30');
+    const keep = [...feedback().keep, { title: 'אחריות', axis: 'ערכים - אחריות', text: '' }, { title: '', axis: '', text: '' }];
+    const more = (await c.s2.post(`/api/experiences/${second.id}/feedback`, feedback(90, { keep }))).body;
+    expect(more.feedbackForm.keep.map((p: { title: string }) => p.title)).toEqual(['החלטיות', 'קשר רציף עם הסגל', 'אחריות']);
   });
 
   it('reads the score on the legend: each band up to and including its top', async () => {
