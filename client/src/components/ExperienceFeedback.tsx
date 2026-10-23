@@ -25,7 +25,7 @@ import { experienceName } from '@shared/experiences';
 import { DOCX_TYPE, feedbackDocName, feedbackDocx } from '@shared/feedbackDocx';
 import type { Experience } from '@shared/types';
 import { api } from '../lib/api';
-import { saveFile } from '../lib/download';
+import { shareOrSave } from '../lib/download';
 import { useDraft } from '../lib/draft';
 import { emitLocalChange } from '../lib/realtime';
 import { Icon } from './Icon';
@@ -276,18 +276,22 @@ function AxesGuide() {
   );
 }
 
-/** the feedback as a Word file, in the format on paper */
+/**
+ * The experience as a Word file in the feedback's format - Google Drive opens it as Google Docs: the feedback
+ * given, or (before it is given) the form with the cadet, the experience and its date filled in.
+ */
 export function FeedbackWordButton({ x, small }: { x: Experience; small?: boolean }) {
-  if (!x.feedbackForm) return null;
-  const form = x.feedbackForm;
+  const given = x.status === 'done';
+  if (given && !x.feedbackForm) return null;
+  const form = given ? x.feedbackForm : null;
   const download = () => {
     const topic = experienceName(x.kind, x.role, x.span);
-    const file = feedbackDocx({ cadetName: x.cadetName, topic, date: experienceDates(x), form, score: x.score });
-    void saveFile(feedbackDocName(x.cadetName, topic), new Blob([file as BlobPart], { type: DOCX_TYPE }));
+    const file = feedbackDocx({ cadetName: x.cadetName, topic, date: experienceDates(x), form, score: given ? x.score : null });
+    void shareOrSave(feedbackDocName(x.cadetName, topic), new Blob([file as BlobPart], { type: DOCX_TYPE }));
   };
   return (
-    <button type="button" className={`btn btn-ghost${small ? ' btn-sm' : ''}`} onClick={download} title="המשוב כקובץ Word, בפורמט המשוב">
-      <Icon name="download" /> קובץ Word
+    <button type="button" className={`btn btn-ghost${small ? ' btn-sm' : ''}`} onClick={download} title={given ? 'המשוב כקובץ Word - נפתח ב-Google Docs' : 'טופס המשוב עם פרטי ההתנסות, למילוי - Word / Google Docs'}>
+      <Icon name="file" /> {given ? 'Docs / Word' : 'טופס משוב'}
     </button>
   );
 }

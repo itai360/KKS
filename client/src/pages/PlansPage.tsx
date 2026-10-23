@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { shortDate } from '@shared/dates';
 import type { PlanDocument, PlanSectionKey, PlansOverview, PlanStatus } from '@shared/types';
-import { DocPager, ShareButton, useDocNav, type DocLink } from '../components/DocNav';
+import { DocPager, ShareButton, useDocNav, type DocLink, WordButton } from '../components/DocNav';
 import { ApproveDialog, dateRange as range, EditButton, EditDialog, KIND_LABELS, PLAN_STATUS as STATUS, Prep, StatusSteps, whenOf as when, Wording } from '../components/PlanParts';
 import { Icon } from '../components/Icon';
 import { SectionRail, type RailItem } from '../components/SectionRail';
@@ -323,6 +323,7 @@ export function PlanPage() {
           </button>
         )}
         <ShareButton title={`אישור תוכנית - ${w.name}`} />
+        <WordButton title={`אישור תוכנית - ${w.name}`} />
         <button className="btn btn-primary" onClick={() => window.print()}>
           <Icon name="print" /> הדפסה / PDF
         </button>

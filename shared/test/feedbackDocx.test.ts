@@ -93,6 +93,16 @@ describe('the feedback as a Word file', () => {
     expect(xml).toMatch(/w:fill="C9D6EC"\/><w:vAlign w:val="center"\/><\/w:tcPr><w:p><w:pPr><w:bidi\/><w:spacing w:after="0"\/><w:jc w:val="center"\/><\/w:pPr><w:r><w:rPr><w:b\/><w:bCs\/><w:sz w:val="20"\/><w:szCs w:val="20"\/><w:rtl\/><\/w:rPr><w:t xml:space="preserve">מצוין</);
   });
 
+  it('before the feedback is given: the form, its details filled in and the rest to write', () => {
+    const xml = readZip(feedbackDocx({ ...doc, form: null, score: null })).get('word/document.xml')!;
+    expect(xml).toContain('נועם לוי');
+    expect(xml.match(/נקודה לשימור: /g)).toHaveLength(2);
+    expect(xml.match(/נקודה לשיפור: /g)).toHaveLength(2);
+    expect(xml).toContain('(ציר:                    ) ');
+    expect(xml).not.toContain('C9D6EC');
+    expect(xml).not.toContain('פקודות ברורות');
+  });
+
   it('is named for the cadet and the experience, as a file name can hold it', () => {
     expect(feedbackDocName('נועם לוי', 'מ"מ בתרגיל / שלב א')).toBe('משוב לאחר התנסות - נועם לוי - מ״מ בתרגיל שלב א.docx');
   });

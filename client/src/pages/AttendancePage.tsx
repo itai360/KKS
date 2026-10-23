@@ -14,7 +14,7 @@ import { useSwipeAction } from '../components/swipeAction';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
-import { saveCsv } from '../lib/csv';
+import { saveSheet } from '../lib/sheet';
 import { todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { emitLocalChange } from '../lib/realtime';
@@ -135,14 +135,14 @@ export function AttendancePage() {
               disabled={!data}
               onClick={() =>
                 data &&
-                void saveCsv(
+                void saveSheet(
                   `מצבה-${date}`,
                   ['צוות', 'שם', 'מצב', 'הערה', 'סומן ע"י'],
                   data.entries.map((e) => [e.teamName ?? '', e.fullName, e.status ? ATTENDANCE_LABELS[e.status] : 'לא סומן', e.note, e.markedByName ?? '']),
                 )
               }
             >
-              <Icon name="download" /> ייצוא
+              <Icon name="download" /> Sheets / אקסל
             </button>
             <button className="btn" onClick={() => window.print()} aria-label="הדפסה">
               <Icon name="print" />

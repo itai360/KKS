@@ -42,6 +42,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { sortHe } from '@shared/sort';
+import { WordButton } from './DocNav';
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -300,6 +301,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
               <Icon name="print" />
               <span className="hide-mobile">הדפסה</span>
             </button>
+            <WordButton title={d.title} target=".dform-page" />
             {d.canEdit && (
               <>
                 <button className="btn" onClick={onEdit}>

@@ -15,14 +15,14 @@ import { Bar, CountUp, Empty, ErrorBox, Loading, openable, PageHead, Ring } from
 import { dateKeyOf, fmtAgo, fmtDateTime, fmtLongDate, todayKey } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { api, qs } from '../lib/api';
-import { saveCsv } from '../lib/csv';
+import { saveSheet } from '../lib/sheet';
 import { useSession } from '../lib/session';
 import { prefetch, useApi } from '../lib/useApi';
 
 /** The discipline records as a spreadsheet: one week, or the whole course. */
 async function exportDiscipline(from?: string, to?: string): Promise<void> {
   const log = await api.get<DisciplineLogEntry[]>(`/api/discipline/log${qs({ from, to })}`);
-  await saveCsv(
+  await saveSheet(
     from ? `משמעת-${from}` : 'משמעת-כל-הקורס',
     ['תאריך', 'צוער', 'צוות', 'נושא', 'מקרה', 'פעם', 'הערת משמעת', 'חומרה', 'כותרת', 'פירוט', 'נרשם על ידי'],
     log.map((r) => [
@@ -54,7 +54,7 @@ function WeeklyDiscipline({ d, from, to }: { d: DisciplineSummary; from: string;
           {d.events} {d.events === 1 ? 'אירוע' : 'אירועים'} · {d.notes} {d.notes === 1 ? 'הערת משמעת' : 'הערות משמעת'}
         </span>
         <span className="row gap-4 no-print">
-          <button className="btn btn-sm" disabled={!d.events} onClick={() => save(from, to)} title="רישומי המשמעת של השבוע לאקסל">
+          <button className="btn btn-sm" disabled={!d.events} onClick={() => save(from, to)} title="רישומי המשמעת של השבוע - נפתח ב-Google Sheets ובאקסל">
             <Icon name="download" size={14} /> ייצוא השבוע
           </button>
           <button className="btn btn-sm btn-ghost" onClick={() => save()} title="כל רישומי המשמעת מתחילת הקורס">

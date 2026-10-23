@@ -14,7 +14,7 @@ import { finishedJustNow, leaveClass, noteFinished, useLeaving, type LeavePhase 
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { saveCsv } from '../lib/csv';
+import { saveSheet } from '../lib/sheet';
 import { fmtDateTime } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -121,9 +121,9 @@ export function TasksPage() {
               className="btn hide-mobile"
               onClick={() => data && exportCsv(data, userName).catch((e: Error) => toast({ title: e.message, tone: 'red' }))}
               disabled={!data?.length}
-              title="ייצוא הרשימה המסוננת לאקסל"
+              title="ייצוא הרשימה המסוננת - נפתח ב-Google Sheets ובאקסל"
             >
-              <Icon name="download" /> אקסל
+              <Icon name="download" /> Sheets / אקסל
             </button>
             <button className="btn btn-primary" onClick={() => newTask({ weekId: f.week ? Number(f.week) : undefined })}>
               <Icon name="plus" /> משימה
@@ -468,7 +468,7 @@ function BoardCard({ t, folded }: { t: Task; folded: boolean }) {
 
 // each person's copy on its own line - the group in its own column - so it can be followed in the sheet
 function exportCsv(tasks: Task[], userName: (id: number) => string) {
-  return saveCsv(
+  return saveSheet(
     'משימות',
     ['משימה', 'אחראי', 'קבוצה', 'משתתפים', 'יצר', 'תחום', 'שבוע', 'דד-ליין', 'עדיפות', 'סטטוס', 'באיחור', 'הושלמה'],
     tasks.map((t) => [

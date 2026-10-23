@@ -9,7 +9,7 @@ import { Link, useParams } from 'react-router';
 import { ABSENCE_REASON_LABELS } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName } from '@shared/dates';
 import type { PlanEvent, ThreeWeekPlan, ThreeWeekWeek, Week } from '@shared/types';
-import { DocPager, ShareButton, useDocNav, type DocLink } from '../components/DocNav';
+import { DocPager, ShareButton, useDocNav, type DocLink, WordButton } from '../components/DocNav';
 import { PlanCalendars, useReloadWhileLoading } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { ApproveDialog, dateRange, EditButton, EditDialog, KIND_LABELS, PLAN_STATUS, Prep, StatusSteps, whenOf, Wording } from '../components/PlanParts';
@@ -313,6 +313,7 @@ export function ThreeWeekPage() {
           </button>
         )}
         <ShareButton title={`${NAME} - ${label}`} />
+        <WordButton title={`${NAME} - ${label}`} />
         <button className="btn btn-primary" onClick={() => window.print()}>
           <Icon name="print" /> הדפסה / PDF
         </button>

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { diffDays, shortDate } from '@shared/dates';
+import { diffDays, fmtDateIL, shortDate } from '@shared/dates';
+import { feedbackText } from '@shared/experienceFeedback';
 import { BROAD_EXPERIENCES, EXPERIENCE_KIND_LABELS, EXPERIENCE_SPANS, SPAN_LABELS, SPAN_SHORT, spanDates, type ExperienceKind, type ExperienceSpan } from '@shared/experiences';
 import { byHe } from '@shared/sort';
 import type { Cadet, Experience, Team } from '@shared/types';
@@ -18,8 +19,9 @@ import { haptic } from '../lib/haptics';
 import { useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
-import { useApi } from '../lib/useApi';
+import { saveSheet } from '../lib/sheet';
 import { onTabListKey, tabProps } from '../lib/tabKeys';
+import { useApi } from '../lib/useApi';
 
 const PHASE: Record<Experience['phase'], { label: string; tone: string }> = {
   planned: { label: 'מתוכננת', tone: 'gray' },
@@ -28,6 +30,28 @@ const PHASE: Record<Experience['phase'], { label: string; tone: string }> = {
   done: { label: 'הושלמה', tone: 'green' },
 };
 const PHASE_ORDER: Record<Experience['phase'], number> = { awaiting_feedback: 0, active: 1, planned: 2, done: 3 };
+
+/** the experiences shown, as a sheet: one a row - the feedback in its own column where it may be seen */
+function exportList(list: Experience[]) {
+  return saveSheet(
+    'התנסויות',
+    ['צוער', 'צוות', 'התנסות', 'סוג', 'מתאריך', 'עד תאריך', 'שבוע', 'מפקד חונך', 'מצב', 'ציון', 'סומן במעקב', 'משוב'],
+    list.map((x) => [
+      x.cadetName,
+      x.teamName ?? '',
+      x.role,
+      EXPERIENCE_KIND_LABELS[x.kind],
+      fmtDateIL(x.startDate),
+      fmtDateIL(x.endDate),
+      x.weekName ?? '',
+      x.mentorName ?? '',
+      PHASE[x.phase].label,
+      x.canSeeFeedback ? x.score : null,
+      x.markedAt ? (x.markedByName ?? 'כן') : '',
+      x.canSeeFeedback && x.feedbackForm ? feedbackText(x.feedbackForm, x.score) : '',
+    ]),
+  );
+}
 
 type Tab = 'all' | 'mine' | 'broad' | 'awaiting_feedback' | 'active' | 'planned' | 'done';
 const inTab = (t: Tab, x: Experience, userId: number) => (t === 'all' ? true : t === 'mine' ? x.mentorId === userId : t === 'broad' ? x.kind === 'broad' : x.phase === t);
@@ -99,14 +123,17 @@ export function ExperiencesPage() {
         title="התנסויות"
         sub="שיבוץ צוערים לתפקידים, מטרות, מפקד חונך, משוב והערכה. המשוב נכנס אוטומטית לתיק הצוער."
         actions={
-          canCreate && (
-            <>
-              {view === 'list' && <BulkToggle />}
+          <>
+            {canCreate && view === 'list' && <BulkToggle />}
+            <button className="btn" disabled={!list.length} onClick={() => void exportList(list)} title="ההתנסויות שבסינון - נפתח ב-Google Sheets ובאקסל">
+              <Icon name="download" /> Sheets / אקסל
+            </button>
+            {canCreate && (
               <button className="btn btn-primary" onClick={() => setCreating(true)}>
                 <Icon name="plus" /> התנסות
               </button>
-            </>
-          )
+            )}
+          </>
         }
       />
       <div className="exp-view">
@@ -217,8 +244,8 @@ export function ExperienceCard({ x, compact, leaving }: { x: Experience; compact
     wasStatus.current = x.status;
   }, [x.status]);
   const p = PHASE[x.phase];
-  // the feedback given in the format comes as a Word file too
-  const wordFile = x.status === 'done' && x.canSeeFeedback && !!x.feedbackForm;
+  // the feedback given in the format comes as a Word file too - and before it is given, its form to fill in
+  const wordFile = x.status === 'done' ? x.canSeeFeedback && !!x.feedbackForm : x.canGiveFeedback || x.canEdit;
   return (
     <SwipeRow itemId={x.id} label={`${x.role} - ${x.cadetName}`} leaving={leaving}>
     <div className={`card card-pad tone-edge t-${p.tone}${justDone ? ' just-cleared' : ''}`} style={{ padding: compact ? 12 : 16 }}>

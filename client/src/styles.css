@@ -5620,6 +5620,15 @@ button.stat:disabled {
   background: var(--gray-bg);
 }
 
+/* a document made off the screen for a moment, for its Word file (EvaluationsPage) */
+.doc-offscreen {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 820px;
+  pointer-events: none;
+}
+
 /* ---------- debrief forms (components/DebriefFormView.tsx) ---------- */
 
 .prewrap {

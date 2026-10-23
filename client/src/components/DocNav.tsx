@@ -11,6 +11,7 @@ import { Icon } from './Icon';
 import { usePeriodSwipe } from './periodSwipe';
 import { usePhonePicker } from './pickers';
 import { useToast } from './Toasts';
+import { saveElementDocx } from '../lib/docExport';
 
 export interface DocLink {
   /** the address it opens at */
@@ -96,6 +97,33 @@ export function DocPager({ prev, next, position, noun }: { prev: DocLink | null;
         <Icon name="chevronLeft" size={16} />
       </button>
     </nav>
+  );
+}
+
+/**
+ * The document on the page as a Word file - Google Drive opens it as Google Docs; on a phone, the share
+ * sheet offers Drive itself. `target` finds the document (the page's article by default).
+ */
+export function WordButton({ title, target = 'article.doc', before, after }: { title: string; target?: string; before?: () => Promise<HTMLElement | null>; after?: () => void }) {
+  const toast = useToast();
+  const save = async () => {
+    try {
+      const el = before ? await before() : document.querySelector<HTMLElement>(target);
+      if (!el) throw new Error('המסמך לא נמצא בדף');
+      const saved = saveElementDocx(el, title);
+      // the document was read the moment the file was made
+      after?.();
+      await saved;
+    } catch (e) {
+      after?.();
+      toast({ title: 'הקובץ לא נוצר', body: (e as Error).message, tone: 'red' });
+    }
+  };
+  return (
+    <button type="button" className="btn doc-word" onClick={() => void save()} title="המסמך כקובץ Word - נפתח ב-Google Docs">
+      <Icon name="file" /> <span className="hide-mobile">Docs / Word</span>
+      <span className="only-mobile">Word</span>
+    </button>
   );
 }
 

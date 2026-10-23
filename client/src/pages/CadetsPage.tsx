@@ -39,7 +39,7 @@ import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
 import { api, changedFields, qs } from '../lib/api';
 import { telHref, waHref } from '../lib/contact';
-import { saveCsv } from '../lib/csv';
+import { saveSheet } from '../lib/sheet';
 import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
 import { useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
@@ -106,10 +106,10 @@ export function CadetsPage() {
             {canAdd && <BulkToggle />}
             <button
               className="btn"
-              title="ייצוא הרשימה המסוננת לאקסל"
+              title="ייצוא הרשימה המסוננת - נפתח ב-Google Sheets ובאקסל"
               disabled={!shown.length}
               onClick={() =>
-                void saveCsv(
+                void saveSheet(
                   'צוערים',
                   ['שם מלא', 'מספר אישי', 'צוות', 'טלפון', 'סטטוס', 'רישומים', 'ציון ממוצע', 'משמעת', 'הערות משמעת', 'שיחות', 'רישום אחרון', 'הערות'],
                   shown.map((c) => [
@@ -129,7 +129,7 @@ export function CadetsPage() {
                 ).catch((e: Error) => toast({ title: e.message, tone: 'red' }))
               }
             >
-              <Icon name="download" /> ייצוא
+              <Icon name="download" /> Sheets / אקסל
             </button>
             {!viewing && (
               <button className="btn" onClick={() => setDialog('discipline')} title="רישום משמעת לצוער, בלי לפתוח את התיק">

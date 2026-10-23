@@ -10,7 +10,7 @@ import { ABSENCE_REASON_LABELS, STATUS_LABELS, WEEK_STATUS_LABELS } from '@share
 import { addDays, shortDate, weekdayName } from '@shared/dates';
 import { goalsFromText, LESSON_DECISION_LABELS } from '@shared/debriefForms';
 import type { Absence, BankLesson, Task, WeekDetail } from '@shared/types';
-import { DocPager, ShareButton, useDocNav, type DocLink } from '../components/DocNav';
+import { DocPager, ShareButton, useDocNav, type DocLink, WordButton } from '../components/DocNav';
 import { Icon } from '../components/Icon';
 import { SectionRail, type RailItem } from '../components/SectionRail';
 import { Loading, PageError } from '../components/ui';
@@ -67,6 +67,7 @@ export function WeekOrderPage() {
           <span className="only-mobile">השבוע</span>
         </Link>
         <ShareButton title={`פקודת שבוע ${w.number} - ${w.name}`} />
+        <WordButton title={`פקודת שבוע ${w.number} - ${w.name}`} />
         <button className="btn btn-primary" onClick={() => window.print()}>
           <Icon name="print" /> הדפסה / PDF
         </button>

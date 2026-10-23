@@ -19,7 +19,7 @@ import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Seg, Select, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
-import { saveCsv } from '../lib/csv';
+import { saveSheet } from '../lib/sheet';
 import { isoAt, todayKey } from '../lib/format';
 import { useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
@@ -27,6 +27,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { ask } from '../components/Confirm';
 import { onTabListKey, tabProps } from '../lib/tabKeys';
+import { WordButton } from '../components/DocNav';
 
 const ADD_PLACEHOLDER: Record<DebriefItemKind, string> = {
   fact: 'הוספת עובדה...',
@@ -249,14 +250,14 @@ function LessonsBank() {
             <button
               className="btn"
               onClick={() =>
-                void saveCsv(
+                void saveSheet(
                   'בנק-לקחים',
                   ['עבור', 'לקח', 'אחראי', 'תחקיר', 'תאריך', 'נכתב על ידי'],
                   list.map((l) => [l.target, l.body, l.ownerName, l.debriefTitle, l.occurredOn, l.createdByName]),
                 )
               }
             >
-              <Icon name="download" /> ייצוא
+              <Icon name="download" /> Sheets / אקסל
             </button>
           </div>
           {!list.length && <Empty icon="search" title="לא נמצאו לקחים" />}
@@ -576,7 +577,7 @@ export function DebriefPage() {
   };
 
   return (
-    <div className="page">
+    <div className="page debrief-page">
       <PageHead
         eyebrow={
           <Link to="/debriefs" className="muted">
@@ -586,25 +587,28 @@ export function DebriefPage() {
         title={d.title}
         sub={[shortDate(d.occurredOn), d.eventTitle, d.weekName, d.facilitatorName && `מנחה: ${d.facilitatorName}`, d.status === 'final' ? 'סוכם' : 'טיוטה'].filter(Boolean).join(' · ')}
         actions={
-          d.canEdit && (
-            <>
-              <button className="btn" onClick={() => setEditing(true)}>
-                <Icon name="edit" /> עריכה
-              </button>
-              {d.status === 'draft' ? (
-                <button className="btn btn-primary" onClick={() => void run(() => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'final' }), 'התחקיר סוכם')}>
-                  <Icon name="check" /> סיכום התחקיר
+          <>
+            <WordButton title={d.title} target=".debrief-page" />
+            {d.canEdit && (
+              <>
+                <button className="btn" onClick={() => setEditing(true)}>
+                  <Icon name="edit" /> עריכה
                 </button>
-              ) : (
-                <button className="btn" onClick={() => void run(() => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'draft' }))}>
-                  החזר לטיוטה
+                {d.status === 'draft' ? (
+                  <button className="btn btn-primary" onClick={() => void run(() => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'final' }), 'התחקיר סוכם')}>
+                    <Icon name="check" /> סיכום התחקיר
+                  </button>
+                ) : (
+                  <button className="btn" onClick={() => void run(() => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'draft' }))}>
+                    החזר לטיוטה
+                  </button>
+                )}
+                <button className="btn btn-ghost text-red" onClick={async () => (await ask({ title: 'למחוק את התחקיר?', body: 'הממצאים, המסקנות והלקחים שבו יימחקו. משימות ההמשך יישארו.', confirm: 'מחיקה', danger: true })) && void api.del(`/api/debriefs/${d.id}`).then(() => navigate('/debriefs'))} aria-label="מחיקה">
+                  <Icon name="trash" />
                 </button>
-              )}
-              <button className="btn btn-ghost text-red" onClick={async () => (await ask({ title: 'למחוק את התחקיר?', body: 'הממצאים, המסקנות והלקחים שבו יימחקו. משימות ההמשך יישארו.', confirm: 'מחיקה', danger: true })) && void api.del(`/api/debriefs/${d.id}`).then(() => navigate('/debriefs'))} aria-label="מחיקה">
-                <Icon name="trash" />
-              </button>
-            </>
-          )
+              </>
+            )}
+          </>
         }
       />
       {(d.summary || d.participants) && (

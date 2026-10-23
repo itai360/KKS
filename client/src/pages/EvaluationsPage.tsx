@@ -19,7 +19,7 @@ import { shortDate } from '@shared/dates';
 import { scoreText } from '@shared/experienceFeedback';
 import type { Committee, CommitteeDetail, EvaluationFile, EvaluationListItem, Team } from '@shared/types';
 import { NoteDots, NotesBadge, noteTone, timeLabel } from '../components/Discipline';
-import { DocPager, useDocNav, type DocLink } from '../components/DocNav';
+import { DocPager, useDocNav, WordButton, type DocLink } from '../components/DocNav';
 import { FileDocument, fileParts, HistoryDialog, LiveFile } from '../components/EvaluationFile';
 import { GradesImport } from '../components/GradesImport';
 import { Icon } from '../components/Icon';
@@ -27,7 +27,7 @@ import { SectionRail } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, PageError, PageHead, Select } from '../components/ui';
 import { api } from '../lib/api';
-import { saveCsv } from '../lib/csv';
+import { saveSheet } from '../lib/sheet';
 import { fmtAgo, fmtDateTime } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -86,10 +86,10 @@ export function EvaluationsPage() {
           )}
           <button
             className="btn"
-            title="ייצוא הרשימה המסוננת לאקסל"
+            title="ייצוא הרשימה המסוננת - נפתח ב-Google Sheets ובאקסל"
             disabled={!shown.length}
             onClick={() =>
-              void saveCsv(
+              void saveSheet(
                 'תיקי-הערכה',
                 ['שם מלא', 'מספר אישי', 'צוות', 'מצב', 'התייחסויות', 'נקודות קריטיות', 'ציונים שהוזנו', 'דינמיקה אחרונה - ציון', 'דינמיקה אחרונה - מיקום', 'סיכום מ"פ', 'הערות משמעת', 'עודכן לאחרונה', 'ועדה'],
                 shown.map((c) => [
@@ -110,7 +110,7 @@ export function EvaluationsPage() {
               )
             }
           >
-            <Icon name="download" /> ייצוא
+            <Icon name="download" /> Sheets / אקסל
           </button>
           </>
         }
@@ -200,6 +200,13 @@ export function EvaluationFilePage() {
   const { data, setData, error, loading, status } = useApi<EvaluationFile>(`/api/evaluations/${cadetId}`, ['cadets']);
   const [dialog, setDialog] = useState<null | 'refer' | { decide: Committee } | { history: number | undefined }>(null);
   const [printing, setPrinting] = useState(false);
+  // the file as a document, made off the screen for a moment for its Word file (the living one stays as it is)
+  const [asDocument, setAsDocument] = useState(false);
+  const documentFor = async () => {
+    setAsDocument(true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return document.querySelector<HTMLElement>('.doc-offscreen .eval-document');
+  };
   const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
   // a file saved after its page moved on to the next cadet's file belongs to its own cadet, not to this one
@@ -280,6 +287,7 @@ export function EvaluationFilePage() {
             <button className="btn" onClick={() => setPrinting(true)}>
               <Icon name="print" /> הדפסה
             </button>
+            <WordButton title={`תיק הערכה - ${c.fullName}`} before={documentFor} after={() => setAsDocument(false)} />
             {data.canRefer && !pending && (
               <button className="btn btn-primary" onClick={() => setDialog('refer')}>
                 <Icon name="flag" /> העברה לוועדה
@@ -328,6 +336,11 @@ export function EvaluationFilePage() {
       <div className="split eval-split">
         {/* a new cadet's file, a new saver: what was typed in one file never shows (or saves) in the next */}
         {printing ? <FileDocument file={data} /> : <LiveFile key={c.id} file={data} setFile={setFile} onHistory={(itemId) => setDialog({ history: itemId })} />}
+        {asDocument && (
+          <div className="doc-offscreen">
+            <FileDocument file={data} />
+          </div>
+        )}
         <ContextColumn file={data} />
       </div>
       {dialog === 'refer' && <ReferDialog cadetId={c.id} name={c.fullName} reasonInFile={data.committeeReason} onClose={() => setDialog(null)} onDone={setData} />}

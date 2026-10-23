@@ -28,3 +28,6 @@ export async function saveFile(filename: string, data: Blob): Promise<void> {
     throw new Error('השמירה לא הצליחה');
   }
 }
+
+/** in the demo, files go through the same save prompt */
+export const shareOrSave = saveFile;

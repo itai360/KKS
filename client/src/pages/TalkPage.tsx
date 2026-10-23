@@ -8,7 +8,7 @@ import { TALK_TYPES } from '@shared/constants';
 import { shortDate } from '@shared/dates';
 import { numberedSections, type TalkType } from '@shared/talks';
 import type { CadetDetail } from '@shared/types';
-import { DocPager, ShareButton, useDocNav, type DocLink } from '../components/DocNav';
+import { DocPager, ShareButton, useDocNav, type DocLink, WordButton } from '../components/DocNav';
 import { Icon } from '../components/Icon';
 import { SectionRail } from '../components/SectionRail';
 import { Loading, PageError } from '../components/ui';
@@ -69,6 +69,7 @@ export function TalkPage() {
           </Link>
         )}
         <ShareButton title={`${record.category} - ${c.fullName}`} />
+        <WordButton title={`${record.category} - ${c.fullName}`} />
         <button className="btn btn-primary" onClick={() => window.print()}>
           <Icon name="print" /> הדפסה / PDF
         </button>
