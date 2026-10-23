@@ -12696,6 +12696,58 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   width: 220px;
   flex: none;
 }
+/* what the axis chosen takes in, under its row */
+.fb-axis-about {
+  margin: -4px 0 0;
+}
+/* the axes and what each takes in, folded under the general reference */
+.fb-axes-guide {
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+}
+.fb-axes-guide > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 12px;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.fb-axes-guide > summary::-webkit-details-marker {
+  display: none;
+}
+.fb-axes-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px 20px;
+  padding: 4px 14px 14px;
+}
+.fb-axes-groups h4 {
+  margin: 0;
+  font-size: 15px;
+}
+.fb-axes-groups p {
+  margin: 2px 0 6px;
+}
+.fb-axes-groups ul {
+  margin: 0;
+  padding-inline-start: 16px;
+  display: grid;
+  gap: 4px;
+}
+@media (max-width: 600px) {
+  .fb-point-row {
+    flex-direction: column;
+    gap: 0;
+  }
+  .fb-axis {
+    width: 100%;
+  }
+}
 .fb-point textarea {
   resize: vertical;
   min-height: 0;

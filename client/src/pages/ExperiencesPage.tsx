@@ -8,7 +8,7 @@ import { byHe } from '@shared/sort';
 import type { Cadet, Experience, Team } from '@shared/types';
 import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
 import { DoneDrawer } from '../components/DoneDrawer';
-import { FeedbackDialog, FeedbackView, ScoreBadge } from '../components/ExperienceFeedback';
+import { FeedbackDialog, FeedbackView, FeedbackWordButton, ScoreBadge } from '../components/ExperienceFeedback';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select } from '../components/ui';
@@ -216,6 +216,8 @@ export function ExperienceCard({ x, compact, leaving }: { x: Experience; compact
     wasStatus.current = x.status;
   }, [x.status]);
   const p = PHASE[x.phase];
+  // the feedback given in the format comes as a Word file too
+  const wordFile = x.status === 'done' && x.canSeeFeedback && !!x.feedbackForm;
   return (
     <SwipeRow itemId={x.id} label={`${x.role} - ${x.cadetName}`} leaving={leaving}>
     <div className={`card card-pad tone-edge t-${p.tone}${justDone ? ' just-cleared' : ''}`} style={{ padding: compact ? 12 : 16 }}>
@@ -256,8 +258,9 @@ export function ExperienceCard({ x, compact, leaving }: { x: Experience; compact
           <div className="tiny muted mt-8">משוב: {x.evaluatedByName}</div>
         </div>
       )}
-      {(x.canGiveFeedback || x.canEdit) && (
+      {(x.canGiveFeedback || x.canEdit || wordFile) && (
         <div className="row gap-6 mt-12 wrap">
+          {wordFile && <FeedbackWordButton x={x} small />}
           {x.canGiveFeedback && x.status !== 'done' && (
             <button className={`btn btn-sm${x.phase === 'awaiting_feedback' ? ' btn-primary' : ''}`} onClick={() => setFeedback(true)}>
               <Icon name="message" /> מתן משוב

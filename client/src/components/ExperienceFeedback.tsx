@@ -3,12 +3,15 @@
 // reference, two points to keep and two to improve, and the score on its legend - and the feedback as it
 // shows once given.
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { fmtDateIL, shortDate } from '@shared/dates';
 import {
   asFeedbackForm,
+  axisAbout,
   emptyFeedback,
   FEEDBACK_AXES,
+  FEEDBACK_AXIS_GROUPS,
+  axisValue,
   feedbackMissing,
   POINT_LABELS,
   SCORE_BANDS,
@@ -19,15 +22,16 @@ import {
   type PointKind,
 } from '@shared/experienceFeedback';
 import { experienceName } from '@shared/experiences';
-import { sortHe } from '@shared/sort';
+import { DOCX_TYPE, feedbackDocName, feedbackDocx } from '@shared/feedbackDocx';
 import type { Experience } from '@shared/types';
 import { api } from '../lib/api';
+import { saveFile } from '../lib/download';
 import { useDraft } from '../lib/draft';
 import { emitLocalChange } from '../lib/realtime';
-import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
+import { Select } from './pickers';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal, SuggestInput } from './ui';
+import { ErrorBox, Field, Modal } from './ui';
 
 const KINDS: PointKind[] = ['keep', 'improve'];
 const KIND_TONE: Record<PointKind, string> = { keep: 't-green', improve: 't-orange' };
@@ -75,8 +79,6 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
   // what was typed is kept until it is saved, in this tab only - a long feedback is not lost to a closed window
   const [stored, setStored] = useDraft(`experience-feedback:${x.id}`);
   const [draft, setDraftState] = useState<Draft>(() => readDraft(stored));
-  const used = useApi<string[]>('/api/experiences/feedback-axes', ['cadets']);
-  const axes = useMemo(() => sortHe([...new Set([...FEEDBACK_AXES, ...(used.data ?? [])])]), [used.data]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -162,6 +164,8 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
           />
         </Field>
 
+        <AxesGuide />
+
         {KINDS.map((kind) =>
           draft.form[kind].map((p, i) => {
             const name = `${POINT_LABELS[kind]} ${i + 1}`;
@@ -175,9 +179,10 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
                     <input className="input" value={p.title} maxLength={300} onChange={(e) => setPoint(kind, i, { title: e.target.value })} placeholder={i === 0 ? TITLE_HINT[kind] : undefined} aria-label={name} />
                   </Field>
                   <Field label="ציר" required className="fb-axis">
-                    <SuggestInput value={p.axis} onChange={(v) => setPoint(kind, i, { axis: v })} options={axes} maxLength={60} placeholder="בחירה או הקלדה" aria-label={`הציר של ${name}`} />
+                    <AxisSelect value={p.axis} onChange={(v) => setPoint(kind, i, { axis: v })} label={`הציר של ${name}`} />
                   </Field>
                 </div>
+                {axisAbout(p.axis) && <p className="tiny muted fb-axis-about">{axisAbout(p.axis)}</p>}
                 <Field label="פירוט">
                   <textarea className="textarea" rows={2} value={p.text} maxLength={2000} onChange={(e) => setPoint(kind, i, { text: e.target.value })} placeholder="מה ראית, ומתי" aria-label={`פירוט ${name}`} />
                 </Field>
@@ -222,6 +227,68 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
         <ErrorBox error={error} />
       </div>
     </Modal>
+  );
+}
+
+/** the axis of a point: the four main axes as groups, each with its parts - one typed before the list stays */
+function AxisSelect({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  return (
+    <Select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} searchable>
+      <option value="">בחירת ציר...</option>
+      {value && !FEEDBACK_AXES.includes(value) && <option value={value}>{value}</option>}
+      {FEEDBACK_AXIS_GROUPS.map((g) => (
+        <optgroup key={g.name} label={g.name}>
+          {g.axes.map((a) => (
+            <option key={a.name} value={axisValue(g.name, a.name)}>
+              {a.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </Select>
+  );
+}
+
+/** what each axis takes in, folded until asked for */
+function AxesGuide() {
+  return (
+    <details className="fb-axes-guide">
+      <summary>
+        <Icon name="lightbulb" size={15} /> מה כולל כל ציר
+      </summary>
+      <div className="fb-axes-groups">
+        {FEEDBACK_AXIS_GROUPS.map((g) => (
+          <section key={g.name}>
+            <h4>{g.name}</h4>
+            <p className="tiny muted">{g.about}</p>
+            <ul>
+              {g.axes.map((a) => (
+                <li key={a.name} className="small">
+                  <b>{a.name}</b>
+                  {a.about && <span className="muted"> - {a.about}</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/** the feedback as a Word file, in the format on paper */
+export function FeedbackWordButton({ x, small }: { x: Experience; small?: boolean }) {
+  if (!x.feedbackForm) return null;
+  const form = x.feedbackForm;
+  const download = () => {
+    const topic = experienceName(x.kind, x.role, x.span);
+    const file = feedbackDocx({ cadetName: x.cadetName, topic, date: experienceDates(x), form, score: x.score });
+    void saveFile(feedbackDocName(x.cadetName, topic), new Blob([file as BlobPart], { type: DOCX_TYPE }));
+  };
+  return (
+    <button type="button" className={`btn btn-ghost${small ? ' btn-sm' : ''}`} onClick={download} title="המשוב כקובץ Word, בפורמט המשוב">
+      <Icon name="download" /> קובץ Word
+    </button>
   );
 }
 

@@ -2,8 +2,6 @@
 // broad one: a general written reference, two points to keep and two to improve - each the point, the
 // axis (ציר) it belongs to and a few words on it - and a score from 0 to 100, read on the legend below.
 
-import { EVALUATION_CRITERIA } from './constants';
-
 /** how many points of each kind the format asks for */
 export const FEEDBACK_POINTS = 2;
 
@@ -54,8 +52,74 @@ export function scoreBand(score: number): ScoreBand {
   return SCORE_BANDS.find((b) => score <= b.max) ?? SCORE_BANDS[SCORE_BANDS.length - 1];
 }
 
-/** the axes offered for a point: the course's evaluation criteria - any other can be typed */
-export const FEEDBACK_AXES: readonly string[] = EVALUATION_CRITERIA;
+export interface FeedbackAxis {
+  name: string;
+  /** what it takes in, in a few words (the values have none) */
+  about?: string;
+}
+
+export interface FeedbackAxisGroup {
+  name: string;
+  about: string;
+  axes: readonly FeedbackAxis[];
+}
+
+/** the axes a point belongs to: four main ones, each with the parts it holds */
+export const FEEDBACK_AXIS_GROUPS: readonly FeedbackAxisGroup[] = [
+  {
+    name: 'המקצוע הצבאי',
+    about: 'היכולת להוביל משימה, לתכנן אותה ולהוציא אותה לפועל',
+    axes: [
+      { name: 'הובלה', about: 'העברת מסרים, הפעלת סמכות, האצלת סמכויות ומיקום המפקד' },
+      { name: 'קבלת החלטות', about: 'שיקול דעת, חשיבה ביקורתית, הבחנה בין עיקר לטפל וקביעת סדרי עדיפויות' },
+      { name: 'יוזמה', about: 'יצירתיות, חשיבה מחוץ לקופסה, ראייה כוללת והגדלת ראש' },
+      { name: 'הכנה ותכנון', about: 'יסודיות, ירידה לפרטים, סדר וארגון ובקיאות' },
+      { name: 'ביצוע ובקרה', about: 'ניהול זמנים, מעקב ובקרה, רצינות והשקעה' },
+      { name: 'למידה והשתפרות', about: 'ניתוח, תחקור, הפקת לקחים ושיפור מתמיד' },
+    ],
+  },
+  {
+    name: 'ערכים',
+    about: 'העקרונות שמכוונים את ההתנהלות ואת אופן ביצוע המשימה',
+    axes: [{ name: 'דבקות במשימה וחתירה לניצחון' }, { name: 'אמינות' }, { name: 'אחריות' }, { name: 'שליחות' }, { name: 'משמעת' }, { name: 'רעות' }, { name: 'חיי אדם' }],
+  },
+  {
+    name: 'מנהיגות',
+    about: 'היכולת להכיר את עצמך, להשפיע על אנשים ולפתח אותם',
+    axes: [
+      { name: 'מודעות עצמית', about: 'הכרת החוזקות והחולשות, צניעות וביקורת עצמית' },
+      { name: 'תפיסה פיקודית', about: 'גיבוש דרך פיקודית ופעולה לאורה' },
+      { name: 'הנעה ומוטיבציה', about: 'רתימת אנשים, יחס מכבד ואיזון בין דרישה להכלה' },
+      { name: 'יצירת יציבות ובהירות', about: 'תמונת מצב ברורה, שקיפות, זמינות ונוכחות' },
+      { name: 'פיתוח פקודים', about: 'חניכה, יחס אישי, דאגה לפרט וחיזוק תחושת המסוגלות' },
+      { name: 'קבלת החלטות פיקודיות', about: 'קריאת המצב והאנשים, התאמה לקהל היעד ואומץ פיקודי' },
+    ],
+  },
+  {
+    name: 'חוסן',
+    about: 'היכולת לשמור על תפקוד ועל שיקול דעת מול לחץ, קושי ושינוי',
+    axes: [
+      { name: 'תפקוד תחת לחץ', about: 'התמודדות עם אתגרים ובלת״מים ושמירה על רציפות תפקודית' },
+      { name: 'ויסות ושליטה עצמית', about: 'קור רוח, איפוק, סבלנות, פרופורציות והפרדה בין האישי למקצועי' },
+      { name: 'עמידות והתמדה', about: 'חוסן פיזי ומנטלי, נחישות, איתנות ותעצומות נפש' },
+      { name: 'מסוגלות ואומץ אישי', about: 'תחושת מסוגלות, תעוזה והבעת עמדה' },
+      { name: 'גמישות ופתיחות למשוב', about: 'פתיחות לשינויים, חשיבה רעננה ויכולת לתת ולקבל ביקורת' },
+      { name: 'חוסן ביחסים ובקבוצה', about: 'אינטליגנציה רגשית ולכידות' },
+    ],
+  },
+];
+
+/** an axis as a point keeps it: the main axis and its part - "מנהיגות - מודעות עצמית" */
+export const axisValue = (group: string, axis: string) => `${group} - ${axis}`;
+
+/** every axis that can be chosen, in the order of the groups */
+export const FEEDBACK_AXES: readonly string[] = FEEDBACK_AXIS_GROUPS.flatMap((g) => g.axes.map((a) => axisValue(g.name, a.name)));
+
+/** what an axis chosen takes in ("" for one typed before the list, or a value) */
+export function axisAbout(value: string): string {
+  for (const g of FEEDBACK_AXIS_GROUPS) for (const a of g.axes) if (axisValue(g.name, a.name) === value) return a.about ?? '';
+  return '';
+}
 
 export const emptyPoint = (): FeedbackPoint => ({ title: '', axis: '', text: '' });
 export const emptyFeedback = (): ExperienceFeedbackForm => ({
