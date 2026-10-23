@@ -222,6 +222,13 @@ textarea {
   color: inherit;
 }
 
+/* A space typed at the end of a line keeps its room. Otherwise it "hangs" past the line's end - and on an
+   iPhone, at the end of a right-to-left line, the caret was then drawn at the far left edge of the field
+   until the next letter was typed. Every text box in the app. */
+textarea {
+  white-space: break-spaces;
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
