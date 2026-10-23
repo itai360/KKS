@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
 import type { EntryRequest, Task, TaskRequest } from '@shared/types';
 import { pendingRequests, reportIssue } from '../lib/api';
@@ -19,11 +19,14 @@ import { BackButton } from './BackButton';
 import { CommandPalette } from './CommandPalette';
 import { TopSearch } from './TopSearch';
 import { ShortcutsHelp } from './Shortcuts';
-import { initials, Modal } from './ui';
-import { NavMenu, SETTINGS_ITEM } from './NavMenu';
+import { initials } from './ui';
+import { SETTINGS_ITEM } from './NavMenu';
 import { NotificationsPanel } from './Notifications';
 import { noteScreen, screenOf } from '../lib/frequent';
-import { bottomBarScreens } from '../lib/bottomBar';
+import { BOTTOM_BAR_MEDIA, bottomBarScreens } from '../lib/bottomBar';
+import { useDrawerSwipe } from '../lib/drawerSwipe';
+import { trapFocus } from '../lib/focusTrap';
+import { lockScroll } from '../lib/scrollLock';
 import { switchCourse } from '../lib/courses';
 import { isTypingField } from '../lib/keyboard';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
@@ -457,7 +460,9 @@ export function Layout({ children }: { children: ReactNode }) {
     mq.addEventListener('change', on);
     return () => mq.removeEventListener('change', on);
   }, []);
-  const folded = railPref ? railPref === 'collapsed' : mediumScreen;
+  // a phone: the same menu slides in from the side whole - never folded to icons
+  const phone = useMedia(BOTTOM_BAR_MEDIA);
+  const folded = !phone && (railPref ? railPref === 'collapsed' : mediumScreen);
   // just folded: it stays folded under the pointer (no opening on hover) until the pointer leaves it
   const [noPeek, setNoPeek] = useState(false);
   const toggleRail = () => {
@@ -544,11 +549,51 @@ export function Layout({ children }: { children: ReactNode }) {
           : path.startsWith('/schedule')
             ? 4
             : -1;
-  // the course mark at the top of a phone opens every screen, as a sheet over the page
+  // on a phone the course's name at the top opens the side menu - the computer's own, with the same groups
+  // and screens - sliding in from the side over the page; a screen chosen, a tap beside it, a swipe back to
+  // the edge or Escape close it
   const [menuOpen, setMenuOpen] = useState(false);
+  const drawer = phone && menuOpen;
+  const railRef = useRef<HTMLElement>(null);
+  const scrimRef = useRef<HTMLDivElement>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname]);
+  useEffect(() => {
+    if (!phone) setMenuOpen(false);
+  }, [phone]);
+  useDrawerSwipe(railRef, scrimRef, drawer, closeMenu);
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!drawer || !rail) return;
+    // the page behind stays still, and the keyboard stays in the menu (a dialog opened over it has its own)
+    const unlock = lockScroll();
+    const untrap = trapFocus(rail, () => !document.querySelector('.modal-backdrop:not(.is-leaving)'));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.querySelector('.modal')) return;
+      e.preventDefault();
+      setMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    // the screen on show is where the menu opens: in sight, and the keyboard's place in it
+    const at = rail.querySelector<HTMLElement>('.rail-link.active');
+    (at ?? rail).focus({ preventScroll: true });
+    if (at) {
+      const r = at.getBoundingClientRect();
+      const box = rail.getBoundingClientRect();
+      if (r.bottom > box.bottom - 96) rail.scrollTop += r.bottom - box.bottom + 96;
+    }
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      untrap();
+      unlock();
+      // back to the button that opened it
+      const now = document.activeElement;
+      if (!now || now === document.body || rail.contains(now)) menuButton.current?.focus({ preventScroll: true });
+    };
+  }, [drawer]);
 
   // the menu's groups (תכנון הקורס, צוערים, בקרה, כלים) open and close; each remembers how it was left,
   // and the group of the screen on show opens by itself
@@ -561,7 +606,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const toggleGroup = (title: string) => setGroups((g) => saveGroups({ ...g, [title]: !g[title] }));
 
   return (
-    <div className={`app${folded ? ' rail-collapsed' : ''}${viewing ? ' viewing-past' : ''}`}>
+    <div className={`app${folded ? ' rail-collapsed' : ''}${drawer ? ' menu-open' : ''}${viewing ? ' viewing-past' : ''}`}>
       {/* keyboard and screen-reader users skip the menu */}
       <a
         className="skip-link"
@@ -573,11 +618,19 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         דילוג לתוכן הראשי
       </a>
+      {/* a phone: the page behind the open menu, dimmed - a tap on it closes the menu */}
+      {phone && <div ref={scrimRef} className="rail-scrim" aria-hidden="true" onClick={closeMenu} />}
       <aside
+        ref={railRef}
+        id="main-menu"
         className={`rail${noPeek ? ' no-peek' : ''}`}
         aria-label="ניווט ראשי"
+        tabIndex={phone ? -1 : undefined}
+        inert={(phone && !menuOpen) || undefined}
         onMouseLeave={() => setNoPeek(false)}
         onFocus={(e) => noPeek && !(e.target as HTMLElement).classList.contains('rail-toggle') && setNoPeek(false)}
+        // a phone: a screen chosen closes the menu, also the one already on show
+        onClick={(e) => phone && (e.target as Element).closest('a[href]') && setMenuOpen(false)}
       >
         <div className="brand">
           <div className="brand-mark">{symbol.slice(0, 4)}</div>
@@ -641,13 +694,20 @@ export function Layout({ children }: { children: ReactNode }) {
           <button className="icon-btn rail-logout" style={{ color: 'var(--rail-muted)' }} onClick={() => void logout()} aria-label="יציאה" title="יציאה">
             <Icon name="logout" />
           </button>
-          <button className="icon-btn rail-toggle" onClick={toggleRail} aria-pressed={folded} aria-label={folded ? 'הרחבת התפריט' : 'כיווץ התפריט'} title={folded ? 'הרחבת התפריט' : 'כיווץ התפריט לסמלים'}>
+          {/* on a phone the same button sends the menu back to its edge */}
+          <button
+            className="icon-btn rail-toggle"
+            onClick={phone ? closeMenu : toggleRail}
+            aria-pressed={phone ? undefined : folded}
+            aria-label={phone ? 'סגירת התפריט' : folded ? 'הרחבת התפריט' : 'כיווץ התפריט'}
+            title={phone ? 'סגירת התפריט' : folded ? 'הרחבת התפריט' : 'כיווץ התפריט לסמלים'}
+          >
             <Icon name={folded ? 'chevronLeft' : 'chevronRight'} />
           </button>
         </div>
       </aside>
 
-      <div className="main">
+      <div className="main" inert={drawer || undefined}>
         <header className="topbar">
           <BackButton />
           <div className={`top-brand${menuOpen ? ' is-open' : ''}`}>
@@ -662,8 +722,17 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               <span className="brand-mark">{symbol.slice(0, 4)}</span>
             </NavLink>
-            {/* the course's name opens every screen, as a sheet over the page */}
-            <button type="button" className="top-brand-menu" onClick={() => setMenuOpen(true)} aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={`${settings.courseName} - כל המסכים`} title="כל המסכים">
+            {/* the course's name opens the side menu, from this side of the screen */}
+            <button
+              ref={menuButton}
+              type="button"
+              className="top-brand-menu"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-controls="main-menu"
+              aria-expanded={menuOpen}
+              aria-label={`${settings.courseName} - תפריט`}
+              title="תפריט"
+            >
               {/* scrolled past the screen's big title: its name takes the course's place, as an iPhone's large titles do */}
               <span className={`top-brand-names${barTitle ? ' is-titled' : ''}`}>
                 <span className="small top-brand-name">{settings.courseName}</span>
@@ -671,7 +740,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   {barTitle}
                 </span>
               </span>
-              <Icon name="chevronDown" size={15} className="top-brand-chev" />
+              <Icon name="menu" size={18} className="top-brand-icon" />
             </button>
           </div>
           <TopSearch pages={palettePages} />
@@ -756,6 +825,7 @@ export function Layout({ children }: { children: ReactNode }) {
         className={`bottom-nav${typingField ? ' away' : barSmall ? ' compact' : ''}${barIdx < 0 ? ' no-tab' : ''}`}
         aria-label="ניווט"
         style={{ ['--idx' as string]: Math.max(0, barIdx) }}
+        inert={drawer || undefined}
       >
         {/* slides to the current tab */}
         <span className="nav-ind" aria-hidden />
@@ -796,11 +866,6 @@ export function Layout({ children }: { children: ReactNode }) {
           <span className="nav-label">לו"ז</span>
         </NavLink>
       </nav>
-      {menuOpen && (
-        <Modal title="כל המסכים" onClose={() => setMenuOpen(false)} className="menu-sheet">
-          <NavMenu sections={sections} onNavigate={() => setMenuOpen(false)} tabs />
-        </Modal>
-      )}
       {plus.mounted && (
         <PlusMenu
           at={plusAt}

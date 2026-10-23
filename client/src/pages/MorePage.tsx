@@ -1,5 +1,5 @@
-// Every screen in one place (section 28) - the same tiles that rise from the course mark at the top of a
-// phone, as a page of its own.
+// Every screen in one place (section 28): each group of the menu as a grid of icons, with a search - a page of
+// its own beside the side menu.
 
 import { useNavSections } from '../components/Layout';
 import { NavMenu } from '../components/NavMenu';

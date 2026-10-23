@@ -444,6 +444,83 @@ h4 {
   }
 }
 
+/* ---------------- the side bar on a phone: the same bar, sliding in from its side over the page ---------------- */
+/* (Layout opens it from the course's name at the top; it goes back to the same edge it came from) */
+.rail-scrim {
+  display: none;
+}
+.rail:focus {
+  outline: none;
+}
+@media (max-width: 860px) {
+  .rail {
+    display: flex;
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 60;
+    width: min(300px, 84vw);
+    height: auto;
+    padding-top: calc(16px + env(safe-area-inset-top));
+    padding-bottom: 0;
+    padding-inline-start: calc(10px + env(safe-area-inset-right));
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    /* closed: past the right edge (the page reads right to left) */
+    transform: translateX(calc(100% + 40px));
+    visibility: hidden;
+    transition: transform 0.38s var(--spring), box-shadow 0.38s ease, visibility 0s linear 0.38s;
+  }
+  .app.menu-open .rail {
+    transform: none;
+    visibility: visible;
+    box-shadow: -20px 0 50px -24px rgba(0, 0, 0, 0.5);
+    transition: transform 0.38s var(--spring), box-shadow 0.38s ease, visibility 0s;
+  }
+  /* under the finger: it follows it, with nothing in between */
+  .rail.is-dragging,
+  .rail-scrim.is-dragging {
+    transition: none;
+  }
+  .rail-foot {
+    bottom: 0;
+    margin-bottom: 0;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  /* rows as on a computer, a touch taller for a finger - the whole menu still in one screen */
+  .rail-link,
+  .rail-group-head {
+    min-height: 38px;
+  }
+  .rail-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    background: rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    pointer-events: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.3s ease;
+  }
+  .app.menu-open .rail-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* less motion: it fades in where it stands */
+@media (max-width: 860px) and (prefers-reduced-motion: reduce) {
+  .rail {
+    transform: none;
+    opacity: 0;
+    transition: opacity 0.2s ease, visibility 0s linear 0.2s;
+  }
+  .app.menu-open .rail {
+    opacity: 1;
+    transition: opacity 0.2s ease, visibility 0s;
+  }
+}
+
 /* ---------------- the top bar: a material the page scrolls under ---------------- */
 
 .topbar {

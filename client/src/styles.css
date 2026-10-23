@@ -4381,9 +4381,6 @@ input::-webkit-date-and-time-value {
   .app {
     grid-template-columns: minmax(0, 1fr);
   }
-  .rail {
-    display: none;
-  }
   .topbar {
     padding: 0 12px;
     gap: 8px;
@@ -10057,8 +10054,7 @@ html {
   }
 }
 
-/* ---------------- every screen in one place: the menu under the course mark (NavMenu) ---------------- */
-/* at the top of a phone: the course mark goes home, the course's name opens the menu over the page */
+/* ---------------- at the top of a phone: the course mark goes home, the course's name opens the side menu ---------------- */
 .top-brand {
   min-width: 0;
   gap: 4px;
@@ -10098,13 +10094,9 @@ html {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.top-brand-chev {
+.top-brand-icon {
   flex-shrink: 0;
   color: var(--muted);
-  transition: transform 0.2s;
-}
-.top-brand.is-open .top-brand-chev {
-  transform: rotate(180deg);
 }
 /* a screen that is not one of the bar's tabs: no tab marked */
 .bottom-nav.no-tab .nav-ind {
@@ -10114,9 +10106,9 @@ html {
   transition: transform 0.32s var(--spring), opacity 0.2s;
 }
 
-/* ---------------- every screen in one place (components/NavMenu.tsx): the sheet from the course's name on a
-   phone, and the "כל המסכים" page - a search, the most used, then each group as a grid of icons in its
-   own colour, all in sight, one press away; the person at the foot ---------------- */
+/* ---------------- every screen in one place (components/NavMenu.tsx): the "כל המסכים" page - a search, the
+   most used, then each group as a grid of icons in its own colour, all in sight, one press away; the person
+   at the foot ---------------- */
 .nav-menu {
   display: flex;
   flex-direction: column;
@@ -10208,83 +10200,6 @@ html {
 @media (min-width: 560px) {
   .nav-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-}
-/* the sheet on a phone: a group at a time, chosen on its tab (or with a swipe) - the whole menu in one screen */
-.nav-tabs {
-  display: flex;
-  gap: 6px;
-  margin-top: -6px;
-  padding: 6px 2px 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.nav-tabs::-webkit-scrollbar {
-  display: none;
-}
-.nav-tab {
-  position: relative;
-  display: inline-flex;
-  flex: 1 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 38px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--ink-2);
-  font-size: 13.5px;
-  font-weight: 700;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.3s var(--spring);
-}
-.nav-tab svg {
-  color: var(--tone-ink);
-  transition: color 0.2s;
-}
-.nav-tab:active {
-  transform: scale(0.95);
-  transition: transform 0.1s ease-out;
-}
-/* chosen: tinted in its group's colour, with the colour's own ink (readable in every tone, light and dark) */
-.nav-tab.on {
-  border-color: var(--tone);
-  background: var(--tone-bg);
-  box-shadow: inset 0 0 0 1px var(--tone);
-  color: var(--tone-ink);
-}
-.nav-tab:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--focus);
-}
-.nav-tab-count {
-  position: absolute;
-  top: -6px;
-  inset-inline-end: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border: 2px solid var(--card);
-  border-radius: 9px;
-  background: var(--red);
-  color: #fff;
-  font-size: 10.5px;
-  line-height: 14px;
-  text-align: center;
-}
-/* as tall as the biggest group: the sheet keeps its size between groups; the next one comes in from its side */
-.nav-panel {
-  min-height: calc(var(--rows, 1) * 92px + (var(--rows, 1) - 1) * 16px);
-  touch-action: pan-y;
-  animation: panel-in 0.32s var(--spring);
-}
-@keyframes panel-in {
-  from {
-    opacity: 0.2;
-    transform: translateX(calc(var(--dir, 0) * -28px));
   }
 }
 .nav-tile {
@@ -10397,22 +10312,8 @@ html {
 .nav-account-out {
   flex-shrink: 0;
 }
-/* the sheet: the menu fills it, with room to scroll */
-.modal.menu-sheet {
-  max-width: 560px;
-}
-.modal.menu-sheet .modal-body {
-  padding-top: 12px;
-}
-@media (max-width: 860px) {
-  .modal.menu-sheet {
-    max-height: 90vh;
-    max-height: 90dvh;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .nav-tile,
-  .nav-panel {
+  .nav-tile {
     animation: none;
   }
 }
