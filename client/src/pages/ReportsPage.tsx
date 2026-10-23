@@ -47,7 +47,8 @@ function WeeklyDiscipline({ d, from, to }: { d: DisciplineSummary; from: string;
   const save = (a?: string, b?: string) => void exportDiscipline(a, b).catch((e: Error) => toast({ title: e.message, tone: 'red' }));
   return (
     <div className="card">
-      <div className="card-head">
+      {/* on a small phone the counts and the export buttons go to a line of their own */}
+      <div className="card-head wrap">
         <Icon name="shield" />
         <h3 className="grow">משמעת</h3>
         <span className="small muted">

@@ -8391,16 +8391,29 @@ li > .points-view {
   transform: scale(0.94);
 }
 
-/* a dialog covers the top bar: its own arrow sits right where the bar's is - one arrow - and closes it */
+/* a dialog covers the top bar: its own arrow sits right where the bar's is - one arrow - and closes it
+   (Modal in ui.tsx puts it exactly on the bar's arrow; this is its place before that, and on the home
+   screen, which has no arrow in the bar) */
 .modal-back {
   position: fixed;
   z-index: 2;
   top: calc((var(--top-h) - 40px) / 2);
-  inset-inline-start: calc(var(--rail-w) + 40px);
+  inset-inline-start: calc(var(--rail-w) + 24px);
 }
 
 body:has(.app.rail-collapsed) .modal-back {
-  inset-inline-start: calc(68px + 40px);
+  inset-inline-start: calc(68px + 24px);
+}
+
+/* the dialog keeps clear of the top bar's strip, where its arrow is - a tall one never runs under it */
+@media (min-width: 861px) {
+  .modal-backdrop:has(> .modal-back) {
+    padding-top: calc(var(--top-h) + 8px);
+  }
+  .modal-backdrop:has(> .modal-back) > .modal {
+    max-height: calc(100vh - var(--top-h) - 28px);
+    max-height: calc(100dvh - var(--top-h) - 28px);
+  }
 }
 
 @media (max-width: 860px) {
@@ -12323,6 +12336,9 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 /* paused: its title steps back and its days dim - the text itself stays readable */
 .rule-row .strong {
   transition: color 0.25s;
+}
+.rule-title {
+  align-items: center;
 }
 .rule-row.is-paused .strong {
   color: var(--muted);

@@ -165,7 +165,11 @@ function RuleRow({ r, onEdit, onCopy }: { r: RecurringRule; onEdit: () => void; 
       <BulkCheck id={r.id} />
       <Icon name="repeat" className="muted" size={18} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="strong">{r.title}</div>
+        {/* the priority beside the name, so the row fits a small phone with the switch */}
+        <div className="row gap-6 wrap rule-title">
+          <span className="strong">{r.title}</span>
+          {r.priority !== 'normal' && <span className="badge">{PRIORITY_LABELS[r.priority]}</span>}
+        </div>
         <div className="tiny muted">
           {describe(r)} · {r.assigneeLabel}
           {r.domain && ` · ${r.domain}`}
@@ -194,7 +198,6 @@ function RuleRow({ r, onEdit, onCopy }: { r: RecurringRule; onEdit: () => void; 
           </span>
         </div>
       </div>
-      {r.priority !== 'normal' && <span className="badge">{PRIORITY_LABELS[r.priority]}</span>}
       {isCommander && (
         <label className="switch small" onClick={(e) => e.stopPropagation()} title={on ? 'פעילה - לחיצה משהה' : 'מושהית - לחיצה מפעילה'}>
           <input type="checkbox" role="switch" checked={on} onChange={() => void toggle()} />

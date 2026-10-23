@@ -839,6 +839,16 @@ input[type='radio'] {
   background: var(--fill);
   color: var(--ink-2);
 }
+/* a badge that is a link carries a name (a task, a rule): a long one wraps inside the screen */
+a.badge {
+  max-width: 100%;
+  height: auto;
+  min-height: 22px;
+  padding-block: 3px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 /* ---------------- lists: one rounded group, a hairline between rows (as in Settings and Reminders) ---------------- */
 

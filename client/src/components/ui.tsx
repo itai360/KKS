@@ -115,6 +115,34 @@ export function Modal({
     };
     // once per opening: re-running on every parent render would steal focus mid-typing
   }, []);
+  // the floating back arrow right where the top bar's own arrow is - one arrow, in one place - whatever
+  // the bar's padding on this screen size; with no arrow in the bar (the home screen) the CSS place holds
+  const backRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const el = backRef.current;
+    if (!el) return;
+    let frame = 0;
+    const place = () => {
+      const bar = document.querySelector<HTMLElement>('.topbar .back-top')?.getBoundingClientRect();
+      if (!bar || !bar.width) {
+        el.style.removeProperty('inset');
+        return;
+      }
+      el.style.inset = `${bar.top}px auto auto ${bar.left}px`;
+    };
+    const later = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(place);
+    };
+    place();
+    // once the page under it is locked in place (its scroll bar gone), and whenever the window changes
+    later();
+    addEventListener('resize', later);
+    return () => {
+      cancelAnimationFrame(frame);
+      removeEventListener('resize', later);
+    };
+  }, []);
   // its edges show only where content runs under them: the title's once the body is scrolled, the
   // buttons' while more of it is below - not hard lines drawn whether or not anything is there
   useEffect(() => {
@@ -208,7 +236,7 @@ export function Modal({
       </div>
       {/* a screen opened over a screen has the floating back arrow too: it closes this one */}
       {closable && !narrow && (
-        <button type="button" className="modal-back no-print" onClick={() => void tryClose.current()} aria-label="חזרה" title="חזרה">
+        <button type="button" ref={backRef} className="modal-back no-print" onClick={() => void tryClose.current()} aria-label="חזרה" title="חזרה">
           <Icon name="chevronRight" size={24} />
         </button>
       )}
