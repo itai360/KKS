@@ -5,7 +5,7 @@ import { pendingRequests, reportIssue } from '../lib/api';
 import { onNotification, onStatus } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { checkForUpdate, onUpdate, updateReady } from '../lib/update';
-import { onWaiting, useApi } from '../lib/useApi';
+import { onStale, onWaiting, refreshAll, useApi } from '../lib/useApi';
 import { usePresence } from '../lib/presence';
 import { slideTabIndicators } from '../lib/tabIndicator';
 import { Count } from './Count';
@@ -322,6 +322,9 @@ export function Layout({ children }: { children: ReactNode }) {
     const t = setTimeout(() => setLost(true), navigator.onLine === false ? 0 : 10_000);
     return () => clearTimeout(t);
   }, [live]);
+  // a screen showing an earlier answer (its refresh failed, and is tried again on its own): said, with a refresh
+  const [staleCount, setStaleCount] = useState(0);
+  useEffect(() => onStale(setStaleCount), []);
   const [update, setUpdate] = useState(updateReady());
   useEffect(() => onUpdate(setUpdate), []);
   // a new version waiting is loaded on moving to another screen (the address has already changed)
@@ -716,6 +719,15 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="update-bar offline no-print" role="status">
             <Icon name="alert" size={16} />
             <span className="grow">אין חיבור לשרת - מנסה להתחבר מחדש. עד אז מה שמוצג אולי לא מעודכן, ושינויים לא יישמרו.</span>
+          </div>
+        )}
+        {!lost && staleCount > 0 && (
+          <div className="update-bar stale no-print" role="status">
+            <Icon name="history" size={16} />
+            <span className="grow">חלק ממה שמוצג כאן לא התעדכן בטעינה האחרונה - מנסה שוב.</span>
+            <button className="btn btn-sm" onClick={refreshAll}>
+              רענון
+            </button>
           </div>
         )}
         {update && (

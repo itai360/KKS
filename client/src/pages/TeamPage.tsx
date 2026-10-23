@@ -13,6 +13,7 @@ import { TaskList } from '../components/TaskRow';
 import { CountUp, Empty, ErrorBox, PageError, Loading, PageHead, Ring, initials } from '../components/ui';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { onTabListKey, tabProps } from '../lib/tabKeys';
 
 export function TeamPage() {
   const { data, error, loading } = useApi<StaffStatus[]>('/api/team');
@@ -167,9 +168,9 @@ export function StaffPage() {
 
       <div className="split mt-16">
         <div>
-          <div className="tabs" ref={tabsRef} style={{ scrollMarginTop: 'calc(var(--top-h) + 12px)' }}>
+          <div className="tabs" ref={tabsRef} style={{ scrollMarginTop: 'calc(var(--top-h) + 12px)' }} role="tablist" aria-label="המשימות לפי מצב" onKeyDown={onTabListKey}>
             {(Object.keys(lists) as Tab[]).map((k) => (
-              <button key={k} className={`tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>
+              <button key={k} className={`tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)} {...tabProps(tab === k)}>
                 {lists[k].label}
                 <span className="n">{lists[k].tasks.length}</span>
               </button>

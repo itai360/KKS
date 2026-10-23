@@ -26,6 +26,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { ask } from '../components/Confirm';
+import { onTabListKey, tabProps } from '../lib/tabKeys';
 
 const ADD_PLACEHOLDER: Record<DebriefItemKind, string> = {
   fact: 'הוספת עובדה...',
@@ -118,11 +119,11 @@ export function DebriefsPage() {
           </>
         }
       />
-      <div className="tabs" role="tablist">
-        <button className={`tab${tab === 'list' ? ' on' : ''}`} role="tab" aria-selected={tab === 'list'} onClick={() => setParams({}, { replace: true })}>
+      <div className="tabs" role="tablist" aria-label="תחקירים ובנק לקחים" onKeyDown={onTabListKey}>
+        <button className={`tab${tab === 'list' ? ' on' : ''}`} {...tabProps(tab === 'list')} onClick={() => setParams({}, { replace: true })}>
           תחקירים<span className="n">{data?.length ?? ''}</span>
         </button>
-        <button className={`tab${tab === 'bank' ? ' on' : ''}`} role="tab" aria-selected={tab === 'bank'} onClick={() => setParams({ tab: 'bank' }, { replace: true })}>
+        <button className={`tab${tab === 'bank' ? ' on' : ''}`} {...tabProps(tab === 'bank')} onClick={() => setParams({ tab: 'bank' }, { replace: true })}>
           בנק לקחים
         </button>
       </div>

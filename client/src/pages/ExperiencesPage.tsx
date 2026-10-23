@@ -19,6 +19,7 @@ import { useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { onTabListKey, tabProps } from '../lib/tabKeys';
 
 const PHASE: Record<Experience['phase'], { label: string; tone: string }> = {
   planned: { label: 'מתוכננת', tone: 'gray' },
@@ -129,7 +130,7 @@ export function ExperiencesPage() {
         )
       ) : (
       <>
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="סינון ההתנסויות" onKeyDown={onTabListKey}>
         {(
           [
             ['all', 'הכל'],
@@ -141,7 +142,7 @@ export function ExperiencesPage() {
             ['done', 'הושלמו'],
           ] as [Tab, string][]
         ).map(([k, l]) => (
-          <button key={k} className={`tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>
+          <button key={k} className={`tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)} {...tabProps(tab === k)}>
             {l}
             {k !== 'all' && <span className="n">{count(k)}</span>}
           </button>

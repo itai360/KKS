@@ -5616,6 +5616,10 @@ button.stat:disabled {
   color: var(--red-ink);
 }
 
+.update-bar.stale {
+  background: var(--gray-bg);
+}
+
 /* ---------- debrief forms (components/DebriefFormView.tsx) ---------- */
 
 .prewrap {

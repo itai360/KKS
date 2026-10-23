@@ -30,6 +30,7 @@ import { useSheetGesture } from './sheetGesture';
 import { usePresence } from '../lib/presence';
 import { usePeriodSwipe } from './periodSwipe';
 import { lockScroll } from '../lib/scrollLock';
+import { trapFocus } from '../lib/focusTrap';
 
 // ---------------- the floating layer ----------------
 
@@ -195,7 +196,19 @@ function SheetBody({ title, onClose, children, back, tall, className = '', head,
   useEffect(() => {
     // the focus comes inside (the day chosen, or the sheet itself) - not to a field, which would bring the keyboard up
     if (!ref.current?.contains(document.activeElement)) ref.current?.focus({ preventScroll: true });
-    return lockScroll();
+    const unlock = lockScroll();
+    // the keyboard stays in the sheet while it is the topmost layer
+    const layer = backdrop.current;
+    const untrap = layer
+      ? trapFocus(layer, () => {
+          const open = document.querySelectorAll('.sheet-backdrop:not(.is-leaving), .modal-backdrop:not(.is-leaving)');
+          return open[open.length - 1] === layer;
+        })
+      : () => undefined;
+    return () => {
+      untrap();
+      unlock();
+    };
   }, []);
   // the top's edge shows only once the list or calendar under it is scrolled
   useEffect(() => {

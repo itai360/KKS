@@ -146,8 +146,10 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
     // people and areas are offered in alphabetical order on every screen
     const list = sortHe(users.data ?? [me.user], (u) => u.displayName);
     const byId = new Map(list.map((u) => [u.id, u]));
+    // what was saved since signing in (my phone, a name the commander changed) comes with the people list
+    const self = { ...me.user, ...byId.get(me.user.id) };
     return {
-      user: me.user,
+      user: self,
       settings: { ...currentSettings, domains: sortHe(currentSettings.domains) },
       users: list,
       staff: list.filter((u) => u.role === 'staff'),

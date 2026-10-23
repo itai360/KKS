@@ -1,4 +1,4 @@
-import { Children, cloneElement, Fragment, isValidElement, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
@@ -7,9 +7,11 @@ import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
 import { useSheetGesture } from './sheetGesture';
 import { lockScroll } from '../lib/scrollLock';
+import { trapFocus } from '../lib/focusTrap';
 import { useMedia } from '../lib/media';
 import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { Sheet } from './pickers';
+import { onTabListKey, tabProps } from '../lib/tabKeys';
 
 // the pickers live in their own module; every screen imports them from here as before
 export { DateInput, Select, SuggestInput, TimeInput } from './pickers';
@@ -63,6 +65,7 @@ export function Modal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const onCloseRef = useRef(closable ? onClose : () => undefined);
   onCloseRef.current = closable ? onClose : () => undefined;
   // what each field held when first touched: closing by Escape, a click outside or the X
@@ -95,9 +98,18 @@ export function Modal({
     first?.focus();
     const unlock = lockScroll();
     const box = ref.current;
+    // the keyboard stays in the dialog while it is the topmost one (its backdrop holds the arrow too)
+    const layer = box?.closest<HTMLElement>('.modal-backdrop');
+    const untrap = layer
+      ? trapFocus(layer, () => {
+          const open = document.querySelectorAll('.modal-backdrop:not(.is-leaving)');
+          return open[open.length - 1] === layer;
+        })
+      : () => undefined;
     return () => {
       document.removeEventListener('keydown', onKey);
       box?.removeEventListener('focusin', touched);
+      untrap();
       unlock();
       prev?.focus?.();
     };
@@ -179,10 +191,10 @@ export function Modal({
   // stay inside that box's layer, under the phone's bottom bar
   return createPortal(
     <div className="modal-backdrop" ref={backdrop} onMouseDown={(e) => e.target === e.currentTarget && void tryClose.current()}>
-      <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" ref={ref}>
+      <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref}>
         {closable && <div className="modal-grab" aria-hidden="true" />}
         <div className="modal-head">
-          <h2>{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           {closable && (
             <button className="icon-btn" onClick={() => void tryClose.current()} aria-label="סגירה" type="button">
               <Icon name="x" />
@@ -339,10 +351,10 @@ export function Seg<T extends string>({
     return () => ro?.disconnect();
   }, [value, optionKey]);
   return (
-    <div className={`seg${wrap ? ' seg-wrap' : ''}${pill ? ' has-pill' : ''}`} role="tablist" ref={ref} style={pill ?? undefined}>
+    <div className={`seg${wrap ? ' seg-wrap' : ''}${pill ? ' has-pill' : ''}`} role="tablist" ref={ref} style={pill ?? undefined} onKeyDown={onTabListKey}>
       {pill && <span className="seg-pill" aria-hidden="true" />}
-      {options.map((o) => (
-        <button key={o.value} type="button" className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)} role="tab" aria-selected={value === o.value}>
+      {options.map((o, i) => (
+        <button key={o.value} type="button" className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)} {...tabProps(value === o.value || (i === 0 && !options.some((x) => x.value === value)))}>
           {o.icon && <Icon name={o.icon} />}
           {o.label}
         </button>

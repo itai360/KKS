@@ -28,6 +28,8 @@ export function noteVersion(v: unknown): void {
     /* this page only */
   }
 }
+/** the newest change number any answer has brought (0: none yet) */
+export const seenDataVersion = () => seenVersion;
 export function versionHeaders(): Record<string, string> {
   return seenVersion ? { 'x-kks-v': String(seenVersion) } : {};
 }

@@ -12,6 +12,7 @@ import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { ensureNotifications, markAllRead, NOTIFICATION_SUBJECTS, useNotifications } from '../lib/notifications';
 import { useApi } from '../lib/useApi';
+import { onTabListKey, tabProps } from '../lib/tabKeys';
 
 type Tab = '' | 'unread' | NotificationCategory | 'snoozed';
 
@@ -49,13 +50,13 @@ export function NotificationsPage() {
             </>
           }
         />
-        <div className="tabs">
+        <div className="tabs" role="tablist" aria-label="סינון ההתראות" onKeyDown={onTabListKey}>
           {tabs.map(([v, label]) => (
-            <button key={v || 'all'} className={`tab${tab === v ? ' on' : ''}`} onClick={() => setTab(v)}>
+            <button key={v || 'all'} className={`tab${tab === v ? ' on' : ''}`} onClick={() => setTab(v)} {...tabProps(tab === v)}>
               {label}
             </button>
           ))}
-          <button className={`tab${tab === 'snoozed' ? ' on' : ''}`} onClick={() => setTab('snoozed')}>
+          <button className={`tab${tab === 'snoozed' ? ' on' : ''}`} onClick={() => setTab('snoozed')} {...tabProps(tab === 'snoozed')}>
             <Icon name="clock" size={13} /> נדחו
           </button>
         </div>

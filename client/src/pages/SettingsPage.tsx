@@ -977,7 +977,7 @@ function Backups() {
 
 /** my phone and email - for the directory and the call buttons */
 function ContactCard() {
-  const { user } = useSession();
+  const { user, refresh } = useSession();
   const toast = useToast();
   const [phone, setPhone] = useState(user.phone);
   const [email, setEmail] = useState(user.email);
@@ -987,8 +987,12 @@ function ContactCard() {
   const save = async () => {
     setError(null);
     try {
-      await api.patch('/api/me/contact', { phone, email });
+      const saved = await api.patch<User>('/api/me/contact', { phone, email });
+      // as the server keeps them (an email in small letters, spaces trimmed)
+      setPhone(saved.phone);
+      setEmail(saved.email);
       emitLocalChange('users');
+      void refresh();
       toast({ title: 'פרטי הקשר נשמרו', tone: 'green' });
     } catch (e) {
       setError((e as Error).message);
