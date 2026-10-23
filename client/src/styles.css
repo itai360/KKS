@@ -4388,7 +4388,45 @@ input::-webkit-date-and-time-value {
   .top-brand {
     display: flex;
   }
-  .search {
+  /* the search, right after the course's mark: as wide as the bar leaves it */
+  /* the mark keeps its place; the search takes what is left (on the smallest phone too) */
+  .topbar:not(.is-titled) .top-brand {
+    flex-shrink: 0;
+    gap: 0;
+  }
+  .topbar .search {
+    flex: 1 1 0;
+    min-width: 38px;
+    max-width: none;
+    transition: flex-basis 0.32s var(--spring), flex-grow 0.32s var(--spring);
+  }
+  .topbar .search input {
+    padding-inline-end: 12px;
+  }
+  /* what it finds: across the screen, under the bar */
+  .topbar .search-pop {
+    position: fixed;
+    top: calc(var(--top-h) + 6px);
+    inset-inline: 10px;
+    min-width: 0;
+    max-height: calc(100dvh - var(--top-h) - 120px);
+  }
+  /* the screen's title in the bar: the search folds to its icon beside it, and opens again on a tap */
+  .topbar.is-titled .search:not(:focus-within) {
+    flex: 0 0 38px;
+  }
+  .topbar.is-titled .search:not(:focus-within) input {
+    padding: 0;
+    color: transparent;
+    cursor: pointer;
+  }
+  .topbar.is-titled .search:not(:focus-within) input::placeholder {
+    color: transparent;
+  }
+  .topbar.is-titled .search:not(:focus-within) > svg {
+    right: 10px;
+  }
+  .topbar.is-titled:has(.search:focus-within) .top-brand-title {
     display: none;
   }
   .hide-mobile {

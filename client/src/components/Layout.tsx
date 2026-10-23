@@ -711,7 +711,8 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="main" inert={drawer || undefined}>
-        <header className="topbar">
+        {/* titled: the screen's title shows beside the mark, and on a phone the search folds to its icon */}
+        <header className={`topbar${barTitle ? ' is-titled' : ''}`}>
           <BackButton />
           <div className={`top-brand${menuOpen ? ' is-open' : ''}`}>
             {/* the course's mark opens the side menu, from this side of the screen */}
@@ -737,9 +738,6 @@ export function Layout({ children }: { children: ReactNode }) {
             <span className={`live hide-mobile${live ? ' on' : ''}`} title={live ? 'מחובר - עדכונים בזמן אמת' : 'מתחבר...'}>
               {live ? 'מעודכן' : 'מתחבר'}
             </span>
-            <NavLink to="/search" className="icon-btn only-mobile" aria-label="חיפוש">
-              <Icon name="search" />
-            </NavLink>
             <Bell unread={unread} />
             <ThemeButton />
             {/* on a computer, the same "+" as the phone bar's: what one adds, in a menu under it */}

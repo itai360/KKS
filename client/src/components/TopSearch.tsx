@@ -1,13 +1,15 @@
-// The top bar's search on a computer: as one types, everything it finds opens under it - the screens,
-// actions, people, weeks and domains from the first letter, then the tasks, cadets, events, debriefs and
-// documents - narrowing with every letter, as the search screen does on a phone. Arrows and Enter pick,
-// Escape closes; Enter with nothing picked opens the full search.
+// The top bar's search - on a computer, and on a phone right after the course's mark: as one types,
+// everything it finds opens under it - the screens, actions, people, weeks and domains from the first
+// letter, then the tasks, cadets, events, debriefs and documents - narrowing with every letter. Arrows and
+// Enter pick, Escape closes; Enter with nothing picked opens the full search.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { searchKey } from '@shared/search';
 import { OPEN_PALETTE, useFindItems, type FindItem, type FindPage } from './CommandPalette';
 import { Icon } from './Icon';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
+import { useMedia } from '../lib/media';
 import { readRecent, rememberSearch } from '../lib/recentSearches';
 import { useSession } from '../lib/session';
 
@@ -15,6 +17,8 @@ export function TopSearch({ pages }: { pages: FindPage[] }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useSession();
+  // a phone's bar has room for a word, not the whole list of what can be found
+  const phone = useMedia(BOTTOM_BAR_MEDIA);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -105,7 +109,7 @@ export function TopSearch({ pages }: { pages: FindPage[] }) {
         // a click in the list keeps the focus here (it is pressed down without taking it): only a click elsewhere closes
         onBlur={close}
         onKeyDown={onKey}
-        placeholder="חיפוש משימה, איש סגל, צוער, שבוע, מסך..."
+        placeholder={phone ? 'חיפוש...' : 'חיפוש משימה, איש סגל, צוער, שבוע, מסך...'}
         aria-label="חיפוש"
         aria-keyshortcuts="/"
         role="combobox"
@@ -115,7 +119,7 @@ export function TopSearch({ pages }: { pages: FindPage[] }) {
         aria-autocomplete="list"
         autoComplete="off"
       />
-      <button type="button" className="search-palette" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))} aria-label="פקודה מהירה" aria-keyshortcuts="Control+K" title="פקודה מהירה: מסך, פעולה או פריט">
+      <button type="button" className="search-palette hide-mobile" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))} aria-label="פקודה מהירה" aria-keyshortcuts="Control+K" title="פקודה מהירה: מסך, פעולה או פריט">
         <span className="kbd">Ctrl K</span>
       </button>
       {shown && (
@@ -153,7 +157,7 @@ export function TopSearch({ pages }: { pages: FindPage[] }) {
             {!items.length && <div className="palette-empty small muted">{searchKey(q).length >= 2 ? 'מחפש...' : 'לא נמצא דבר בשם הזה'}</div>}
           </div>
           {q.trim() && (
-            <div className="search-pop-foot tiny muted">
+            <div className="search-pop-foot tiny muted hide-mobile">
               <span className="kbd">↑</span>
               <span className="kbd">↓</span> מעבר · <span className="kbd">Enter</span> {active >= 0 ? 'פתיחה' : 'כל התוצאות'} · <span className="kbd">Esc</span> סגירה
             </div>
