@@ -54,7 +54,7 @@ import {
   userForFeedToken,
   weeksCalendarUrl,
 } from './calendar';
-import { googleClientId, verifyGoogleIdToken } from './google';
+import { googleClientId, googleSignInEnabled, verifyGoogleIdToken } from './google';
 import {
   cancelEvent,
   canManageEvent,
@@ -132,7 +132,7 @@ export function apiRouter(): Router {
       courseName: s.courseName,
       courseSymbol: s.courseSymbol,
       needsSetup: users === 0,
-      googleClientId: googleClientId() || null,
+      googleClientId: googleSignInEnabled() ? googleClientId() : null,
       // the serverless deployment has no long-lived connections: the app asks for changes instead
       realtime: process.env.KKS_REALTIME === 'poll' ? 'poll' : 'stream',
     });

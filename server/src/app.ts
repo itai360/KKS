@@ -5,6 +5,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { ZodError } from 'zod';
 import { apiRouter } from './api';
 import { csrfGuard, loadUser } from './auth';
+import { googleSignInEnabled } from './google';
 import { courseScope } from './courses';
 import { HttpError } from './core';
 import { zodMessage } from './validation';
@@ -48,7 +49,7 @@ export function createApp(opts: { staticDir?: string } = {}) {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=()');
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
     // Google's sign-in opens a window of its own
-    res.setHeader('Cross-Origin-Opener-Policy', process.env.GOOGLE_CLIENT_ID ? 'same-origin-allow-popups' : 'same-origin');
+    res.setHeader('Cross-Origin-Opener-Policy', googleSignInEnabled() ? 'same-origin-allow-popups' : 'same-origin');
     next();
   });
 
@@ -77,7 +78,7 @@ export function createApp(opts: { staticDir?: string } = {}) {
       }),
     );
     // Google's sign-in button needs its script and frame only when Google login is enabled
-    const g = process.env.GOOGLE_CLIENT_ID ? ' https://accounts.google.com' : '';
+    const g = googleSignInEnabled() ? ' https://accounts.google.com' : '';
     const csp = [
       "default-src 'self'",
       `script-src 'self'${g ? ' https://accounts.google.com/gsi/client' : ''}`,

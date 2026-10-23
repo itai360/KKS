@@ -29,10 +29,13 @@ interface GoogleIdApi {
 /** Section 3: optional "sign in with Google", rendered by Google's own button. */
 export function GoogleButton({ clientId, onLogin, onError }: { clientId: string; onLogin: (r: LoginResult) => void; onError: (m: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  // shown only once Google's script is here and drew its button - a blocked script leaves nothing behind
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     const render = () => {
       const g = (window as unknown as { google?: GoogleIdApi }).google;
       if (!g || !ref.current) return;
+      setReady(true);
       g.accounts.id.initialize({
         client_id: clientId,
         callback: (r) =>
@@ -50,7 +53,16 @@ export function GoogleButton({ clientId, onLogin, onError }: { clientId: string;
     script.onload = render;
     document.head.appendChild(script);
   }, [clientId, onLogin, onError]);
-  return <div ref={ref} style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }} />;
+  return (
+    <>
+      {ready && (
+        <div className="row small muted" style={{ justifyContent: 'center' }}>
+          או
+        </div>
+      )}
+      <div ref={ref} style={{ minHeight: ready ? 44 : 0, display: 'flex', justifyContent: 'center' }} />
+    </>
+  );
 }
 
 const DEMO_USERS: { username: string; label: string; hint: string }[] = [
@@ -213,14 +225,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
           <button className="btn btn-primary btn-lg btn-block" disabled={busy || !info}>
             {setup ? 'הקם את הקורס' : 'כניסה'} <Icon name="chevronLeft" />
           </button>
-          {!setup && info?.googleClientId && (
-            <>
-              <div className="row small muted" style={{ justifyContent: 'center' }}>
-                או
-              </div>
-              <GoogleButton clientId={info.googleClientId} onLogin={afterPassword} onError={setError} />
-            </>
-          )}
+          {!setup && info?.googleClientId && <GoogleButton clientId={info.googleClientId} onLogin={afterPassword} onError={setError} />}
         </form>
         )}
       </div>

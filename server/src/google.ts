@@ -1,5 +1,6 @@
 // Section 3 - "later, allow signing in with Google or an organisational account".
-// Enabled by setting GOOGLE_CLIENT_ID. The browser gets an ID token from Google;
+// Enabled by setting GOOGLE_CLIENT_ID and GOOGLE_SIGN_IN=1 (the same Google client also serves saving to
+// Drive, googleDrive.ts - which alone does not put a Google button on the sign-in page). The browser gets an ID token from Google;
 // we verify its signature against Google's published keys and match the e-mail
 // to an existing, active user (nobody gets in without the commander adding them).
 
@@ -25,6 +26,8 @@ export function setJwksFetcher(fn: JwksFetcher): void {
 }
 
 export const googleClientId = (): string => process.env.GOOGLE_CLIENT_ID ?? '';
+/** signing in with Google is on: a client, and the switch for it */
+export const googleSignInEnabled = (): boolean => !!googleClientId() && /^(1|on|true|yes)$/i.test(process.env.GOOGLE_SIGN_IN ?? '');
 
 async function keys(): Promise<Jwk[]> {
   if (cache && cache.until > Date.now()) return cache.keys;
@@ -43,7 +46,7 @@ export interface GoogleIdentity {
 
 export async function verifyGoogleIdToken(token: string, now = Date.now()): Promise<GoogleIdentity> {
   const clientId = googleClientId();
-  if (!clientId) throw new HttpError(404, 'כניסה עם Google אינה מופעלת');
+  if (!googleSignInEnabled()) throw new HttpError(404, 'כניסה עם Google אינה מופעלת');
   const parts = token.split('.');
   if (parts.length !== 3) throw new HttpError(401, 'אסימון Google לא תקין');
   let header: { alg?: string; kid?: string };

@@ -353,6 +353,18 @@ describe('saving to Google Drive', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(calls.some((x) => x.url.startsWith('https://oauth2.googleapis.com/revoke?token=ya29.one-time'))).toBe(true);
     expect(db().get<{ n: number }>('SELECT count(*) AS n FROM google_drive_requests')!.n).toBe(0);
+    // the Drive API not turned on in the Google project: said as such, nothing saved
+    setDriveFetch(async (url) => {
+      if (url.startsWith('https://oauth2.googleapis.com/token')) return Response.json({ access_token: 'ya29.other' });
+      if (url.startsWith('https://www.googleapis.com/drive/')) return Response.json({ error: { errors: [{ reason: 'accessNotConfigured' }], message: 'Google Drive API has not been used in project 1 before or it is disabled.' } }, { status: 403 });
+      return new Response('', { status: 200 });
+    });
+    const off = new URL((await c.s1.post(`/api/takpatz/teams/${team1}/drive`)).body.url as string).searchParams.get('state')!;
+    expect((await c.s1.get(`/api/google/drive/callback?state=${off}&code=abc`)).headers.location).toBe(`/takpatz/${team1}?drive=api`);
+    // a wrong secret: Google refuses the code
+    setDriveFetch(async (url) => (url.startsWith('https://oauth2.googleapis.com/token') ? Response.json({ error: 'invalid_client' }, { status: 401 }) : new Response('', { status: 200 })));
+    const bad = new URL((await c.s1.post(`/api/takpatz/teams/${team1}/drive`)).body.url as string).searchParams.get('state')!;
+    expect((await c.s1.get(`/api/google/drive/callback?state=${bad}&code=abc`)).headers.location).toBe(`/takpatz/${team1}?drive=client`);
     // Google saying no: back to the takpatz, nothing saved
     const third = new URL((await c.s1.post(`/api/takpatz/teams/${team1}/drive`)).body.url as string).searchParams.get('state')!;
     expect((await c.s1.get(`/api/google/drive/callback?state=${third}&error=access_denied`)).headers.location).toBe(`/takpatz/${team1}?drive=cancelled`);

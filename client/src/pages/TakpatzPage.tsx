@@ -145,6 +145,9 @@ const DRIVE_RESULTS: Record<string, { title: string; tone: 'green' | 'red' | 'gr
   expired: { title: 'עבר יותר מדי זמן מהכניסה ל-Google. לא נשמר קובץ - נסו שוב.', tone: 'red' },
   denied: { title: 'אין הרשאה לשמור את התקפ״צ הזה. לא נשמר קובץ.', tone: 'red' },
   failed: { title: 'השמירה ב-Google Drive לא הצליחה. לא נשמר קובץ - אפשר להוריד אותו ולהעלות ידנית.', tone: 'red' },
+  client: { title: 'Google לא אישר את מפתחות האתר, ולא נשמר קובץ. כדאי לבדוק ש-GOOGLE_CLIENT_SECRET ב-Vercel הועתק נכון מאותו לקוח OAuth.', tone: 'red' },
+  api: { title: 'ה-Google Drive API לא מופעל בפרויקט ב-Google Cloud, ולא נשמר קובץ. מפעילים אותו ב-APIs & Services ומנסים שוב.', tone: 'red' },
+  redirect: { title: 'כתובת החזרה לא רשומה בלקוח ה-OAuth ב-Google Cloud, ולא נשמר קובץ.', tone: 'red' },
 };
 
 export function TakpatzTeamPage() {

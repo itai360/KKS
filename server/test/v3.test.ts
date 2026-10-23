@@ -448,10 +448,12 @@ describe('google sign-in', () => {
 
   beforeEach(() => {
     process.env.GOOGLE_CLIENT_ID = 'client-123';
+    process.env.GOOGLE_SIGN_IN = '1';
     setJwksFetcher(async () => ({ keys: [jwk as never] }));
   });
   afterEach(() => {
     delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_SIGN_IN;
   });
 
   it('logs in a user whose e-mail matches, and rejects everything else', async () => {
@@ -474,6 +476,12 @@ describe('google sign-in', () => {
 
   it('is disabled without a client id', async () => {
     delete process.env.GOOGLE_CLIENT_ID;
+    expect((await request(c.app).post('/api/auth/google').set('x-kks', '1').send({ credential: token({ email: 'a@b.c' }) })).status).toBe(404);
+  });
+
+  it('is off with a client id alone (set up for saving to Drive): no button, no Google sign-in', async () => {
+    delete process.env.GOOGLE_SIGN_IN;
+    expect((await request(c.app).get('/api/public/info')).body.googleClientId).toBeNull();
     expect((await request(c.app).post('/api/auth/google').set('x-kks', '1').send({ credential: token({ email: 'a@b.c' }) })).status).toBe(404);
   });
 });

@@ -75,9 +75,20 @@ export function takeDriveRequest(state: string): DriveRequest | null {
   return { userId: r.user_id, teamId: r.team_id, verifier: r.verifier };
 }
 
+/** Google's answer, or what went wrong in Google's own words (an error code, never a token) */
 async function ok(res: Response, what: string): Promise<Response> {
-  if (!res.ok) throw new Error(`${what}: ${res.status}`);
-  return res;
+  if (res.ok) return res;
+  const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 400);
+  throw new Error(`${what}: ${res.status} ${body}`);
+}
+
+/** which part of the setup a failure points at, for the person saving and for the log */
+export type DriveFailure = 'client' | 'api' | 'redirect' | 'failed';
+export function driveFailure(message: string): DriveFailure {
+  if (/redirect_uri_mismatch/.test(message)) return 'redirect';
+  if (/invalid_client|unauthorized_client/.test(message)) return 'client';
+  if (/accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(message)) return 'api';
+  return 'failed';
 }
 
 /** Google's one-time code for an access token, used for this save only */

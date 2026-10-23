@@ -47,14 +47,18 @@ writeFileSync(
 
 cpSync(`${root}dist/client`, `${out}/static`, { recursive: true });
 
+// Google's sign-in button needs its script, style and frame - only where signing in with Google is on
+// (server/src/google.ts); the same client set up for saving to Drive alone needs none of them
+const signIn = !!process.env.GOOGLE_CLIENT_ID && /^(1|on|true|yes)$/i.test(process.env.GOOGLE_SIGN_IN ?? '');
+const g = signIn ? ' https://accounts.google.com' : '';
 const csp = [
   "default-src 'self'",
-  "script-src 'self'",
+  `script-src 'self'${signIn ? ' https://accounts.google.com/gsi/client' : ''}`,
   "img-src 'self' data: blob:",
-  "style-src 'self' 'unsafe-inline'",
+  `style-src 'self' 'unsafe-inline'${signIn ? ' https://accounts.google.com/gsi/style' : ''}`,
   "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-src 'none'",
+  `connect-src 'self'${g}`,
+  `frame-src${g || " 'none'"}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",
@@ -81,7 +85,7 @@ writeFileSync(
             // no camera, microphone, location or payment for this site - nor for anything it shows
             'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=()',
             // another site cannot hold a window of this one, nor read its files
-            'Cross-Origin-Opener-Policy': 'same-origin',
+            'Cross-Origin-Opener-Policy': signIn ? 'same-origin-allow-popups' : 'same-origin',
             'Cross-Origin-Resource-Policy': 'same-origin',
           },
           continue: true,

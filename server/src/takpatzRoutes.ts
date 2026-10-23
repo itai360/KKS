@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from 'express';
 import { TAKPATZ_BOARDS, takpatzFileName } from '../../shared/takpatz';
 import { fileName } from '../../shared/docx';
 import { badRequest, HttpError } from './core';
-import { driveSignInUrl, driveToken, revokeDriveToken, takeDriveRequest, uploadToDrive } from './googleDrive';
+import { driveFailure, driveSignInUrl, driveToken, revokeDriveToken, takeDriveRequest, uploadToDrive } from './googleDrive';
 import {
   addCatalogItem,
   copyBoard,
@@ -119,8 +119,9 @@ export async function driveCallback(req: Request, res: Response): Promise<void> 
     const link = await uploadToDrive(token, f.name, XLSX_TYPE, f.data);
     back(pending.teamId, 'ok', link);
   } catch (e) {
-    if (!(e instanceof HttpError)) console.error('drive save failed:', (e as Error).message);
-    back(pending.teamId, e instanceof HttpError && e.status === 403 ? 'denied' : 'failed');
+    if (e instanceof HttpError) return back(pending.teamId, e.status === 403 ? 'denied' : 'failed');
+    console.error('drive save failed:', (e as Error).message);
+    back(pending.teamId, driveFailure((e as Error).message));
   } finally {
     if (token) revokeDriveToken(token);
   }

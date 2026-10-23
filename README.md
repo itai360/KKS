@@ -166,7 +166,9 @@ docker run -d -p 3000:3000 -v kks-data:/data --name kks kks
 | `MAX_UPLOAD_MB` | `25` | גודל קובץ מצורף מרבי |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_NAME` | - | יצירת חשבון מפקד אוטומטית בהפעלה ראשונה (במקום מסך ההקמה) |
 | `PUSH_CONTACT` | `mailto:admin@example.com` | כתובת קשר שנשלחת לשירותי ה-Push של הדפדפנים. מפתחות ה-Push נוצרים אוטומטית ונשמרים במסד |
-| `GOOGLE_CLIENT_ID` | - | מפעיל כניסה עם Google. יוצרים OAuth Client מסוג Web application ב-Google Cloud Console עם `https://<DOMAIN>` כ-Authorized JavaScript origin, ומגדירים מייל לכל איש סגל בהגדרות ← אנשי סגל |
+| `GOOGLE_CLIENT_ID` | - | לקוח OAuth מסוג Web application ב-Google Cloud Console. לבדו לא מפעיל דבר - משמש את השמירה ב-Google Drive ואת הכניסה עם Google |
+| `GOOGLE_CLIENT_SECRET` | - | יחד עם `GOOGLE_CLIENT_ID`: שמירת התקפ"צ ב-Google Drive. בלקוח מוסיפים את `https://<DOMAIN>/api/google/drive/callback` כ-Authorized redirect URI, ובפרויקט מפעילים את Google Drive API |
+| `GOOGLE_SIGN_IN` | - | `1` מפעיל כניסה עם Google (עם `GOOGLE_CLIENT_ID`). בלקוח מוסיפים את `https://<DOMAIN>` כ-Authorized JavaScript origin, ומגדירים מייל לכל איש סגל בהגדרות ← אנשי סגל |
 | `GOOGLE_HOSTED_DOMAIN` | - | מגביל את הכניסה עם Google לחשבונות מדומיין ארגוני אחד |
 | `ANTHROPIC_API_KEY` | - | מפעיל סיכום שיחה אישית לפי הטופס (Claude). `KKS_AI_MODEL` בוחר מודל; בלעדיו נבחר החדש ביותר מהקו הראשי שהמפתח מאפשר |
 | `ELEVENLABS_API_KEY` או `OPENAI_API_KEY` | - | מפעיל תמלול של הקלטת שיחה (עברית). כשמוגדרים שניהם - ElevenLabs. `KKS_TRANSCRIBE_MODEL` בוחר מודל תמלול. ההקלטה נשלחת לשירות לתמלול ולא נשמרת באתר |
