@@ -10126,49 +10126,31 @@ html {
   }
 }
 
-/* ---------------- at the top of a phone: the course mark goes home, the course's name opens the side menu ---------------- */
+/* ---------------- at the top of a phone: the course's mark opens the side menu ---------------- */
 .top-brand {
   min-width: 0;
-  gap: 4px;
+  gap: 10px;
 }
 .top-brand-home {
   display: grid;
   flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  place-items: center;
+  padding: 0;
+  border: none;
   border-radius: 12px;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   transition: transform 0.12s;
 }
 .top-brand-home:active {
   transform: scale(0.94);
 }
-.top-brand-menu {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  min-height: 40px;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 12px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.top-brand-menu:active,
-.top-brand.is-open .top-brand-menu {
-  background: var(--hover);
-}
-.top-brand-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.top-brand-icon {
-  flex-shrink: 0;
-  color: var(--muted);
+.top-brand-home:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
 }
 /* a screen that is not one of the bar's tabs: no tab marked */
 .bottom-nav.no-tab .nav-ind {
@@ -11447,16 +11429,8 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 }
 
 /* ---------------- the screen's title in the top bar, once its big title has scrolled away ---------------- */
-.top-brand-names {
-  display: grid;
-  min-width: 0;
-}
-.top-brand-names > * {
-  grid-area: 1 / 1;
-  min-width: 0;
-  transition: opacity 0.22s ease, translate 0.38s var(--spring);
-}
 .top-brand-title {
+  min-width: 0;
   overflow: hidden;
   font-size: 15px;
   font-weight: 700;
@@ -11464,17 +11438,14 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   white-space: nowrap;
   opacity: 0;
   translate: 0 55%;
+  transition: opacity 0.22s ease, translate 0.38s var(--spring);
 }
-.top-brand-names.is-titled .top-brand-name {
-  opacity: 0;
-  translate: 0 -55%;
-}
-.top-brand-names.is-titled .top-brand-title {
+.top-brand-title.is-on {
   opacity: 1;
   translate: 0 0;
 }
 @media (prefers-reduced-motion: reduce) {
-  .top-brand-names > * {
+  .top-brand-title {
     translate: none !important;
   }
 }
@@ -14225,4 +14196,358 @@ tr.is-finished.is-folding {
 }
 .new-task-attach {
   align-items: flex-start;
+}
+
+/* ---------------- the traits a remark names (TraitPicker): the axis, its sub-axis, the traits as chips ---------------- */
+.tp {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tp-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--tone, var(--line-2));
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.tp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.tp-place {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 700;
+}
+.tp-place > svg {
+  color: var(--muted);
+}
+.tp-n {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  background: var(--fill, var(--paper-2));
+  font-size: 12px;
+}
+.tp-crumb {
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--tone-ink, var(--ink));
+  font: inherit;
+  font-weight: 700;
+  text-align: start;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .tp-crumb:hover {
+    background: var(--hover);
+  }
+}
+.tp-remove {
+  width: 34px;
+  height: 34px;
+  color: var(--muted);
+}
+.tp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding-inline: 12px 6px;
+  border-radius: 12px;
+  background: var(--paper-2);
+  color: var(--muted);
+}
+.tp-search:focus-within {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+/* the box is the search: no second ring on the field inside it */
+.tp-search .input:focus,
+.tp-search .input:focus-visible {
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.tp-search .input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  outline: none;
+  font-size: 16px;
+}
+.tp-axes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .tp-axes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.tp-axis {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--tone) 35%, var(--line));
+  border-radius: 14px;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s, border-color 0.15s;
+}
+.tp-axis b {
+  font-size: 15px;
+}
+@media (hover: hover) {
+  .tp-axis:hover:not(:disabled) {
+    border-color: var(--tone);
+  }
+}
+.tp-axis:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.tp-axis:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.tp-subs,
+.tp-options,
+.tp-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tp-sub,
+.tp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 5px 13px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+.tp-sub {
+  font-weight: 600;
+}
+@media (hover: hover) {
+  .tp-sub:hover:not(:disabled),
+  .tp-chip:hover {
+    border-color: var(--tone);
+  }
+}
+.tp-sub:active:not(:disabled),
+.tp-chip:active {
+  transform: scale(0.96);
+}
+.tp-sub:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* chosen: in the axis' colour, with a tick - readable in every tone, light and dark */
+.tp-chip.on {
+  border-color: var(--tone);
+  background: var(--tone-bg);
+  box-shadow: inset 0 0 0 1px var(--tone);
+  color: var(--tone-ink);
+  font-weight: 700;
+}
+.tp-chosen {
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line);
+}
+.tp-sub:focus-visible,
+.tp-chip:focus-visible,
+.tp-axis:focus-visible,
+.tp-crumb:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.tp-found {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.tp-found button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .tp-found button:hover {
+    background: var(--hover);
+  }
+}
+.tp-found .tiny {
+  margin-inline-start: auto;
+  text-align: end;
+}
+.tp-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+.tp-hint,
+.tp-none {
+  margin: 0;
+}
+.tp-text textarea {
+  resize: vertical;
+}
+.tp-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 1.5px dashed var(--line-2);
+  border-radius: 999px;
+  background: none;
+  color: var(--tint, var(--ink-2));
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .tp-add:hover {
+    border-color: var(--tint, var(--ink-2));
+    background: var(--hover);
+  }
+}
+/* written: each group's place, its traits as tags, the words on them */
+.tp-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.tp-view-group {
+  padding-inline-start: 10px;
+  border-inline-start: 3px solid var(--tone);
+}
+.tp-view-place {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tone-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.tp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.tp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.tp-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.85;
+}
+.tp-view-text {
+  margin-top: 6px;
+}
+/* over the whole file: every trait named, by axis and sub-axis */
+.tp-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+}
+.tp-summary-axis {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tp-summary-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tone-ink);
+}
+.tp-summary-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-inline-start: 14px;
+}
+@media print {
+  .tp-tag {
+    border: 1px solid #999;
+    background: none;
+    color: #000;
+  }
 }

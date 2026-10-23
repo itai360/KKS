@@ -2,6 +2,7 @@
 
 import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
 import type { EntryFields } from './entry';
+import type { TraitGroup } from './evaluationTraits';
 import type { ExperienceFeedbackForm } from './experienceFeedback';
 import type { ExperienceKind, ExperienceSpan } from './experiences';
 import type { StaffPermissions } from './permissions';
@@ -843,6 +844,8 @@ export interface EvaluationNote {
   canEdit: boolean;
   /** a remark written before the file had its present form: its tone, subject and when it was shown */
   legacy: { tone: EvalTone | null; category: string; shownOn: string | null } | null;
+  /** the traits it names (shared/evaluationTraits.ts), by axis and sub-axis in the catalog's order */
+  traits: TraitGroup[];
 }
 
 /** a critical point or event (נקודה / אירוע קריטי) */

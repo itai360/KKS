@@ -3,6 +3,8 @@
 // added - each the point, the axis (ציר) it belongs to and a few words on it - and a score from 0 to 100,
 // read on the legend below.
 
+import { TRAIT_AXES } from './evaluationTraits';
+
 /** how many points of each kind the format asks for: one - and more may be added, up to the most */
 export const FEEDBACK_POINTS = 1;
 export const FEEDBACK_POINTS_MAX = 6;
@@ -56,7 +58,7 @@ export function scoreBand(score: number): ScoreBand {
 
 export interface FeedbackAxis {
   name: string;
-  /** what it takes in, in a few words (the values have none) */
+  /** what it takes in: its traits in the catalog, in a line */
   about?: string;
 }
 
@@ -66,53 +68,18 @@ export interface FeedbackAxisGroup {
   axes: readonly FeedbackAxis[];
 }
 
-/** the axes a point belongs to: four main ones, each with the parts it holds */
-export const FEEDBACK_AXIS_GROUPS: readonly FeedbackAxisGroup[] = [
-  {
-    name: 'המקצוע הצבאי',
-    about: 'היכולת להוביל משימה, לתכנן אותה ולהוציא אותה לפועל',
-    axes: [
-      { name: 'הובלה', about: 'העברת מסרים, הפעלת סמכות, האצלת סמכויות ומיקום המפקד' },
-      { name: 'קבלת החלטות', about: 'שיקול דעת, חשיבה ביקורתית, הבחנה בין עיקר לטפל וקביעת סדרי עדיפויות' },
-      { name: 'יוזמה', about: 'יצירתיות, חשיבה מחוץ לקופסה, ראייה כוללת והגדלת ראש' },
-      { name: 'הכנה ותכנון', about: 'יסודיות, ירידה לפרטים, סדר וארגון ובקיאות' },
-      { name: 'ביצוע ובקרה', about: 'ניהול זמנים, מעקב ובקרה, רצינות והשקעה' },
-      { name: 'למידה והשתפרות', about: 'ניתוח, תחקור, הפקת לקחים ושיפור מתמיד' },
-    ],
-  },
-  {
-    name: 'ערכים',
-    about: 'העקרונות שמכוונים את ההתנהלות ואת אופן ביצוע המשימה',
-    axes: [{ name: 'דבקות במשימה וחתירה לניצחון' }, { name: 'אמינות' }, { name: 'אחריות' }, { name: 'שליחות' }, { name: 'משמעת' }, { name: 'רעות' }, { name: 'חיי אדם' }],
-  },
-  {
-    name: 'מנהיגות',
-    about: 'היכולת להכיר את עצמך, להשפיע על אנשים ולפתח אותם',
-    axes: [
-      { name: 'מודעות עצמית', about: 'הכרת החוזקות והחולשות, צניעות וביקורת עצמית' },
-      { name: 'תפיסה פיקודית', about: 'גיבוש דרך פיקודית ופעולה לאורה' },
-      { name: 'הנעה ומוטיבציה', about: 'רתימת אנשים, יחס מכבד ואיזון בין דרישה להכלה' },
-      { name: 'יצירת יציבות ובהירות', about: 'תמונת מצב ברורה, שקיפות, זמינות ונוכחות' },
-      { name: 'פיתוח פקודים', about: 'חניכה, יחס אישי, דאגה לפרט וחיזוק תחושת המסוגלות' },
-      { name: 'קבלת החלטות פיקודיות', about: 'קריאת המצב והאנשים, התאמה לקהל היעד ואומץ פיקודי' },
-    ],
-  },
-  {
-    name: 'חוסן',
-    about: 'היכולת לשמור על תפקוד ועל שיקול דעת מול לחץ, קושי ושינוי',
-    axes: [
-      { name: 'תפקוד תחת לחץ', about: 'התמודדות עם אתגרים ובלת״מים ושמירה על רציפות תפקודית' },
-      { name: 'ויסות ושליטה עצמית', about: 'קור רוח, איפוק, סבלנות, פרופורציות והפרדה בין האישי למקצועי' },
-      { name: 'עמידות והתמדה', about: 'חוסן פיזי ומנטלי, נחישות, איתנות ותעצומות נפש' },
-      { name: 'מסוגלות ואומץ אישי', about: 'תחושת מסוגלות, תעוזה והבעת עמדה' },
-      { name: 'גמישות ופתיחות למשוב', about: 'פתיחות לשינויים, חשיבה רעננה ויכולת לתת ולקבל ביקורת' },
-      { name: 'חוסן ביחסים ובקבוצה', about: 'אינטליגנציה רגשית ולכידות' },
-    ],
-  },
-];
+/**
+ * The axes a point belongs to - the course's evaluation axes (shared/evaluationTraits.ts, their one
+ * source): each main axis with its sub-axes; an axis without sub-axes (חוסן) is chosen as it is.
+ */
+export const FEEDBACK_AXIS_GROUPS: readonly FeedbackAxisGroup[] = TRAIT_AXES.map((a) => ({
+  name: a.name,
+  about: a.about,
+  axes: a.subAxes.length ? a.subAxes.map((s) => ({ name: s.name, about: s.traits.map((t) => t.name).join(', ') })) : [{ name: a.name, about: a.traits.map((t) => t.name).join(', ') }],
+}));
 
-/** an axis as a point keeps it: the main axis and its part - "מנהיגות - מודעות עצמית" */
-export const axisValue = (group: string, axis: string) => `${group} - ${axis}`;
+/** an axis as a point keeps it: the main axis and its sub-axis - "מנהיגות - יעורר מוטיבציה" - or the main axis alone */
+export const axisValue = (group: string, axis: string) => (group === axis ? group : `${group} - ${axis}`);
 
 /** every axis that can be chosen, in the order of the groups */
 export const FEEDBACK_AXES: readonly string[] = FEEDBACK_AXIS_GROUPS.flatMap((g) => g.axes.map((a) => axisValue(g.name, a.name)));

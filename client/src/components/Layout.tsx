@@ -252,6 +252,9 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
   ];
 }
 
+/** the course's cycle, as its name says it ("מחזור כ׳") - the top of the menu names it; a name without one is shown whole */
+export const courseCycle = (name: string) => /מחזור\s*[^\s,()·-]+/.exec(name)?.[0] ?? name;
+
 const RAIL_KEY = 'kks.rail';
 const MEDIUM = '(max-width: 1279px)';
 
@@ -635,7 +638,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="brand">
           <div className="brand-mark">{symbol.slice(0, 4)}</div>
           <div className="brand-text">
-            <div className="brand-name">{settings.courseName}</div>
+            <div className="brand-name">{courseCycle(settings.courseName)}</div>
             <div className="brand-sub">מערכת ניהול קורס</div>
           </div>
         </div>
@@ -711,37 +714,23 @@ export function Layout({ children }: { children: ReactNode }) {
         <header className="topbar">
           <BackButton />
           <div className={`top-brand${menuOpen ? ' is-open' : ''}`}>
-            {/* the mark goes home - from anywhere; already there, back to the top */}
-            <NavLink
-              to="/"
-              end
-              className="top-brand-home"
-              aria-label="דף הבית"
-              title="דף הבית"
-              onClick={() => path === '/' && window.scrollTo({ top: 0, behavior: 'smooth' })}
-            >
-              <span className="brand-mark">{symbol.slice(0, 4)}</span>
-            </NavLink>
-            {/* the course's name opens the side menu, from this side of the screen */}
+            {/* the course's mark opens the side menu, from this side of the screen */}
             <button
               ref={menuButton}
               type="button"
-              className="top-brand-menu"
+              className="top-brand-home"
               onClick={() => setMenuOpen((o) => !o)}
               aria-controls="main-menu"
               aria-expanded={menuOpen}
-              aria-label={`${settings.courseName} - תפריט`}
+              aria-label="תפריט"
               title="תפריט"
             >
-              {/* scrolled past the screen's big title: its name takes the course's place, as an iPhone's large titles do */}
-              <span className={`top-brand-names${barTitle ? ' is-titled' : ''}`}>
-                <span className="small top-brand-name">{settings.courseName}</span>
-                <span className="top-brand-title" aria-hidden="true">
-                  {barTitle}
-                </span>
-              </span>
-              <Icon name="menu" size={18} className="top-brand-icon" />
+              <span className="brand-mark">{symbol.slice(0, 4)}</span>
             </button>
+            {/* scrolled past the screen's big title: its name comes in beside the mark, as an iPhone's large titles do */}
+            <span className={`top-brand-title${barTitle ? ' is-on' : ''}`} aria-hidden="true">
+              {barTitle}
+            </span>
           </div>
           <TopSearch pages={palettePages} />
           <div className="top-actions">

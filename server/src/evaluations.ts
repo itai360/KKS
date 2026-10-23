@@ -15,6 +15,7 @@ import { COMMITTEE_DECISIONS, COMMITTEE_DECISION_LABELS, COMMITTEE_KINDS, commit
 import { isDateKey, localDateKey } from '../../shared/dates';
 import { byTeamAndName } from '../../shared/sort';
 import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, examsEntered, shownTests, type EvaluationSection } from '../../shared/evaluation';
+import { groupProblem, groupsText, TRAIT_AXES, traitPlace, type TraitGroup } from '../../shared/evaluationTraits';
 import type { Committee, CommitteeDetail, EvaluationChange, EvaluationExams, EvaluationField, EvaluationFile, EvaluationListItem, EvaluationNote, EvaluationPoint, ExamTest } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { cadetRow, canManageCadet, disciplineOrder, listExperiences, RECORD_BASE, toCadet, toRecord, type CadetRow, type RecordRow } from './cadets';
@@ -77,6 +78,8 @@ interface NoteRow {
   updated_at: string;
   updated_by_name: string | null;
   version: number;
+  /** the traits it names, as JSON (TraitGroup[]) */
+  traits: string;
 }
 
 interface PointRow {
@@ -173,15 +176,38 @@ function remember(actor: UserRow, cadetId: number, section: EvaluationSection, a
 
 /** someone else changed it meanwhile: say who, and change nothing */
 function conflict(what: string, cadetId: number, field: string, itemId: number | null = null): never {
+  // a remark is its words, its date and its traits: a change to any of them
+  const fields = field === 'note' ? ['note', 'noteDate', 'noteTraits'] : [field];
   const last = db().get<{ name: string | null }>(
     `SELECT u.display_name AS name FROM evaluation_history h LEFT JOIN users u ON u.id = h.user_id
-     WHERE h.cadet_id = ? AND h.field = ? AND (? IS NULL OR h.item_id = ?) ORDER BY h.id DESC LIMIT 1`,
+     WHERE h.cadet_id = ? AND h.field IN (${fields.map(() => '?').join(', ')}) AND (? IS NULL OR h.item_id = ?) ORDER BY h.id DESC LIMIT 1`,
     cadetId,
-    field,
+    ...fields,
     itemId,
     itemId,
   );
   throw new HttpError(409, `${what} עודכן בינתיים${last?.name ? ` על ידי ${last.name}` : ''}. השינוי שלך לא נשמר כדי לא לדרוס את שלו - בדקו את הנוסח השמור והחליטו.`);
+}
+
+/** the traits kept with a remark, read back - whatever is not a group in the catalog's shape is left out */
+function readTraits(raw: string | null | undefined): TraitGroup[] {
+  let v: unknown;
+  try {
+    v = JSON.parse(raw || '[]');
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(v)) return [];
+  const str = (x: unknown) => (typeof x === 'string' ? x : '');
+  return v
+    .filter((g): g is Record<string, unknown> => !!g && typeof g === 'object')
+    .map((g) => ({
+      axis: str(g.axis),
+      sub: typeof g.sub === 'string' && g.sub ? g.sub : null,
+      traits: (Array.isArray(g.traits) ? g.traits : []).filter((t): t is { id: string; name: string } => !!t && typeof t === 'object' && typeof (t as { id?: unknown }).id === 'string').map((t) => ({ id: t.id, name: str(t.name) })),
+      text: str(g.text),
+    }))
+    .filter((g) => g.axis && g.traits.length);
 }
 
 function toNote(actor: UserRow, e: NoteRow): EvaluationNote {
@@ -198,6 +224,7 @@ function toNote(actor: UserRow, e: NoteRow): EvaluationNote {
     edited: e.version > 1,
     canEdit: isCommander(actor) || e.author_id === actor.id,
     legacy: e.tone || e.category || e.shown_on ? { tone: e.tone, category: e.category, shownOn: e.shown_on } : null,
+    traits: readTraits(e.traits),
   };
 }
 
@@ -645,21 +672,69 @@ export function deleteDynamics(actor: UserRow, id: number): number {
 
 // ---------------- the team commander's remarks ----------------
 
-const noteSchema = z.object({
-  occurredOn: dateKey,
-  body: z.string().trim().min(1, 'כתבו את ההתייחסות').max(20_000, 'ההתייחסות ארוכה מדי'),
+/**
+ * Traits chosen for a remark: each group an axis, its sub-axis (none under חוסן) and traits of that place
+ * only - a combination the catalog (shared/evaluationTraits.ts) does not have is refused - and words on them.
+ */
+const groupSchema = z.object({
+  axis: z.string().max(40),
+  sub: z.string().max(80).nullable().optional(),
+  traits: z.array(z.string().max(80)).max(40, 'יותר מדי מאפיינים בקבוצה אחת'),
+  text: z.string().trim().max(4000, 'ההתייחסות למאפיינים ארוכה מדי').optional().default(''),
 });
-const noteEditSchema = noteSchema.partial().extend({ version: z.number().int().positive() });
+const traitsSchema = z
+  .array(groupSchema)
+  .max(30, 'יותר מדי קבוצות מאפיינים בהתייחסות אחת')
+  .superRefine((groups, ctx) => {
+    for (const g of groups) {
+      const problem = groupProblem(g);
+      if (problem) return void ctx.addIssue({ code: 'custom', message: problem });
+    }
+    const places = groups.map((g) => `${g.axis}|${g.sub ?? ''}`);
+    if (new Set(places).size !== places.length) ctx.addIssue({ code: 'custom', message: 'אותו תת ציר נבחר פעמיים - בחרו את המאפיינים באותה קבוצה' });
+  });
+
+/** the groups as kept: in the catalog's order, each trait with its name as it is now */
+function keptTraits(groups: z.infer<typeof traitsSchema>): TraitGroup[] {
+  const order = (g: { axis: string; sub?: string | null }) => {
+    const a = TRAIT_AXES.findIndex((x) => x.id === g.axis);
+    return a * 100 + (g.sub ? TRAIT_AXES[a].subAxes.findIndex((s) => s.id === g.sub) : 0);
+  };
+  return [...groups]
+    .sort((x, y) => order(x) - order(y))
+    .map((g) => ({ axis: g.axis, sub: g.sub ?? null, traits: g.traits.map((id) => ({ id, name: traitPlace(id)!.trait.name })), text: g.text }));
+}
+
+const noteSchema = z
+  .object({
+    occurredOn: dateKey,
+    body: z.string().trim().max(20_000, 'ההתייחסות ארוכה מדי').optional().default(''),
+    traits: traitsSchema.optional().default([]),
+  })
+  .refine((n) => n.body || n.traits.length, 'בחרו מאפיינים או כתבו את ההתייחסות');
+const noteEditSchema = z.object({
+  occurredOn: dateKey.optional(),
+  body: z.string().trim().max(20_000, 'ההתייחסות ארוכה מדי').optional(),
+  traits: traitsSchema.optional(),
+  version: z.number().int().positive(),
+});
+
+/** traits as the history keeps them: one text */
+const traitsWords = (groups: TraitGroup[]) => (groups.length ? groupsText(groups) : null);
+/** a remark in one text: its traits, then its words */
+const noteWords = (body: string, groups: TraitGroup[]) => [traitsWords(groups), body].filter(Boolean).join('\n');
 
 export function addNote(actor: UserRow, cadetId: number, raw: unknown): void {
   openFile(actor, cadetId);
   const n = noteSchema.parse(raw);
+  const traits = keptTraits(n.traits);
   const now = nowIso();
   db().tx(() => {
     const id = db().run(
-      'INSERT INTO evaluation_entries(cadet_id, body, occurred_on, week_id, author_id, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO evaluation_entries(cadet_id, body, traits, occurred_on, week_id, author_id, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       cadetId,
       n.body,
+      JSON.stringify(traits),
       n.occurredOn,
       weekContaining(n.occurredOn)?.id ?? null,
       actor.id,
@@ -667,7 +742,8 @@ export function addNote(actor: UserRow, cadetId: number, raw: unknown): void {
       now,
       actor.id,
     ).id;
-    remember(actor, cadetId, 'notes', 'add', 'note', null, n.body, id);
+    if (n.body) remember(actor, cadetId, 'notes', 'add', 'note', null, n.body, id);
+    if (traits.length) remember(actor, cadetId, 'notes', 'add', 'noteTraits', null, traitsWords(traits), id);
     touched(actor, cadetId);
   });
   changed('cadets');
@@ -688,12 +764,16 @@ export function updateNote(actor: UserRow, id: number, raw: unknown): number {
   const before = toNote(actor, e);
   const body = p.body ?? before.body;
   const occurredOn = p.occurredOn ?? e.occurred_on;
-  if (body === before.body && occurredOn === e.occurred_on) return e.cadet_id;
+  const traits = p.traits ? keptTraits(p.traits) : before.traits;
+  const traitsChanged = traitsWords(traits) !== traitsWords(before.traits);
+  if (!body && !traits.length) throw badRequest('בחרו מאפיינים או כתבו את ההתייחסות');
+  if (body === before.body && occurredOn === e.occurred_on && !traitsChanged) return e.cadet_id;
   db().tx(() => {
     // a remark from before the present form keeps its words in one text from now on
     db().run(
-      "UPDATE evaluation_entries SET title = '', body = ?, occurred_on = ?, week_id = ?, updated_at = ?, updated_by = ?, version = version + 1 WHERE id = ? AND version = ?",
+      "UPDATE evaluation_entries SET title = '', body = ?, traits = ?, occurred_on = ?, week_id = ?, updated_at = ?, updated_by = ?, version = version + 1 WHERE id = ? AND version = ?",
       body,
+      JSON.stringify(traits),
       occurredOn,
       weekContaining(occurredOn)?.id ?? null,
       nowIso(),
@@ -703,6 +783,7 @@ export function updateNote(actor: UserRow, id: number, raw: unknown): number {
     );
     if (body !== before.body) remember(actor, e.cadet_id, 'notes', 'edit', 'note', before.body, body, id);
     if (occurredOn !== e.occurred_on) remember(actor, e.cadet_id, 'notes', 'edit', 'noteDate', e.occurred_on, occurredOn, id);
+    if (traitsChanged) remember(actor, e.cadet_id, 'notes', 'edit', 'noteTraits', traitsWords(before.traits), traitsWords(traits), id);
     touched(actor, e.cadet_id);
   });
   changed('cadets');
@@ -715,7 +796,8 @@ export function deleteNote(actor: UserRow, id: number): number {
   if (!isCommander(actor) && e.author_id !== actor.id) throw forbidden('התייחסות נמחקת בידי מי שכתב אותה או המ"פ');
   db().tx(() => {
     db().run('DELETE FROM evaluation_entries WHERE id = ?', id);
-    remember(actor, e.cadet_id, 'notes', 'delete', 'note', `${e.occurred_on}: ${toNote(actor, e).body}`, null, id);
+    const n = toNote(actor, e);
+    remember(actor, e.cadet_id, 'notes', 'delete', 'note', `${e.occurred_on}: ${noteWords(n.body, n.traits)}`, null, id);
     touched(actor, e.cadet_id);
   });
   changed('cadets');
@@ -809,6 +891,7 @@ export function deletePoint(actor: UserRow, id: number): number {
 const ITEM_LABELS: Record<string, string> = {
   note: 'התייחסות',
   noteDate: 'תאריך התייחסות',
+  noteTraits: 'מאפייני התייחסות',
   'point.period': 'נקודה קריטית - תאריך / תקופה',
   'point.description': 'נקודה קריטית - תיאור',
   'point.significance': 'נקודה קריטית - משמעות פיקודית',
@@ -975,7 +1058,9 @@ export function committeeDetail(actor: UserRow, id: number): CommitteeDetail {
 /** a version kept before tests could be added: the tests it has values in, the rest not entered */
 function withTests(file: EvaluationFile): EvaluationFile {
   const exams = { ...examsOf(undefined), ...file.exams };
-  return { ...file, exams, tests: file.tests ?? shownTests([], exams), removableTests: [], grades: file.grades ?? [] };
+  // a version kept before remarks named traits: its remarks name none
+  const notes = file.notes.map((n) => ({ ...n, traits: n.traits ?? [] }));
+  return { ...file, exams, notes, tests: file.tests ?? shownTests([], exams), removableTests: [], grades: file.grades ?? [] };
 }
 
 /** a version given to a committee before the file had its present form */
@@ -1010,10 +1095,11 @@ function fromLegacy(old: LegacyFile): EvaluationFile {
       edited: false,
       canEdit: false,
       legacy: { tone: e.tone, category: e.category, shownOn: e.shownOn },
+      traits: [],
     }))
     .sort((a, b) => a.occurredOn.localeCompare(b.occurredOn) || a.id - b.id);
   if (old.teamOpinion?.text) {
-    notes.unshift({ id: 0, occurredOn: (old.teamOpinion.at ?? old.generatedAt).slice(0, 10), body: `חוות דעת מפקד הצוות:\n${old.teamOpinion.text}`, authorId: 0, authorName: old.teamOpinion.byName ?? '', createdAt: old.teamOpinion.at ?? old.generatedAt, updatedAt: old.teamOpinion.at ?? old.generatedAt, updatedByName: null, version: 1, edited: false, canEdit: false, legacy: null });
+    notes.unshift({ id: 0, occurredOn: (old.teamOpinion.at ?? old.generatedAt).slice(0, 10), body: `חוות דעת מפקד הצוות:\n${old.teamOpinion.text}`, authorId: 0, authorName: old.teamOpinion.byName ?? '', createdAt: old.teamOpinion.at ?? old.generatedAt, updatedAt: old.teamOpinion.at ?? old.generatedAt, updatedByName: null, version: 1, edited: false, canEdit: false, legacy: null, traits: [] });
   }
   return {
     layout: 2,

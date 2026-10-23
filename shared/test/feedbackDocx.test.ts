@@ -109,14 +109,17 @@ describe('the feedback as a Word file', () => {
 });
 
 describe('the axes of a point', () => {
-  it('four main axes, each part chosen as "main - part", none twice', () => {
+  it('are the evaluation axes of the catalog: each sub-axis chosen as "axis - sub-axis", חוסן as it is, none twice', () => {
     expect(FEEDBACK_AXIS_GROUPS.map((g) => g.name)).toEqual(['המקצוע הצבאי', 'ערכים', 'מנהיגות', 'חוסן']);
-    expect(FEEDBACK_AXES).toHaveLength(25);
-    expect(new Set(FEEDBACK_AXES).size).toBe(25);
+    expect(FEEDBACK_AXES).toHaveLength(6 + 7 + 6 + 1);
+    expect(new Set(FEEDBACK_AXES).size).toBe(FEEDBACK_AXES.length);
     expect(FEEDBACK_AXES).toContain('ערכים - חיי אדם');
-    expect(axisAbout('מנהיגות - מודעות עצמית')).toBe('הכרת החוזקות והחולשות, צניעות וביקורת עצמית');
-    // the values have no words of their own; an axis typed before the list has none either
-    expect(axisAbout('ערכים - אמינות')).toBe('');
+    expect(FEEDBACK_AXES).toContain('המקצוע הצבאי - להוביל');
+    expect(FEEDBACK_AXES).toContain('חוסן');
+    // what an axis takes in: its traits
+    expect(axisAbout('ערכים - אמינות')).toBe('דיוק, הוגנות, יושרה, אותנטיות, נאמנות');
+    expect(axisAbout('חוסן').split(', ')).toHaveLength(24);
+    // an axis typed before the list has none
     expect(axisAbout('פיקוד והובלה')).toBe('');
   });
 });

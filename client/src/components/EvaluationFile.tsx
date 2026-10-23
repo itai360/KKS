@@ -3,11 +3,12 @@
 // shown instead of written over, and every part's history. The same file read-only, for print and
 // for the version a committee received.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { STANDING_LABELS, STANDING_TONES, STANDINGS, EVAL_TONE_LABELS, type Standing } from '@shared/constants';
 import { shortDate } from '@shared/dates';
 import { EVALUATION_FIELDS, EVALUATION_SECTIONS, EVALUATION_TITLE, EXAM_FIELDS, EXAM_TESTS, EXAM_TEXT_FIELDS, examsEntered, NOT_ENTERED, shownTests, TEST_ORDER } from '@shared/evaluation';
+import type { TraitGroup } from '@shared/evaluationTraits';
 import type { EvaluationChange, EvaluationExams, EvaluationField, EvaluationFile, EvaluationNote, EvaluationPoint, ExamTest } from '@shared/types';
 import { api, ApiError } from '../lib/api';
 import { useDraft } from '../lib/draft';
@@ -17,6 +18,7 @@ import { useSession } from '../lib/session';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
 import { SectionRail, type RailItem } from './SectionRail';
+import { draftGroups, emptyGroup, groupDone, groupsProblem, sentGroups, TraitGroupsView, TraitPicker, TraitSummary, type DraftGroup } from './TraitPicker';
 import { useToast } from './Toasts';
 import { DateInput, ErrorBox, Field, Modal, Seg, Select } from './ui';
 
@@ -839,21 +841,40 @@ function DynamicsSection({ file, setFile }: { file: EvaluationFile; setFile: (f:
   );
 }
 
+/** the groups kept with a draft (one empty group when none) */
+function readGroups(stored: string): DraftGroup[] {
+  try {
+    const v = JSON.parse(stored) as DraftGroup[];
+    if (Array.isArray(v) && v.length) return v.map((g) => ({ ...emptyGroup(), ...g, traits: Array.isArray(g.traits) ? g.traits : [] }));
+  } catch {
+    /* nothing kept */
+  }
+  return [emptyGroup()];
+}
+
 const legacyTag = (n: EvaluationNote) => (n.legacy ? [n.legacy.tone ? EVAL_TONE_LABELS[n.legacy.tone] : '', n.legacy.category].filter(Boolean).join(' · ') : '');
 
 function NotesSection({ file, setFile, onHistory, authorName }: { file: EvaluationFile; setFile: (f: EvaluationFile) => void; onHistory: (itemId?: number) => void; authorName: string }) {
   const toast = useToast();
   const [date, setDate] = useState(todayKey());
   const [body, setBody] = useDraft(`evaluation-note:${file.cadet.id}`);
+  // the traits being chosen, kept with the draft until saved
+  const [storedGroups, setStoredGroups] = useDraft(`evaluation-note-traits:${file.cadet.id}`);
+  const groups = useMemo(() => readGroups(storedGroups), [storedGroups]);
+  const setGroups = (g: DraftGroup[]) => setStoredGroups(sentGroups(g).length ? JSON.stringify(g) : '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const ready = !!body.trim() || groups.some(groupDone);
   const add = async () => {
+    const problem = groupsProblem(groups);
+    if (problem) return setError(problem);
     setBusy(true);
     setError(null);
     try {
-      setFile(await api.post<EvaluationFile>(`/api/evaluations/${file.cadet.id}/notes`, { occurredOn: date, body }));
+      setFile(await api.post<EvaluationFile>(`/api/evaluations/${file.cadet.id}/notes`, { occurredOn: date, body, traits: sentGroups(groups) }));
       emitLocalChange('cadets');
       setBody('');
+      setStoredGroups('');
       toast({ title: 'ההתייחסות נוספה לתיק', tone: 'green' });
     } catch (e) {
       setError((e as Error).message);
@@ -868,6 +889,8 @@ function NotesSection({ file, setFile, onHistory, authorName }: { file: Evaluati
           עוד אין התייחסויות.
         </p>
       ) : (
+        <>
+        <TraitSummary notes={file.notes} />
         <ol className="eval-timeline">
           {file.notes.map((n) => (
             <ItemEditor
@@ -878,6 +901,7 @@ function NotesSection({ file, setFile, onHistory, authorName }: { file: Evaluati
               version={n.version}
               canEdit={n.canEdit}
               setFile={setFile}
+              traits={n.traits}
               values={{ occurredOn: n.occurredOn, body: n.body }}
               fresh={(f) => {
                 const x = f.notes.find((y) => y.id === n.id);
@@ -898,16 +922,18 @@ function NotesSection({ file, setFile, onHistory, authorName }: { file: Evaluati
                       </span>
                     )}
                   </div>
-                  <div className="eval-readonly mt-8">{n.body}</div>
+                  <TraitGroupsView groups={n.traits} />
+                  {n.body && <div className="eval-readonly mt-8">{n.body}</div>}
                 </>
               }
               fields={[
                 { key: 'occurredOn', label: 'תאריך', type: 'date' },
-                { key: 'body', label: 'תוכן ההתייחסות', long: true },
+                { key: 'body', label: n.traits.length ? 'התייחסות כללית (לא חובה)' : 'תוכן ההתייחסות', long: true },
               ]}
             />
           ))}
         </ol>
+        </>
       )}
       <div className="eval-add col gap-12">
         <div className="row wrap gap-12">
@@ -918,11 +944,15 @@ function NotesSection({ file, setFile, onHistory, authorName }: { file: Evaluati
             ייכתב בשם: <b>{authorName}</b>
           </div>
         </div>
-        <Field label="התייחסות חדשה">
-          <AutoText value={body} minRows={4} onChange={(e) => setBody(e.target.value)} placeholder="תפקוד, חוזקות, פערים, אירועים, משוב שניתן לצוער והשינוי שנצפה בעקבותיו" />
+        <div className="field">
+          <span>מאפיינים</span>
+          <TraitPicker groups={groups} onChange={setGroups} />
+        </div>
+        <Field label={groups.some(groupDone) ? 'התייחסות כללית (לא חובה)' : 'התייחסות'}>
+          <AutoText value={body} minRows={3} onChange={(e) => setBody(e.target.value)} placeholder="תפקוד, חוזקות, פערים, אירועים, משוב שניתן לצוער והשינוי שנצפה בעקבותיו" />
         </Field>
         <div className="row">
-          <button type="button" className="btn btn-primary" disabled={busy || !body.trim() || !date} onClick={() => void add()}>
+          <button type="button" className="btn btn-primary" disabled={busy || !ready || !date} onClick={() => void add()}>
             <Icon name="plus" /> הוספת התייחסות
           </button>
         </div>
@@ -1045,6 +1075,7 @@ function ItemEditor({
   canEdit,
   setFile,
   values,
+  traits,
   fresh,
   freshVersion,
   view,
@@ -1057,6 +1088,8 @@ function ItemEditor({
   version: number;
   canEdit: boolean;
   setFile: (f: EvaluationFile) => void;
+  /** a remark: the traits it names, chosen again when it is edited */
+  traits?: TraitGroup[];
   values: Record<string, string>;
   fresh: (f: EvaluationFile) => Record<string, string> | null;
   freshVersion: (f: EvaluationFile) => number | null;
@@ -1066,6 +1099,7 @@ function ItemEditor({
 }) {
   const toast = useToast();
   const [editing, setEditing] = useState<Record<string, string> | null>(null);
+  const [editGroups, setEditGroups] = useState<DraftGroup[]>([]);
   const [base, setBase] = useState(version);
   const [conflict, setConflict] = useState<{ error: string; saved: Record<string, string> | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1074,10 +1108,12 @@ function ItemEditor({
 
   const save = async (withVersion = base) => {
     if (!editing) return;
+    const problem = traits ? groupsProblem(editGroups) : null;
+    if (problem) return setError(problem);
     setBusy(true);
     setError(null);
     try {
-      setFile(await api.patch<EvaluationFile>(`/api/evaluations/${kind}/${id}`, { ...editing, version: withVersion }));
+      setFile(await api.patch<EvaluationFile>(`/api/evaluations/${kind}/${id}`, { ...editing, ...(traits ? { traits: sentGroups(editGroups) } : {}), version: withVersion }));
       emitLocalChange('cadets');
       setEditing(null);
       setConflict(null);
@@ -1099,6 +1135,12 @@ function ItemEditor({
     <li className="eval-item">
       {editing ? (
         <div className="col gap-12">
+          {traits && (
+            <div className="field">
+              <span>מאפיינים</span>
+              <TraitPicker groups={editGroups} onChange={setEditGroups} />
+            </div>
+          )}
           {fields.map((f) => (
             <Field key={f.key} label={f.label}>
               {f.long ? (
@@ -1157,6 +1199,7 @@ function ItemEditor({
                 className="btn btn-ghost btn-sm"
                 onClick={() => {
                   setEditing({ ...values });
+                  if (traits) setEditGroups(traits.length ? draftGroups(traits) : [emptyGroup()]);
                   setBase(version);
                   setConflict(null);
                 }}
@@ -1389,7 +1432,8 @@ export function FileDocument({ file }: { file: EvaluationFile }) {
                   <span>{n.authorName}</span>
                   {legacyTag(n) && <span className="badge">{legacyTag(n)}</span>}
                 </div>
-                <div className="eval-readonly mt-8">{n.body}</div>
+                <TraitGroupsView groups={n.traits ?? []} />
+                {n.body && <div className="eval-readonly mt-8">{n.body}</div>}
               </li>
             ))}
           </ol>
