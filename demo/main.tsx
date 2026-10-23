@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import '../client/src/styles.css';
 import '../client/src/apple.css';
+import '../client/src/takpatz.css';
 import { AppShell } from '../client/src/App';
 import { watchKeyboard } from '../client/src/lib/keyboard';
 import { applyTheme } from '../client/src/lib/theme';

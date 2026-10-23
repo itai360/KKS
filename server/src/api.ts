@@ -34,6 +34,7 @@ import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
 import { v3Router } from './api3';
+import { driveCallback, takpatzRouter } from './takpatzRoutes';
 import { newPassword } from './netguard';
 import { completeSignIn, disable, enable, issueTicket, recoveryLeft, regenerateRecovery, startSetup, turnOff } from './twofactor';
 import { shareTarget } from './alignment';
@@ -253,6 +254,9 @@ export function apiRouter(): Router {
   // WhatsApp's "share" into the app (alignment.ts): signed in or not, it ends on the page
   // the body is read only for someone signed in: a stranger cannot make the server hold large uploads
   r.post('/share-target', (req, res, next) => (req.user ? next() : res.redirect(303, '/alignment?share=login')), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), shareTarget);
+
+  // Google's sign-in for saving a takpatz to Drive comes back here; it checks who is signed in itself
+  r.get('/google/drive/callback', (req, res, next) => void driveCallback(req, res).catch(next));
 
   r.use(requireAuth);
 
@@ -1003,6 +1007,7 @@ export function apiRouter(): Router {
   });
 
   r.use(v3Router());
+  r.use(takpatzRouter());
 
   r.use((_req, _res, next) => next(notFound('נתיב לא קיים')));
   return r;

@@ -17,6 +17,7 @@ import { demoStep, linkLetters, saveGuide } from './discipline';
 import { addItem, createDebrief, itemToTask, updateDebrief } from './debriefs';
 import { createLinkDocument } from './documents';
 import { addWeeklyItem, holdWeekly, updateWeeklyItem } from './weekly';
+import { createPlacement, createTracking, saveProfile, setStage } from './takpatz';
 
 /** Fills an empty database with the demo course. Dates are relative to today. */
 export function seedDemoData(PASSWORD = 'kks12345'): { tasks: number; weeks: number; events: number } {
@@ -455,6 +456,50 @@ export function seedDemoData(PASSWORD = 'kks12345'): { tasks: number; weeks: num
   put(d(-1, '12:00'), ids.cmd, curWeek, 'closure', 'רכב פינוי לתרגיל הלילה');
   put(d(-1, '20:00'), ids.s1, curWeek, 'schedule', 'להקדים את ארוחת הבוקר ביום היציאה', { eventDate: addDays(sunday, 3) });
   put(d(-1, '22:30'), ids.cmd, curWeek, 'point', 'להתחיל לאסוף חומר לסיכום אמצע הקורס');
+
+  // ---------------- the takpatz of the first two teams ----------------
+  const catalogId = (half: number, name: string) => db().get<{ id: number }>('SELECT id FROM takpatz_catalog WHERE half = ? AND name = ?', half, name)?.id ?? null;
+  const team1 = cadetIds.filter((_, i) => i % 4 === 0);
+  const team2 = cadetIds.filter((_, i) => i % 4 === 1 && i !== 23);
+  const tk = (who: number, cadets: number[], rows: [number, string, string, number | null, number | null, string?, number?][]) => {
+    const actor = u(who);
+    return rows.map(([c, category, label, from, to, item, half]) =>
+      at(d(-12, '21:00'), () => createPlacement(actor, { cadetId: cadets[c], board: 'main', category, label, weekFrom: from, weekTo: to, span: 3, catalogId: item ? catalogId(half ?? 1, item) : null })).id,
+    );
+  };
+  const goals: [string, string, string][] = [
+    ['קבלת החלטות תחת לחץ', 'האצלת סמכויות', 'ביטחון מול קהל'],
+    ['העברת מסרים ברורה', 'ניהול זמנים', ''],
+    ['לסמוך על אחרים', 'קור רוח', 'עמידה מול קהל'],
+    ['יוזמה', 'ביקורת עצמית מאוזנת', ''],
+    ['מערכתיות', 'הובלת משימה מורכבת', 'סדר וארגון'],
+    ['דמות המפקד', '', ''],
+  ];
+  team1.forEach((c, i) =>
+    at(d(-13, '22:00'), () => saveProfile(u(ids.s1), c, { goals: goals[i], notes: i === 2 ? 'רוחב בחציון ב?' : '', ideas: i === 4 ? 'מ"כ ניווטים בשבוע השטח' : '', third: (['upper', 'middle', 'middle', 'lower', 'upper', 'middle'] as const)[i], rank: [2, 3, 4, 6, 1, 5][i] })),
+  );
+  const [first] = tk(ids.s1, team1, [
+    [0, 'broad_company', 'סמ"פ', 1, 4, 'תפקידן רוחב X'],
+    [0, 'command_team', 'ממ"ש היסוד', 0, 0, 'ממ"ש היסוד'],
+    [1, 'broad_team', 'קה"ד צוותי', 1, 4, 'קה"ד'],
+    [1, 'instruct_team', 'סיור הר הרצל', 6, 6, 'סיור הר הרצל', 2],
+    [2, 'command_team', 'ממ"ש שטח', 4, 4, 'ממ"ש שטח'],
+    [2, 'broad_team', 'סימולציות', 5, 8, 'א. סימולציות', 2],
+    [3, 'instruct_company', 'קרוסלת כלים', 3, 3, 'קרוסלת כלים'],
+    [3, 'command_team', 'מ"כ ניווטים', null, null],
+    [4, 'broad_company', 'קב"ט', 5, 8, 'תפקידן רוחב Y', 2],
+    [4, 'instruct_team', 'סק"ן כוכבים', 2, 2, 'סק"ן כוכבים'],
+    [5, 'command_team', 'מ"כ שטח', 4, 4, 'מ"כ שטח'],
+  ]);
+  for (const [stage, status] of [['download', 'done'], ['at', 'done'], ['exec', 'done']] as const) at(d(-5, '20:00'), () => setStage(u(ids.s1), { placementId: first + 1, stage, status }));
+  at(d(-4, '20:00'), () => setStage(u(ids.s1), { placementId: first, stage: 'download', status: 'done' }));
+  at(d(-4, '20:05'), () => setStage(u(ids.s1), { placementId: first, stage: 'at', status: 'set', date: addDays(today, 2) }));
+  at(d(-3, '19:00'), () => createTracking(u(ids.s1), { cadetId: team1[5], label: 'ק. אקדמיה', week: 1 }));
+  at(d(-11, '21:00'), () => saveProfile(u(ids.s2), team2[0], { goals: ['הובלה בשטח', 'העברת מסרים', ''], third: 'upper', rank: 1 }));
+  tk(ids.s2, team2, [
+    [0, 'command_team', 'ממ"ש המקצוע', 2, 2, 'ממ"ש המקצוע'],
+    [1, 'broad_team', 'קחו"ם צוותי', 1, 4, 'קחו"ם'],
+  ]);
 
   // ---------------- let the automation catch up to "now" ----------------
   db().run('UPDATE notifications SET read_at = created_at WHERE created_at < ?', d(-1, '00:00'));

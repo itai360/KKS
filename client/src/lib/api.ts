@@ -130,6 +130,28 @@ async function request<T>(method: string, url: string, body?: unknown, headers: 
   return data as T;
 }
 
+/**
+ * A file the server makes (a spreadsheet): its bytes and the name the server gave it. A failed answer
+ * carries the server's own words, as any request's does; an ended session asks to sign in again first.
+ */
+export async function fetchFile(url: string, retried = false): Promise<{ name: string; data: Blob }> {
+  let res: Response;
+  try {
+    res = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'x-kks': '1', ...versionHeaders() } });
+  } catch {
+    throw new ApiError(0, 'אין חיבור לשרת. בדוק את החיבור ונסה שוב.');
+  }
+  noteVersion(res.headers.get('x-kks-v'));
+  if (res.status === 401 && !retried && (await sessionLost())) return fetchFile(url, true);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, body?.error ?? 'אירעה שגיאה');
+  }
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const m = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  return { name: m ? decodeURIComponent(m[1]) : 'file', data: await res.blob() };
+}
+
 // A double click (or an impatient second tap) sends the same change twice; while the
 // first is on its way, the second one waits for its answer instead of creating a copy.
 const sending = new Map<string, Promise<unknown>>();

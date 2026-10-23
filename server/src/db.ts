@@ -3,6 +3,7 @@ import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlit
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { ADDED_DOMAINS, ADDED_TRACKS, COURSE_TRACKS } from '../../shared/constants';
+import { DEFAULT_TAKPATZ_CATALOG } from '../../shared/takpatzCatalog';
 
 export type Param = SQLInputValue | boolean | undefined;
 
@@ -1197,7 +1198,88 @@ ALTER TABLE experiences ADD COLUMN marked_at TEXT;
 ALTER TABLE experiences ADD COLUMN marked_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
 `;
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46];
+// the team commander's takpatz (takpatz.ts): each cadet's goals, notes, third and rank; the experiences
+// planned week by week in the main plan and a second one; the tracking of each from its handing down to
+// its feedback; the course's catalog of experiences (the spreadsheet's planning by halves) and a short
+// history of the changes, by team. A link to Google Drive waits here for the few minutes of its sign-in.
+function V47_TAKPATZ(db: Db): void {
+  const cats = "'broad_company', 'broad_team', 'command_team', 'instruct_team', 'instruct_company'";
+  db.exec(`
+CREATE TABLE takpatz_profiles (
+  cadet_id INTEGER PRIMARY KEY REFERENCES cadets(id) ON DELETE CASCADE,
+  goal1 TEXT NOT NULL DEFAULT '',
+  goal2 TEXT NOT NULL DEFAULT '',
+  goal3 TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  ideas TEXT NOT NULL DEFAULT '',
+  third TEXT CHECK (third IN ('upper', 'middle', 'lower')),
+  rank INTEGER CHECK (rank > 0),
+  third_updated_at TEXT,
+  third_updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE TABLE takpatz_catalog (
+  id INTEGER PRIMARY KEY,
+  half INTEGER NOT NULL CHECK (half IN (1, 2)),
+  kind TEXT NOT NULL CHECK (kind IN (${cats}, 'role')),
+  name TEXT NOT NULL,
+  sort INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE takpatz_placements (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  board TEXT NOT NULL CHECK (board IN ('main', 'alt')),
+  category TEXT NOT NULL CHECK (category IN (${cats})),
+  catalog_id INTEGER REFERENCES takpatz_catalog(id) ON DELETE SET NULL,
+  label TEXT NOT NULL,
+  week_from INTEGER,
+  week_to INTEGER,
+  span INTEGER NOT NULL DEFAULT 1 CHECK (span > 0),
+  notes TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL,
+  CHECK ((week_from IS NULL AND week_to IS NULL) OR (week_from IS NOT NULL AND week_to IS NOT NULL AND week_to >= week_from))
+);
+CREATE INDEX takpatz_placements_cadet ON takpatz_placements(cadet_id, board);
+CREATE TABLE takpatz_tracking (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  placement_id INTEGER UNIQUE REFERENCES takpatz_placements(id) ON DELETE SET NULL,
+  label TEXT NOT NULL,
+  week INTEGER,
+  stages TEXT NOT NULL DEFAULT '{}',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX takpatz_tracking_cadet ON takpatz_tracking(cadet_id);
+CREATE TABLE takpatz_history (
+  id INTEGER PRIMARY KEY,
+  team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+  cadet_id INTEGER REFERENCES cadets(id) ON DELETE SET NULL,
+  actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  text TEXT NOT NULL,
+  at TEXT NOT NULL
+);
+CREATE INDEX takpatz_history_team ON takpatz_history(team_id, id);
+CREATE TABLE google_drive_requests (
+  state_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  verifier TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+`);
+  const now = new Date().toISOString();
+  DEFAULT_TAKPATZ_CATALOG.forEach((c, i) => db.run('INSERT INTO takpatz_catalog(half, kind, name, sort, created_at) VALUES (?, ?, ?, ?, ?)', c.half, c.kind, c.name, i, now));
+}
+
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

@@ -169,6 +169,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
           { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
           { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
           { to: '/experiences', label: 'התנסויות', icon: 'target' },
+          { to: '/takpatz', label: 'תקפ״צ', icon: 'board', keywords: 'תקפצ תקפ"צ יעדים אישיים תכנון התנסויות שלישים' },
         ],
       },
       {
@@ -224,6 +225,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
         { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
         { to: '/experiences', label: 'התנסויות', icon: 'target' },
+        { to: '/takpatz', label: 'תקפ״צ', icon: 'board', keywords: 'תקפצ תקפ"צ יעדים אישיים תכנון התנסויות שלישים' },
       ],
     },
     {
