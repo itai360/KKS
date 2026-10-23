@@ -1,21 +1,23 @@
 // The feedback after an experience (משוב לאחר התנסות), one format for every experience - a role or a
 // broad one: a general written reference, a point to keep and a point to improve - more of either may be
-// added - each the point, the axis (ציר) it belongs to and a few words on it - and a score from 0 to 100,
-// read on the legend below.
+// added - each its axis (ציר), then how it shows (אופן המימוש: one of that axis' traits in the catalog,
+// shared/evaluationTraits.ts) and a few words on it - and a score from 0 to 100, read on the legend below.
 
-import { TRAIT_AXES } from './evaluationTraits';
+import { TRAIT_AXES, traitAxis, traitSubAxis, traitsUnder, type Trait } from './evaluationTraits';
 
 /** how many points of each kind the format asks for: one - and more may be added, up to the most */
 export const FEEDBACK_POINTS = 1;
 export const FEEDBACK_POINTS_MAX = 6;
 
 export interface FeedbackPoint {
-  /** the point itself, in a few words */
+  /** how it shows (אופן המימוש): the trait's name - in feedback given before the catalog, the point in a few words */
   title: string;
-  /** the axis (ציר) it belongs to */
+  /** the axis (ציר) it belongs to: "axis - sub-axis", or the axis alone */
   axis: string;
   /** what was seen, in a sentence or two (may stay empty) */
   text: string;
+  /** the trait's id in the catalog (none in feedback given before it) */
+  trait?: string;
 }
 
 export interface ExperienceFeedbackForm {
@@ -90,6 +92,39 @@ export function axisAbout(value: string): string {
   return '';
 }
 
+/** an axis value's place in the catalog: its axis and sub-axis ids (null: not one of the catalog's) */
+export function axisPlace(value: string): { axis: string; sub: string | null } | null {
+  for (const a of TRAIT_AXES) {
+    if (!a.subAxes.length && value === a.name) return { axis: a.id, sub: null };
+    for (const s of a.subAxes) if (value === axisValue(a.name, s.name)) return { axis: a.id, sub: s.id };
+  }
+  return null;
+}
+
+/** an axis and sub-axis of the catalog as a point keeps them */
+export function axisValueOf(axisId: string, subId: string | null): string {
+  const a = traitAxis(axisId);
+  if (!a) return '';
+  const s = traitSubAxis(a, subId);
+  return s ? axisValue(a.name, s.name) : a.name;
+}
+
+/** the ways an axis shows (אופן המימוש): the traits under it in the catalog */
+export function axisTraits(value: string): readonly Trait[] {
+  const place = axisPlace(value);
+  return place ? traitsUnder(place.axis, place.sub) : [];
+}
+
+/** what is wrong with a point's axis and how it shows (null: nothing) - only the catalog's own combinations */
+export function pointProblem(p: Pick<FeedbackPoint, 'axis' | 'title' | 'trait'>): string | null {
+  if (!p.axis.trim() || !p.title.trim()) return null;
+  if (!axisPlace(p.axis)) return `הציר "${p.axis}" לא נמצא במאגר צירי ההערכה`;
+  const traits = axisTraits(p.axis);
+  const t = traits.find((x) => (p.trait ? x.id === p.trait : x.name === p.title.trim()));
+  if (!t) return `"${p.title.trim()}" אינו אופן מימוש של הציר ${p.axis}`;
+  return null;
+}
+
 export const emptyPoint = (): FeedbackPoint => ({ title: '', axis: '', text: '' });
 export const emptyFeedback = (): ExperienceFeedbackForm => ({
   general: '',
@@ -118,16 +153,21 @@ export function feedbackMissing(raw: ExperienceFeedbackForm, score: number | nul
     if (!f[kind].length) out.push(POINT_LABELS[kind]);
     f[kind].forEach((p, i) => {
       const name = pointName(kind, i, f[kind].length);
-      if (!p.title.trim()) out.push(name);
-      else if (!p.axis.trim()) out.push(`הציר של ${name}`);
+      // the axis first, then how it shows
+      if (!p.axis.trim()) out.push(`הציר של ${name}`);
+      else if (!p.title.trim()) out.push(`אופן המימוש של ${name}`);
     });
   }
   if (score === null) out.push('ציון');
   return out;
 }
 
-/** a point in one line: "the point (ציר: the axis)" */
-export const pointLine = (p: FeedbackPoint) => `${p.title.trim()}${p.axis.trim() ? ` (ציר: ${p.axis.trim()})` : ''}`;
+/**
+ * a point in one line, as the paper form writes it: its axis, then how it shows - "(ציר: המקצוע הצבאי - להוביל)
+ * האצלת סמכויות"; a point given before the catalog as it was written then: "the point (ציר: the axis)"
+ */
+export const pointLine = (p: FeedbackPoint) =>
+  p.trait && p.axis.trim() ? `(ציר: ${p.axis.trim()}) ${p.title.trim()}` : `${p.title.trim()}${p.axis.trim() ? ` (ציר: ${p.axis.trim()})` : ''}`;
 
 /** the points of a kind as text: each in its line, with its words under it */
 export const pointsText = (points: FeedbackPoint[]) =>
@@ -157,7 +197,7 @@ export function asFeedbackForm(v: unknown): ExperienceFeedbackForm | null {
   const str = (s: unknown) => (typeof s === 'string' ? s : '');
   const points = (list: unknown) => {
     const given = (Array.isArray(list) ? list : []).slice(0, FEEDBACK_POINTS_MAX) as (Partial<Record<keyof FeedbackPoint, unknown>> | null)[];
-    const read = given.map((p) => ({ title: str(p?.title), axis: str(p?.axis), text: str(p?.text) }));
+    const read = given.map((p) => ({ title: str(p?.title), axis: str(p?.axis), text: str(p?.text), ...(typeof p?.trait === 'string' && p.trait ? { trait: p.trait } : {}) }));
     return read.length >= FEEDBACK_POINTS ? read : [...read, ...Array.from({ length: FEEDBACK_POINTS - read.length }, emptyPoint)];
   };
   return { general: str(o.general), keep: points(o.keep), improve: points(o.improve) };

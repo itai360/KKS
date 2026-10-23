@@ -12738,13 +12738,101 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   gap: 12px;
   align-items: flex-start;
 }
-.fb-axis {
-  width: 220px;
-  flex: none;
+/* the axis, then how it shows - side by side, the same width */
+.fb-axis,
+.fb-how {
+  flex: 1 1 0;
+  min-width: 0;
 }
-/* what the axis chosen takes in, under its row */
-.fb-axis-about {
-  margin: -4px 0 0;
+/* the recommendation of the axis and how it shows, under the words it is read from */
+.fb-recommend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fb-recommend-head {
+  align-items: center;
+}
+.fb-recommend-btn {
+  color: var(--accent-ink, var(--blue));
+}
+.fb-recommend-btn svg {
+  color: var(--blue);
+}
+.fb-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  transition: opacity 0.2s;
+}
+.fb-suggestions.is-busy {
+  opacity: 0.5;
+}
+.fb-suggestion {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.fb-suggestion > * {
+  grid-column: 1;
+  min-width: 0;
+}
+.fb-suggestion > svg {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  color: var(--blue);
+}
+.fb-suggestion-axis {
+  color: var(--muted);
+}
+.fb-suggestion-why {
+  overflow-wrap: anywhere;
+}
+@media (hover: hover) {
+  .fb-suggestion:hover {
+    border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+    background: color-mix(in srgb, var(--blue) 5%, var(--card));
+  }
+}
+.fb-suggestion:active {
+  transform: scale(0.98);
+}
+.fb-suggestion:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.fb-suggestion.on {
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 9%, var(--card));
+}
+/* given: the axis over how it showed */
+.fb-view-axis {
+  display: block;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb-suggestion,
+  .fb-suggestions {
+    transition: none;
+  }
+  .fb-suggestion:active {
+    transform: none;
+  }
 }
 /* the axes and what each takes in, folded under the general reference */
 .fb-axes-guide {
@@ -12790,7 +12878,8 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
     flex-direction: column;
     gap: 0;
   }
-  .fb-axis {
+  .fb-axis,
+  .fb-how {
     width: 100%;
   }
 }
@@ -12908,8 +12997,10 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
     align-items: stretch;
     gap: 10px;
   }
-  .fb-axis {
+  .fb-axis,
+  .fb-how {
     width: auto;
+    flex: none;
   }
   .fb-legend {
     grid-template-columns: repeat(4, minmax(0, 1fr));

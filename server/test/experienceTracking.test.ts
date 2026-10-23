@@ -39,12 +39,12 @@ describe('the tracking table', () => {
     const feedback = {
       general: 'הוביל את המחלקה בביטחון',
       keep: [
-        { title: 'פקודות ברורות', axis: 'פיקוד', text: '' },
-        { title: 'שליטה בכוח', axis: 'פיקוד', text: '' },
+        { title: 'תשדורת סמכותית', axis: 'המקצוע הצבאי - להוביל', text: '' },
+        { title: 'מיקום המפקד', axis: 'המקצוע הצבאי - להוביל', text: '' },
       ],
       improve: [
-        { title: 'ניהול זמן', axis: 'תכנון', text: '' },
-        { title: 'תדריך קצר יותר', axis: 'תכנון', text: '' },
+        { title: 'ניהול זמנים', axis: 'המקצוע הצבאי - לבצע', text: '' },
+        { title: 'מיקוד במסרים', axis: 'המקצוע הצבאי - להוביל', text: '' },
       ],
       score: 85,
     };

@@ -21,6 +21,7 @@ import {
   talkCadet,
   updateTalk,
   deleteTeam,
+  assertFeedbackGiver,
   feedbackAxes,
   giveFeedback,
   importCadets,
@@ -94,6 +95,8 @@ import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } f
 import { changed } from './journal';
 import { requireAbility } from './abilities';
 import { MAX_PART_BYTES, MAX_TRANSCRIPT_CHARS, summarizeTalk, talkAiStatus, transcribePart } from './talkAi';
+import { suggestTraits } from './traitAi';
+import { SUGGEST_MAX_CHARS } from '../../shared/traitSuggest';
 import { TALK_TYPES } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
 import { approvePlan, approveThreeWeek, planDocument, plansOverview, savePlan, saveThreeWeek, threeWeekPlan } from './plans';
@@ -356,6 +359,12 @@ export function v3Router(): Router {
   r.patch('/experiences/:id', (req, res) => {
     updateExperience(me(req), id(req.params.id), req.body);
     res.json(listExperiences(me(req)).find((x) => x.id === id(req.params.id)));
+  });
+  // the axis and the trait (אופן המימוש) a point's words speak of - Claude when set up, else the built-in matcher
+  r.post('/experiences/:id/feedback/suggest', async (req, res) => {
+    assertFeedbackGiver(me(req), id(req.params.id));
+    const p = z.object({ text: z.string().max(SUGGEST_MAX_CHARS * 2, 'הפירוט ארוך מדי להמלצה'), kind: z.enum(['keep', 'improve']) }).parse(req.body ?? {});
+    res.json(await suggestTraits(p.text, p.kind));
   });
   r.post('/experiences/:id/feedback', (req, res) => {
     giveFeedback(me(req), id(req.params.id), req.body);

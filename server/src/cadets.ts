@@ -17,7 +17,9 @@ import {
 } from '../../shared/constants';
 import { addDays, isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import { byHe, byTeamAndName } from '../../shared/sort';
-import { FEEDBACK_POINTS, FEEDBACK_POINTS_MAX, feedbackMissing, feedbackText, pointsText, readFeedbackForm, SCORE_MAX, scoreText, tidyFeedback } from '../../shared/experienceFeedback';
+import { axisTraits, FEEDBACK_POINTS, FEEDBACK_POINTS_MAX, feedbackMissing, feedbackText, pointProblem, pointName, pointsText, readFeedbackForm, SCORE_MAX, scoreText, tidyFeedback, type FeedbackPoint } from '../../shared/experienceFeedback';
+import { traitPlace } from '../../shared/evaluationTraits';
+import { placeAxis } from '../../shared/traitSuggest';
 import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, experienceName, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
 import type { Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
@@ -1073,9 +1075,11 @@ export function updateExperience(actor: UserRow, id: number, raw: Partial<z.inpu
 }
 
 const pointSchema = z.object({
-  title: z.string().trim().max(300, 'נקודה - עד 300 תווים'),
-  axis: z.string().trim().max(60, 'ציר - עד 60 תווים'),
+  // אופן המימוש: the trait's name under the axis - and its id in the catalog, when the form sends it
+  title: z.string().trim().max(300, 'אופן המימוש - עד 300 תווים'),
+  axis: z.string().trim().max(120, 'ציר - עד 120 תווים'),
   text: z.string().trim().max(2000, 'פירוט נקודה - עד 2000 תווים').optional().default(''),
+  trait: z.string().trim().max(80).optional(),
 });
 const points = z
   .array(pointSchema)
@@ -1092,8 +1096,28 @@ export const feedbackSchema = z
   })
   .superRefine((f, ctx) => {
     const missing = feedbackMissing(f, f.score);
-    if (missing.length) ctx.addIssue({ code: 'custom', message: `חסר במשוב: ${missing.join(', ')}` });
+    if (missing.length) return ctx.addIssue({ code: 'custom', message: `חסר במשוב: ${missing.join(', ')}` });
+    // each point's axis and how it shows: only the catalog's own (shared/evaluationTraits.ts)
+    const form = tidyFeedback(f);
+    for (const kind of ['keep', 'improve'] as const) {
+      form[kind].forEach((p, i) => {
+        const problem = pointProblem(p);
+        if (problem) ctx.addIssue({ code: 'custom', message: `${pointName(kind, i, form[kind].length)}: ${problem}` });
+      });
+    }
   });
+
+/** a point as kept: its trait - sent, or found by its name under the axis - with the name and place the catalog gives it */
+function catalogPoint(p: FeedbackPoint): FeedbackPoint {
+  const id = p.trait ?? axisTraits(p.axis).find((t) => t.name === p.title.trim())?.id;
+  const t = id ? traitPlace(id) : undefined;
+  return t ? { title: t.trait.name, axis: placeAxis(t), text: p.text, trait: t.trait.id } : { title: p.title, axis: p.axis, text: p.text };
+}
+
+/** who may ask for a recommendation on a feedback's points: whoever may give it */
+export function assertFeedbackGiver(actor: UserRow, id: number): void {
+  if (!experiencePerms(actor, experienceRow(id)).canGiveFeedback) throw forbidden('רק החונך, מפקד הצוות או מפקד הקורס נותנים משוב');
+}
 
 /** the axes already used in the course's feedback - offered beside the evaluation criteria */
 export function feedbackAxes(): string[] {
@@ -1111,7 +1135,8 @@ export function giveFeedback(actor: UserRow, id: number, raw: z.input<typeof fee
   if (!experiencePerms(actor, x).canGiveFeedback) throw forbidden('רק החונך, מפקד הצוות או מפקד הקורס נותנים משוב');
   const f = feedbackSchema.parse(raw);
   // a point added and left empty is not kept
-  const form = tidyFeedback({ general: f.general, keep: f.keep, improve: f.improve });
+  const tidy = tidyFeedback({ general: f.general, keep: f.keep, improve: f.improve });
+  const form = { ...tidy, keep: tidy.keep.map(catalogPoint), improve: tidy.improve.map(catalogPoint) };
   const at = nowIso();
   db().tx(() => {
     // the form whole, and its parts as text where feedback was read before it (the evaluation file, search)

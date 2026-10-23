@@ -1,13 +1,16 @@
 // The feedback after an experience in the course's format (shared/experienceFeedback.ts): the form the
 // mentor fills in - laid out as the paper one: the cadet, the experience and its dates on top, a general
-// reference, a point to keep and a point to improve (more of either added with a button), and the score on
-// its legend - and the feedback as it shows once given.
+// reference, a point to keep and a point to improve (more of either added with a button) - each its axis,
+// then how it shows (אופן המימוש, one of that axis' traits in the catalog), a recommendation of both from
+// the words written under it - and the score on its legend; and the feedback as it shows once given.
 
-import { useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import type { TraitSuggestion, TraitSuggestions } from '@shared/traitSuggest';
+import { SUGGEST_MIN_WORDS, wordCount } from '@shared/traitSuggest';
 import { fmtDateIL, shortDate } from '@shared/dates';
 import {
   asFeedbackForm,
-  axisAbout,
+  axisTraits,
   emptyFeedback,
   emptyPoint,
   FEEDBACK_AXES,
@@ -18,6 +21,7 @@ import {
   feedbackMissing,
   isBlankPoint,
   pointName,
+  pointProblem,
   POINT_LABELS,
   SCORE_BANDS,
   SCORE_MAX,
@@ -43,7 +47,6 @@ import { ErrorBox, Field, Modal } from './ui';
 const KINDS: PointKind[] = ['keep', 'improve'];
 const KIND_TONE: Record<PointKind, string> = { keep: 't-green', improve: 't-orange' };
 const KIND_ICON: Record<PointKind, string> = { keep: 'check', improve: 'arrowUp' };
-const TITLE_HINT: Record<PointKind, string> = { keep: 'לדוגמה: החלטיות', improve: 'לדוגמה: שיתוף הסגנים בתכנון' };
 
 /** the dates of an experience as one: "1.10-05.10.2026", or its single day */
 export const experienceDates = (x: Pick<Experience, 'startDate' | 'endDate'>) => (x.startDate === x.endDate ? fmtDateIL(x.startDate) : `${shortDate(x.startDate)}-${fmtDateIL(x.endDate)}`);
@@ -110,13 +113,24 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
     update({ ...draft, form: { ...draft.form, [kind]: draft.form[kind].filter((_, j) => j !== i) } });
     requestAnimationFrame(() => document.getElementById(`fb-add-${kind}`)?.focus());
   };
+  // a new axis keeps how it shows only when that is one of its own
+  const setAxis = (kind: PointKind, i: number, axis: string) => {
+    const p = draft.form[kind][i];
+    const keep = axisTraits(axis).some((t) => (p.trait ? t.id === p.trait : t.name === p.title.trim()));
+    setPoint(kind, i, keep ? { axis } : { axis, title: '', trait: undefined });
+  };
+  const pick = (kind: PointKind, i: number, s: Pick<TraitSuggestion, 'axis' | 'trait' | 'title'>) => setPoint(kind, i, { axis: s.axis, trait: s.trait, title: s.title });
   const score = parseScore(draft.score);
   const badScore = draft.score !== '' && score === null;
   const band = score === null ? null : scoreBand(score);
   const missing = feedbackMissing(draft.form, score);
+  // an axis or a way it shows that is not the catalog's (one typed before it): chosen again before saving
+  const tidy = tidyFeedback(draft.form);
+  const problems = KINDS.flatMap((kind) => tidy[kind].map((p, i) => pointProblem(p) && `${pointName(kind, i, tidy[kind].length)}: ${pointProblem(p)}`)).filter(Boolean) as string[];
+  const ready = !missing.length && !problems.length;
 
   const save = async () => {
-    if (missing.length) return;
+    if (!ready) return;
     setBusy(true);
     setError(null);
     try {
@@ -139,12 +153,12 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
       footer={
         <>
           <span className="grow small muted fb-missing" aria-live="polite">
-            {missing.length ? `חסר: ${missing.join(', ')}` : 'הכל מולא - אפשר לשמור.'}
+            {missing.length ? `חסר: ${missing.join(', ')}` : problems.length ? problems[0] : 'הכל מולא - אפשר לשמור.'}
           </span>
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             ביטול
           </button>
-          <button type="button" className="btn btn-primary" disabled={busy || missing.length > 0} onClick={() => void save()}>
+          <button type="button" className="btn btn-primary" disabled={busy || !ready} onClick={() => void save()}>
             {busy ? 'שומר...' : 'שמירת המשוב'}
           </button>
         </>
@@ -203,17 +217,18 @@ export function FeedbackDialog({ x, onClose }: { x: Experience; onClose: () => v
                     </button>
                   )}
                   <div className="fb-point-row">
-                    <Field label="הנקודה" required className="grow">
-                      <input className="input" value={p.title} maxLength={300} onChange={(e) => setPoint(kind, i, { title: e.target.value })} placeholder={i === 0 ? TITLE_HINT[kind] : undefined} aria-label={name} />
-                    </Field>
                     <Field label="ציר" required className="fb-axis">
-                      <AxisSelect value={p.axis} onChange={(v) => setPoint(kind, i, { axis: v })} label={`הציר של ${name}`} />
+                      <AxisSelect value={p.axis} onChange={(v) => setAxis(kind, i, v)} label={`הציר של ${name}`} />
+                    </Field>
+                    <Field label="אופן המימוש" required className="fb-how">
+                      <HowSelect point={p} onChange={(t) => setPoint(kind, i, { trait: t?.id, title: t?.name ?? '' })} label={`אופן המימוש של ${name}`} />
                     </Field>
                   </div>
-                  {axisAbout(p.axis) && <p className="tiny muted fb-axis-about">{axisAbout(p.axis)}</p>}
-                  <Field label="פירוט">
-                    <textarea className="textarea" rows={2} value={p.text} maxLength={2000} onChange={(e) => setPoint(kind, i, { text: e.target.value })} placeholder="מה ראית, ומתי" aria-label={`פירוט ${name}`} />
-                  </Field>
+                  <Recommend experienceId={x.id} kind={kind} point={p} onPick={(s) => pick(kind, i, s)}>
+                    <Field label="פירוט">
+                      <textarea className="textarea" rows={2} value={p.text} maxLength={2000} onChange={(e) => setPoint(kind, i, { text: e.target.value })} placeholder="מה ראית, ומתי - ותתקבל המלצה על הציר ואופן המימוש" aria-label={`פירוט ${name}`} />
+                    </Field>
+                  </Recommend>
                 </fieldset>
               );
             })}
@@ -273,13 +288,111 @@ function AxisSelect({ value, onChange, label }: { value: string; onChange: (v: s
       {FEEDBACK_AXIS_GROUPS.map((g) => (
         <optgroup key={g.name} label={g.name}>
           {g.axes.map((a) => (
-            <option key={a.name} value={axisValue(g.name, a.name)}>
+            <option key={a.name} value={axisValue(g.name, a.name)} data-shown={axisValue(g.name, a.name)}>
               {a.name}
             </option>
           ))}
         </optgroup>
       ))}
     </Select>
+  );
+}
+
+/** how the axis showed (אופן המימוש): the traits under the axis chosen - none to pick before it */
+function HowSelect({ point, onChange, label }: { point: FeedbackPoint; onChange: (t: { id: string; name: string } | null) => void; label: string }) {
+  const traits = axisTraits(point.axis);
+  // a point given before the catalog: its words, if they are one of the axis' traits
+  const chosen = traits.find((t) => (point.trait ? t.id === point.trait : t.name === point.title.trim()));
+  const placeholder = !point.axis ? 'קודם בוחרים ציר' : traits.length ? 'בחירת אופן המימוש...' : 'בחרו ציר מהרשימה';
+  return (
+    <Select value={chosen?.id ?? ''} onChange={(e) => onChange(traits.find((t) => t.id === e.target.value) ?? null)} aria-label={label} disabled={!traits.length} searchable>
+      <option value="">{placeholder}</option>
+      {traits.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.name}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+interface Asked {
+  /** the words it was asked on */
+  text: string;
+  busy: boolean;
+  result: TraitSuggestions | null;
+  error: string | null;
+}
+
+/**
+ * A recommendation of the axis and how it showed, from the words under the point: asked with the button -
+ * or by itself when the words are written before an axis is chosen and the field is left. A tap on one fills
+ * both; the mentor may still choose otherwise.
+ */
+function Recommend({ experienceId, kind, point, onPick, children }: { experienceId: number; kind: PointKind; point: FeedbackPoint; onPick: (s: TraitSuggestion) => void; children: ReactNode }) {
+  const [asked, setAsked] = useState<Asked | null>(null);
+  // one request at a time: leaving the field by tapping the button asks once
+  const inFlight = useRef(false);
+  const text = point.text.trim();
+  const enough = wordCount(text) >= SUGGEST_MIN_WORDS;
+  const stale = !!asked && !asked.busy && asked.text !== text;
+  const run = async () => {
+    if (!enough || inFlight.current) return;
+    inFlight.current = true;
+    setAsked((a) => ({ text, busy: true, result: a?.result ?? null, error: null }));
+    try {
+      const result = await api.post<TraitSuggestions>(`/api/experiences/${experienceId}/feedback/suggest`, { text, kind });
+      setAsked({ text, busy: false, result, error: null });
+    } catch (e) {
+      setAsked({ text, busy: false, result: null, error: (e as Error).message });
+    } finally {
+      inFlight.current = false;
+    }
+  };
+  const list = asked?.result?.suggestions ?? [];
+  const chosenTrait = point.trait ?? axisTraits(point.axis).find((t) => t.name === point.title.trim())?.id;
+  return (
+    <div
+      className="fb-recommend"
+      // the words written first and the field left: the recommendation comes by itself, once for those words
+      onBlurCapture={(e) => {
+        if ((e.target as HTMLElement).tagName === 'TEXTAREA' && !point.axis && enough && asked?.text !== text) void run();
+      }}
+    >
+      {children}
+      <div className="row gap-8 wrap fb-recommend-head">
+        <button type="button" className="btn btn-ghost btn-sm fb-recommend-btn" disabled={!enough || asked?.busy} onClick={() => void run()} aria-describedby={enough ? undefined : `fb-rec-hint-${kind}`}>
+          <Icon name="sparkle" size={15} /> {asked?.busy ? 'מחפש התאמה...' : asked && !stale ? 'המלצה מחדש' : 'המלצה על ציר ואופן מימוש'}
+        </button>
+        {!enough && (
+          <span className={text ? 'tiny muted' : 'sr-only'} id={`fb-rec-hint-${kind}`}>
+            {text ? 'עוד כמה מילים בפירוט, ותתקבל המלצה' : 'כתבו בפירוט מה ראיתם, ותתקבל המלצה'}
+          </span>
+        )}
+        {stale && list.length > 0 && <span className="tiny muted">הפירוט השתנה - אפשר לבקש שוב</span>}
+      </div>
+      <div aria-live="polite">
+        {asked?.error && <p className="tiny text-red">{asked.error}</p>}
+        {asked?.result && !asked.busy && !list.length && <p className="tiny muted">לא נמצאה התאמה ברורה בפירוט - בחרו את הציר ואופן המימוש ידנית.</p>}
+        {list.length > 0 && (
+          <ul className={`fb-suggestions${asked?.busy ? ' is-busy' : ''}`} aria-label="המלצות לציר ולאופן המימוש">
+            {list.map((s) => {
+              const on = chosenTrait === s.trait && point.axis === s.axis;
+              return (
+                <li key={s.trait}>
+                  <button type="button" className={`fb-suggestion${on ? ' on' : ''}`} aria-pressed={on} onClick={() => onPick(s)}>
+                    <span className="fb-suggestion-axis tiny">{s.axis}</span>
+                    <b className="small">{s.title}</b>
+                    {s.reason && <span className="tiny muted fb-suggestion-why">{s.reason}</span>}
+                    {on && <Icon name="check" size={14} />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -344,8 +457,21 @@ export function FeedbackView({ form, by, compact }: { form: ExperienceFeedbackFo
                 <Icon name={KIND_ICON[kind]} size={14} />
                 <div className="grow">
                   <span className="sr-only">{POINT_LABELS[kind]}: </span>
-                  <b className="small">{p.title}</b>
-                  {p.axis && <span className="tiny muted"> · ציר: {p.axis}</span>}
+                  {p.trait ? (
+                    <>
+                      <span className="tiny muted fb-view-axis">
+                        <span className="sr-only">ציר: </span>
+                        {p.axis}
+                      </span>
+                      <span className="sr-only">אופן המימוש: </span>
+                      <b className="small">{p.title}</b>
+                    </>
+                  ) : (
+                    <>
+                      <b className="small">{p.title}</b>
+                      {p.axis && <span className="tiny muted"> · ציר: {p.axis}</span>}
+                    </>
+                  )}
                   {!compact && p.text && <div className="tiny muted fb-point-text">{p.text}</div>}
                 </div>
               </li>

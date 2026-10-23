@@ -99,6 +99,8 @@ describe('the feedback as a Word file', () => {
     expect(xml.match(/נקודה לשימור: /g)).toHaveLength(1);
     expect(xml.match(/נקודה לשיפור: /g)).toHaveLength(1);
     expect(xml).toContain('(ציר:                    ) ');
+    // the axis first, then how it shows
+    expect(xml.indexOf('(ציר:')).toBeLessThan(xml.indexOf('אופן המימוש: '));
     expect(xml).not.toContain('C9D6EC');
     expect(xml).not.toContain('פקודות ברורות');
   });

@@ -112,6 +112,9 @@ async function summaryModel(): Promise<string> {
   return (chosenModel = newest);
 }
 
+/** Claude and its model, for the site's other uses of it (traitAi.ts) */
+export { claude as aiClient, summaryModel as aiModel };
+
 const SYSTEM = `You draft the personal-talk form of an officers' course from the transcript of a recorded talk between a staff commander and a cadet. The commander reads the draft, corrects it and saves it in the cadet's file.
 
 How to fill each field:

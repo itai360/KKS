@@ -16,13 +16,14 @@ beforeEach(async () => {
 /** a whole feedback in the course's format (made-up words) */
 const feedback = (score = 84, patch: object = {}) => ({
   general: 'הוביל את הכיתה בביטחון ולמד מהר מטעויות',
+  // each point its axis, then how it shows (a trait under that axis in the catalog) - by its id, or by its name alone
   keep: [
-    { title: 'החלטיות', axis: 'פיקוד והובלה', text: 'החליט מהר גם בלי תמונה מלאה' },
-    { title: 'קשר רציף עם הסגל', axis: 'עבודת צוות', text: '' },
+    { title: 'הפעלת שיקול דעת', axis: 'המקצוע הצבאי - להחליט', text: 'החליט מהר גם בלי תמונה מלאה', trait: 'military.decide.1' },
+    { title: 'עבודה מול רמה ממונה', axis: 'המקצוע הצבאי - לבצע', text: '' },
   ],
   improve: [
-    { title: 'שיתוף הסגנים', axis: 'עבודת צוות', text: 'תכנן לבד' },
-    { title: 'ניהול זמן', axis: 'ציר אישי', text: 'ההכנות התארכו' },
+    { title: 'האצלת סמכויות', axis: 'המקצוע הצבאי - להוביל', text: 'תכנן לבד', trait: 'military.lead.7' },
+    { title: 'ניהול זמנים', axis: 'המקצוע הצבאי - לבצע', text: 'ההכנות התארכו', trait: 'military.execute.7' },
   ],
   score,
   ...patch,
@@ -170,7 +171,9 @@ describe('experiences (section 31)', () => {
     expect((await c.s3.post(`/api/experiences/${x.id}/feedback`, feedback())).status).toBe(403);
     const done = (await c.s2.post(`/api/experiences/${x.id}/feedback`, feedback())).body;
     expect(done).toMatchObject({ status: 'done', phase: 'done', score: 84, feedbackForm: { general: 'הוביל את הכיתה בביטחון ולמד מהר מטעויות' } });
-    expect(done.feedbackForm.keep.map((p: { title: string }) => p.title)).toEqual(['החלטיות', 'קשר רציף עם הסגל']);
+    expect(done.feedbackForm.keep.map((p: { title: string }) => p.title)).toEqual(['הפעלת שיקול דעת', 'עבודה מול רמה ממונה']);
+    // a point sent by its name alone is kept with its trait's id too
+    expect(done.feedbackForm.keep[1]).toEqual({ title: 'עבודה מול רמה ממונה', axis: 'המקצוע הצבאי - לבצע', text: '', trait: 'military.execute.8' });
     expect((await c.s2.get(`/api/tasks/${feedbackTask.id}`)).body.task.status).toBe('done');
 
     const seenByOther = (await c.s3.get('/api/experiences')).body.find((e: { id: number }) => e.id === x.id);
@@ -181,10 +184,10 @@ describe('experiences (section 31)', () => {
     expect(lead.records[0].body).toBe(
       [
         'התייחסות כללית: הוביל את הכיתה בביטחון ולמד מהר מטעויות',
-        'נקודה לשימור: החלטיות (ציר: פיקוד והובלה)\nהחליט מהר גם בלי תמונה מלאה',
-        'נקודה לשימור: קשר רציף עם הסגל (ציר: עבודת צוות)',
-        'נקודה לשיפור: שיתוף הסגנים (ציר: עבודת צוות)\nתכנן לבד',
-        'נקודה לשיפור: ניהול זמן (ציר: ציר אישי)\nההכנות התארכו',
+        'נקודה לשימור: (ציר: המקצוע הצבאי - להחליט) הפעלת שיקול דעת\nהחליט מהר גם בלי תמונה מלאה',
+        'נקודה לשימור: (ציר: המקצוע הצבאי - לבצע) עבודה מול רמה ממונה',
+        'נקודה לשיפור: (ציר: המקצוע הצבאי - להוביל) האצלת סמכויות\nתכנן לבד',
+        'נקודה לשיפור: (ציר: המקצוע הצבאי - לבצע) ניהול זמנים\nההכנות התארכו',
         'ציון להתנסות: 84 - טוב מאוד',
       ].join('\n\n'),
     );
@@ -273,11 +276,21 @@ describe("the feedback after an experience, in the course's format", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('חסר במשוב: התייחסות כללית, הציר של נקודה לשימור');
     const half = await give(feedback(70, { improve: [feedback().improve[0], { title: '', axis: '', text: 'רק פירוט' }] }));
-    expect(half.body.error).toBe('חסר במשוב: נקודה לשיפור 2');
+    expect(half.body.error).toBe('חסר במשוב: הציר של נקודה לשיפור 2');
+    // the axis first, then how it shows
+    const noHow = await give(feedback(70, { keep: [{ title: '', axis: 'חוסן', text: '' }] }));
+    expect(noHow.body.error).toBe('חסר במשוב: אופן המימוש של נקודה לשימור');
+    // only the catalog's axes, and under each only its own traits
+    const oldAxis = await give(feedback(70, { keep: [{ title: 'החלטיות', axis: 'פיקוד והובלה', text: '' }] }));
+    expect(oldAxis.body.error).toBe('נקודה לשימור: הציר "פיקוד והובלה" לא נמצא במאגר צירי ההערכה');
+    const otherAxis = await give(feedback(70, { keep: [{ title: 'ניהול זמנים', axis: 'המקצוע הצבאי - להוביל', text: '' }] }));
+    expect(otherAxis.body.error).toBe('נקודה לשימור: "ניהול זמנים" אינו אופן מימוש של הציר המקצוע הצבאי - להוביל');
+    const otherId = await give(feedback(70, { keep: [{ title: 'האצלת סמכויות', axis: 'המקצוע הצבאי - להוביל', text: '', trait: 'military.execute.7' }] }));
+    expect(otherId.status).toBe(400);
     expect((await give(feedback(101))).body.error).toBe('ציון בין 0 ל-100');
     expect((await give(feedback(80.5))).body.error).toBe('ציון שלם בין 0 ל-100');
     expect((await give(feedback(80, { improve: [] }))).body.error).toBe('במשוב לפחות נקודה אחת לשימור ונקודה אחת לשיפור');
-    const many = Array.from({ length: 7 }, (_, i) => ({ title: `נקודה ${i + 1}`, axis: 'עבודת צוות', text: '' }));
+    const many = Array.from({ length: 7 }, () => ({ title: 'קור רוח', axis: 'חוסן', text: '' }));
     expect((await give(feedback(80, { keep: many }))).body.error).toBe('במשוב עד 6 נקודות לשימור ועד 6 לשיפור');
     // the experience stays open until the feedback is whole
     expect((await c.s2.get('/api/experiences')).body.find((e: { id: number }) => e.id === x.id)).toMatchObject({ status: 'planned', score: null, feedbackForm: null });
@@ -285,13 +298,13 @@ describe("the feedback after an experience, in the course's format", () => {
     const done = (await give(feedback(96))).body;
     expect(done).toMatchObject({ status: 'done', score: 96, kind: 'broad' });
     // the points as text where feedback was read before (the evaluation file, search)
-    expect(done.strengths).toBe('החלטיות (ציר: פיקוד והובלה)\nהחליט מהר גם בלי תמונה מלאה\nקשר רציף עם הסגל (ציר: עבודת צוות)');
+    expect(done.strengths).toBe('(ציר: המקצוע הצבאי - להחליט) הפעלת שיקול דעת\nהחליט מהר גם בלי תמונה מלאה\n(ציר: המקצוע הצבאי - לבצע) עבודה מול רמה ממונה');
     expect(done.feedback).toBe('הוביל את הכיתה בביטחון ולמד מהר מטעויות');
     const file = (await c.cmd.get(`/api/evaluations/${a}`)).body;
-    expect(file.experiences[0]).toMatchObject({ role: 'קב"ט', score: 96, form: { improve: [{ title: 'שיתוף הסגנים' }, { title: 'ניהול זמן' }] } });
+    expect(file.experiences[0]).toMatchObject({ role: 'קב"ט', score: 96, form: { improve: [{ title: 'האצלת סמכויות' }, { title: 'ניהול זמנים' }] } });
     expect((await c.s1.get(`/api/cadets/${a}`)).body.records[0].title).toBe('משוב התנסות: רוחב - קב"ט (חצי קורס ראשון)');
     // an axis typed for a point is offered next time, beside the evaluation criteria
-    expect((await c.s3.get('/api/experiences/feedback-axes')).body).toEqual(['עבודת צוות', 'פיקוד והובלה', 'ציר אישי']);
+    expect((await c.s3.get('/api/experiences/feedback-axes')).body).toEqual(['המקצוע הצבאי - לבצע', 'המקצוע הצבאי - להוביל', 'המקצוע הצבאי - להחליט']);
   });
 
   it('takes one point of each kind, and more when added - one added and left empty is dropped', async () => {
@@ -300,12 +313,12 @@ describe("the feedback after an experience, in the course's format", () => {
     const first = await make('2026-09-01', '2026-09-10');
     const one = feedback(80, { keep: [feedback().keep[0]], improve: [feedback().improve[0]] });
     const saved = (await c.s2.post(`/api/experiences/${first.id}/feedback`, one)).body;
-    expect(saved.feedbackForm).toMatchObject({ keep: [{ title: 'החלטיות' }], improve: [{ title: 'שיתוף הסגנים' }] });
+    expect(saved.feedbackForm).toMatchObject({ keep: [{ title: 'הפעלת שיקול דעת' }], improve: [{ title: 'האצלת סמכויות' }] });
     expect(saved.feedbackForm.keep).toHaveLength(1);
     const second = await make('2026-09-20', '2026-09-30');
-    const keep = [...feedback().keep, { title: 'אחריות', axis: 'ערכים - אחריות', text: '' }, { title: '', axis: '', text: '' }];
+    const keep = [...feedback().keep, { title: 'מעורבות', axis: 'ערכים - אחריות', text: '' }, { title: '', axis: '', text: '' }];
     const more = (await c.s2.post(`/api/experiences/${second.id}/feedback`, feedback(90, { keep }))).body;
-    expect(more.feedbackForm.keep.map((p: { title: string }) => p.title)).toEqual(['החלטיות', 'קשר רציף עם הסגל', 'אחריות']);
+    expect(more.feedbackForm.keep.map((p: { title: string }) => p.title)).toEqual(['הפעלת שיקול דעת', 'עבודה מול רמה ממונה', 'מעורבות']);
   });
 
   it('reads the score on the legend: each band up to and including its top', async () => {

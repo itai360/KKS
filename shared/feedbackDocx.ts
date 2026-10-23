@@ -20,10 +20,12 @@ export interface FeedbackDocument {
   score: number | null;
 }
 
-/** a point: its kind and axis in bold, the point, and what was seen on the line under it */
+/** a point: its kind and axis in bold, how it shows (אופן המימוש), and what was seen on the line under it */
 function point(kind: PointKind, p: FeedbackPoint, first: boolean): string {
   const text = p.text.trim();
-  return para(run(`${POINT_LABELS[kind]}: `, { bold: true }) + run(`(ציר: ${p.axis.trim()}) `, { bold: true }) + run(p.title.trim() + (text ? `\n${text}` : '')), {
+  // a point given before the catalog wrote the point itself where the trait is now
+  const how = p.trait ? run('אופן המימוש: ', { bold: true }) : '';
+  return para(run(`${POINT_LABELS[kind]}: `, { bold: true }) + run(`(ציר: ${p.axis.trim()}) `, { bold: true }) + how + run(p.title.trim() + (text ? `\n${text}` : '')), {
     before: first ? 200 : 0,
     after: 100,
   });
@@ -31,7 +33,7 @@ function point(kind: PointKind, p: FeedbackPoint, first: boolean): string {
 
 /** an empty point, to write by hand or in Docs */
 function blankPoint(kind: PointKind, first: boolean): string {
-  return para(run(`${POINT_LABELS[kind]}: `, { bold: true }) + run('(ציר:                    ) ', { bold: true }) + run('\n '), { before: first ? 200 : 0, after: 160 });
+  return para(run(`${POINT_LABELS[kind]}: `, { bold: true }) + run('(ציר:                    ) ', { bold: true }) + run('אופן המימוש: ', { bold: true }) + run('\n '), { before: first ? 200 : 0, after: 160 });
 }
 
 function body(d: FeedbackDocument): string {

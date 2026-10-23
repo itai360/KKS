@@ -340,7 +340,8 @@ function labelOf(el: HTMLElement | null, ariaLabel?: string): string | undefined
 
 // ---------------- a list to pick from ----------------
 
-type Opt = { value: string; label: string; disabled: boolean; group?: string };
+/** shown: what the field shows once chosen, when the list's short words need their group (an option's data-shown) */
+type Opt = { value: string; label: string; disabled: boolean; group?: string; shown?: string };
 
 const textOf = (n: ReactNode): string => {
   if (n === null || n === undefined || typeof n === 'boolean') return '';
@@ -354,12 +355,12 @@ const textOf = (n: ReactNode): string => {
 function optionsOf(children: ReactNode, group?: string, out: Opt[] = []): Opt[] {
   Children.forEach(children, (ch) => {
     if (!isValidElement(ch)) return;
-    const props = ch.props as { children?: ReactNode; value?: unknown; disabled?: boolean; label?: string };
+    const props = ch.props as { children?: ReactNode; value?: unknown; disabled?: boolean; label?: string; 'data-shown'?: string };
     if (ch.type === Fragment) optionsOf(props.children, group, out);
     else if (ch.type === 'optgroup') optionsOf(props.children, props.label, out);
     else if (ch.type === 'option') {
       const label = textOf(props.children).replace(/\s+/g, ' ').trim();
-      out.push({ value: props.value === undefined || props.value === null ? label : String(props.value), label, disabled: !!props.disabled, group });
+      out.push({ value: props.value === undefined || props.value === null ? label : String(props.value), label, disabled: !!props.disabled, group, shown: props['data-shown'] });
     }
   });
   return out;
@@ -400,6 +401,7 @@ export function Select({ value, onChange, children, className = 'select', style,
   const sheet = usePhonePicker() && typing;
   const current = value === null || value === undefined ? '' : String(value);
   const chosen = opts.find((o) => o.value === current);
+  const chosenText = chosen ? (chosen.shown ?? chosen.label) : '';
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState<string | null>(null);
   const [active, setActive] = useState(-1);
@@ -512,7 +514,7 @@ export function Select({ value, onChange, children, className = 'select', style,
     'aria-label': ariaLabel,
     'aria-invalid': ariaInvalid || undefined,
     'data-autofocus': autofocus || undefined,
-    title: title ?? (chosen && chosen.label.length > 28 ? chosen.label : undefined),
+    title: title ?? (chosenText.length > 28 ? chosenText : undefined),
     disabled,
     onKeyDown: onKey,
     // the sheet takes the focus while it is open - that is not leaving the field
@@ -530,7 +532,7 @@ export function Select({ value, onChange, children, className = 'select', style,
           aria-haspopup={sheet ? 'dialog' : 'listbox'}
           onClick={() => (open ? close() : openAll())}
         >
-          <span className="select-button-label">{chosen?.label ?? ''}</span>
+          <span className="select-button-label">{chosenText}</span>
         </button>
       ) : (
       <input
@@ -547,14 +549,14 @@ export function Select({ value, onChange, children, className = 'select', style,
         aria-label={ariaLabel}
         aria-invalid={ariaInvalid || undefined}
         data-autofocus={autofocus || undefined}
-        title={title ?? (chosen && chosen.label.length > 28 ? chosen.label : undefined)}
+        title={title ?? (chosenText.length > 28 ? chosenText : undefined)}
         autoComplete="off"
         spellCheck={false}
         disabled={disabled}
         required={required}
-        size={fit ? Math.max(4, (query ?? chosen?.label ?? '').length + 2) : undefined}
-        value={query ?? chosen?.label ?? ''}
-        placeholder={query !== null ? (chosen?.label ?? 'חיפוש...') : undefined}
+        size={fit ? Math.max(4, (query ?? chosenText).length + 2) : undefined}
+        value={query ?? chosenText}
+        placeholder={query !== null ? chosenText || 'חיפוש...' : undefined}
         onMouseDown={() => {
           if (open) return;
           openAll();
