@@ -4,7 +4,7 @@
 // its own, grouped in the discipline reports under its subject. Made-up names and words.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { procedureBody, procedureMissing, procedureOffense, procedureTitle, procedureWhat } from '../../shared/procedures';
+import { byCadet, kindsLine, procedureBody, procedureMissing, procedureOffense, procedureTitle, procedureWhat, readProcedure, type ProcedureEntry, type ProcedureOverview } from '../../shared/procedures';
 import { notificationsOf, setup, type Ctx } from './helpers';
 
 let c: Ctx;
@@ -16,6 +16,15 @@ beforeEach(async () => {
 async function cadetOfTeam1(): Promise<number> {
   const teams = (await c.cmd.post('/api/teams', { name: 'צוות 1', commanderId: c.ids.s1 })).body;
   return (await c.cmd.post('/api/cadets', { firstName: 'עומר', lastName: 'שלו', teamId: teams[0].id })).body.cadet.id;
+}
+
+/** two teams: team 1 (the first staff member commands it) with two cadets, team 2 (the second) with one */
+async function twoTeams(): Promise<{ a: number; b: number; x: number }> {
+  const t1 = (await c.cmd.post('/api/teams', { name: 'צוות 1', commanderId: c.ids.s1 })).body[0].id;
+  const teams = (await c.cmd.post('/api/teams', { name: 'צוות 2', commanderId: c.ids.s2 })).body;
+  const t2 = teams.find((t: { name: string }) => t.name === 'צוות 2').id;
+  const add = async (firstName: string, lastName: string, teamId: number) => (await c.cmd.post('/api/cadets', { firstName, lastName, teamId })).body.cadet.id as number;
+  return { a: await add('עומר', 'שלו', t1), b: await add('נגה', 'אלון', t1), x: await add('רון', 'דגן', t2) };
 }
 
 const records = async (agent: Ctx['cmd'], cadetId: number) =>
@@ -93,5 +102,93 @@ describe('a report of not keeping to procedures', () => {
     expect((await send({ cadetId: cadet, kind: 'other', other: 'א'.repeat(81) })).status).toBe(400);
     expect((await send({ cadetId: 9999, kind: 'phone' })).status).toBe(404);
     expect(await records(c.cmd, cadet)).toHaveLength(0);
+  });
+});
+
+describe('every report, by cadet', () => {
+  it('reads a report back from its record, as it was written', () => {
+    const back = (r: Parameters<typeof procedureTitle>[0]) => readProcedure(procedureOffense(r), procedureTitle(r));
+    expect(back({ kind: 'weapon_back' })).toEqual({ kind: 'weapon_back', other: '', dress: [] });
+    expect(back({ kind: 'dress', dress: ['תג שם', 'שרוך'] })).toEqual({ kind: 'dress', other: '', dress: ['שרוך', 'תג שם'] });
+    expect(back({ kind: 'other', other: 'נעליים לא מצוחצחות' })).toEqual({ kind: 'other', other: 'נעליים לא מצוחצחות', dress: [] });
+    // a record of the enforcement ladder, not of this form
+    expect(readProcedure('טלפונים · שימוש בטלפון בשיעור', 'שימוש בטלפון בשיעור')).toBeNull();
+  });
+
+  it('groups the reports by cadet: the most first, each kind counted, the dress items and the other things', () => {
+    let id = 0;
+    const entry = (cadetId: number, cadetName: string, kind: ProcedureEntry['kind'], occurredOn: string, more: Partial<ProcedureEntry> = {}): ProcedureEntry => ({
+      id: ++id,
+      cadetId,
+      cadetName,
+      teamId: 1,
+      teamName: 'צוות 1',
+      cadetStatus: 'active',
+      occurredOn,
+      kind,
+      other: '',
+      dress: [],
+      body: '',
+      authorName: 'מפק"צ 1',
+      occurrence: null,
+      canDelete: false,
+      ...more,
+    });
+    const cadets = byCadet([
+      entry(1, 'עומר שלו', 'phone', '2026-10-02'),
+      entry(2, 'נגה אלון', 'dress', '2026-10-03', { dress: ['כומתה', 'שרוך'] }),
+      entry(2, 'נגה אלון', 'dress', '2026-10-05', { dress: ['כומתה'] }),
+      entry(2, 'נגה אלון', 'other', '2026-10-04', { other: 'גילוח' }),
+      entry(3, 'רון דגן', 'weapon_left', '2026-10-06'),
+    ]);
+    expect(cadets.map((c) => `${c.cadetName} ${c.total}`)).toEqual(['נגה אלון 3', 'רון דגן 1', 'עומר שלו 1']);
+    const noga = cadets[0];
+    expect(noga.byKind).toEqual({ weapon_left: 0, weapon_back: 0, phone: 0, dress: 2, other: 1 });
+    expect(noga.dress).toEqual([
+      { item: 'כומתה', count: 2 },
+      { item: 'שרוך', count: 1 },
+    ]);
+    expect(noga.others).toEqual([{ text: 'גילוח', count: 1 }]);
+    expect(noga.last).toBe('2026-10-05');
+    expect(noga.entries.map((e) => e.occurredOn)).toEqual(['2026-10-05', '2026-10-04', '2026-10-03']);
+    expect(kindsLine(noga)).toBe('דיגום 2 · אחר 1');
+  });
+
+  it('shows each one what discipline shows them: the commander every report, a team commander their teams and their own, others their own', async () => {
+    const { a, b, x } = await twoTeams();
+    await c.s3.post('/api/procedures', { cadetId: a, kind: 'phone', situation: 'בשיעור' });
+    await c.s3.post('/api/procedures', { cadetId: a, kind: 'phone' });
+    await c.s1.post('/api/procedures', { cadetId: b, kind: 'dress', dress: ['כומתה'] });
+    await c.s1.post('/api/procedures', { cadetId: x, kind: 'weapon_left' });
+    await c.s2.post('/api/procedures', { cadetId: x, kind: 'other', other: 'גילוח' });
+    // a discipline record that is not of this form stays out
+    await c.s1.post(`/api/cadets/${a}/records`, { kind: 'discipline', body: 'איחור למסדר' });
+    const view = async (agent: Ctx['cmd']) => (await agent.get('/api/procedures')).body as ProcedureOverview;
+
+    const all = await view(c.cmd);
+    expect(all.scope).toBe('all');
+    expect(all.entries).toHaveLength(5);
+    // as many and as recent: by name
+    expect(byCadet(all.entries).map((g) => `${g.cadetName} ${g.total}`)).toEqual(['עומר שלו 2', 'רון דגן 2', 'נגה אלון 1']);
+    const phone = all.entries.filter((e) => e.cadetId === a);
+    expect(phone.map((e) => [e.kind, e.occurrence])).toEqual([
+      ['phone', 2],
+      ['phone', 1],
+    ]);
+    expect(phone[1]).toMatchObject({ cadetName: 'עומר שלו', teamName: 'צוות 1', body: 'הסיטואציה: בשיעור', authorName: 'מפק"צ 3', canDelete: true });
+
+    // the first staff member commands team 1: its reports, and the one they wrote on a cadet of team 2
+    const lead = await view(c.s1);
+    expect(lead.scope).toBe('teams');
+    expect(lead.entries.map((e) => `${e.cadetName}: ${procedureWhat(e)}`).sort()).toEqual(['נגה אלון: דיגום - כומתה', 'עומר שלו: טלפון', 'עומר שלו: טלפון', 'רון דגן: הפקרת נשק'].sort());
+    // only what they wrote may they delete
+    expect(lead.entries.filter((e) => e.canDelete).map((e) => e.kind).sort()).toEqual(['dress', 'weapon_left']);
+
+    // the third commands no team: their own reports only
+    const other = await view(c.s3);
+    expect(other.scope).toBe('mine');
+    expect(other.entries.map((e) => e.cadetId)).toEqual([a, a]);
+    // the second commands team 2: its two reports - the one on its cadet by the first included - and none of team 1
+    expect((await view(c.s2)).entries.map((e) => e.cadetId)).toEqual([x, x]);
   });
 });

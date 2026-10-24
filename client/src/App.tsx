@@ -41,6 +41,7 @@ const LookAheadPage = lazyPage(() => import('./pages/ReportsPage'), 'LookAheadPa
 const WeeklyReportPage = lazyPage(() => import('./pages/ReportsPage'), 'WeeklyReportPage');
 const RequestsPage = lazyPage(() => import('./pages/RequestsPage'), 'RequestsPage');
 const EntriesPage = lazyPage(() => import('./pages/EntriesPage'), 'EntriesPage');
+const ProceduresPage = lazyPage(() => import('./pages/ProceduresPage'), 'ProceduresPage');
 const SchedulePage = lazyPage(() => import('./pages/SchedulePage'), 'SchedulePage');
 const SearchPage = lazyPage(() => import('./pages/SearchPage'), 'SearchPage');
 const SettingsPage = lazyPage(() => import('./pages/SettingsPage'), 'SettingsPage');
@@ -142,6 +143,7 @@ function AuthedRoutes() {
               <Route path="/cadets/:id" element={<CadetPage />} />
               <Route path="/cadets/:id/talks/:recordId" element={<TalkPage />} />
               <Route path="/experiences" element={<ExperiencesPage />} />
+              <Route path="/procedures" element={<ProceduresPage />} />
               <Route path="/evaluations" element={<EvaluationsPage />} />
               <Route path="/sociometric" element={<SociometricPage />} />
               <Route path="/takpatz" element={<TakpatzHome />} />

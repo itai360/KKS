@@ -173,6 +173,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
           { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
           { to: '/experiences', label: 'התנסויות', icon: 'target' },
           { to: '/takpatz', label: 'תקפ״צ', icon: 'board', keywords: 'תקפצ תקפ"צ יעדים אישיים תכנון התנסויות שלישים' },
+          { to: '/procedures', label: 'אי עמידה בנהלים', icon: 'shield', keywords: 'נהלים הפקרת נשק נשק מאחורה טלפון דיגום כומתה שרוך גומיות תג שם משמעת' },
         ],
       },
       {
@@ -229,6 +230,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
         { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
         { to: '/experiences', label: 'התנסויות', icon: 'target' },
         { to: '/takpatz', label: 'תקפ״צ', icon: 'board', keywords: 'תקפצ תקפ"צ יעדים אישיים תכנון התנסויות שלישים' },
+        { to: '/procedures', label: 'אי עמידה בנהלים', icon: 'shield', keywords: 'נהלים הפקרת נשק נשק מאחורה טלפון דיגום כומתה שרוך גומיות תג שם משמעת' },
       ],
     },
     {

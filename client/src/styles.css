@@ -14057,6 +14057,221 @@ tr.is-finished.is-folding {
   }
 }
 
+/* ---------------- every report of not keeping to procedures, by cadet (pages/ProceduresPage.tsx) ---------------- */
+.proc-periods {
+  margin-bottom: 4px;
+}
+/* a number by kind, picked: it reads as chosen, as a picked chip does - the hover a tap leaves on a phone too */
+.count-tap.is-on,
+.count-tap.is-on:hover:not(:disabled) {
+  background: var(--tint-fill, var(--ink));
+  border-color: transparent;
+  color: #fff;
+}
+.count-tap.is-on .count-tap-n {
+  color: #fff;
+}
+.proc-counts {
+  margin-top: 8px;
+  margin-bottom: 12px;
+}
+.proc-counts .count-tap {
+  flex: 0 0 auto;
+}
+.proc-filters {
+  margin-bottom: 12px;
+}
+/* the table: a row a cadet, a column a kind - the kind picked lit down its column */
+.proc-table th,
+.proc-table td {
+  white-space: nowrap;
+}
+.proc-table th[scope='row'] {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.proc-table .is-on {
+  background: color-mix(in srgb, var(--tint, var(--blue)) 7%, transparent);
+}
+.proc-tr {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .proc-tr:hover td,
+  .proc-tr:hover th {
+    background: var(--card-2);
+  }
+}
+.proc-tr.is-open td,
+.proc-tr.is-open th {
+  border-bottom-color: transparent;
+}
+.proc-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.proc-name:focus-visible,
+.th-sort:focus-visible,
+.proc-card-head:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+  border-radius: 6px;
+}
+.proc-chev {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.2s var(--spring, ease-out);
+}
+.is-open .proc-chev {
+  transform: rotate(180deg);
+}
+.proc-none {
+  color: var(--faint, var(--muted));
+}
+.proc-status-badge {
+  margin-inline-start: 8px;
+}
+/* a column head sorts the table by it */
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.th-sort.is-active {
+  color: var(--ink);
+}
+.proc-detail > td {
+  padding: 0 14px 14px;
+  background: var(--card-2);
+  white-space: normal;
+}
+/* the phone: a card a cadet, its kinds in a line under the name */
+.proc-cards {
+  overflow: hidden;
+}
+.proc-card + .proc-card {
+  border-top: 1px solid var(--line);
+}
+.proc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+.proc-card-head:active {
+  background: var(--card-2);
+}
+.proc-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.proc-card-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.proc-card-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.proc-kind-count b {
+  font-variant-numeric: tabular-nums;
+}
+.proc-kind-count.is-on {
+  color: var(--tint, var(--blue));
+  font-weight: 600;
+}
+.proc-total {
+  min-width: 28px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.proc-card-body {
+  padding: 0 14px 12px;
+  background: var(--card-2);
+}
+/* a cadet's reports, newest first - in a readable measure, the trash beside the words, even in a wide table */
+.proc-entries-wrap {
+  max-width: 760px;
+}
+.proc-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.proc-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.proc-date {
+  flex: none;
+  min-width: 40px;
+  padding-top: 2px;
+}
+.proc-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.proc-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+}
+.proc-remove {
+  flex: none;
+  color: var(--muted);
+}
+.proc-entries-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding-top: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .proc-chev {
+    transition: none;
+  }
+}
+
 /* a task's deadline to Google Calendar, beside it (pages/TaskPage.tsx) */
 .task-gcal {
   display: inline-flex;

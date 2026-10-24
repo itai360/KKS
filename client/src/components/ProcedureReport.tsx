@@ -52,7 +52,7 @@ export function ProcedureReportHost() {
 }
 
 /** the tone of which time this is: the first quietly, a repeat in orange, a third and on in red */
-const timeTone = (n: number) => (n >= 3 ? 't-red' : n === 2 ? 't-orange' : 't-gray');
+export const timeTone = (n: number) => (n >= 3 ? 't-red' : n === 2 ? 't-orange' : 't-gray');
 
 function ProcedureModal({ onClose }: { onClose: () => void }) {
   const toast = useToast();

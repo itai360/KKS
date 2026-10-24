@@ -19,7 +19,7 @@ import { addDays, isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import { byHe, byTeamAndName } from '../../shared/sort';
 import { axisTraits, FEEDBACK_POINTS, FEEDBACK_POINTS_MAX, feedbackMissing, feedbackText, pointProblem, pointName, pointsText, readFeedbackForm, SCORE_MAX, scoreText, tidyFeedback, type FeedbackPoint } from '../../shared/experienceFeedback';
 import { traitPlace } from '../../shared/evaluationTraits';
-import { DRESS_ITEMS, PROCEDURE_KINDS, PROCEDURE_LIMITS, procedureBody, procedureMissing, procedureOffense, procedureTitle, procedureWhat } from '../../shared/procedures';
+import { DRESS_ITEMS, PROCEDURE_KINDS, PROCEDURE_LIMITS, PROCEDURE_SUBJECT, procedureBody, procedureMissing, procedureOffense, procedureTitle, procedureWhat, readProcedure, type ProcedureEntry, type ProcedureOverview } from '../../shared/procedures';
 import { placeAxis } from '../../shared/traitSuggest';
 import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, experienceName, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
 import type { Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '../../shared/types';
@@ -602,6 +602,39 @@ export function reportProcedure(actor: UserRow, raw: unknown): { recordId: numbe
   const { occurrence } = disciplinePreview(r.cadetId, offense);
   const recordId = addRecord(actor, r.cadetId, { kind: 'discipline', offense, title: procedureTitle(r), body: procedureBody(r) }, { told: `רישום אי עמידה בנהלים (${procedureWhat(r)})` });
   return { recordId, occurrence };
+}
+
+/**
+ * Every report of not keeping to procedures the user may see - as with all discipline: the commander (or
+ * the staff, where every file is open to them) every report; a team commander those on the cadets of their
+ * teams, and their own; anyone else their own. Each with which time its kind was for the cadet.
+ */
+export function procedureOverview(actor: UserRow): ProcedureOverview {
+  const cadets = new Map(db().all<CadetRow>(CADET_BASE).map((c) => [c.id, c]));
+  const rows = db().all<RecordRow>(`${RECORD_BASE} WHERE r.kind = 'discipline' AND r.offense LIKE ? ORDER BY r.occurred_on DESC, r.id DESC`, `${PROCEDURE_SUBJECT} · %`);
+  const order = disciplineOrder(rows);
+  const entries: ProcedureEntry[] = [];
+  for (const r of rows) {
+    const c = cadets.get(r.cadet_id);
+    const p = readProcedure(r.offense, r.title);
+    if (!c || !p || !canViewRecord(actor, r, c)) continue;
+    entries.push({
+      id: r.id,
+      cadetId: c.id,
+      cadetName: `${c.first_name} ${c.last_name}`.trim(),
+      teamId: c.team_id,
+      teamName: c.team_name,
+      cadetStatus: c.status,
+      occurredOn: r.occurred_on,
+      ...p,
+      body: r.body,
+      authorName: r.author_name,
+      occurrence: order.get(r.id)?.occurrence ?? null,
+      canDelete: isCommander(actor) || r.author_id === actor.id,
+    });
+  }
+  const scope = may(actor, 'cadetFiles') ? 'all' : [...cadets.values()].some((c) => c.team_commander_id === actor.id) ? 'teams' : 'mine';
+  return { scope, entries };
 }
 
 /**
