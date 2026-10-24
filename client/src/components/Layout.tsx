@@ -13,7 +13,7 @@ import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
-import { addEntry } from './EntryAdd';
+import { addProcedure } from './ProcedureReport';
 import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
 import { CommandPalette } from './CommandPalette';
@@ -870,9 +870,9 @@ export function Layout({ children }: { children: ReactNode }) {
             setPlusOpen(false);
             addToWeekDebrief();
           }}
-          onEntry={() => {
+          onProcedure={() => {
             setPlusOpen(false);
-            addEntry();
+            addProcedure();
           }}
           onEvent={
             canEvent
@@ -898,7 +898,7 @@ function PlusMenu({
   onTask,
   onWeekly,
   onDebrief,
-  onEntry,
+  onProcedure,
   onEvent,
   leaving,
 }: {
@@ -907,7 +907,7 @@ function PlusMenu({
   onTask: () => void;
   onWeekly: () => void;
   onDebrief: () => void;
-  onEntry: () => void;
+  onProcedure: () => void;
   onEvent?: () => void;
   leaving: boolean;
 }) {
@@ -1001,13 +1001,13 @@ function PlusMenu({
             <span className="plus-menu-sub">לשימור, לשיפור או לקח - לתחקיר השבועי של השבוע הזה</span>
           </span>
         </button>
-        <button type="button" role="menuitem" onClick={onEntry}>
+        <button type="button" role="menuitem" onClick={onProcedure}>
           <span className="plus-menu-icon">
-            <Icon name="stamp" />
+            <Icon name="shield" />
           </span>
           <span className="grow">
-            <span className="plus-menu-title">אישור כניסה</span>
-            <span className="plus-menu-sub">מבקר שמגיע לבסיס - הבקשה מגיעה למפקד הקורס</span>
+            <span className="plus-menu-title">אי עמידה בנהלים</span>
+            <span className="plus-menu-sub">הפקרת נשק, נשק מאחורה, טלפון, דיגום - נרשם בתיק הצוער</span>
           </span>
         </button>
       </div>

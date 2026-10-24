@@ -116,7 +116,8 @@ export function Modal({
     // once per opening: re-running on every parent render would steal focus mid-typing
   }, []);
   // the floating back arrow right where the top bar's own arrow is - one arrow, in one place - whatever
-  // the bar's padding on this screen size; with no arrow in the bar (the home screen) the CSS place holds
+  // the bar's padding on this screen size. With no arrow in the bar (the home screen) there is none here
+  // either - its place holds the course's mark - and the dialog closes with its X
   const backRef = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     const el = backRef.current;
@@ -124,11 +125,8 @@ export function Modal({
     let frame = 0;
     const place = () => {
       const bar = document.querySelector<HTMLElement>('.topbar .back-top')?.getBoundingClientRect();
-      if (!bar || !bar.width) {
-        el.style.removeProperty('inset');
-        return;
-      }
-      el.style.inset = `${bar.top}px auto auto ${bar.left}px`;
+      el.hidden = !bar || !bar.width;
+      if (!el.hidden) el.style.inset = `${bar!.top}px auto auto ${bar!.left}px`;
     };
     const later = () => {
       cancelAnimationFrame(frame);

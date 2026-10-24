@@ -18,6 +18,7 @@ import {
   deleteExperience,
   deleteRecord,
   disciplinePreview,
+  reportProcedure,
   talkCadet,
   updateTalk,
   deleteTeam,
@@ -157,6 +158,8 @@ export function v3Router(): Router {
     res.json(cadetDetail(me(req), id(req.params.id)));
   });
   r.get('/cadets/:id/discipline-preview', (req, res) => res.json(disciplinePreview(id(req.params.id), str(req.query.offense)?.slice(0, 300) ?? '')));
+  // not keeping to procedures (the "+"): into the cadet's discipline record
+  r.post('/procedures', (req, res) => res.json(reportProcedure(me(req), req.body)));
   r.get('/exemptions', (req, res) => res.json(listExemptions(me(req))));
   r.post('/cadets/:id/exemptions', (req, res) => {
     addExemption(me(req), id(req.params.id), req.body);

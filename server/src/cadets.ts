@@ -19,6 +19,7 @@ import { addDays, isDateKey, localDateKey, zonedIso } from '../../shared/dates';
 import { byHe, byTeamAndName } from '../../shared/sort';
 import { axisTraits, FEEDBACK_POINTS, FEEDBACK_POINTS_MAX, feedbackMissing, feedbackText, pointProblem, pointName, pointsText, readFeedbackForm, SCORE_MAX, scoreText, tidyFeedback, type FeedbackPoint } from '../../shared/experienceFeedback';
 import { traitPlace } from '../../shared/evaluationTraits';
+import { DRESS_ITEMS, PROCEDURE_KINDS, PROCEDURE_LIMITS, procedureBody, procedureMissing, procedureOffense, procedureTitle, procedureWhat } from '../../shared/procedures';
 import { placeAxis } from '../../shared/traitSuggest';
 import { BROAD_EXPERIENCES, EXPERIENCE_KINDS, EXPERIENCE_SPANS, experienceName, type ExperienceKind, type ExperienceSpan } from '../../shared/experiences';
 import type { Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '../../shared/types';
@@ -513,7 +514,8 @@ export const recordSchema = z
 const formalNotes = (cadetId: number) =>
   db().get<{ n: number }>("SELECT count(*) AS n FROM cadet_records WHERE cadet_id = ? AND kind = 'discipline' AND formal = 1", cadetId)!.n;
 
-export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof recordSchema>): number {
+/** told: how the team commander hears of it, when not as the kind's own word ("רישום משמעת") */
+export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof recordSchema>, opts: { told?: string } = {}): number {
   const c = cadetRow(cadetId);
   const r = recordSchema.parse(raw);
   const manage = canManageCadet(actor, c);
@@ -566,13 +568,40 @@ export function addRecord(actor: UserRow, cadetId: number, raw: z.input<typeof r
     ).id;
     if (formal) disciplineNoteGiven(actor, c, name, id);
     // someone else wrote in the file of a cadet of the team: its commander hears (a discipline note, above, already)
-    const told = r.kind === 'evaluation' ? 'הערכה' : r.kind === 'note' ? 'הערה' : discipline && !formal ? 'רישום משמעת' : null;
+    const told = r.kind === 'evaluation' ? 'הערכה' : r.kind === 'note' ? 'הערה' : discipline && !formal ? (opts.told ?? 'רישום משמעת') : null;
     if (told && c.team_commander_id && c.team_commander_id !== actor.id) {
       notify([c.team_commander_id], { type: 'cadet_record', category: 'info', title: `${actor.display_name} הוסיף ${told} על ${name}`, link: `/cadets/${cadetId}` }, actor.id);
     }
   });
   changed('cadets');
   return id;
+}
+
+const procedureSchema = z
+  .object({
+    cadetId: z.number().int().positive(),
+    kind: z.enum(PROCEDURE_KINDS),
+    other: z.string().trim().max(PROCEDURE_LIMITS.other, `מה לא נשמר - עד ${PROCEDURE_LIMITS.other} תווים`).optional().default(''),
+    situation: z.string().trim().max(PROCEDURE_LIMITS.situation, `הסיטואציה - עד ${PROCEDURE_LIMITS.situation} תווים`).optional().default(''),
+    dress: z.array(z.enum(DRESS_ITEMS)).max(DRESS_ITEMS.length).optional().default([]),
+    details: z.string().trim().max(PROCEDURE_LIMITS.details, `פירוט - עד ${PROCEDURE_LIMITS.details} תווים`).optional().default(''),
+  })
+  .superRefine((r, ctx) => {
+    const missing = procedureMissing(r);
+    if (missing.length) ctx.addIssue({ code: 'custom', message: `חסר: ${missing.join(', ')}` });
+  });
+
+/**
+ * Not keeping to procedures (shared/procedures.ts), reported by any staff member: a discipline record in the
+ * cadet's file - seen, as all discipline, by its writer, the team commander and the course commander - its
+ * kind counted on its own. The answer says which time this is.
+ */
+export function reportProcedure(actor: UserRow, raw: unknown): { recordId: number; occurrence: number } {
+  const r = procedureSchema.parse(raw);
+  const offense = procedureOffense(r);
+  const { occurrence } = disciplinePreview(r.cadetId, offense);
+  const recordId = addRecord(actor, r.cadetId, { kind: 'discipline', offense, title: procedureTitle(r), body: procedureBody(r) }, { told: `רישום אי עמידה בנהלים (${procedureWhat(r)})` });
+  return { recordId, occurrence };
 }
 
 /**

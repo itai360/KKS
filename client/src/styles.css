@@ -8404,6 +8404,10 @@ li > .points-view {
 body:has(.app.rail-collapsed) .modal-back {
   inset-inline-start: calc(68px + 24px);
 }
+/* no arrow in the bar (the home screen): none over it either */
+.modal-back[hidden] {
+  display: none;
+}
 
 /* the dialog keeps clear of the top bar's strip, where its arrow is - a tall one never runs under it */
 @media (min-width: 861px) {
@@ -13963,6 +13967,94 @@ tr.is-finished.is-folding {
 }
 .entry-foot .text-red {
   color: var(--red);
+}
+
+/* ---------------- not keeping to procedures, from the "+" (components/ProcedureReport.tsx) ---------------- */
+.proc-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* a legend reads as the fields' own labels - inside its box, not on its edge */
+.proc-group legend {
+  float: inline-start;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.proc-group legend + * {
+  clear: both;
+}
+.proc-group legend .req {
+  color: var(--red-ink);
+}
+/* the choices: big enough for a thumb, each a real radio (or check box) under the chip */
+.proc-kinds {
+  gap: 8px;
+}
+.proc-chip {
+  position: relative;
+  height: auto;
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 15px;
+  -webkit-tap-highlight-color: transparent;
+}
+.proc-chip:active {
+  transform: scale(0.97);
+}
+.proc-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.proc-chip:has(.proc-input:focus-visible) {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+/* what belongs to the choice (a phone's situation, the dress items, "אחר") opens under it */
+.proc-more {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+  animation: proc-in 0.24s var(--spring, ease-out);
+}
+@keyframes proc-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.proc-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+.proc-exempt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--blue);
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .proc-more {
+    animation: none;
+  }
+  .proc-chip:active {
+    transform: none;
+  }
 }
 
 /* a task's deadline to Google Calendar, beside it (pages/TaskPage.tsx) */

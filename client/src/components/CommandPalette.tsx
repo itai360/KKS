@@ -12,6 +12,7 @@ import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addEntry } from './EntryAdd';
+import { addProcedure } from './ProcedureReport';
 import { addToWeekly } from './WeeklyAdd';
 import { api } from '../lib/api';
 import { fmtDeadline, todayKey } from '../lib/format';
@@ -81,6 +82,7 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
         : []),
       { id: 'a:weeklyadd', group: 'פעולות', label: 'הוספה לשבועי - נושא, סגירה מקצועית או הערה ללו"ז', icon: 'weekly', run: () => addToWeekly() },
       { id: 'a:weeknote', group: 'פעולות', label: 'לתחקיר השבוע - לשימור, לשיפור או לקח', icon: 'lightbulb', run: () => addToWeekDebrief() },
+      { id: 'a:procedure', group: 'פעולות', label: 'אי עמידה בנהלים - הפקרת נשק, נשק מאחורה, טלפון, דיגום', icon: 'shield', run: () => addProcedure() },
       { id: 'a:entry', group: 'פעולות', label: 'אישור כניסה - מבקר שמגיע לבסיס', icon: 'stamp', run: () => addEntry() },
       { id: 'a:weeklynow', group: 'פעולות', label: 'השבועי הקרוב', icon: 'weekly', run: go('/weekly') },
       { id: 'a:weekly', group: 'פעולות', label: 'תחקיר שבועי חדש', icon: 'calendar', run: go('/debriefs?new=weekly') },
