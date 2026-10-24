@@ -48,9 +48,8 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
   const searching = !!query.trim();
   // the phone's bar below has these already
   const onBar = useMemo(() => new Set(typeof matchMedia === 'function' && matchMedia(BOTTOM_BAR_MEDIA).matches ? BOTTOM_BAR_SCREENS : []), []);
-  // the groups' tiles leave out the home page (the logo is home), the schedule (it has its own place: the
-  // bar below on a phone, the side menu on a computer) and whatever else the bar below has
-  const kept = (it: MenuItem) => !it.end && it.to !== '/' && it.to !== '/schedule' && !onBar.has(it.to);
+  // the groups' tiles leave out the home page (the logo is home) and whatever else the bar below has
+  const kept = (it: MenuItem) => !it.end && it.to !== '/' && !onBar.has(it.to);
   const all: MenuSection[] = nav.map((s) => (s.title ? s : { title: 'ראשי', items: s.items.filter((it) => searching || kept(it)) }));
   const everything = [...nav.flatMap((s) => s.items), SETTINGS_ITEM];
   // which group a screen is in: its colour, wherever it shows (the most used on top too)

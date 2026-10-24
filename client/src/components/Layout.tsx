@@ -541,7 +541,7 @@ export function Layout({ children }: { children: ReactNode }) {
     if (barSmall) setPlusOpen(false);
   }, [barSmall]);
   const path = location.pathname;
-  // the phone's bar, right to left: home, cadets, "+", weeks, schedule; on any other screen no tab is marked
+  // the phone's bar, right to left: home, cadets, "+", weeks, tasks; on any other screen no tab is marked
   // (everything else is in the menu under the course mark at the top)
   const barIdx =
     path === '/'
@@ -550,7 +550,7 @@ export function Layout({ children }: { children: ReactNode }) {
         ? 1
         : path.startsWith('/weeks') || path.startsWith('/weekly')
           ? 3
-          : path.startsWith('/schedule')
+          : path.startsWith('/tasks') || path === '/my'
             ? 4
             : -1;
   // on a phone the course's name at the top opens the side menu - the computer's own, with the same groups
@@ -850,9 +850,9 @@ export function Layout({ children }: { children: ReactNode }) {
           <Icon name="layers" />
           <span className="nav-label">שבועות</span>
         </NavLink>
-        <NavLink to="/schedule" className={() => (barIdx === 4 ? 'active' : '')} aria-current={barIdx === 4 ? 'page' : undefined}>
-          <Icon name="calendar" />
-          <span className="nav-label">לו"ז</span>
+        <NavLink to="/tasks" className={() => (barIdx === 4 ? 'active' : '')} aria-current={barIdx === 4 ? 'page' : undefined}>
+          <Icon name="tasks" />
+          <span className="nav-label">משימות</span>
         </NavLink>
       </nav>
       {plus.mounted && (
