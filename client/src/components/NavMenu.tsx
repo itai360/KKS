@@ -10,7 +10,7 @@
 import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { matchesSearch } from '@shared/search';
-import { BOTTOM_BAR_MEDIA, bottomBarScreens } from '../lib/bottomBar';
+import { BOTTOM_BAR_MEDIA, BOTTOM_BAR_SCREENS } from '../lib/bottomBar';
 import { frequentScreens } from '../lib/frequent';
 import { useSession } from '../lib/session';
 import { setThemePref, shownTheme } from '../lib/theme';
@@ -47,7 +47,7 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
   const search = useRef<HTMLInputElement>(null);
   const searching = !!query.trim();
   // the phone's bar below has these already
-  const onBar = useMemo(() => new Set(typeof matchMedia === 'function' && matchMedia(BOTTOM_BAR_MEDIA).matches ? bottomBarScreens(isCommander) : []), [isCommander]);
+  const onBar = useMemo(() => new Set(typeof matchMedia === 'function' && matchMedia(BOTTOM_BAR_MEDIA).matches ? BOTTOM_BAR_SCREENS : []), []);
   // the groups' tiles leave out the home page (the logo is home), the schedule (it has its own place: the
   // bar below on a phone, the side menu on a computer) and whatever else the bar below has
   const kept = (it: MenuItem) => !it.end && it.to !== '/' && it.to !== '/schedule' && !onBar.has(it.to);

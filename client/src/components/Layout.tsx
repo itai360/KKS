@@ -23,7 +23,7 @@ import { initials } from './ui';
 import { SETTINGS_ITEM } from './NavMenu';
 import { NotificationsPanel } from './Notifications';
 import { noteScreen, screenOf } from '../lib/frequent';
-import { BOTTOM_BAR_MEDIA, bottomBarScreens } from '../lib/bottomBar';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { useDrawerSwipe } from '../lib/drawerSwipe';
 import { trapFocus } from '../lib/focusTrap';
 import { lockScroll } from '../lib/scrollLock';
@@ -541,11 +541,10 @@ export function Layout({ children }: { children: ReactNode }) {
     if (barSmall) setPlusOpen(false);
   }, [barSmall]);
   const path = location.pathname;
-  // the phone's bar, right to left: tasks, cadets, "+", weeks, schedule; on any other screen no tab is marked
+  // the phone's bar, right to left: home, cadets, "+", weeks, schedule; on any other screen no tab is marked
   // (everything else is in the menu under the course mark at the top)
-  const tasksHome = bottomBarScreens(isCommander)[0];
   const barIdx =
-    path.startsWith('/tasks') || path === '/my' || (!isCommander && path === '/')
+    path === '/'
       ? 0
       : path.startsWith('/cadets')
         ? 1
@@ -645,7 +644,8 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         {sections.map((s, i) => {
-          const links = s.items.map((it) => (
+          // with the phone's bar below, home is its first tab - not in the menu too
+          const links = s.items.filter((it) => !(phone && it.to === '/')).map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
               <Icon name={it.icon} />
               <span className="rail-label">{it.label}</span>
@@ -818,9 +818,9 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         {/* slides to the current tab */}
         <span className="nav-ind" aria-hidden />
-        <NavLink to={tasksHome} end={tasksHome === '/'} className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
-          <Icon name="tasks" />
-          <span className="nav-label">משימות</span>
+        <NavLink to="/" end className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
+          <Icon name="home" />
+          <span className="nav-label">בית</span>
         </NavLink>
         <NavLink to="/cadets" className={() => (barIdx === 1 ? 'active' : '')} aria-current={barIdx === 1 ? 'page' : undefined}>
           <Icon name="cap" />
