@@ -10,6 +10,7 @@ import { usePresence } from '../lib/presence';
 import { slideTabIndicators } from '../lib/tabIndicator';
 import { Count } from './Count';
 import { Icon } from './Icon';
+import { TabIcon } from './TabIcon';
 import { useNewTask } from './NewTask';
 import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
@@ -481,9 +482,9 @@ export function Layout({ children }: { children: ReactNode }) {
     }
   };
 
-  // the phone's bar grows small while reading down - a short capsule of its symbols, every tab still one press
-  // away - and is whole again on scrolling up, at the end of the page, or on moving to another screen
-  const [barSmall, setBarSmall] = useState(false);
+  // reading down the page closes the phone bar's "+" menu (it would hang over a moving page); scrolling up,
+  // the end of the page or another screen reset it
+  const [readingDown, setReadingDown] = useState(false);
   useEffect(() => {
     let last = window.scrollY;
     let frame = 0;
@@ -495,8 +496,8 @@ export function Layout({ children }: { children: ReactNode }) {
         // the top bar shows its edge only while content passes under it
         document.documentElement.toggleAttribute('data-scrolled', y > 2);
         const atEnd = y + window.innerHeight >= document.documentElement.scrollHeight - 8;
-        if (atEnd || y < 60) setBarSmall(false);
-        else if (Math.abs(y - last) > 6) setBarSmall(y > last);
+        if (atEnd || y < 60) setReadingDown(false);
+        else if (Math.abs(y - last) > 6) setReadingDown(y > last);
         last = y;
       });
     };
@@ -507,7 +508,7 @@ export function Layout({ children }: { children: ReactNode }) {
     };
   }, []);
   useEffect(() => {
-    setBarSmall(false);
+    setReadingDown(false);
   }, [location.pathname]);
   // the line under a chosen tab slides to the next one, on every screen
   useEffect(() => {
@@ -538,8 +539,8 @@ export function Layout({ children }: { children: ReactNode }) {
     setPlusOpen(false);
   }, [location.pathname]);
   useEffect(() => {
-    if (barSmall) setPlusOpen(false);
-  }, [barSmall]);
+    if (readingDown) setPlusOpen(false);
+  }, [readingDown]);
   const path = location.pathname;
   // the phone's bar, right to left: home, cadets, "+", weeks, tasks; on any other screen no tab is marked
   // (everything else is in the menu under the course mark at the top)
@@ -810,20 +811,14 @@ export function Layout({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      <nav
-        className={`bottom-nav${typingField ? ' away' : barSmall ? ' compact' : ''}${barIdx < 0 ? ' no-tab' : ''}`}
-        aria-label="ניווט"
-        style={{ ['--idx' as string]: Math.max(0, barIdx) }}
-        inert={drawer || undefined}
-      >
-        {/* slides to the current tab */}
-        <span className="nav-ind" aria-hidden />
+      {/* after Instagram's bar: the symbols alone, the chosen tab's filled (the words stay for screen readers) */}
+      <nav className={`bottom-nav${typingField ? ' away' : ''}`} aria-label="ניווט" inert={drawer || undefined}>
         <NavLink to="/" end className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
-          <Icon name="home" />
+          <TabIcon name="home" filled={barIdx === 0} />
           <span className="nav-label">בית</span>
         </NavLink>
         <NavLink to="/cadets" className={() => (barIdx === 1 ? 'active' : '')} aria-current={barIdx === 1 ? 'page' : undefined}>
-          <Icon name="cap" />
+          <TabIcon name="cadets" filled={barIdx === 1} />
           <span className="nav-label">צוערים</span>
         </NavLink>
         <button
@@ -833,8 +828,8 @@ export function Layout({ children }: { children: ReactNode }) {
             if (viewing) return;
             setPlusAt('bar');
             setPlusOpen((o) => !o);
-            // its menu opens over the whole bar
-            setBarSmall(false);
+            // so that reading on down closes it again
+            setReadingDown(false);
           }}
           aria-label={viewing ? 'קורס קודם - לקריאה בלבד' : canEvent ? 'הוספה: משימה, אירוע בלו"ז או שבועי' : 'הוספה: משימה או שבועי'}
           aria-disabled={viewing ? 'true' : undefined}
@@ -842,16 +837,14 @@ export function Layout({ children }: { children: ReactNode }) {
           aria-expanded={plusOpen}
           aria-controls={plusOpen ? 'plus-menu' : undefined}
         >
-          <span className="plus">
-            <Icon name="plus" />
-          </span>
+          <TabIcon name="create" filled={plusOpen} />
         </button>
         <NavLink to="/weeks" className={() => (barIdx === 3 ? 'active' : '')} aria-current={barIdx === 3 ? 'page' : undefined}>
-          <Icon name="layers" />
+          <TabIcon name="weeks" filled={barIdx === 3} />
           <span className="nav-label">שבועות</span>
         </NavLink>
         <NavLink to="/tasks" className={() => (barIdx === 4 ? 'active' : '')} aria-current={barIdx === 4 ? 'page' : undefined}>
-          <Icon name="tasks" />
+          <TabIcon name="tasks" filled={barIdx === 4} />
           <span className="nav-label">משימות</span>
         </NavLink>
       </nav>

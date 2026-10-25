@@ -40,6 +40,9 @@
   --material: rgba(249, 249, 249, 0.8);
   --material-strong: rgba(249, 249, 249, 0.94);
   --hud: rgba(30, 30, 32, 0.92);
+  /* the phone's bottom bar: opaque, a hairline on top */
+  --bar-bg: #ffffff;
+  --bar-line: rgba(0, 0, 0, 0.14);
 
   --red: #ff3b30;
   --red-bg: #ffe5e3;
@@ -112,6 +115,8 @@
     --material: rgba(22, 22, 24, 0.78);
     --material-strong: rgba(28, 28, 30, 0.94);
     --hud: rgba(58, 58, 60, 0.94);
+    --bar-bg: #000000;
+    --bar-line: rgba(255, 255, 255, 0.16);
 
     --red: #ff453a;
     --red-bg: #3b1714;
@@ -176,6 +181,8 @@
     --material: rgba(22, 22, 24, 0.78);
     --material-strong: rgba(28, 28, 30, 0.94);
     --hud: rgba(58, 58, 60, 0.94);
+    --bar-bg: #000000;
+    --bar-line: rgba(255, 255, 255, 0.16);
 
     --red: #ff453a;
     --red-bg: #3b1714;
@@ -1355,69 +1362,12 @@ input[type='radio'] {
     font-size: 17px;
   }
 
-  /* the tab bar of the system: the width of the screen, a material, the chosen tab in the tint */
-  .bottom-nav,
-  .bottom-nav.compact {
-    inset-inline: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 4px 6px calc(2px + env(safe-area-inset-bottom));
-    border-radius: 0;
-    background: var(--material-strong);
-    -webkit-backdrop-filter: blur(30px) saturate(1.8);
-    backdrop-filter: blur(30px) saturate(1.8);
-    border-top: 0.5px solid var(--line-2);
-    box-shadow: none;
-  }
-  .nav-ind {
-    display: none;
-  }
-  .bottom-nav a,
-  .bottom-nav button,
-  .bottom-nav.compact :is(a, button) {
-    min-height: 50px;
-    padding: 4px 0 2px;
-    gap: 3px;
-    color: var(--muted);
-    font-size: 10.5px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-  }
-  .bottom-nav.compact .nav-label {
-    height: 1.5em;
-    opacity: 1;
-  }
-  .bottom-nav svg {
-    width: 25px;
-    height: 25px;
-  }
-  .bottom-nav .active {
-    color: var(--tint);
-  }
-  .bottom-nav .active svg {
-    transform: none;
-  }
-  .bottom-nav .plus,
-  .bottom-nav.compact .plus {
-    width: 44px;
-    height: 44px;
-    background: var(--tint-fill);
-    color: #fff;
-    box-shadow: 0 4px 12px color-mix(in srgb, var(--tint-fill) 35%, transparent);
-  }
-  .bottom-nav.compact .plus svg {
-    scale: 1;
-  }
-  .bottom-nav .count {
-    background: var(--red);
-  }
   .plus-menu {
-    bottom: calc(env(safe-area-inset-bottom) + 70px);
+    bottom: calc(env(safe-area-inset-bottom) + 62px);
     width: min(340px, calc(100vw - 24px));
   }
   .toasts {
-    bottom: calc(76px + env(safe-area-inset-bottom));
+    bottom: calc(62px + env(safe-area-inset-bottom));
   }
 
   /* a sheet rising from below, its grabber on top */
@@ -1437,7 +1387,6 @@ input[type='radio'] {
   }
   .topbar,
   .rail,
-  .bottom-nav,
   .plus-menu,
   .toast {
     -webkit-backdrop-filter: none;
