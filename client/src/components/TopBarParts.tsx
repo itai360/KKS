@@ -7,7 +7,6 @@ import { Link } from 'react-router';
 import { DESK_VIEWS, VIEW_KEYS, VIEW_LABELS, type CalendarBar } from '../lib/calendarBar';
 import { useSession } from '../lib/session';
 import { Icon } from './Icon';
-import { NavMenu, type MenuSection } from './NavMenu';
 import { OPEN_SHORTCUTS } from './Shortcuts';
 import { initials } from './ui';
 
@@ -159,27 +158,6 @@ export function HelpButton() {
     <button type="button" className="icon-btn hide-mobile" aria-label="קיצורי מקלדת ועזרה" title="קיצורי מקלדת (?)" onClick={() => window.dispatchEvent(new Event(OPEN_SHORTCUTS))}>
       <Icon name="help" />
     </button>
-  );
-}
-
-export function SettingsLink() {
-  return (
-    <Link to="/settings" className="icon-btn hide-mobile top-settings" aria-label="הגדרות" title="הגדרות">
-      <Icon name="settings" />
-    </Link>
-  );
-}
-
-/** every screen in one place, as Google's apps: the "כל המסכים" menu over the page */
-export function AppsButton({ sections }: { sections: MenuSection[] }) {
-  return (
-    <Dropdown className="top-apps hide-mobile" panelClass="dd-apps" label="כל המסכים" button={<Icon name="apps" />}>
-      {(close) => (
-        <div onClick={(e) => (e.target as Element).closest('a[href]') && close()}>
-          <NavMenu sections={sections} onNavigate={close} />
-        </div>
-      )}
-    </Dropdown>
   );
 }
 

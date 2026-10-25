@@ -391,7 +391,6 @@ export function SchedulePage() {
       askDate: () => bar.current.askDate(),
       extras: [
         ...(canAdd ? [{ label: 'בחירת אירועים לפעולה משותפת', icon: 'check', run: () => bulkToggle.current?.() }] : []),
-        { label: 'יומן Google', icon: 'calendar', run: () => setGoogle(true) },
         { label: 'הדפסה', icon: 'print', run: () => window.print() },
       ],
     });

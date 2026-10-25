@@ -114,61 +114,6 @@
   padding-top: 4px;
 }
 
-/* "יצירה": large, raised, the "+" in the course's colour */
-.create-btn {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  height: 56px;
-  margin: 4px 4px 14px;
-  padding: 0 16px 0 20px;
-  border: 0;
-  border-radius: 16px;
-  background: var(--card);
-  color: var(--ink);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 2px 8px 1px rgba(0, 0, 0, 0.1);
-  transition: box-shadow 0.18s, background 0.18s, transform 0.12s;
-}
-.create-plus {
-  display: grid;
-  place-items: center;
-  color: var(--tint);
-}
-.create-chev {
-  color: var(--muted);
-  transition: transform 0.2s;
-}
-.create-btn.is-open .create-chev {
-  transform: rotate(180deg);
-}
-@media (hover: hover) {
-  .create-btn:hover {
-    background: color-mix(in srgb, var(--tint) 7%, var(--card));
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22), 0 4px 12px 2px rgba(0, 0, 0, 0.12);
-  }
-}
-.create-btn:active {
-  transform: scale(0.98);
-}
-.create-btn:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-.create-btn.is-round {
-  width: 56px;
-  padding: 0;
-  justify-content: center;
-  margin-inline: 2px;
-}
-.create-btn.is-round :is(.create-label, .create-chev) {
-  display: none;
-}
-
 /* the small month */
 .mini-month {
   padding: 0 6px 12px;
@@ -509,11 +454,11 @@
   justify-content: center;
   padding: 0;
 }
-.rail-collapsed .rail.gside:not(:hover):not(:has(:focus-visible)) .gside-brand,
+.rail-collapsed .rail.gside:not(:has(:focus-visible)) .gside-brand,
 .rail-collapsed .rail.gside.no-peek .gside-brand {
   display: none;
 }
-.rail-collapsed .rail.gside:not(.no-peek):is(:hover, :has(:focus-visible)) .gside-top {
+.rail-collapsed .rail.gside:not(.no-peek):has(:focus-visible) .gside-top {
   justify-content: flex-start;
   padding-inline: 2px 6px;
 }
@@ -617,8 +562,7 @@
   }
 }
 @media (min-width: 861px) and (max-width: 1180px) {
-  .topbar.is-calendar .live,
-  .topbar.is-calendar .top-settings {
+  .topbar.is-calendar .live {
     display: none !important;
   }
 }
@@ -769,16 +713,6 @@
 .dd-who .avatar {
   width: 40px;
   height: 40px;
-}
-.dd-apps {
-  width: min(400px, calc(100vw - 32px));
-  max-height: min(640px, calc(100dvh - var(--top-h) - 24px));
-  overflow: auto;
-  padding: 8px 12px 12px;
-  border-radius: 20px;
-}
-.dd-apps .nav-menu {
-  gap: 10px;
 }
 
 /* ---------------- the calendar's page (a computer): the sheet, the panel, the strip ---------------- */
@@ -1879,10 +1813,8 @@
   .gc-panel {
     animation: none;
   }
-  .create-btn,
   .gc-event,
-  .layers-chev,
-  .create-chev {
+  .layers-chev {
     transition: none;
   }
 }

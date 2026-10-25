@@ -306,8 +306,9 @@ p {
 }
 }
 
-/* folded to icons: a medium screen, or the person's choice. Opening it (hover) only widens it:
-   the icons keep their place, the words fade in, nothing changes height - so it opens smoothly. */
+/* folded to icons: a medium screen, or the person's choice. It opens from its button only (not on
+   hover - that popped it over the page and was hard to leave); a keyboard reaching it widens it to show
+   the words: the icons keep their place, the words fade in, nothing changes height. */
 .app.rail-collapsed {
   --rail-w: 68px;
 }
@@ -318,7 +319,6 @@ p {
   will-change: width;
 }
 
-.rail-collapsed .rail:not(.no-peek):hover,
 .rail-collapsed .rail:not(.no-peek):has(:focus-visible) {
   width: 252px;
   box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.6);
@@ -354,7 +354,7 @@ p {
 }
 
 /* folded: the words are there (for screen readers) but out of sight, clipped by the width */
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) :is(.brand-text, .rail-label, .rail-user, .rail-logout, .rail-toggle) {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:has(:focus-visible))) :is(.brand-text, .rail-label, .rail-user, .rail-logout, .rail-toggle) {
   opacity: 0;
   pointer-events: none;
   transition-delay: 0s;
@@ -364,22 +364,22 @@ p {
 /* folded: no scrollbar narrowing the width the icons and their highlight are centred in - on a computer
    with classic scrollbars it pushed the highlight off the icon. The wheel and a finger still scroll it,
    and it comes back when the menu opens. */
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:has(:focus-visible))) {
   scrollbar-width: none;
 }
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible)))::-webkit-scrollbar {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:has(:focus-visible)))::-webkit-scrollbar {
   display: none;
 }
 
 /* a section title keeps its height, shown as a line */
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-section {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:has(:focus-visible))) .rail-section {
   color: transparent;
   background: linear-gradient(var(--rail-2), var(--rail-2)) center calc(100% - 9px) / 70% 1px no-repeat;
   transition-delay: 0s;
   transition-duration: 0.1s;
 }
 
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-link .count {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:has(:focus-visible))) .rail-link .count {
   position: absolute;
   top: 1px;
   inset-inline-start: 26px;
@@ -514,7 +514,7 @@ p {
   background: var(--rail-ink);
   flex-shrink: 0;
 }
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-group-here {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:has(:focus-visible))) .rail-group-here {
   position: absolute;
   top: 6px;
   inset-inline-start: 30px;
@@ -542,10 +542,10 @@ p {
 .rail-collapsed .rail .rail-group-head {
   padding-inline: 13px;
 }
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-group-chev {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:has(:focus-visible))) .rail-group-chev {
   opacity: 0;
 }
-.rail-collapsed :is(.rail.no-peek, .rail:not(:hover):not(:has(:focus-visible))) .rail-group-head .count {
+.rail-collapsed :is(.rail.no-peek, .rail:not(:has(:focus-visible))) .rail-group-head .count {
   position: absolute;
   top: 1px;
   inset-inline-start: 26px;

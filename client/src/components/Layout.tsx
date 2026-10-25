@@ -19,9 +19,9 @@ import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
 import { CommandPalette } from './CommandPalette';
 import { TopSearch } from './TopSearch';
-import { CalendarLayers, CreateButton } from './SideBar';
+import { CalendarLayers } from './SideBar';
 import { MiniMonth } from './MiniMonth';
-import { AppsButton, CalendarControls, HelpButton, SettingsLink, UserMenu, ViewSwitcher } from './TopBarParts';
+import { CalendarControls, HelpButton, UserMenu, ViewSwitcher } from './TopBarParts';
 import { useCalendarBar } from '../lib/calendarBar';
 import { todayKey } from '../lib/format';
 import { ShortcutsHelp } from './Shortcuts';
@@ -548,7 +548,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // the bar's "+": a new task or something for the weekly
   const [plusOpen, setPlusOpen] = useState(false);
   // where the "+" menu opened from: the phone bar's, or the top bar's on a computer
-  const [plusAt, setPlusAt] = useState<'bar' | 'side'>('bar');
+  const [plusAt, setPlusAt] = useState<'bar' | 'top'>('bar');
   const plus = usePresence(plusOpen, 200);
   useEffect(() => {
     setPlusOpen(false);
@@ -654,15 +654,16 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         {/* in line with the top bar, as one bar across: the menu's button and the course's mark (home: the calendar) */}
         <div className="gside-top">
+          {/* says what it does: shows or hides the side bar (a phone: closes the menu) */}
           <button
             type="button"
             className="icon-btn gside-menu"
             onClick={phone ? closeMenu : toggleRail}
             aria-pressed={phone ? undefined : !folded}
-            aria-label={phone ? 'סגירת התפריט' : folded ? 'פתיחת התפריט הראשי' : 'כיווץ התפריט הראשי'}
-            title={phone ? 'סגירת התפריט' : 'התפריט הראשי'}
+            aria-label={phone ? 'סגירת התפריט' : folded ? 'הצגת סרגל הצד' : 'הסתרת סרגל הצד'}
+            title={phone ? 'סגירת התפריט' : folded ? 'הצגת סרגל הצד: החודש, היומנים והתפריט' : 'הסתרת סרגל הצד'}
           >
-            <Icon name="menu" />
+            <Icon name={phone ? 'x' : 'sidebar'} />
           </button>
           <NavLink to="/" end className="gside-brand" title="יומן הקורס">
             <span className="brand-mark">{symbol.slice(0, 4)}</span>
@@ -673,18 +674,6 @@ export function Layout({ children }: { children: ReactNode }) {
           </NavLink>
         </div>
         <div className="gside-body">
-          {!viewing && (
-            <CreateButton
-              folded={folded}
-              open={plusOpen && plusAt === 'side'}
-              label={canEvent ? 'יצירה: אירוע, משימה, שבועי או תחקיר השבוע' : 'יצירה: משימה, שבועי או תחקיר השבוע'}
-              onClick={() => {
-                if (plusOpen && plusAt === 'side') return setPlusOpen(false);
-                setPlusAt('side');
-                setPlusOpen(true);
-              }}
-            />
-          )}
           {!phone && !folded && (
             <MiniMonth
               selected={calBar?.date ?? today}
@@ -795,10 +784,28 @@ export function Layout({ children }: { children: ReactNode }) {
               {live ? 'מעודכן' : 'מתחבר'}
             </span>
             <HelpButton />
-            <SettingsLink />
             <ThemeButton />
             <Bell unread={unread} />
-            <AppsButton sections={sections} />
+            {/* a computer: the "+" with everything one adds - the screens are in the side menu (settings too) */}
+            {!phone && !viewing && (
+              <button
+                id="top-plus-button"
+                type="button"
+                className={`top-plus${plusOpen && plusAt === 'top' ? ' plus-open' : ''}`}
+                onClick={() => {
+                  if (plusOpen && plusAt === 'top') return setPlusOpen(false);
+                  setPlusAt('top');
+                  setPlusOpen(true);
+                }}
+                aria-label={canEvent ? 'הוספה: משימה, אירוע בלו"ז, שבועי, תחקיר השבוע או אי עמידה בנהלים' : 'הוספה: משימה, שבועי, תחקיר השבוע או אי עמידה בנהלים'}
+                title="הוספה"
+                aria-haspopup="menu"
+                aria-expanded={plusOpen && plusAt === 'top'}
+                aria-controls={plusOpen && plusAt === 'top' ? 'plus-menu' : undefined}
+              >
+                <Icon name="plus" />
+              </button>
+            )}
             <UserMenu />
           </div>
         </header>
@@ -921,8 +928,8 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 /**
- * The "+": the things one adds. From the phone bar it rises above the bar; from "יצירה" in the side
- * bar on a computer it drops under the button, as a menu.
+ * The "+": the things one adds. From the phone bar it rises above the bar; from the top bar's "+" on a
+ * computer it drops under the button, as a menu.
  */
 function PlusMenu({
   at,
@@ -934,7 +941,7 @@ function PlusMenu({
   onEvent,
   leaving,
 }: {
-  at: 'bar' | 'side';
+  at: 'bar' | 'top';
   onClose: () => void;
   onTask: () => void;
   onWeekly: () => void;
@@ -944,14 +951,14 @@ function PlusMenu({
   leaving: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const anchorId = at === 'side' ? 'side-create-button' : 'plus-button';
-  // under "יצירה", its start edge in line with the button's (right to left: their right edges)
+  const anchorId = at === 'top' ? 'top-plus-button' : 'plus-button';
+  // under the top bar's "+", toward the middle of the screen from it (it sits near the left edge)
   const [spot, setSpot] = useState<{ top: number; left: number } | null>(null);
   useLayoutEffect(() => {
-    if (at !== 'side') return;
+    if (at !== 'top') return;
     const place = () => {
       const r = document.getElementById(anchorId)?.getBoundingClientRect();
-      if (r) setSpot({ top: r.bottom + 8, left: Math.max(12, Math.min(r.right - 300, window.innerWidth - 312)) });
+      if (r) setSpot({ top: r.bottom + 10, left: Math.max(12, Math.min(r.left, window.innerWidth - 312)) });
     };
     place();
     window.addEventListener('resize', place);
@@ -987,13 +994,13 @@ function PlusMenu({
       {at === 'bar' && <div className={`plus-scrim${leaving ? ' is-leaving' : ''}`} aria-hidden="true" />}
       {/* closed, it goes back into the "+" it came from */}
       <div
-        className={`plus-menu${at === 'side' ? ' at-top' : ''}${leaving ? ' is-leaving' : ''}`}
+        className={`plus-menu${at === 'top' ? ' at-top' : ''}${leaving ? ' is-leaving' : ''}`}
         id="plus-menu"
         role="menu"
         aria-label="הוספה"
         ref={ref}
         inert={leaving || undefined}
-        style={at === 'side' ? (spot ? { top: spot.top, left: spot.left } : { visibility: 'hidden' }) : undefined}
+        style={at === 'top' ? (spot ? { top: spot.top, left: spot.left } : { visibility: 'hidden' }) : undefined}
       >
         <button type="button" role="menuitem" onClick={onTask}>
           <span className="plus-menu-icon">

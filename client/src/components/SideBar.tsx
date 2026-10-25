@@ -15,29 +15,6 @@ import { Icon } from './Icon';
 import { Select } from './pickers';
 import { Seg } from './ui';
 
-/** "יצירה": the big button at the top of the side bar - or, with the side bar folded, a round "+" */
-export function CreateButton({ open, folded, onClick, label }: { open: boolean; folded: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      id="side-create-button"
-      type="button"
-      className={`create-btn${folded ? ' is-round' : ''}${open ? ' is-open' : ''}`}
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      aria-haspopup="menu"
-      aria-expanded={open}
-      aria-controls={open ? 'plus-menu' : undefined}
-    >
-      <span className="create-plus" aria-hidden="true">
-        <Icon name="plus" size={22} />
-      </span>
-      <span className="create-label">יצירה</span>
-      <Icon name="chevronDown" size={16} className="create-chev" />
-    </button>
-  );
-}
-
 function LayerRow({ id, label, color, hint, on }: { id: string; label: string; color: CalColor; hint: string; on: boolean }) {
   return (
     <label className={`layer-row c-${color}`} title={hint}>
