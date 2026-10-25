@@ -156,7 +156,7 @@ export function scheduleIcs(origin: string, user: UserRow): string {
 
 // ---------------- in: calendars shown in the schedule ----------------
 
-const MAX_SOURCES = 8;
+const MAX_SOURCES = 12;
 const REFRESH_MS = 10 * 60_000;
 /** a calendar that could not be read is tried again sooner */
 const RETRY_MS = 60_000;
@@ -191,8 +191,8 @@ interface SourceRow {
   url: string;
 }
 
-/** https only, and never a local or private address. */
-export function normalizeCalendarUrl(raw: string): string {
+/** https only, and never a local or private address. A Google link that only shows a calendar leads to its iCal. */
+export function normalizeCalendarUrl(raw: string, depth = 0): string {
   let u: URL;
   try {
     u = new URL(raw.trim().replace(/^webcals?:\/\//i, 'https://'));
@@ -206,7 +206,41 @@ export function normalizeCalendarUrl(raw: string): string {
   if (ipLiteral || host === 'localhost' || !host.includes('.') || /\.(local|internal|localhost)$/.test(host)) {
     throw badRequest('כתובת היומן צריכה להיות כתובת אינטרנט ציבורית');
   }
-  return u.toString();
+  return googleIcal(u, depth) ?? u.toString();
+}
+
+const CALENDAR_ID = /^[^\s@/]{1,200}@[^\s@/]{1,120}$/;
+
+/** a "cid" of an "add this calendar" link: the calendar's id - as it is, or in base64 */
+function calendarIdOf(cid: string): string | null {
+  if (CALENDAR_ID.test(cid)) return cid;
+  const decoded = Buffer.from(cid, 'base64').toString('utf8');
+  return CALENDAR_ID.test(decoded) ? decoded : null;
+}
+
+/**
+ * Google Calendar's links that show a calendar rather than give it - the embed link (src=) and the
+ * "add this calendar" link (cid=) - lead to the calendar's public iCal address. It is read only if the
+ * calendar is public; otherwise its secret address is needed (readError says so).
+ */
+function googleIcal(u: URL, depth: number): string | null {
+  const host = u.hostname.toLowerCase();
+  const google = host === 'calendar.google.com' || ((host === 'www.google.com' || host === 'google.com') && u.pathname.startsWith('/calendar'));
+  if (!google || u.pathname.includes('/ical/')) return null;
+  const srcs = u.searchParams.getAll('src');
+  if (srcs.length > 1) throw badRequest('בקישור הזה יש כמה יומנים - חברו כל יומן בנפרד, בכתובת שלו');
+  const cid = u.searchParams.get('cid');
+  // an "add this calendar" link to a calendar from elsewhere: that calendar's own address
+  if (!srcs.length && cid && /^(webcals?|https?):\/\//i.test(cid) && depth < 2) return normalizeCalendarUrl(cid, depth + 1);
+  const id = srcs.length ? (CALENDAR_ID.test(srcs[0]) ? srcs[0] : null) : cid ? calendarIdOf(cid) : null;
+  if (!id) throw badRequest('זה קישור לדף של Google Calendar ולא ליומן. ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "כתובת סודית בפורמט iCal" - והדביקו אותה כאן');
+  return `https://calendar.google.com/calendar/ical/${encodeURIComponent(id)}/public/basic.ics`;
+}
+
+/** a Google calendar's iCal address: "public" or "private" (its secret one) */
+function googleKind(url: string): 'public' | 'private' | null {
+  const m = /^https:\/\/calendar\.google\.com\/calendar\/ical\/[^/]+\/(public|private-[^/]+)\/basic\.ics$/.exec(url);
+  return m ? (m[1] === 'public' ? 'public' : 'private') : null;
 }
 
 interface Cached {
@@ -231,7 +265,7 @@ const awaited = new Set<string>();
 let fetcher = async (url: string): Promise<string> => {
   // an address the commander pasted: it may not lead into the server's own network, redirects included
   const res = await safeFetch(url, { headers: { Accept: 'text/calendar' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  if (!res.ok) throw new Error(res.status === 404 ? 'היומן לא נמצא בכתובת הזו' : `שרת היומן החזיר שגיאה ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(res.status === 404 ? 'היומן לא נמצא בכתובת הזו' : `שרת היומן החזיר שגיאה ${res.status}`), { status: res.status });
   return (await readLimited(res, MAX_BYTES, () => new Error('היומן גדול מדי'))).toString('utf8');
 };
 
@@ -256,14 +290,16 @@ export function forgetCalendarCopies(): void {
 /** the readings still running when a request ends - the serverless platform keeps the instance up for them */
 export const calendarReadsSettled = (): Promise<unknown> => Promise.allSettled([...reading.values()]);
 
+const NOT_CALENDAR = 'הקובץ בכתובת הזו אינו יומן בפורמט iCal';
+
 function parseCalendar(text: string): ICAL.Component {
   let root: ICAL.Component;
   try {
     root = new ICAL.Component(ICAL.parse(text));
   } catch {
-    throw new Error('הקובץ בכתובת הזו אינו יומן בפורמט iCal');
+    throw new Error(NOT_CALENDAR);
   }
-  if (root.name !== 'vcalendar') throw new Error('הקובץ בכתובת הזו אינו יומן בפורמט iCal');
+  if (root.name !== 'vcalendar') throw new Error(NOT_CALENDAR);
   for (const vtz of root.getAllSubcomponents('vtimezone')) {
     const id = String(vtz.getFirstPropertyValue('tzid') ?? '');
     if (id && !ICAL.TimezoneService.has(id)) ICAL.TimezoneService.register(vtz);
@@ -385,7 +421,15 @@ function parseTrimmed(text: string): { root: ICAL.Component; text: string } {
 
 const nameOf = (root: ICAL.Component) => String(root.getFirstPropertyValue('x-wr-calname') ?? '').trim().slice(0, 80) || null;
 
-function readError(e: unknown): string {
+function readError(e: unknown, url: string): string {
+  const status = (e as { status?: number })?.status;
+  const refused = status === 403 || status === 404;
+  // Google answers so for a calendar that is not public, and for a secret address that was reset
+  const kind = googleKind(url);
+  if (kind === 'public' && (refused || (e as Error)?.message === NOT_CALENDAR)) {
+    return 'היומן הזה לא ציבורי, ולכן אי אפשר לקרוא אותו מקישור כזה. ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "כתובת סודית בפורמט iCal" - והדביקו אותה כאן';
+  }
+  if (kind === 'private' && refused) return 'הכתובת הסודית הזו לא פעילה - אולי היא אופסה ב-Google. העתיקו את הכתובת הסודית העדכנית מהגדרות היומן';
   if (e instanceof Error && /[֐-׿]/.test(e.message)) return e.message;
   if ((e as Error)?.name === 'TimeoutError' || (e as Error)?.name === 'AbortError') return 'Google לא סיים לשלוח את היומן בזמן. נסו שוב בעוד כמה דקות';
   return 'לא ניתן לקרוא את היומן כרגע';
@@ -451,7 +495,7 @@ function readFromGoogle(url: string): Promise<Cached> {
     } catch (e) {
       // keep showing the last good copy while the calendar cannot be reached
       const hit = cache.get(url);
-      entry = { at: Date.now(), root: hit?.root ?? null, error: readError(e), name: hit?.name ?? null };
+      entry = { at: Date.now(), root: hit?.root ?? null, error: readError(e, url), name: hit?.name ?? null };
     }
     cache.set(url, entry);
     return entry;
@@ -617,10 +661,11 @@ function expand(source: SourceRow, root: ICAL.Component, from: string, to: strin
   return out;
 }
 
-export function listCalendarSources(asCommander: boolean): CalendarSource[] {
+/** The calendars shown - never their addresses: a secret address stays on the server, the commander's browser included. */
+export function listCalendarSources(): CalendarSource[] {
   return db()
     .all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id')
-    .map((r) => ({ id: r.id, name: r.name, calendarName: cache.get(r.url)?.name ?? null, url: asCommander ? r.url : null, error: cache.get(r.url)?.error ?? null, loading: reading.has(r.url) && !cache.get(r.url)?.root }));
+    .map((r) => ({ id: r.id, name: r.name, calendarName: cache.get(r.url)?.name ?? null, error: cache.get(r.url)?.error ?? null, loading: reading.has(r.url) && !cache.get(r.url)?.root }));
 }
 
 /** Checks the address right away, so a wrong one is reported while adding it. */

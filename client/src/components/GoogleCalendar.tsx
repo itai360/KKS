@@ -15,7 +15,7 @@ import { ask } from './Confirm';
 export function GoogleCalendarModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal
-      title="סנכרון עם יומן Google"
+      title="יומן Google"
       onClose={onClose}
       footer={
         <button className="btn btn-ghost" onClick={onClose}>
@@ -193,7 +193,7 @@ export function CalendarSources() {
           </Field>
           <Field
             label="הכתובת הסודית של היומן בפורמט iCal"
-            hint={'ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "שילוב היומן" ← "כתובת סודית בפורמט iCal". ליומן ציבורי אפשר גם "כתובת ציבורית בפורמט iCal".'}
+            hint={'ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "שילוב היומן" ← "כתובת סודית בפורמט iCal". ליומן ציבורי אפשר גם את הכתובת הציבורית או את קישור התצוגה שלו. הכתובת נשמרת בשרת בלבד ולא מוצגת לאיש.'}
           >
             <input className="input mono" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" />
           </Field>

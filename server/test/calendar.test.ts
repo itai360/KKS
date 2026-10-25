@@ -4,7 +4,7 @@
 import request from 'supertest';
 import ICAL from 'ical.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { calendarReadsSettled, setCalendarFetcher, setCalendarWaits, trimCalendar } from '../src/calendar';
+import { calendarReadsSettled, normalizeCalendarUrl, setCalendarFetcher, setCalendarWaits, trimCalendar } from '../src/calendar';
 import { db } from '../src/db';
 import { at, newTask, setup, type Ctx } from './helpers';
 
@@ -152,7 +152,8 @@ describe('Google calendars in the schedule', () => {
     expect((await c.s1.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL })).status).toBe(403);
     const added = await c.cmd.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL.replace('https://', 'webcal://') });
     expect(added.status).toBe(200);
-    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', url: GOOGLE_URL, error: null, loading: false }]);
+    // the secret address stays on the server - the commander's browser included
+    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', error: null, loading: false }]);
     expect(asked).toEqual([GOOGLE_URL]);
 
     const events = (await c.s1.get('/api/calendar/external?from=2026-09-28&to=2026-10-18')).body;
@@ -174,10 +175,46 @@ describe('Google calendars in the schedule', () => {
     expect(asked).toHaveLength(1); // fetched once, kept for a few minutes
 
     // staff see which calendars are shown, not their secret addresses
-    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', url: null, error: null, loading: false }]);
+    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', error: null, loading: false }]);
+    expect(JSON.stringify((await c.cmd.get('/api/calendar/sources')).body)).not.toContain('private-');
 
     expect((await c.cmd.del(`/api/calendar/sources/${added.body[0].id}`)).body).toEqual([]);
     expect((await c.s1.get('/api/calendar/external?from=2026-09-28&to=2026-10-18')).body).toEqual([]);
+  });
+
+  it('a Google link that only shows a calendar leads to its public iCal address', () => {
+    const ical = (id: string) => `https://calendar.google.com/calendar/ical/${encodeURIComponent(id)}/public/basic.ics`;
+    // the embed link, as Google gives it to put a calendar in a site
+    expect(normalizeCalendarUrl('https://calendar.google.com/calendar/embed?src=team%40group.calendar.google.com&ctz=Asia%2FJerusalem')).toBe(ical('team@group.calendar.google.com'));
+    expect(normalizeCalendarUrl('https://www.google.com/calendar/embed?src=someone%40gmail.com')).toBe(ical('someone@gmail.com'));
+    // "add this calendar": the id as it is or in base64, or another calendar's address
+    const b64 = Buffer.from('other@group.calendar.google.com').toString('base64url');
+    expect(normalizeCalendarUrl(`https://calendar.google.com/calendar/u/0?cid=${b64}`)).toBe(ical('other@group.calendar.google.com'));
+    expect(normalizeCalendarUrl('https://calendar.google.com/calendar/r?cid=other%40group.calendar.google.com')).toBe(ical('other@group.calendar.google.com'));
+    expect(normalizeCalendarUrl(`https://calendar.google.com/calendar/r?cid=${encodeURIComponent('webcal://example.com/team.ics')}`)).toBe('https://example.com/team.ics');
+    // iCal addresses stay as they are
+    expect(normalizeCalendarUrl(GOOGLE_URL)).toBe(GOOGLE_URL);
+    expect(normalizeCalendarUrl(ical('team@group.calendar.google.com'))).toBe(ical('team@group.calendar.google.com'));
+    // a page of Google Calendar is not a calendar, and one link of several calendars is connected one by one
+    expect(() => normalizeCalendarUrl('https://calendar.google.com/calendar/u/0/r/week')).toThrow(/דף של Google Calendar/);
+    expect(() => normalizeCalendarUrl('https://calendar.google.com/calendar/embed?src=a%40gmail.com&src=b%40gmail.com')).toThrow(/כמה יומנים/);
+    expect(() => normalizeCalendarUrl(`https://calendar.google.com/calendar/r?cid=${encodeURIComponent('webcal://localhost/x.ics')}`)).toThrow(/ציבורית/);
+  });
+
+  it('says what to do when Google will not give a calendar', async () => {
+    const asked: string[] = [];
+    setCalendarFetcher(async (url) => {
+      asked.push(url);
+      throw Object.assign(new Error('not found'), { status: 404 });
+    });
+    const embed = await c.cmd.post('/api/calendar/sources', { name: 'x', url: 'https://calendar.google.com/calendar/embed?src=closed%40group.calendar.google.com' });
+    expect(embed.status).toBe(400);
+    expect(embed.body.error).toMatch(/לא ציבורי.*כתובת סודית בפורמט iCal/);
+    expect(asked).toEqual(['https://calendar.google.com/calendar/ical/closed%40group.calendar.google.com/public/basic.ics']);
+    const reset = await c.cmd.post('/api/calendar/sources', { name: 'x', url: GOOGLE_URL });
+    expect(reset.status).toBe(400);
+    expect(reset.body.error).toMatch(/אופסה/);
+    expect((await c.cmd.get('/api/calendar/sources')).body).toEqual([]);
   });
 
   it('a calendar connected without a name takes the one it has in Google', async () => {
