@@ -903,17 +903,17 @@ export function apiRouter(): Router {
 
   r.get('/calendar/feed', (req, res) => res.json(calendarFeed(me(req).id, origin(req))));
   r.post('/calendar/feed/rotate', (req, res) => res.json(calendarFeed(me(req).id, origin(req), true)));
-  r.get('/calendar/sources', (req, res) => res.json(listCalendarSources(isCommander(me(req)))));
+  r.get('/calendar/sources', (_req, res) => res.json(listCalendarSources()));
   r.post('/calendar/sources', requireCommander, async (req, res) => {
     const { name, url } = z.object({ name: z.string().trim().max(60).default(''), url: z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000) }).parse(req.body);
     await addCalendarSource(me(req), name, url);
     changed('events');
-    res.json(listCalendarSources(true));
+    res.json(listCalendarSources());
   });
   r.delete('/calendar/sources/:id', requireCommander, (req, res) => {
     removeCalendarSource(id(req.params.id));
     changed('events');
-    res.json(listCalendarSources(true));
+    res.json(listCalendarSources());
   });
   // the calendar the plan documents read (calendar.ts): the commander's
   r.get('/plan-calendars', requireCommander, async (_req, res) => res.json(await listPlanCalendars()));

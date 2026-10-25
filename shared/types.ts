@@ -343,8 +343,6 @@ export interface CalendarSource {
   name: string;
   /** the name the calendar has in Google Calendar, once it was read */
   calendarName: string | null;
-  /** the calendar's address; only the commander sees it */
-  url: string | null;
   error: string | null;
   /** read for the first time, Google still sending it */
   loading: boolean;
