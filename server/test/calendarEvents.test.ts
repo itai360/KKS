@@ -118,3 +118,23 @@ describe('the calendar: a repeating event', () => {
     expect((await c.s2.patch(`/api/events/${theirs.id}`, { title: 'אחר', scope: 'all' })).status).toBe(403);
   });
 });
+
+describe('privacy of the staff absences layer', () => {
+  it('a sick day reads as an absence to the rest of the staff - from the server, not only on screen', async () => {
+    const day = '2030-01-10';
+    expect((await c.s2.post('/api/absences', { startDate: day, endDate: day, reason: 'sick', note: 'בדיקה' })).status).toBe(200);
+    const of = (list: { userId: number }[]) => list.find((a) => a.userId === c.ids.s2);
+    // the person and the commander see why
+    expect(of((await c.s2.get('/api/absences')).body)).toMatchObject({ reason: 'sick', note: 'בדיקה' });
+    expect(of((await c.cmd.get('/api/absences')).body)).toMatchObject({ reason: 'sick', note: 'בדיקה' });
+    // another staff member: away, nothing more
+    expect(of((await c.s1.get('/api/absences')).body)).toMatchObject({ reason: 'other', note: '' });
+    // and the same where a task's owner is chosen
+    const away = async (agent: typeof c.s1) => (await agent.get(`/api/load?date=${day}`)).body.find((l: { userId: number }) => l.userId === c.ids.s2).away;
+    expect(await away(c.s1)).toMatchObject({ reason: 'other' });
+    expect(await away(c.cmd)).toMatchObject({ reason: 'sick' });
+    // leave is not medical: everyone sees it
+    expect((await c.s2.post('/api/absences', { startDate: '2030-02-01', endDate: '2030-02-03', reason: 'leave' })).status).toBe(200);
+    expect((await c.s1.get('/api/absences')).body.filter((a: { userId: number }) => a.userId === c.ids.s2).map((a: { reason: string }) => a.reason)).toEqual(['other', 'leave']);
+  });
+});
