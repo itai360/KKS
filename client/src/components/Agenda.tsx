@@ -541,7 +541,7 @@ function AgendaDaySection({
     const ended = (it: AgendaItem) =>
       isToday &&
       (it.kind === 'event'
-        ? it.e.id !== liveNow && endMinutes(it.e) <= at
+        ? !it.e.allDay && it.e.id !== liveNow && endMinutes(it.e) <= at
         : it.kind === 'external' && !!it.e.startTime && endMinutes({ startTime: it.e.startTime, endTime: it.e.endTime }) <= at);
     return { over: items.filter(ended), rest: items.filter((it) => !ended(it)) };
   }, [items, isToday, at, liveNow]);
@@ -673,10 +673,11 @@ export function CourseEventRow({
         className={`event-row${e.cancelled ? ' cancelled' : ''}${now ? ' now' : ''}${past ? ' past' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`}
         {...openable(bulkClick(bulk, e.id, onOpen))}
       >
-        <div className="event-time">
+        <div className={`event-time${e.allDay ? ' small' : ''}`}>
           <BulkCheck id={e.id} />
-          {e.startTime}
-          {e.endTime && <span className="end">עד {e.endTime}</span>}
+          {e.allDay ? 'כל היום' : e.startTime}
+          {!e.allDay && e.endTime && <span className="end">עד {e.endTime}</span>}
+          {e.allDay && e.endDate && e.endDate !== e.date && <span className="end">עד {shortDate(e.endDate)}</span>}
         </div>
         <div style={{ minWidth: 0 }}>
           <div className="event-title">

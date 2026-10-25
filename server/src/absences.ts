@@ -50,6 +50,15 @@ function toAbsence(r: AbsenceRow): Absence {
   };
 }
 
+/**
+ * Why someone is away, as another may see it: a sick day is medical - for them and the commander only,
+ * and the rest of the staff see an absence. Leave, a course or reserve duty stay as they are: they tell
+ * who can take a task.
+ */
+export function reasonSeenBy(viewer: UserRow, ownerId: number, reason: AbsenceReason): AbsenceReason {
+  return reason === 'sick' && viewer.id !== ownerId && !isCommander(viewer) ? 'other' : reason;
+}
+
 /** absences that touch a range of days (all current and upcoming ones by default), of one person or all */
 export function listAbsences(f: { from?: string; to?: string; userId?: number } = {}): Absence[] {
   const today = localDateKey(clock.now(), tz());

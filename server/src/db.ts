@@ -1204,6 +1204,25 @@ const SCHEMA_V48 = `
 ALTER TABLE evaluation_entries ADD COLUMN traits TEXT NOT NULL DEFAULT '[]';
 `;
 
+// the calendar (the home page): an event all day, or over several days (all day too); a colour of its
+// own; and a repeating series - each of its events a whole event of its own, kept together by the series.
+// Added columns only: every event there is keeps its meaning (one day, its hours, the course's blue).
+const SCHEMA_V49 = `
+CREATE TABLE event_series (
+  id INTEGER PRIMARY KEY,
+  freq TEXT NOT NULL CHECK (freq IN ('daily', 'weekdays', 'weekly', 'monthly')),
+  interval INTEGER NOT NULL DEFAULT 1 CHECK (interval BETWEEN 1 AND 12),
+  until TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+ALTER TABLE events ADD COLUMN end_date TEXT;
+ALTER TABLE events ADD COLUMN all_day INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE events ADD COLUMN color TEXT;
+ALTER TABLE events ADD COLUMN series_id INTEGER REFERENCES event_series(id) ON DELETE SET NULL;
+CREATE INDEX events_series ON events(series_id);
+`;
+
 // the team commander's takpatz (takpatz.ts): each cadet's goals, notes, third and rank; the experiences
 // planned week by week in the main plan and a second one; the tracking of each from its handing down to
 // its feedback; the course's catalog of experiences (the spreadsheet's planning by halves) and a short
@@ -1285,7 +1304,7 @@ CREATE TABLE google_drive_requests (
   DEFAULT_TAKPATZ_CATALOG.forEach((c, i) => db.run('INSERT INTO takpatz_catalog(half, kind, name, sort, created_at) VALUES (?, ?, ?, ?, ?)', c.half, c.kind, c.name, i, now));
 }
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

@@ -35,7 +35,11 @@ export function agendaDays(from: string, count: number, events: ScheduleEvent[],
     days.push(d);
     byDay.set(d, []);
   }
-  for (const e of events) byDay.get(e.date)?.push({ kind: 'event', key: `e${e.id}`, at: e.startTime, e });
+  // an event all day comes first in its day, as a Google all-day one; one of several days is in each of them
+  for (const e of events) {
+    const last = e.endDate && e.endDate > e.date ? e.endDate : e.date;
+    for (let d = e.date; d <= last; d = addDays(d, 1)) byDay.get(d)?.push({ kind: 'event', key: `e${e.id}`, at: e.allDay ? '' : e.startTime, e });
+  }
   for (const x of external) byDay.get(x.date)?.push({ kind: 'external', key: `x${x.id}`, at: x.startTime ?? '', e: x });
   for (const t of tasks) {
     const at = deadlineAt(t);

@@ -1,5 +1,5 @@
 import { Suspense, useEffect } from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router';
 import { Layout } from './components/Layout';
 import { NewTaskProvider } from './components/NewTask';
 import { WeekDebriefAddHost } from './components/WeekDebriefAdd';
@@ -9,9 +9,9 @@ import { WeeklyAddHost } from './components/WeeklyAdd';
 import { ToastProvider } from './components/Toasts';
 import { Empty, Loading } from './components/ui';
 import { SessionGate, useSession } from './lib/session';
-import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { MyTasksPage } from './pages/MyTasksPage';
+import { SchedulePage } from './pages/SchedulePage';
 import { lazyPage, prefetchPages } from './lib/lazyPage';
 import { ConfirmHost } from './components/Confirm';
 import { usePageTitle } from './lib/title';
@@ -42,7 +42,7 @@ const WeeklyReportPage = lazyPage(() => import('./pages/ReportsPage'), 'WeeklyRe
 const RequestsPage = lazyPage(() => import('./pages/RequestsPage'), 'RequestsPage');
 const EntriesPage = lazyPage(() => import('./pages/EntriesPage'), 'EntriesPage');
 const ProceduresPage = lazyPage(() => import('./pages/ProceduresPage'), 'ProceduresPage');
-const SchedulePage = lazyPage(() => import('./pages/SchedulePage'), 'SchedulePage');
+const DashboardPage = lazyPage(() => import('./pages/DashboardPage'), 'DashboardPage');
 const SearchPage = lazyPage(() => import('./pages/SearchPage'), 'SearchPage');
 const SettingsPage = lazyPage(() => import('./pages/SettingsPage'), 'SettingsPage');
 const TaskPage = lazyPage(() => import('./pages/TaskPage'), 'TaskPage');
@@ -85,6 +85,12 @@ function NotFound() {
   );
 }
 
+/** The schedule's old address: the calendar, with the day, the view and the event asked for (links in notifications). */
+function ToCalendar() {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: '/', search, hash }} replace />;
+}
+
 function AuthedRoutes() {
   const { isCommander, can } = useSession();
   useEffect(() => {
@@ -103,7 +109,9 @@ function AuthedRoutes() {
             }
           >
             <Routes>
-              <Route path="/" element={isCommander ? <DashboardPage /> : <MyTasksPage />} />
+              {/* the calendar is home; the commander's overview has its own address */}
+              <Route path="/" element={<SchedulePage />} />
+              <Route path="/overview" element={isCommander ? <DashboardPage /> : <Navigate to="/my" replace />} />
               <Route path="/my" element={<MyTasksPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/tasks/:id" element={<TaskPage />} />
@@ -118,7 +126,7 @@ function AuthedRoutes() {
               <Route path="/plans/:id" element={can('plans') ? <PlanPage /> : <Navigate to="/" />} />
               <Route path="/three-week" element={can('plans') ? <ThreeWeekPage /> : <Navigate to="/" />} />
               <Route path="/three-week/:weekId" element={can('plans') ? <ThreeWeekPage /> : <Navigate to="/" />} />
-              <Route path="/schedule" element={<SchedulePage />} />
+              <Route path="/schedule" element={<ToCalendar />} />
               <Route path="/team" element={isCommander ? <TeamPage /> : <Navigate to="/" />} />
               <Route path="/team/:id" element={<StaffPage />} />
               <Route path="/requests" element={<RequestsPage />} />

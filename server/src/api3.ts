@@ -86,7 +86,7 @@ import { deleteSocioRound, importSocio, previewSocio, readSocioSheets, socioOfCa
 import { addWeeklyItem, addWeeklyItems, deleteWeeklyItem, holdWeekly, reopenWeekly, updateWeeklyItem, weeklyTarget, weeklyView } from './weekly';
 import { deleteGuide, disciplineLog, disciplineOverview, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
 import { bulkSchema, runBulk } from './bulk';
-import { addAbsence, deleteAbsence, listAbsences, staffLoad } from './absences';
+import { addAbsence, deleteAbsence, listAbsences, reasonSeenBy, staffLoad } from './absences';
 import { attendanceHistory, markAttendance, rollCall } from './attendance';
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
@@ -417,9 +417,10 @@ export function v3Router(): Router {
 
   r.get('/absences', (req, res) =>
     res.json(
-      // who is away is for everyone; what they wrote about it is for them and the commander
+      // who is away is for everyone; what they wrote about it is for them and the commander, and a sick
+      // day reads as an absence to the rest (reasonSeenBy) - in the calendar and anywhere else
       listAbsences({ userId: num(req.query.user), from: isDateKey(req.query.from) ? req.query.from : undefined, to: isDateKey(req.query.to) ? req.query.to : undefined }).map((a) =>
-        isCommander(me(req)) || a.userId === me(req).id ? a : { ...a, note: '' },
+        isCommander(me(req)) || a.userId === me(req).id ? a : { ...a, note: '', reason: reasonSeenBy(me(req), a.userId, a.reason) },
       ),
     ),
   );
@@ -429,7 +430,9 @@ export function v3Router(): Router {
     res.json({ ok: true });
   });
   // who to give a task to: everyone's load, and who is away on its day
-  r.get('/load', (req, res) => res.json(staffLoad(isDateKey(req.query.date) ? req.query.date : undefined)));
+  r.get('/load', (req, res) =>
+    res.json(staffLoad(isDateKey(req.query.date) ? req.query.date : undefined).map((l) => (l.away ? { ...l, away: { ...l.away, reason: reasonSeenBy(me(req), l.userId, l.away.reason) } } : l))),
+  );
 
   // ---------------- debriefs ----------------
 

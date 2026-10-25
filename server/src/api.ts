@@ -65,7 +65,12 @@ import {
   restoreEvent,
   shiftEventTasks,
   updateEvent,
+  SERIES_SCOPES,
+  type SeriesScope,
 } from './schedule';
+
+/** one event of a series, it and the later ones, or all of it (anything else: the one) */
+const seriesScope = (v: unknown): SeriesScope => ((SERIES_SCOPES as readonly unknown[]).includes(v) ? (v as SeriesScope) : 'one');
 import { subscriptionCounts } from './push';
 import { requireAbility } from './abilities';
 import { staffGroups } from './staffGroups';
@@ -881,8 +886,10 @@ export function apiRouter(): Router {
   });
   r.post('/events', (req, res) => res.json(eventDetail(me(req), createEvent(me(req), req.body))));
   r.get('/events/:id', (req, res) => res.json(eventDetail(me(req), id(req.params.id))));
+  // one of a repeating series: { scope: 'following' | 'all' } takes the change to the rest of it
   r.patch('/events/:id', (req, res) => {
-    const out = updateEvent(me(req), id(req.params.id), req.body);
+    const { scope, ...patch } = (req.body ?? {}) as Record<string, unknown>;
+    const out = updateEvent(me(req), id(req.params.id), patch, seriesScope(scope));
     res.json({ ...eventDetail(me(req), id(req.params.id)), ...out });
   });
   r.post('/events/:id/shift-tasks', (req, res) => res.json({ shifted: shiftEventTasks(me(req), id(req.params.id), req.body) }));
@@ -895,8 +902,8 @@ export function apiRouter(): Router {
     res.json(eventDetail(me(req), id(req.params.id)));
   });
   r.delete('/events/:id', (req, res) => {
-    deleteEvent(me(req), id(req.params.id));
-    res.json({ ok: true });
+    const deleted = deleteEvent(me(req), id(req.params.id), seriesScope(req.query.scope));
+    res.json({ ok: true, deleted });
   });
 
   // ---------------- Google Calendar ----------------

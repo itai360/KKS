@@ -27,8 +27,26 @@ export interface MenuSection {
 type MenuItem = { to: string; label: string; icon: string; count?: number; end?: boolean; keywords?: string };
 
 /** each group's own mark and colour */
-const SECTION_ICONS: Record<string, string> = { ראשי: 'home', 'תכנון הקורס': 'plan', צוערים: 'cap', בקרה: 'pulse', כלים: 'wrench', חשבון: 'settings' };
-const SECTION_TONES: Record<string, string> = { ראשי: 'gray', 'תכנון הקורס': 'blue', צוערים: 'green', בקרה: 'orange', כלים: 'purple', חשבון: 'gray' };
+const SECTION_ICONS: Record<string, string> = {
+  ראשי: 'home',
+  'ניהול משימות': 'tasks',
+  'תכנון הקורס': 'plan',
+  'פיקוד ובקרה': 'pulse',
+  צוערים: 'cap',
+  'תחקירים ולמידה': 'lightbulb',
+  'סגל וכלים': 'wrench',
+  חשבון: 'settings',
+};
+const SECTION_TONES: Record<string, string> = {
+  ראשי: 'gray',
+  'ניהול משימות': 'blue',
+  'תכנון הקורס': 'purple',
+  'פיקוד ובקרה': 'orange',
+  צוערים: 'green',
+  'תחקירים ולמידה': 'yellow',
+  'סגל וכלים': 'gray',
+  חשבון: 'gray',
+};
 
 /** the person's own place, beside the course's screens */
 export const SETTINGS_ITEM: MenuItem = { to: '/settings', label: 'הגדרות', icon: 'settings' };
