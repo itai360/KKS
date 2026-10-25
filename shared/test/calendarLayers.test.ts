@@ -3,6 +3,11 @@ import {
   dayOrder,
   dedupe,
   externalColor,
+  GOOGLE_COLORS,
+  CAL_COLORS,
+  CAL_COLOR_HEX,
+  sourceColor,
+  sourceGoogleColor,
   fromAbsence,
   fromDebrief,
   fromEvent,
@@ -37,7 +42,7 @@ describe('the calendar layers', () => {
     expect(layerShown({ 'ext:4': false }, 'ext:4')).toBe(false);
     expect(layerShown({ absences: true }, 'absences')).toBe(true);
     expect(externalColor(0)).not.toBe(externalColor(1));
-    expect(externalColor(8)).toBe(externalColor(0));
+    expect(externalColor(12)).toBe(externalColor(0));
   });
 
   it('turns every kind of thing into one shape, only by the days it really has', () => {
@@ -130,5 +135,25 @@ describe('the calendar layers', () => {
     expect(matchesTaskFilter(task(1, '2026-10-26T18:00', { eventId: 4 }), f)).toBe(true);
     expect(matchesTaskFilter(task(2, '2026-10-26T18:00'), f)).toBe(false);
     expect(matchesTaskFilter(task(2, '2026-10-26T18:00'), NO_TASK_FILTER)).toBe(true);
+  });
+});
+
+describe("Google Calendar's colours", () => {
+  it("draws events in Google's eleven event colours and calendars in its 24 calendar colours", () => {
+    expect(CAL_COLORS).toHaveLength(11);
+    expect(new Set(Object.values(CAL_COLOR_HEX)).size).toBe(11);
+    expect(GOOGLE_COLORS).toHaveLength(24);
+    expect(new Set(GOOGLE_COLORS.map((c) => c.id)).size).toBe(24);
+    expect(new Set(GOOGLE_COLORS.map((c) => c.hex)).size).toBe(24);
+    // every event colour is one of Google's calendar colours too, the same hue
+    const hexes = new Set<string>(GOOGLE_COLORS.map((c) => c.hex));
+    for (const hex of Object.values(CAL_COLOR_HEX)) expect(hexes.has(hex), hex).toBe(true);
+  });
+
+  it("draws a connected calendar in the colour chosen for it, else by its place", () => {
+    expect(sourceColor('grape', 0)).toBe('g-grape');
+    expect(sourceGoogleColor('grape', 3)).toBe('grape');
+    expect(sourceColor(null, 1)).toBe(externalColor(1));
+    expect(sourceColor('not-a-colour', 2)).toBe(externalColor(2));
   });
 });

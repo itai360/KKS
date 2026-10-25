@@ -10,6 +10,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import ICAL from 'ical.js';
 import type { CalendarFeed, CalendarSource, CalendarWeek, CalendarWeeksPreview, ExternalEvent, PlanCalendars, ScheduleEvent, Week } from '../../shared/types';
 import { addDays, diffDays, localDateKey, localTime, zonedToUtc } from '../../shared/dates';
+import { isGoogleColor, type GoogleColor } from '../../shared/calendarLayers';
 import type { UserRow } from './auth';
 import { badRequest, clock, getSettings, notFound, nowIso, tz, updateSettings } from './core';
 import { readLimited, safeFetch } from './netguard';
@@ -189,6 +190,8 @@ interface SourceRow {
   id: number;
   name: string;
   url: string;
+  /** a Google calendar colour (shared/calendarLayers.ts GOOGLE_COLORS), or none chosen */
+  color?: string | null;
 }
 
 /** https only, and never a local or private address. A Google link that only shows a calendar leads to its iCal. */
@@ -664,12 +667,25 @@ function expand(source: SourceRow, root: ICAL.Component, from: string, to: strin
 /** The calendars shown - never their addresses: a secret address stays on the server, the commander's browser included. */
 export function listCalendarSources(): CalendarSource[] {
   return db()
-    .all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id')
-    .map((r) => ({ id: r.id, name: r.name, calendarName: cache.get(r.url)?.name ?? null, error: cache.get(r.url)?.error ?? null, loading: reading.has(r.url) && !cache.get(r.url)?.root }));
+    .all<SourceRow>('SELECT id, name, url, color FROM calendar_sources ORDER BY id')
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      calendarName: cache.get(r.url)?.name ?? null,
+      color: isGoogleColor(r.color) ? r.color : null,
+      error: cache.get(r.url)?.error ?? null,
+      loading: reading.has(r.url) && !cache.get(r.url)?.root,
+    }));
+}
+
+/** The colour a connected calendar is drawn in, for everyone - as it is in Google (null: by its place). */
+export function setCalendarSourceColor(id: number, color: GoogleColor | null): void {
+  if (!db().get('SELECT 1 FROM calendar_sources WHERE id = ?', id)) throw notFound('היומן לא נמצא');
+  db().run('UPDATE calendar_sources SET color = ? WHERE id = ?', color, id);
 }
 
 /** Checks the address right away, so a wrong one is reported while adding it. */
-export async function addCalendarSource(actor: UserRow, name: string, rawUrl: string): Promise<void> {
+export async function addCalendarSource(actor: UserRow, name: string, rawUrl: string, color: GoogleColor | null = null): Promise<void> {
   const url = normalizeCalendarUrl(rawUrl);
   if (db().get<{ n: number }>('SELECT count(*) AS n FROM calendar_sources')!.n >= MAX_SOURCES) throw badRequest(`אפשר לחבר עד ${MAX_SOURCES} יומנים`);
   if (db().get('SELECT 1 FROM calendar_sources WHERE url = ?', url)) throw badRequest('היומן הזה כבר מחובר');
@@ -677,7 +693,7 @@ export async function addCalendarSource(actor: UserRow, name: string, rawUrl: st
   // still loading (a big calendar): connected, and its events come in when Google has sent it
   if (!loaded.root && !loaded.loading) throw badRequest(loaded.error ?? 'לא ניתן לקרוא את היומן');
   // no name given: the one the calendar has in Google
-  db().run('INSERT INTO calendar_sources(name, url, created_by, created_at) VALUES (?, ?, ?, ?)', name.trim() || loaded.name || 'יומן Google', url, actor.id, nowIso());
+  db().run('INSERT INTO calendar_sources(name, url, color, created_by, created_at) VALUES (?, ?, ?, ?, ?)', name.trim() || loaded.name || 'יומן Google', url, color, actor.id, nowIso());
 }
 
 export function removeCalendarSource(id: number): void {

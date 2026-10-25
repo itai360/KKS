@@ -351,6 +351,8 @@ export interface CalendarSource {
   name: string;
   /** the name the calendar has in Google Calendar, once it was read */
   calendarName: string | null;
+  /** one of Google's calendar colours (shared/calendarLayers.ts GOOGLE_COLORS), chosen by the commander; null: by its place */
+  color: string | null;
   error: string | null;
   /** read for the first time, Google still sending it */
   loading: boolean;

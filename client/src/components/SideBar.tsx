@@ -4,18 +4,21 @@
 // hide it. What is shown is remembered on this device (lib/calendarPrefs.ts); the calendar loads only
 // the layers that are on.
 
-import { useState } from 'react';
-import { CORE_LAYERS, externalColor, isTaskFilterSet, layerShown, NO_TASK_FILTER, type CalColor, type TaskFilter } from '@shared/calendarLayers';
+import { useEffect, useRef, useState } from 'react';
+import { CORE_LAYERS, GOOGLE_COLORS, isTaskFilterSet, layerShown, NO_TASK_FILTER, sourceColor, sourceGoogleColor, type GoogleColor, type ItemColor, type TaskFilter } from '@shared/calendarLayers';
 import type { CalendarSource } from '@shared/types';
+import { api } from '../lib/api';
 import { setCalendarPrefs, setLayer, useCalendarPrefs } from '../lib/calendarPrefs';
+import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { GoogleCalendarModal } from './GoogleCalendar';
 import { Icon } from './Icon';
 import { Select } from './pickers';
+import { useToast } from './Toasts';
 import { Seg } from './ui';
 
-function LayerRow({ id, label, color, hint, on }: { id: string; label: string; color: CalColor; hint: string; on: boolean }) {
+function LayerRow({ id, label, color, hint, on }: { id: string; label: string; color: ItemColor; hint: string; on: boolean }) {
   return (
     <label className={`layer-row c-${color}`} title={hint}>
       <input type="checkbox" className="sr-only" checked={on} onChange={(e) => setLayer(id, e.target.checked)} />
@@ -129,6 +132,47 @@ function Section({ id, title, children, action }: { id: 'mine' | 'other'; title:
   );
 }
 
+/**
+ * A connected calendar's colour, from Google's own palette laid out as Google lays it out - so the colour it
+ * has there is found in the same place. The commander's choice, for everyone.
+ */
+function GooglePalette({ name, current, onPick, onClose }: { name: string; current: GoogleColor; onPick: (c: GoogleColor) => void; onClose: () => void }) {
+  // the colour it has now takes the focus, for the keys
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus({ preventScroll: true });
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className="gpal"
+      role="radiogroup"
+      aria-label={`הצבע של ${name}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      {GOOGLE_COLORS.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          role="radio"
+          aria-checked={current === c.id}
+          className={`gpal-swatch c-g-${c.id}${current === c.id ? ' on' : ''}`}
+          title={c.label}
+          aria-label={c.label}
+          onClick={() => onPick(c.id)}
+        >
+          {current === c.id && <Icon name="check" size={14} />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The calendar's layers in the side bar. */
 export function CalendarLayers() {
   const { can, isCommander, weeks, tracks, users } = useSession();
@@ -136,6 +180,18 @@ export function CalendarLayers() {
   const sources = useApi<CalendarSource[]>('/api/calendar/sources', ['events']);
   const [google, setGoogle] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  // the connected calendar whose colour is being chosen
+  const [picking, setPicking] = useState<number | null>(null);
+  const toast = useToast();
+  const pickColor = async (id: number, color: GoogleColor) => {
+    setPicking(null);
+    try {
+      sources.setData(await api.patch<CalendarSource[]>(`/api/calendar/sources/${id}`, { color }));
+      emitLocalChange('events');
+    } catch (e) {
+      toast({ title: 'הצבע לא נשמר', body: (e as Error).message, tone: 'red' });
+    }
+  };
   // the staff's deadlines: for whoever may see all the tasks
   const layers = CORE_LAYERS.filter((l) => l.id !== 'staffTasks' || can('tasks'));
   const tasksOn = layerShown(prefs.layers, 'myTasks') || layerShown(prefs.layers, 'staffTasks');
@@ -185,13 +241,28 @@ export function CalendarLayers() {
         }
       >
         {(sources.data ?? []).map((s, i) => (
-          <div key={s.id} className="layer-ext">
-            <LayerRow id={`ext:${s.id}`} label={s.name} color={externalColor(i)} hint={s.calendarName && s.calendarName !== s.name ? `ב-Google: ${s.calendarName} · לקריאה בלבד` : 'יומן Google מחובר - לקריאה בלבד'} on={layerShown(prefs.layers, `ext:${s.id}`)} />
-            {s.error && (
-              <span className="layer-warn" title={s.error} aria-label={`שגיאה ביומן: ${s.error}`}>
-                <Icon name="alert" size={14} />
-              </span>
-            )}
+          <div key={s.id}>
+            <div className="layer-ext">
+              <LayerRow id={`ext:${s.id}`} label={s.name} color={sourceColor(s.color, i)} hint={s.calendarName && s.calendarName !== s.name ? `ב-Google: ${s.calendarName} · לקריאה בלבד` : 'יומן Google מחובר - לקריאה בלבד'} on={layerShown(prefs.layers, `ext:${s.id}`)} />
+              {s.error && (
+                <span className="layer-warn" title={s.error} aria-label={`שגיאה ביומן: ${s.error}`}>
+                  <Icon name="alert" size={14} />
+                </span>
+              )}
+              {isCommander && (
+                <button
+                  type="button"
+                  className="icon-btn layer-more"
+                  aria-expanded={picking === s.id}
+                  aria-label={`הצבע של ${s.name}`}
+                  title="צבע היומן - כמו ב-Google"
+                  onClick={() => setPicking((p) => (p === s.id ? null : s.id))}
+                >
+                  <Icon name="moreVertical" size={16} />
+                </button>
+              )}
+            </div>
+            {picking === s.id && <GooglePalette name={s.name} current={sourceGoogleColor(s.color, i)} onPick={(c) => void pickColor(s.id, c)} onClose={() => setPicking(null)} />}
           </div>
         ))}
         {sources.data && sources.data.length === 0 && <p className="tiny muted layer-empty">{isCommander ? 'עדיין לא חובר יומן Google. + מחבר יומן לקריאה.' : 'עדיין לא חובר יומן Google.'}</p>}

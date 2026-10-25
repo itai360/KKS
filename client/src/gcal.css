@@ -15,17 +15,43 @@
   --g-gutter: 56px;
   --g-now: #e8453c;
 }
-.c-blue { --c: #3367d6; }
-.c-teal { --c: #00796b; }
-.c-green { --c: #2e7d32; }
-.c-olive { --c: #5f6f0c; }
-.c-yellow { --c: #f2b705; --c-on: #3a2c00; }
-.c-orange { --c: #b85400; }
-.c-red { --c: #c5221f; }
-.c-pink { --c: #c2185b; }
-.c-purple { --c: #7b3fa0; }
-.c-lavender { --c: #5c6bc0; }
-.c-graphite { --c: #5f6368; }
+/* an event's colour: Google Calendar's eleven event colours (shared/calendarLayers.ts CAL_COLOR_HEX) */
+.c-red { --c: #d50000; }
+.c-pink { --c: #e67c73; }
+.c-orange { --c: #f4511e; }
+.c-yellow { --c: #f6bf26; --c-on: #202124; }
+.c-olive { --c: #33b679; }
+.c-green { --c: #0b8043; }
+.c-teal { --c: #039be5; }
+.c-blue { --c: #3f51b5; }
+.c-lavender { --c: #7986cb; }
+.c-purple { --c: #8e24aa; }
+.c-graphite { --c: #616161; }
+/* a connected Google calendar's colour: Google's 24 calendar colours (GOOGLE_COLORS); dark words on the lightest */
+.c-g-radicchio { --c: #ad1457; }
+.c-g-tangerine { --c: #f4511e; }
+.c-g-citron { --c: #e4c441; --c-on: #202124; }
+.c-g-basil { --c: #0b8043; }
+.c-g-blueberry { --c: #3f51b5; }
+.c-g-grape { --c: #8e24aa; }
+.c-g-cherry-blossom { --c: #d81b60; }
+.c-g-pumpkin { --c: #ef6c00; }
+.c-g-avocado { --c: #c0ca33; --c-on: #202124; }
+.c-g-eucalyptus { --c: #009688; }
+.c-g-lavender { --c: #7986cb; }
+.c-g-amethyst { --c: #9e69af; }
+.c-g-tomato { --c: #d50000; }
+.c-g-mango { --c: #f09300; --c-on: #202124; }
+.c-g-pistachio { --c: #7cb342; }
+.c-g-peacock { --c: #039be5; }
+.c-g-cocoa { --c: #795548; }
+.c-g-graphite { --c: #616161; }
+.c-g-flamingo { --c: #e67c73; }
+.c-g-banana { --c: #f6bf26; --c-on: #202124; }
+.c-g-sage { --c: #33b679; }
+.c-g-cobalt { --c: #4285f4; }
+.c-g-wisteria { --c: #b39ddb; --c-on: #202124; }
+.c-g-birch { --c: #a79b8e; }
 [class*='c-'] {
   --c-soft: color-mix(in srgb, var(--c, #3367d6) 15%, var(--g-sheet));
   --c-ink: color-mix(in srgb, var(--c, #3367d6) 78%, var(--ink));
@@ -367,6 +393,61 @@
   color: var(--orange-ink);
   margin-inline-end: 8px;
   display: grid;
+}
+/* a connected calendar's colour (the commander's): its button, and Google's palette under it */
+.layer-more {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.layer-more[aria-expanded='true'] {
+  background: var(--hover-2);
+  color: var(--ink);
+}
+.gpal {
+  display: grid;
+  grid-template-columns: repeat(6, 24px);
+  gap: 8px;
+  padding: 6px 12px 10px 12px;
+  padding-inline-start: 42px;
+}
+.gpal-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--c);
+  color: var(--c-on, #fff);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.gpal-swatch.on {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--c);
+}
+@media (hover: hover) {
+  .gpal-swatch:hover {
+    transform: scale(1.15);
+  }
+}
+.gpal-swatch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+@media (max-width: 860px) {
+  .gpal {
+    grid-template-columns: repeat(6, 30px);
+    gap: 12px;
+  }
+  .gpal-swatch {
+    width: 30px;
+    height: 30px;
+  }
 }
 .layer-empty {
   padding: 2px 12px 6px;
@@ -959,11 +1040,6 @@
 .gc-event.is-short .gc-event-meta {
   font-size: 11px;
 }
-.gc-event.k-external {
-  background: var(--c-soft);
-  color: var(--c-ink);
-  border-inline-start: 3px solid var(--c);
-}
 .gc-event.is-faded {
   opacity: 0.55;
 }
@@ -1082,10 +1158,10 @@
   color: var(--c-on, #fff);
   font-weight: 600;
 }
-/* a course week, who is away: calm, as they cover whole days */
+/* a course week, who is away: calm, as they cover whole days. (A Google calendar's events are drawn
+   as Google draws them: filled with the calendar's colour.) */
 .gc-chip.is-bar.k-week,
-.gc-chip.is-bar.k-absence,
-.gc-chip.is-bar.k-external {
+.gc-chip.is-bar.k-absence {
   background: var(--c-soft);
   color: var(--c-ink);
 }
@@ -1840,4 +1916,10 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+
+/* the connected calendars in the Google Calendar dialog: each in its colour */
+.src-icon {
+  display: grid;
+  color: var(--c);
 }

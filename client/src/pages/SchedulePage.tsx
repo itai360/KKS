@@ -15,6 +15,7 @@ import {
   CAL_COLORS,
   dedupe,
   externalColor,
+  sourceColor,
   fromAbsence,
   fromDebrief,
   fromEvent,
@@ -201,6 +202,11 @@ export function SchedulePage() {
   const eventsApi = useApi<ScheduleEvent[]>(on('events') ? `/api/events?from=${from}&to=${to}` : null, ['events', 'tasks']);
   const sources = useApi<CalendarSource[]>('/api/calendar/sources', ['events']);
   const sourceIndex = useMemo(() => new Map((sources.data ?? []).map((s, i) => [s.id, i])), [sources.data]);
+  // each connected calendar in its colour - the one chosen for it as in Google, else by its place
+  const colorOf = useMemo(() => {
+    const m = new Map((sources.data ?? []).map((s, i) => [s.id, sourceColor(s.color, i)]));
+    return (id: number) => m.get(id) ?? externalColor(0);
+  }, [sources.data]);
   const extOn = !prefs.onlyMine && (sources.data ?? []).some((s) => on(`ext:${s.id}`));
   const external = useApi<ExternalEvent[]>(extOn ? `/api/calendar/external?from=${from}&to=${to}` : null, ['events']);
   const myTasks = useApi<Task[]>(on('myTasks') ? taskQuery(prefs.taskFilter, true, from, to) : null, ['tasks']);
@@ -226,7 +232,7 @@ export function SchedulePage() {
 
   const items = useMemo(() => {
     const out: CalItem[] = events.map(fromEvent);
-    for (const x of externalEvents) out.push(fromExternal(x, externalColor(sourceIndex.get(x.sourceId) ?? 0)));
+    for (const x of externalEvents) out.push(fromExternal(x, colorOf(x.sourceId)));
     const mineIds = new Set((on('myTasks') ? (myTasks.data ?? []) : []).map((t) => t.id));
     for (const t of taskList) out.push(fromTask(t, mineIds.has(t.id) ? 'myTasks' : 'staffTasks', atIso));
     if (on('weeks')) for (const w of weeks) if (w.startDate <= to && w.endDate >= from) out.push(fromWeek(w));
@@ -235,7 +241,7 @@ export function SchedulePage() {
     if (on('absences')) for (const a of absences.data ?? []) out.push(fromAbsence(a, commanderRole || a.userId === user.id));
     return dedupe(out);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, externalEvents, taskList, weeks, experiences.data, debriefs.data, absences.data, prefs.layers, from, to, sourceIndex, commanderRole, user.id]);
+  }, [events, externalEvents, taskList, weeks, experiences.data, debriefs.data, absences.data, prefs.layers, from, to, colorOf, commanderRole, user.id]);
   const loading = on('events') && eventsApi.loading && !eventsApi.data;
   const error = eventsApi.error;
 
@@ -479,7 +485,7 @@ export function SchedulePage() {
       canAddOn={canAddOn}
       onAdd={(d) => createHere(d)}
       onOpen={openEvent}
-      onOpenExternal={(x) => openFromList(fromExternal(x, externalColor(sourceIndex.get(x.sourceId) ?? 0)))}
+      onOpenExternal={(x) => openFromList(fromExternal(x, colorOf(x.sourceId)))}
       onOpenTask={(t) => openFromList(fromTask(t, 'myTasks', atIso))}
       onFocusDay={view === 'agenda' ? (d) => Date.now() > steering.current && setFocusFor({ date, day: d }) : undefined}
       onlyMine={prefs.onlyMine}

@@ -8,21 +8,77 @@ import { byHe } from './sort';
 import type { Absence, Debrief, Experience, ExternalEvent, ScheduleEvent, Task, Week } from './types';
 
 /** the colours things are drawn in - their tones, light and dark, are in the stylesheet (gcal.css) */
-export const CAL_COLORS = ['blue', 'teal', 'green', 'olive', 'yellow', 'orange', 'red', 'pink', 'purple', 'lavender', 'graphite'] as const;
+// The colours are Google Calendar's own, so a thing looks the same here as there.
+// An event's colour: Google's eleven event colours, in the order of its menu. (The ids are KKS's
+// own, kept for what is already stored: olive is Sage, teal is Peacock, blue is Blueberry.)
+export const CAL_COLORS = ['red', 'pink', 'orange', 'yellow', 'olive', 'green', 'teal', 'blue', 'lavender', 'purple', 'graphite'] as const;
 export type CalColor = (typeof CAL_COLORS)[number];
 export const CAL_COLOR_LABELS: Record<CalColor, string> = {
-  blue: 'כחול',
-  teal: 'טורקיז',
-  green: 'ירוק',
-  olive: 'זית',
-  yellow: 'צהוב',
-  orange: 'כתום',
-  red: 'אדום',
-  pink: 'ורוד',
-  purple: 'סגול',
+  red: 'עגבנייה',
+  pink: 'פלמינגו',
+  orange: 'קלמנטינה',
+  yellow: 'בננה',
+  olive: 'מרווה',
+  green: 'בזיליקום',
+  teal: 'טווס',
+  blue: 'אוכמניות',
   lavender: 'לבנדר',
-  graphite: 'אפור',
+  purple: 'ענבים',
+  graphite: 'גרפיט',
 };
+/** the same hues as client/src/gcal.css (.c-*) - a test keeps the two together */
+export const CAL_COLOR_HEX: Record<CalColor, string> = {
+  red: '#d50000',
+  pink: '#e67c73',
+  orange: '#f4511e',
+  yellow: '#f6bf26',
+  olive: '#33b679',
+  green: '#0b8043',
+  teal: '#039be5',
+  blue: '#3f51b5',
+  lavender: '#7986cb',
+  purple: '#8e24aa',
+  graphite: '#616161',
+};
+
+/**
+ * A connected Google calendar's colour: Google's 24 calendar colours, six to a row in the order of
+ * Google's own palette - so the one chosen there is found in the same place here. The iCal address
+ * does not carry it (in Google the colour is each person's display choice), so it is chosen once here.
+ */
+export const GOOGLE_COLORS = [
+  { id: 'radicchio', label: 'רדיקיו', hex: '#ad1457' },
+  { id: 'tangerine', label: 'קלמנטינה', hex: '#f4511e' },
+  { id: 'citron', label: 'אתרוג', hex: '#e4c441' },
+  { id: 'basil', label: 'בזיליקום', hex: '#0b8043' },
+  { id: 'blueberry', label: 'אוכמניות', hex: '#3f51b5' },
+  { id: 'grape', label: 'ענבים', hex: '#8e24aa' },
+  { id: 'cherry-blossom', label: 'פריחת דובדבן', hex: '#d81b60' },
+  { id: 'pumpkin', label: 'דלעת', hex: '#ef6c00' },
+  { id: 'avocado', label: 'אבוקדו', hex: '#c0ca33' },
+  { id: 'eucalyptus', label: 'אקליפטוס', hex: '#009688' },
+  { id: 'lavender', label: 'לבנדר', hex: '#7986cb' },
+  { id: 'amethyst', label: 'אמטיסט', hex: '#9e69af' },
+  { id: 'tomato', label: 'עגבנייה', hex: '#d50000' },
+  { id: 'mango', label: 'מנגו', hex: '#f09300' },
+  { id: 'pistachio', label: 'פיסטוק', hex: '#7cb342' },
+  { id: 'peacock', label: 'טווס', hex: '#039be5' },
+  { id: 'cocoa', label: 'קקאו', hex: '#795548' },
+  { id: 'graphite', label: 'גרפיט', hex: '#616161' },
+  { id: 'flamingo', label: 'פלמינגו', hex: '#e67c73' },
+  { id: 'banana', label: 'בננה', hex: '#f6bf26' },
+  { id: 'sage', label: 'מרווה', hex: '#33b679' },
+  { id: 'cobalt', label: 'קובלט', hex: '#4285f4' },
+  { id: 'wisteria', label: 'ויסטריה', hex: '#b39ddb' },
+  { id: 'birch', label: 'ליבנה', hex: '#a79b8e' },
+] as const;
+export type GoogleColor = (typeof GOOGLE_COLORS)[number]['id'];
+export const GOOGLE_COLOR_IDS = GOOGLE_COLORS.map((c) => c.id) as [GoogleColor, ...GoogleColor[]];
+export const isGoogleColor = (c: unknown): c is GoogleColor => typeof c === 'string' && (GOOGLE_COLOR_IDS as readonly string[]).includes(c);
+export const googleColorLabel = (c: GoogleColor): string => GOOGLE_COLORS.find((g) => g.id === c)!.label;
+
+/** what a thing is drawn in: an event colour, or (a Google calendar) a calendar colour - its class is c-<this> */
+export type ItemColor = CalColor | `g-${GoogleColor}`;
 export const isCalColor = (c: unknown): c is CalColor => typeof c === 'string' && (CAL_COLORS as readonly string[]).includes(c);
 
 export type CoreLayer = 'events' | 'myTasks' | 'staffTasks' | 'weeks' | 'experiences' | 'debriefs' | 'absences';
@@ -57,9 +113,13 @@ export function layerShown(prefs: Partial<Record<string, boolean>>, id: LayerId)
   return id.startsWith('ext:') ? true : (CORE_LAYERS.find((l) => l.id === id)?.on ?? false);
 }
 
-/** the colour of a connected Google calendar, by its place among them */
-const EXT_COLORS: CalColor[] = ['graphite', 'olive', 'pink', 'yellow', 'red', 'blue', 'teal', 'purple'];
-export const externalColor = (index: number): CalColor => EXT_COLORS[((index % EXT_COLORS.length) + EXT_COLORS.length) % EXT_COLORS.length];
+/** a connected Google calendar's colour until one is chosen: one of Google's, by its place among them */
+const EXT_COLORS: GoogleColor[] = ['peacock', 'tomato', 'basil', 'banana', 'grape', 'tangerine', 'cobalt', 'flamingo', 'sage', 'cocoa', 'lavender', 'graphite'];
+export const defaultSourceColor = (index: number): GoogleColor => EXT_COLORS[((index % EXT_COLORS.length) + EXT_COLORS.length) % EXT_COLORS.length];
+export const externalColor = (index: number): ItemColor => `g-${defaultSourceColor(index)}`;
+/** a connected Google calendar's colour: the one chosen for it, else by its place */
+export const sourceGoogleColor = (color: string | null | undefined, index: number): GoogleColor => (isGoogleColor(color) ? color : defaultSourceColor(index));
+export const sourceColor = (color: string | null | undefined, index: number): ItemColor => `g-${sourceGoogleColor(color, index)}`;
 
 export type CalSource =
   | { kind: 'event'; e: ScheduleEvent }
@@ -85,7 +145,7 @@ export interface CalItem {
   /** "HH:MM", or null: it has no hour - all day, or the days it lasts. A task: its deadline's hour. */
   start: string | null;
   end: string | null;
-  color: CalColor;
+  color: ItemColor;
   /** called off, done or over: drawn faded */
   faded: boolean;
   /** a task past its deadline */
@@ -110,7 +170,7 @@ export function fromEvent(e: ScheduleEvent): CalItem {
   };
 }
 
-export function fromExternal(x: ExternalEvent, color: CalColor): CalItem {
+export function fromExternal(x: ExternalEvent, color: ItemColor): CalItem {
   return {
     key: `ext:${x.sourceId}:${x.id}`,
     layer: `ext:${x.sourceId}`,

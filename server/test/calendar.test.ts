@@ -153,7 +153,7 @@ describe('Google calendars in the schedule', () => {
     const added = await c.cmd.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL.replace('https://', 'webcal://') });
     expect(added.status).toBe(200);
     // the secret address stays on the server - the commander's browser included
-    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', error: null, loading: false }]);
+    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', color: null, error: null, loading: false }]);
     expect(asked).toEqual([GOOGLE_URL]);
 
     const events = (await c.s1.get('/api/calendar/external?from=2026-09-28&to=2026-10-18')).body;
@@ -175,7 +175,7 @@ describe('Google calendars in the schedule', () => {
     expect(asked).toHaveLength(1); // fetched once, kept for a few minutes
 
     // staff see which calendars are shown, not their secret addresses
-    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', error: null, loading: false }]);
+    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', color: null, error: null, loading: false }]);
     expect(JSON.stringify((await c.cmd.get('/api/calendar/sources')).body)).not.toContain('private-');
 
     expect((await c.cmd.del(`/api/calendar/sources/${added.body[0].id}`)).body).toEqual([]);
@@ -215,6 +215,25 @@ describe('Google calendars in the schedule', () => {
     expect(reset.status).toBe(400);
     expect(reset.body.error).toMatch(/אופסה/);
     expect((await c.cmd.get('/api/calendar/sources')).body).toEqual([]);
+  });
+
+  it('draws a connected calendar in the colour the commander chose for it, as it is in Google', async () => {
+    setCalendarFetcher(async () => GOOGLE_ICS);
+    const added = await c.cmd.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL, color: 'tomato' });
+    expect(added.status).toBe(200);
+    const id = added.body[0].id;
+    expect(added.body[0].color).toBe('tomato');
+    // the commander changes it, for everyone
+    const changed = await c.cmd.patch(`/api/calendar/sources/${id}`, { color: 'basil' });
+    expect(changed.status).toBe(200);
+    expect(changed.body[0].color).toBe('basil');
+    expect((await c.s1.get('/api/calendar/sources')).body[0].color).toBe('basil');
+    // back to its colour by place
+    expect((await c.cmd.patch(`/api/calendar/sources/${id}`, { color: null })).body[0].color).toBeNull();
+    // only Google's colours, only the commander, only a calendar that is there
+    expect((await c.cmd.patch(`/api/calendar/sources/${id}`, { color: 'neon' })).status).toBe(400);
+    expect((await c.s1.patch(`/api/calendar/sources/${id}`, { color: 'basil' })).status).toBe(403);
+    expect((await c.cmd.patch('/api/calendar/sources/9999', { color: 'basil' })).status).toBe(404);
   });
 
   it('a calendar connected without a name takes the one it has in Google', async () => {

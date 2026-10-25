@@ -3,6 +3,7 @@ import express, { Router, type Request } from 'express';
 import { z } from 'zod';
 import { isOpenStatus, ROLES } from '../../shared/constants';
 import { addDays, dayRange, isDateKey, localDateKey } from '../../shared/dates';
+import { GOOGLE_COLOR_IDS } from '../../shared/calendarLayers';
 import type { Task } from '../../shared/types';
 import {
   clearSessionCookie,
@@ -49,6 +50,7 @@ import {
   listPlanCalendars,
   previewCalendarWeeks,
   removeCalendarSource,
+  setCalendarSourceColor,
   removePlanCalendar,
   scheduleIcs,
   userForFeedToken,
@@ -912,8 +914,17 @@ export function apiRouter(): Router {
   r.post('/calendar/feed/rotate', (req, res) => res.json(calendarFeed(me(req).id, origin(req), true)));
   r.get('/calendar/sources', (_req, res) => res.json(listCalendarSources()));
   r.post('/calendar/sources', requireCommander, async (req, res) => {
-    const { name, url } = z.object({ name: z.string().trim().max(60).default(''), url: z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000) }).parse(req.body);
-    await addCalendarSource(me(req), name, url);
+    const { name, url, color } = z
+      .object({ name: z.string().trim().max(60).default(''), url: z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000), color: z.enum(GOOGLE_COLOR_IDS).nullable().default(null) })
+      .parse(req.body);
+    await addCalendarSource(me(req), name, url, color);
+    changed('events');
+    res.json(listCalendarSources());
+  });
+  // its colour, as it is in Google: for everyone
+  r.patch('/calendar/sources/:id', requireCommander, (req, res) => {
+    const { color } = z.object({ color: z.enum(GOOGLE_COLOR_IDS).nullable() }).parse(req.body);
+    setCalendarSourceColor(id(req.params.id), color);
     changed('events');
     res.json(listCalendarSources());
   });

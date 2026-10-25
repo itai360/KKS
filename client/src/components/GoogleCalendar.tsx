@@ -1,6 +1,7 @@
 // The schedule and Google Calendar, both ways (see server/src/calendar.ts).
 
 import { useEffect, useRef, useState } from 'react';
+import { sourceColor } from '@shared/calendarLayers';
 import { shortDate } from '@shared/dates';
 import type { CalendarFeed, CalendarSource, CalendarWeeksPreview, PlanCalendars as PlanCalendarList } from '@shared/types';
 import { api } from '../lib/api';
@@ -168,9 +169,12 @@ export function CalendarSources() {
       <h3>יומני Google בתוך הלו"ז</h3>
       <div className="small muted">אירועים מיומן Google מופיעים בלו"ז לכל הסגל, לקריאה בלבד, ומתעדכנים כל כמה דקות. כל עוד לא נבחר יומן לאישור התוכניות, הם משמשים גם אותו.</div>
       <ErrorBox error={error ?? sources.error} />
-      {list.map((s) => (
+      {list.map((s, i) => (
         <div key={s.id} className="row gap-6">
-          <Icon name="calendar" />
+          {/* in the colour it is drawn in (chosen beside it in the side bar, as in Google) */}
+          <span className={`src-icon c-${sourceColor(s.color, i)}`} aria-hidden="true">
+            <Icon name="calendar" />
+          </span>
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="strong">{s.name}</div>
             {/* the name it has in Google, where it was connected by another */}
