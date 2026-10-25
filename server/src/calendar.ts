@@ -69,18 +69,27 @@ function fold(line: string): string {
   return parts.join('\r\n ');
 }
 
+/** an all-day event's day as iCal writes it: 20261025 */
+const icalDay = (d: string) => d.replace(/-/g, '');
+
 function eventLines(e: ScheduleEvent, origin: string, zone: string, stamp: string): string[] {
-  const start = zonedToUtc(e.date, e.startTime, zone);
-  let end = e.endTime ? zonedToUtc(e.date, e.endTime, zone) : new Date(start.getTime() + 3600_000);
-  if (end <= start) end = new Date(end.getTime() + 86_400_000); // ends after midnight
   const link = `${origin}/schedule?date=${e.date}&event=${e.id}`;
   const description = [e.notes, e.ownerName ? `אחראי: ${e.ownerName}` : '', link].filter(Boolean).join('\n');
+  // all day, over one day or several: calendar days, the end the day after the last (as iCal has it)
+  let when: string[];
+  if (e.allDay) {
+    when = [`DTSTART;VALUE=DATE:${icalDay(e.date)}`, `DTEND;VALUE=DATE:${icalDay(addDays(e.endDate ?? e.date, 1))}`];
+  } else {
+    const start = zonedToUtc(e.date, e.startTime, zone);
+    let end = e.endTime ? zonedToUtc(e.date, e.endTime, zone) : new Date(start.getTime() + 3600_000);
+    if (end <= start) end = new Date(end.getTime() + 86_400_000); // ends after midnight
+    when = [`DTSTART:${utcStamp(start)}`, `DTEND:${utcStamp(end)}`];
+  }
   return [
     'BEGIN:VEVENT',
     `UID:kks-event-${e.id}@${new URL(origin).host}`,
     `DTSTAMP:${stamp}`,
-    `DTSTART:${utcStamp(start)}`,
-    `DTEND:${utcStamp(end)}`,
+    ...when,
     `SUMMARY:${escapeText(e.cancelled ? `(בוטל) ${e.title}` : e.title)}`,
     ...(e.location ? [`LOCATION:${escapeText(e.location)}`] : []),
     `DESCRIPTION:${escapeText(description)}`,
