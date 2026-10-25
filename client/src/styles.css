@@ -724,6 +724,8 @@ html[data-scrolled] .topbar {
   width: 18px;
   height: 18px;
   color: var(--muted);
+  /* only a mark: a click on it goes to the field (a folded search opens from its icon) */
+  pointer-events: none;
 }
 
 .top-actions {

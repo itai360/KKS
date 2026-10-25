@@ -19,6 +19,11 @@ import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
 import { CommandPalette } from './CommandPalette';
 import { TopSearch } from './TopSearch';
+import { CalendarLayers, CreateButton } from './SideBar';
+import { MiniMonth } from './MiniMonth';
+import { AppsButton, CalendarControls, HelpButton, SettingsLink, UserMenu, ViewSwitcher } from './TopBarParts';
+import { useCalendarBar } from '../lib/calendarBar';
+import { todayKey } from '../lib/format';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
 import { SETTINGS_ITEM } from './NavMenu';
@@ -29,7 +34,7 @@ import { useDrawerSwipe } from '../lib/drawerSwipe';
 import { trapFocus } from '../lib/focusTrap';
 import { lockScroll } from '../lib/scrollLock';
 import { switchCourse } from '../lib/courses';
-import { isTypingField } from '../lib/keyboard';
+import { isTypingField, takesKeys } from '../lib/keyboard';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 import { useMedia } from '../lib/media';
 import { usePullToRefresh } from '../lib/pullRefresh';
@@ -45,7 +50,7 @@ interface NavItem {
 }
 
 /** each group of the menu, by its title - shown alone when the menu is folded to icons */
-const GROUP_ICONS: Record<string, string> = { 'תכנון הקורס': 'plan', צוערים: 'cap', בקרה: 'pulse', כלים: 'wrench' };
+const GROUP_ICONS: Record<string, string> = { 'ניהול משימות': 'tasks', 'תכנון הקורס': 'plan', 'פיקוד ובקרה': 'pulse', צוערים: 'cap', 'תחקירים ולמידה': 'lightbulb', 'סגל וכלים': 'wrench' };
 const GROUPS_KEY = 'kks.navGroups';
 function readGroups(): Record<string, boolean> {
   try {
@@ -143,113 +148,118 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
   // messages from the staff's WhatsApp group that came in since this person last looked
   const alignment = useApi<{ n: number }>('/api/alignment/unseen', ['alignment', 'alignment-seen']).data?.n ?? 0;
 
-  // the same groups for everyone, in the order a day goes: plan the course, the cadets, keeping track, the tools
+  // the same modules for everyone, around the calendar: the tasks, planning the course, command and control,
+  // the cadets, debriefs and learning, the staff and the tools
+  const procedures = { to: '/procedures', label: 'אי עמידה בנהלים', icon: 'shield', keywords: 'נהלים הפקרת נשק נשק מאחורה טלפון דיגום כומתה שרוך גומיות תג שם משמעת' };
+  const cadets = {
+    title: 'צוערים',
+    items: [
+      { to: '/cadets', label: 'צוערים', icon: 'cap', keywords: 'צוותים פטורים משמעת שיחות אישיות' },
+      { to: '/attendance', label: 'מצבה', icon: 'check' },
+      { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder', keywords: 'ציונים מבחנים ועדה' },
+      { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
+      { to: '/experiences', label: 'התנסויות', icon: 'target', keywords: 'משובים חונך' },
+      { to: '/takpatz', label: 'תקפ״צ', icon: 'board', keywords: 'תקפצ תקפ"צ יעדים אישיים תכנון התנסויות שלישים' },
+      procedures,
+    ],
+  };
+  const learning = { title: 'תחקירים ולמידה', items: [{ to: '/debriefs', label: 'תחקירים ולקחים', icon: 'lightbulb', keywords: 'תחקיר שבועי פעילות עצימה תחק"ש פלוגתי לקחים בנק לקחים' }] };
+  const threeWeek = { to: '/three-week', label: 'אישור תוכניות תלת שבועי', icon: 'threeWeeks', keywords: 'תלת שבועי תלת-שבועי שלושה שבועות ארבעה שבועות תוכנית' };
+  const home = { items: [{ to: '/', label: 'יומן', icon: 'calendar', end: true, keywords: 'לו"ז לוז בית אירועים יומן' }] };
   if (isCommander) {
     return [
+      home,
       {
+        title: 'ניהול משימות',
         items: [
-          { to: '/', label: 'בית', icon: 'home', end: true },
           { to: '/my', label: 'המשימות שלי', icon: 'my' },
-          { to: '/tasks', label: 'כל המשימות', icon: 'tasks' },
-          { to: '/schedule', label: 'לו"ז', icon: 'calendar' },
-          { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס' },
+          { to: '/tasks', label: 'כל המשימות', icon: 'tasks', keywords: 'לוח משימות קבוצות' },
+          { to: '/requests', label: 'אישורים ובקשות', icon: 'inbox', count: pending, keywords: 'הארכה העברה אישור מפקד' },
+          { to: '/command', label: 'פקודות שלי', icon: 'zap' },
+          { to: '/templates', label: 'תבניות', icon: 'template' },
+          { to: '/recurring', label: 'משימות חוזרות', icon: 'repeat' },
         ],
       },
       {
         title: 'תכנון הקורס',
         items: [
-          { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
+          { to: '/weeks', label: 'שבועות הקורס', icon: 'layers', keywords: 'מוכנות שבוע פקודת שבוע' },
           { to: '/weekly', label: 'שבועי', icon: 'weekly' },
           { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
           { to: '/plans', label: 'אישור תוכניות', icon: 'stamp' },
-          { to: '/three-week', label: 'אישור תוכניות תלת שבועי', icon: 'threeWeeks', keywords: 'תלת שבועי תלת-שבועי שלושה שבועות ארבעה שבועות תוכנית' },
+          threeWeek,
         ],
       },
       {
-        title: 'צוערים',
+        title: 'פיקוד ובקרה',
         items: [
-          { to: '/cadets', label: 'צוערים', icon: 'cap' },
-          { to: '/attendance', label: 'מצבה', icon: 'check' },
-          { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
-          { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
-          { to: '/experiences', label: 'התנסויות', icon: 'target' },
-          { to: '/takpatz', label: 'תקפ״צ', icon: 'board', keywords: 'תקפצ תקפ"צ יעדים אישיים תכנון התנסויות שלישים' },
-          { to: '/procedures', label: 'אי עמידה בנהלים', icon: 'shield', keywords: 'נהלים הפקרת נשק נשק מאחורה טלפון דיגום כומתה שרוך גומיות תג שם משמעת' },
-        ],
-      },
-      {
-        title: 'בקרה',
-        items: [
-          { to: '/requests', label: 'אישורים ובקשות', icon: 'inbox', count: pending },
-          { to: '/entries', label: 'אישורי כניסה', icon: 'stamp', count: entries, keywords: 'מבקר כניסה לבסיס ש"ג' },
-          { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
-          { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
+          { to: '/overview', label: 'תמונת מצב', icon: 'home', keywords: 'דף הבית לוח המפקד דורש טיפול' },
           { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
           { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
+          { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
+          { to: '/day-end', label: 'סיכום היום', icon: 'moon' },
+          { to: '/activity', label: 'יומן פעילות', icon: 'history' },
         ],
       },
+      cadets,
+      learning,
       {
-        title: 'כלים',
+        title: 'סגל וכלים',
         items: [
-          { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
+          { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס' },
+          { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
+          { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
+          { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
+          { to: '/entries', label: 'אישורי כניסה', icon: 'stamp', count: entries, keywords: 'מבקר כניסה לבסיס ש"ג' },
           { to: '/documents', label: 'מסמכים', icon: 'file' },
-          { to: '/templates', label: 'תבניות', icon: 'template' },
           { to: '/courses', label: 'קורסים קודמים', icon: 'history' },
         ],
       },
     ];
   }
   return [
+    home,
     {
+      title: 'ניהול משימות',
       items: [
-        { to: '/', label: 'המשימות שלי', icon: 'home', end: true },
-        { to: '/tasks', label: 'משימות', icon: 'tasks' },
-        { to: '/schedule', label: 'לו"ז', icon: 'calendar' },
+        { to: '/my', label: 'המשימות שלי', icon: 'my' },
+        { to: '/tasks', label: 'משימות', icon: 'tasks', keywords: 'לוח משימות קבוצות' },
+        { to: '/requests', label: 'הבקשות שלי', icon: 'inbox' },
+        ...(can('tasks') ? [{ to: '/command', label: 'פקודות שלי', icon: 'zap' }] : []),
+        { to: '/templates', label: 'תבניות', icon: 'template' },
+        { to: '/recurring', label: 'משימות חוזרות', icon: 'repeat' },
       ],
     },
     {
       title: 'תכנון הקורס',
       items: [
-        { to: '/weeks', label: 'שבועות הקורס', icon: 'layers' },
+        { to: '/weeks', label: 'שבועות הקורס', icon: 'layers', keywords: 'מוכנות שבוע פקודת שבוע' },
         { to: '/weekly', label: 'שבועי', icon: 'weekly' },
         { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
         // what the commander opened to the staff (settings - permissions)
-        ...(can('plans')
-          ? [
-              { to: '/plans', label: 'אישור תוכניות', icon: 'stamp' },
-              { to: '/three-week', label: 'אישור תוכניות תלת שבועי', icon: 'threeWeeks', keywords: 'תלת שבועי תלת-שבועי שלושה שבועות ארבעה שבועות תוכנית' },
-            ]
-          : []),
+        ...(can('plans') ? [{ to: '/plans', label: 'אישור תוכניות', icon: 'stamp' }, threeWeek] : []),
       ],
     },
     {
-      title: 'צוערים',
+      title: 'פיקוד ובקרה',
       items: [
-        { to: '/cadets', label: 'צוערים', icon: 'cap' },
-        { to: '/attendance', label: 'מצבה', icon: 'check' },
-        { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder' },
-        { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
-        { to: '/experiences', label: 'התנסויות', icon: 'target' },
-        { to: '/takpatz', label: 'תקפ״צ', icon: 'board', keywords: 'תקפצ תקפ"צ יעדים אישיים תכנון התנסויות שלישים' },
-        { to: '/procedures', label: 'אי עמידה בנהלים', icon: 'shield', keywords: 'נהלים הפקרת נשק נשק מאחורה טלפון דיגום כומתה שרוך גומיות תג שם משמעת' },
+        { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
+        { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
+        { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
+        { to: '/day-end', label: 'סיכום היום', icon: 'moon' },
+        { to: '/activity', label: 'יומן פעילות', icon: 'history' },
       ],
     },
+    cadets,
+    learning,
     {
-      title: 'בקרה',
+      title: 'סגל וכלים',
       items: [
-        { to: '/requests', label: 'הבקשות שלי', icon: 'inbox' },
-        { to: '/entries', label: 'אישורי כניסה', icon: 'stamp', keywords: 'מבקר כניסה לבסיס ש"ג' },
         { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
         { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
-        { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
-      ],
-    },
-    {
-      title: 'כלים',
-      items: [
-        { to: '/debriefs', label: 'תחקירים', icon: 'lightbulb' },
+        { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
+        { to: '/entries', label: 'אישורי כניסה', icon: 'stamp', keywords: 'מבקר כניסה לבסיס ש"ג' },
         { to: '/documents', label: 'מסמכים', icon: 'file' },
-        { to: '/templates', label: 'תבניות', icon: 'template' },
       ],
     },
   ];
@@ -344,7 +354,7 @@ export function Layout({ children }: { children: ReactNode }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
       const el = e.target as HTMLElement;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      if (takesKeys(el)) return;
       if (document.querySelector('.modal')) return;
       e.preventDefault();
       const input = document.querySelector<HTMLInputElement>('.topbar .search input');
@@ -455,6 +465,10 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   const symbol = settings.courseSymbol || 'קק"ס';
+  // the calendar - the home page - puts its own controls in the top bar on a computer, and its layers in the side bar
+  const calBar = useCalendarBar();
+  const onCalendar = location.pathname === '/';
+  const today = todayKey();
 
   // the side menu folds to icons on a medium screen (a tablet, a small laptop) unless
   // the person pinned it; hovering a folded menu opens it over the content
@@ -468,6 +482,7 @@ export function Layout({ children }: { children: ReactNode }) {
   }, []);
   // a phone: the same menu slides in from the side whole - never folded to icons
   const phone = useMedia(BOTTOM_BAR_MEDIA);
+  const deskBar = !phone && onCalendar ? calBar : null;
   const folded = !phone && (railPref ? railPref === 'collapsed' : mediumScreen);
   // just folded: it stays folded under the pointer (no opening on hover) until the pointer leaves it
   const [noPeek, setNoPeek] = useState(false);
@@ -533,7 +548,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // the bar's "+": a new task or something for the weekly
   const [plusOpen, setPlusOpen] = useState(false);
   // where the "+" menu opened from: the phone bar's, or the top bar's on a computer
-  const [plusAt, setPlusAt] = useState<'bar' | 'top'>('bar');
+  const [plusAt, setPlusAt] = useState<'bar' | 'side'>('bar');
   const plus = usePresence(plusOpen, 200);
   useEffect(() => {
     setPlusOpen(false);
@@ -628,94 +643,124 @@ export function Layout({ children }: { children: ReactNode }) {
       <aside
         ref={railRef}
         id="main-menu"
-        className={`rail${noPeek ? ' no-peek' : ''}`}
+        className={`rail gside${noPeek ? ' no-peek' : ''}`}
         aria-label="ניווט ראשי"
         tabIndex={phone ? -1 : undefined}
         inert={(phone && !menuOpen) || undefined}
         onMouseLeave={() => setNoPeek(false)}
-        onFocus={(e) => noPeek && !(e.target as HTMLElement).classList.contains('rail-toggle') && setNoPeek(false)}
+        onFocus={(e) => noPeek && !(e.target as HTMLElement).classList.contains('gside-menu') && setNoPeek(false)}
         // a phone: a screen chosen closes the menu, also the one already on show
         onClick={(e) => phone && (e.target as Element).closest('a[href]') && setMenuOpen(false)}
       >
-        <div className="brand">
-          <div className="brand-mark">{symbol.slice(0, 4)}</div>
-          <div className="brand-text">
-            <div className="brand-name">{courseCycle(settings.courseName)}</div>
-            <div className="brand-sub">מערכת ניהול קורס</div>
-          </div>
+        {/* in line with the top bar, as one bar across: the menu's button and the course's mark (home: the calendar) */}
+        <div className="gside-top">
+          <button
+            type="button"
+            className="icon-btn gside-menu"
+            onClick={phone ? closeMenu : toggleRail}
+            aria-pressed={phone ? undefined : !folded}
+            aria-label={phone ? 'סגירת התפריט' : folded ? 'פתיחת התפריט הראשי' : 'כיווץ התפריט הראשי'}
+            title={phone ? 'סגירת התפריט' : 'התפריט הראשי'}
+          >
+            <Icon name="menu" />
+          </button>
+          <NavLink to="/" end className="gside-brand" title="יומן הקורס">
+            <span className="brand-mark">{symbol.slice(0, 4)}</span>
+            <span className="brand-text">
+              <span className="brand-name">{courseCycle(settings.courseName)}</span>
+              <span className="brand-sub">יומן הקורס</span>
+            </span>
+          </NavLink>
         </div>
-        {sections.map((s, i) => {
-          // with the phone's bar below, home is its first tab - not in the menu too
-          const links = s.items.filter((it) => !(phone && it.to === '/')).map((it) => (
-            <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
-              <Icon name={it.icon} />
-              <span className="rail-label">{it.label}</span>
-              <Count n={it.count ?? 0} />
-            </NavLink>
-          ));
-          if (!s.title)
+        <div className="gside-body">
+          {!viewing && (
+            <CreateButton
+              folded={folded}
+              open={plusOpen && plusAt === 'side'}
+              label={canEvent ? 'יצירה: אירוע, משימה, שבועי או תחקיר השבוע' : 'יצירה: משימה, שבועי או תחקיר השבוע'}
+              onClick={() => {
+                if (plusOpen && plusAt === 'side') return setPlusOpen(false);
+                setPlusAt('side');
+                setPlusOpen(true);
+              }}
+            />
+          )}
+          {!phone && !folded && (
+            <MiniMonth
+              selected={calBar?.date ?? today}
+              shown={calBar?.shown ?? []}
+              today={today}
+              onPick={(d) => (calBar ? calBar.goTo(d) : navigate(d === today ? '/' : `/?date=${d}`))}
+            />
+          )}
+          {onCalendar && !folded && <CalendarLayers />}
+          {sections.map((s, i) => {
+            // with the phone's bar below, home is its first tab - not in the menu too
+            const links = s.items.filter((it) => !(phone && it.to === '/')).map((it) => (
+              <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
+                <Icon name={it.icon} />
+                <span className="rail-label">{it.label}</span>
+                <Count n={it.count ?? 0} />
+              </NavLink>
+            ));
+            if (!links.length) return null;
+            if (!s.title)
+              return (
+                <nav key={i} aria-label="ראשי" className="rail-main">
+                  {links}
+                </nav>
+              );
+            const open = groupOpen(s.title);
+            const total = s.items.reduce((n, it) => n + (it.count ?? 0), 0);
+            const id = `rail-group-${i}`;
             return (
-              <nav key={i} aria-label="ניהול שוטף">
-                {links}
+              <nav key={i} aria-label={s.title} className={`rail-group${open ? ' open' : ''}${s.title === here ? ' here' : ''}`}>
+                <button
+                  type="button"
+                  className="rail-group-head"
+                  aria-expanded={open}
+                  aria-controls={id}
+                  onClick={() => toggleGroup(s.title!)}
+                  title={s.title === here && !open ? `${s.title} - המסך הפתוח נמצא כאן` : s.title}
+                >
+                  <Icon name={GROUP_ICONS[s.title] ?? 'layers'} />
+                  <span className="rail-label">{s.title}</span>
+                  {/* closed, with the screen on show inside: marked, so it is clear where one is */}
+                  {!open && s.title === here && <span className="rail-group-here" aria-hidden="true" />}
+                  {!open && <Count n={total} />}
+                  <Icon name="chevronDown" size={15} className="rail-group-chev" />
+                </button>
+                <div className="rail-group-body" id={id} inert={!open}>
+                  <div className="rail-group-inner">{links}</div>
+                </div>
               </nav>
             );
-          const open = groupOpen(s.title);
-          const total = s.items.reduce((n, it) => n + (it.count ?? 0), 0);
-          const id = `rail-group-${i}`;
-          return (
-            <nav key={i} aria-label={s.title} className={`rail-group${open ? ' open' : ''}${s.title === here ? ' here' : ''}`}>
-              <button
-                type="button"
-                className="rail-group-head"
-                aria-expanded={open}
-                aria-controls={id}
-                onClick={() => toggleGroup(s.title!)}
-                title={s.title === here && !open ? `${s.title} - המסך הפתוח נמצא כאן` : s.title}
-              >
-                <Icon name={GROUP_ICONS[s.title] ?? 'layers'} />
-                <span className="rail-label">{s.title}</span>
-                {/* closed, with the screen on show inside: marked, so it is clear where one is */}
-                {!open && s.title === here && <span className="rail-group-here" aria-hidden="true" />}
-                {!open && <Count n={total} />}
-                <Icon name="chevronDown" size={15} className="rail-group-chev" />
-              </button>
-              <div className="rail-group-body" id={id} inert={!open}>
-                <div className="rail-group-inner">{links}</div>
-              </div>
-            </nav>
-          );
-        })}
-        <NavLink to="/settings" className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`} style={{ marginTop: 14 }}>
-          <Icon name="settings" />
-          <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
-        </NavLink>
-        <div className="rail-foot">
-          <div className="avatar">{initials(user.displayName)}</div>
-          <div className="grow rail-user" title={`${user.displayName} - ${isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}`}>
-            <div className="strong small">{user.displayName}</div>
-            <div className="tiny" style={{ color: 'var(--rail-muted)' }}>
-              {isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}
-            </div>
-          </div>
-          <button className="icon-btn rail-logout" style={{ color: 'var(--rail-muted)' }} onClick={() => void logout()} aria-label="יציאה" title="יציאה">
-            <Icon name="logout" />
-          </button>
-          {/* on a phone the same button sends the menu back to its edge */}
-          <button
-            className="icon-btn rail-toggle"
-            onClick={phone ? closeMenu : toggleRail}
-            aria-pressed={phone ? undefined : folded}
-            aria-label={phone ? 'סגירת התפריט' : folded ? 'הרחבת התפריט' : 'כיווץ התפריט'}
-            title={phone ? 'סגירת התפריט' : folded ? 'הרחבת התפריט' : 'כיווץ התפריט לסמלים'}
-          >
-            <Icon name={folded ? 'chevronLeft' : 'chevronRight'} />
-          </button>
+          })}
+          <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
+            <Icon name="settings" />
+            <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
+          </NavLink>
         </div>
+        {/* a phone: the person and leaving, at the foot of the menu (a computer has them in the top bar) */}
+        {phone && (
+          <div className="rail-foot">
+            <div className="avatar">{initials(user.displayName)}</div>
+            <div className="grow rail-user" title={`${user.displayName} - ${isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}`}>
+              <div className="strong small">{user.displayName}</div>
+              <div className="tiny" style={{ color: 'var(--rail-muted)' }}>
+                {isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}
+              </div>
+            </div>
+            <button className="icon-btn rail-logout" style={{ color: 'var(--rail-muted)' }} onClick={() => void logout()} aria-label="יציאה" title="יציאה">
+              <Icon name="logout" />
+            </button>
+          </div>
+        )}
       </aside>
 
       <div className="main" inert={drawer || undefined}>
         {/* titled: the screen's title shows beside the mark, and on a phone the search folds to its icon */}
-        <header className={`topbar${barTitle ? ' is-titled' : ''}`}>
+        <header className={`topbar${barTitle && !deskBar ? ' is-titled' : ''}${deskBar ? ' is-calendar' : ''}`}>
           <BackButton />
           <div className={`top-brand${menuOpen ? ' is-open' : ''}`}>
             {/* the course's mark opens the side menu, from this side of the screen */}
@@ -736,33 +781,25 @@ export function Layout({ children }: { children: ReactNode }) {
               {barTitle}
             </span>
           </div>
+          {deskBar && <CalendarControls bar={deskBar} />}
+          {/* a computer, any other screen: its title, once it has gone under the bar */}
+          {!phone && !deskBar && (
+            <span className={`top-title${barTitle ? ' is-on' : ''}`} aria-hidden="true">
+              {barTitle}
+            </span>
+          )}
           <TopSearch pages={palettePages} />
           <div className="top-actions">
+            {deskBar && <ViewSwitcher bar={deskBar} />}
             <span className={`live hide-mobile${live ? ' on' : ''}`} title={live ? 'מחובר - עדכונים בזמן אמת' : 'מתחבר...'}>
               {live ? 'מעודכן' : 'מתחבר'}
             </span>
-            <Bell unread={unread} />
+            <HelpButton />
+            <SettingsLink />
             <ThemeButton />
-            {/* on a computer, the same "+" as the phone bar's: what one adds, in a menu under it */}
-            {!viewing && (
-              <button
-                id="top-plus-button"
-                type="button"
-                className={`top-plus hide-mobile${plusOpen && plusAt === 'top' ? ' plus-open' : ''}`}
-                onClick={() => {
-                  if (plusOpen && plusAt === 'top') return setPlusOpen(false);
-                  setPlusAt('top');
-                  setPlusOpen(true);
-                }}
-                aria-label={canEvent ? 'הוספה: משימה, אירוע בלו"ז, שבועי או תחקיר השבוע' : 'הוספה: משימה, שבועי או תחקיר השבוע'}
-                title="הוספה (N - משימה חדשה)"
-                aria-haspopup="menu"
-                aria-expanded={plusOpen && plusAt === 'top'}
-                aria-controls={plusOpen && plusAt === 'top' ? 'plus-menu' : undefined}
-              >
-                <Icon name="plus" />
-              </button>
-            )}
+            <Bell unread={unread} />
+            <AppsButton sections={sections} />
+            <UserMenu />
           </div>
         </header>
         {viewing && (
@@ -873,7 +910,7 @@ export function Layout({ children }: { children: ReactNode }) {
             canEvent
               ? () => {
                   setPlusOpen(false);
-                  navigate('/schedule?new=1');
+                  navigate('/?new=1');
                 }
               : undefined
           }
@@ -884,8 +921,8 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 /**
- * The "+": the things one adds. From the phone bar it rises above the bar; from the top bar on a
- * computer it drops under the button, as a menu.
+ * The "+": the things one adds. From the phone bar it rises above the bar; from "יצירה" in the side
+ * bar on a computer it drops under the button, as a menu.
  */
 function PlusMenu({
   at,
@@ -897,7 +934,7 @@ function PlusMenu({
   onEvent,
   leaving,
 }: {
-  at: 'bar' | 'top';
+  at: 'bar' | 'side';
   onClose: () => void;
   onTask: () => void;
   onWeekly: () => void;
@@ -907,14 +944,14 @@ function PlusMenu({
   leaving: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const anchorId = at === 'top' ? 'top-plus-button' : 'plus-button';
-  // under the top bar's button, its edge in line with the button's
+  const anchorId = at === 'side' ? 'side-create-button' : 'plus-button';
+  // under "יצירה", its start edge in line with the button's (right to left: their right edges)
   const [spot, setSpot] = useState<{ top: number; left: number } | null>(null);
   useLayoutEffect(() => {
-    if (at !== 'top') return;
+    if (at !== 'side') return;
     const place = () => {
       const r = document.getElementById(anchorId)?.getBoundingClientRect();
-      if (r) setSpot({ top: r.bottom + 10, left: Math.max(12, Math.min(r.left, window.innerWidth - 312)) });
+      if (r) setSpot({ top: r.bottom + 8, left: Math.max(12, Math.min(r.right - 300, window.innerWidth - 312)) });
     };
     place();
     window.addEventListener('resize', place);
@@ -950,13 +987,13 @@ function PlusMenu({
       {at === 'bar' && <div className={`plus-scrim${leaving ? ' is-leaving' : ''}`} aria-hidden="true" />}
       {/* closed, it goes back into the "+" it came from */}
       <div
-        className={`plus-menu${at === 'top' ? ' at-top' : ''}${leaving ? ' is-leaving' : ''}`}
+        className={`plus-menu${at === 'side' ? ' at-top' : ''}${leaving ? ' is-leaving' : ''}`}
         id="plus-menu"
         role="menu"
         aria-label="הוספה"
         ref={ref}
         inert={leaving || undefined}
-        style={at === 'top' ? (spot ? { top: spot.top, left: spot.left } : { visibility: 'hidden' }) : undefined}
+        style={at === 'side' ? (spot ? { top: spot.top, left: spot.left } : { visibility: 'hidden' }) : undefined}
       >
         <button type="button" role="menuitem" onClick={onTask}>
           <span className="plus-menu-icon">

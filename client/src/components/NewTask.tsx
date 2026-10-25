@@ -15,6 +15,7 @@ import { useStaffGroups } from '../lib/taskGroups';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { DateInput, ErrorBox, Field, Modal, Seg, Select, TimeInput } from './ui';
+import { takesKeys } from '../lib/keyboard';
 
 export interface NewTaskInitial {
   title?: string;
@@ -42,7 +43,7 @@ export function NewTaskProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      if (takesKeys(el)) return;
       // not on top of an open dialog
       if (document.querySelector('.modal')) return;
       if ((e.key === 'n' || e.key === 'מ') && !e.ctrlKey && !e.metaKey && !e.altKey) {

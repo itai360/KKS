@@ -1,7 +1,14 @@
 // "?" shows every keyboard shortcut in one place.
 
 import { useEffect, useState } from 'react';
+import { VIEW_KEYS, VIEW_LABELS, type CalView } from '../lib/calendarBar';
+import { takesKeys } from '../lib/keyboard';
 import { Modal } from './ui';
+
+/** the calendar's views by their keys, in the order of the numbers (as in Google Calendar) */
+const VIEW_LINES = (Object.entries(VIEW_KEYS) as [CalView, [string, string]][])
+  .sort((a, b) => Number(a[1][1]) - Number(b[1][1]))
+  .map(([v, keys]): [string[], string] => [keys, `תצוגת ${VIEW_LABELS[v]}`]);
 
 const GROUPS: { title: string; keys: [string[], string][] }[] = [
   {
@@ -17,22 +24,32 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
   },
   { title: 'בטופס', keys: [[['Ctrl', 'Enter'], 'שליחה (משימה חדשה, עדכון במשימה)']] },
   {
-    title: 'בלו"ז',
+    title: 'ביומן',
     keys: [
-      [['T'], 'היום'],
-      [['J', 'K'], 'הבא / הקודם'],
-      [['A', 'D', 'W', 'M'], 'רשימה / יום / שבוע / חודש'],
+      [['T'], 'חזרה להיום'],
+      [['J', 'K'], 'התקופה הבאה / הקודמת'],
+      ...VIEW_LINES,
+      [['C'], 'אירוע חדש'],
+      [['G'], 'מעבר לתאריך'],
     ],
   },
 ];
 
+/** the top bar's help button opens the list too */
+export const OPEN_SHORTCUTS = 'kks:shortcuts';
+
 export function ShortcutsHelp() {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener(OPEN_SHORTCUTS, show);
+    return () => window.removeEventListener(OPEN_SHORTCUTS, show);
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey) return;
       const el = e.target as HTMLElement;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      if (takesKeys(el)) return;
       if (document.querySelector('.modal')) return;
       e.preventDefault();
       setOpen(true);

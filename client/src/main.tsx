@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import './apple.css';
+import './gcal.css';
 import './takpatz.css';
 import { App } from './App';
 import { reportIssue } from './lib/api';

@@ -15,6 +15,18 @@ export function isTypingField(el: EventTarget | null): el is HTMLElement {
   );
 }
 
+/**
+ * A field that takes the keys typed in it, so keyboard shortcuts leave it alone. A checkbox, a radio or
+ * a button does not: after ticking a calendar's box, its keys work at once.
+ */
+export function takesKeys(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true;
+  if (el instanceof HTMLInputElement) return !['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color', 'hidden'].includes(el.type);
+  const role = el.getAttribute('role');
+  return role === 'combobox' || role === 'textbox' || role === 'searchbox' || role === 'listbox';
+}
+
 // the floating send button at the bottom of a sheet: the field stays clear of it
 const DOCK = 84;
 
