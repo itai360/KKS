@@ -1,12 +1,16 @@
-// The arithmetic behind the calendar view of the schedule (day, week and month,
-// like Google Calendar): which days a view shows, where an event sits in the
-// time grid, and how events that overlap share a column. Free of the DOM so it
-// can be tested.
+// The arithmetic behind the calendar (day, a few days, week, month and year, like
+// Google Calendar): which days a view shows, where an event sits in the time grid,
+// how events that overlap share a column, and how things that last a day or more
+// (a course week, an absence, a deadline) share the rows above the hours and the
+// month's cells. Free of the DOM so it can be tested.
 
-import { addDays, parseDateKey, startOfWeek, toDateKey } from './dates';
+import { addDays, diffDays, parseDateKey, startOfWeek, toDateKey } from './dates';
 
-/** 'three': the day chosen and the two after it - a phone's week, wide enough to read */
-export type CalendarView = 'day' | 'three' | 'week' | 'month';
+/**
+ * 'three': the day chosen and the two after it - a phone's week, wide enough to read;
+ * 'four': the computer's own few days (Google Calendar's custom view); 'year': twelve months
+ */
+export type CalendarView = 'day' | 'three' | 'four' | 'week' | 'month' | 'year';
 
 export const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'] as const;
 
@@ -56,29 +60,47 @@ export function monthWeeks(date: string): string[][] {
   return weeks;
 }
 
-/** The days a view shows, in order. */
+/** how many days a view of a few days shows */
+const FEW: Partial<Record<CalendarView, number>> = { three: 3, four: 4 };
+
+/** The first day of each month of the year `date` is in. */
+export function yearMonths(date: string): string[] {
+  const { year } = parseDateKey(date);
+  return Array.from({ length: 12 }, (_, i) => toDateKey(year, i + 1, 1));
+}
+
+/** The days a view shows, in order (a year: every day of it). */
 export function viewDays(view: CalendarView, date: string): string[] {
   if (view === 'day') return [date];
-  if (view === 'three') return [date, addDays(date, 1), addDays(date, 2)];
+  const few = FEW[view];
+  if (few) return Array.from({ length: few }, (_, i) => addDays(date, i));
   if (view === 'week') return Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(date), i));
+  if (view === 'year') {
+    const { year } = parseDateKey(date);
+    const first = toDateKey(year, 1, 1);
+    const n = diffDays(toDateKey(year + 1, 1, 1), first);
+    return Array.from({ length: n }, (_, i) => addDays(first, i));
+  }
   return monthWeeks(date).flat();
 }
 
-/** The previous or next day, week or month. A month step keeps the day, or the month's last day. */
+/** The previous or next day, few days, week, month or year. A month or year step keeps the day, or the month's last day. */
 export function stepDate(view: CalendarView, date: string, dir: 1 | -1): string {
   if (view === 'day') return addDays(date, dir);
-  if (view === 'three') return addDays(date, 3 * dir);
+  const few = FEW[view];
+  if (few) return addDays(date, few * dir);
   if (view === 'week') return addDays(date, 7 * dir);
   const { year, month, day } = parseDateKey(date);
-  const m = month - 1 + dir;
+  const m = month - 1 + (view === 'year' ? 12 : 1) * dir;
   const y = year + Math.floor(m / 12);
   const mm = ((m % 12) + 12) % 12;
   return toDateKey(y, mm + 1, Math.min(day, daysInMonth(y, mm + 1)));
 }
 
-/** "אוקטובר 2026", or "ספטמבר - אוקטובר 2026" for a week across two months. */
+/** "אוקטובר 2026", "ספטמבר - אוקטובר 2026" for a week across two months, or the year alone. */
 export function viewTitle(view: CalendarView, date: string): string {
-  const days = view === 'week' || view === 'three' ? viewDays(view, date) : [date];
+  if (view === 'year') return String(parseDateKey(date).year);
+  const days = view === 'week' || FEW[view] ? viewDays(view, date) : [date];
   const a = parseDateKey(days[0]);
   const b = parseDateKey(days[days.length - 1]);
   if (a.month === b.month) return `${MONTH_NAMES[a.month - 1]} ${a.year}`;
@@ -149,3 +171,70 @@ export function movedSpan(start: number, end: number, delta: number, step = 15):
 export function resizedEnd(start: number, end: number, delta: number, step = 15): number {
   return Math.max(start + step, Math.min(DAY_MINUTES, snap(end + delta, step)));
 }
+
+// ---------------- what lasts a day or more: the rows above the hours, the month's cells ----------------
+
+/** A thing of one day or more, placed in a row (lane) over the days shown. */
+export interface Lane<T> {
+  item: T;
+  /** the first and last day shown it covers, as indexes into the days */
+  start: number;
+  end: number;
+  /** the row it is in, from the top */
+  lane: number;
+  /** it began before the first day shown / goes on after the last */
+  cutStart: boolean;
+  cutEnd: boolean;
+}
+
+/**
+ * Lays things of one day or more in rows over consecutive days, the way Google Calendar fills the
+ * rows above the hours and a month's week: the earliest first, the longer of two that start
+ * together first (then `order`), each in the first row free all through its days.
+ */
+export function layoutSpans<T>(
+  items: T[],
+  days: string[],
+  range: (item: T) => { startDate: string; endDate: string },
+  order: (a: T, b: T) => number = () => 0,
+): Lane<T>[] {
+  if (!days.length) return [];
+  const first = days[0];
+  const last = days[days.length - 1];
+  const placed = items
+    .map((item) => ({ item, ...range(item) }))
+    .filter((x) => x.startDate <= last && x.endDate >= first)
+    .map((x) => {
+      const start = x.startDate < first ? 0 : diffDays(x.startDate, first);
+      const end = x.endDate > last ? days.length - 1 : diffDays(x.endDate, first);
+      return { item: x.item, start, end, cutStart: x.startDate < first, cutEnd: x.endDate > last };
+    })
+    .sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start) || order(a.item, b.item));
+  const lanes: number[] = []; // the last day taken in each row
+  return placed.map((p) => {
+    let lane = lanes.findIndex((end) => end < p.start);
+    if (lane === -1) lane = lanes.push(p.end) - 1;
+    else lanes[lane] = p.end;
+    return { ...p, lane };
+  });
+}
+
+/**
+ * What fits in `rows` rows of each day: a day with more than that shows one row less and "עוד N"
+ * in its place. A thing hidden on any of its days is hidden on all of them (and counted there).
+ */
+export function fitLanes<T>(lanes: Lane<T>[], dayCount: number, rows: number): { shown: Lane<T>[]; more: number[] } {
+  const total = Array.from({ length: dayCount }, () => 0);
+  for (const l of lanes) for (let i = l.start; i <= l.end; i++) total[i]++;
+  const limit = total.map((n) => (n > rows ? rows - 1 : rows));
+  const shown = lanes.filter((l) => {
+    for (let i = l.start; i <= l.end; i++) if (l.lane >= limit[i]) return false;
+    return true;
+  });
+  const seen = Array.from({ length: dayCount }, () => 0);
+  for (const l of shown) for (let i = l.start; i <= l.end; i++) seen[i]++;
+  return { shown, more: total.map((n, i) => n - seen[i]) };
+}
+
+/** How many rows the lanes take (0 when there are none). */
+export const laneCount = (lanes: Lane<unknown>[]) => lanes.reduce((n, l) => Math.max(n, l.lane + 1), 0);

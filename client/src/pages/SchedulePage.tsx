@@ -91,7 +91,7 @@ const TASKS_OPTIONS: { value: TasksShown; label: string }[] = [
 ];
 // keys by position, so they work with a Hebrew keyboard too (as in Google Calendar)
 const VIEW_KEYS: Record<string, ScheduleView> = { KeyA: 'agenda', KeyD: 'day', KeyW: 'week', KeyM: 'month' };
-const VIEW_STEP: Record<ScheduleView, string> = { agenda: 'שבוע', day: 'יום', three: '3 ימים', week: 'שבוע', month: 'חודש' };
+const VIEW_STEP: Record<ScheduleView, string> = { agenda: 'שבוע', day: 'יום', three: '3 ימים', four: '4 ימים', week: 'שבוע', month: 'חודש', year: 'שנה' };
 
 const earliest = (a: string[]) => a.reduce((m, x) => (x < m ? x : m));
 const latest = (a: string[]) => a.reduce((m, x) => (x > m ? x : m));

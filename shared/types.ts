@@ -310,6 +310,14 @@ export interface DomainReadiness {
 export interface ScheduleEvent {
   id: number;
   date: string;
+  /** the last day of an event of several days (null or missing: one day) */
+  endDate?: string | null;
+  /** all day (or the days it lasts): no hour of its own - startTime is then "00:00" */
+  allDay?: boolean;
+  /** its colour in the calendar (shared/calendarLayers.ts CAL_COLORS); missing: the course's blue */
+  color?: string | null;
+  /** one of a repeating series of events (each a whole event of its own) */
+  seriesId?: number | null;
   startTime: string;
   endTime: string | null;
   title: string;
