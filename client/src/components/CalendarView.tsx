@@ -213,7 +213,8 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
     if (down.button !== 0 || down.pointerType === 'touch' || bulk?.active || !canMove(e)) return;
     const span = eventSpan(e.startTime, e.endTime);
     const home = columnAt(down.clientX);
-    const grab = minutesAt(home, down.clientY) - span.start;
+    const grabAt = minutesAt(home, down.clientY);
+    const grab = grabAt - span.start;
     const x0 = down.clientX;
     const y0 = down.clientY;
     let current: Drag | null = null;
@@ -222,7 +223,8 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
       (m) => {
         if (!current && Math.hypot(m.clientX - x0, m.clientY - y0) < 5) return;
         if (kind === 'resize') {
-          current = { kind, id: e.id, date: e.date, start: span.start, end: resizedEnd(span.start, span.end, minutesAt(home, m.clientY) - span.end) };
+          // the edge moves as far as the pointer did - where on the handle it was grabbed does not count
+          current = { kind, id: e.id, date: e.date, start: span.start, end: resizedEnd(span.start, span.end, minutesAt(home, m.clientY) - grabAt) };
         } else {
           const col = columnAt(m.clientX);
           const to = movedSpan(span.start, span.end, minutesAt(col, m.clientY) - grab - span.start);
