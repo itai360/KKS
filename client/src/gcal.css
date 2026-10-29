@@ -1125,6 +1125,10 @@
 .gc-event.is-faded .gc-event-title {
   text-decoration: line-through;
 }
+/* over already: pale, as Google Calendar draws what is behind you, so what is next stands out */
+.gc-event.is-past {
+  background: color-mix(in srgb, var(--c) 58%, var(--g-sheet));
+}
 .gc-event.is-now {
   box-shadow: 0 0 0 2px var(--g-sheet), 0 0 0 4px color-mix(in srgb, var(--c) 45%, transparent);
 }
@@ -1284,6 +1288,22 @@
 .gc-chip.is-faded .gc-chip-title {
   text-decoration: line-through;
 }
+.gc-chip.is-bar.is-past {
+  background: color-mix(in srgb, var(--c) 58%, var(--g-sheet));
+}
+.gc-chip.is-bar.is-past.k-week,
+.gc-chip.is-bar.is-past.k-absence {
+  background: color-mix(in srgb, var(--c-soft) 60%, var(--g-sheet));
+  color: color-mix(in srgb, var(--c-ink) 72%, var(--g-sheet));
+}
+.gc-chip.is-past:not(.is-bar) {
+  color: var(--muted);
+}
+.gc-chip.is-past .gc-dot,
+.gc-chip.is-past .gc-task-ring,
+.gc-chip.is-past.is-note svg {
+  opacity: 0.5;
+}
 @media (hover: hover) {
   .gc-chip:not(.is-bar):hover {
     background: var(--hover-2);
@@ -1353,9 +1373,6 @@
   border-inline-start: 1px solid var(--g-line);
   transition: background 0.12s;
 }
-.gc-cell.is-out {
-  background: color-mix(in srgb, var(--paper) 45%, transparent);
-}
 @media (hover: hover) {
   .gc-cell.can-create:hover {
     background: var(--hover);
@@ -1405,6 +1422,75 @@
   .gc-daynum:not(.is-today):hover {
     background: var(--hover-2);
   }
+}
+/* a phone's month, as Google Calendar's app draws it: everything a small filled bar with its title, and a
+   tap anywhere on a day opens that day (the bars are too small to aim at one by one) */
+.gc-month.is-compact .gc-month-head > div {
+  padding: 6px 0 3px;
+  border-inline-start-color: transparent;
+}
+.gc-month.is-compact .gc-cell {
+  cursor: pointer;
+}
+.gc-month.is-compact .gc-cell:active {
+  background: var(--hover);
+}
+.gc-month.is-compact .gc-week-fg {
+  grid-template-rows: 22px repeat(var(--rows), 16px);
+}
+.gc-month.is-compact .gc-daynum,
+.gc-month.is-compact .gc-chip,
+.gc-month.is-compact .gc-more {
+  pointer-events: none;
+}
+.gc-month.is-compact .gc-daynum {
+  min-width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  padding: 0 4px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.gc-month.is-compact .gc-chip {
+  height: 16px;
+  margin: 0 1px;
+  padding: 0 3px;
+  gap: 2px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 16px;
+}
+.gc-month.is-compact .gc-chip.cut-start {
+  margin-inline-start: 0;
+}
+.gc-month.is-compact .gc-chip.cut-end {
+  margin-inline-end: 0;
+}
+.gc-month.is-compact .gc-chip.is-bar.k-week {
+  border-inline-start-width: 2px;
+}
+.gc-month.is-compact .gc-chip-time {
+  display: none;
+}
+/* as many letters as the day has room for, as Google's app: no "..." taking the room of two of them */
+.gc-month.is-compact .gc-chip-title {
+  text-overflow: clip;
+}
+.gc-month.is-compact .gc-task-ring {
+  width: 8px;
+  height: 8px;
+  border-width: 1.5px;
+}
+.gc-month.is-compact .gc-chip.is-note svg {
+  width: 10px;
+  height: 10px;
+}
+.gc-month.is-compact .gc-more {
+  height: 16px;
+  margin: 0 2px;
+  padding: 0 3px;
+  font-size: 10px;
 }
 
 /* ---------------- the year ---------------- */
@@ -1929,8 +2015,10 @@
     background: var(--g-sheet);
     overflow: hidden;
   }
-  .cal-page.is-phone .gc {
-    height: calc(100dvh - var(--top-h) - 250px - env(safe-area-inset-bottom));
+  /* the grid takes the screen down to the bottom bar, as Google's app: under the top bar and the calendar's own bar */
+  .cal-page.is-phone .gc,
+  .cal-page.is-phone .gc-month {
+    height: calc(100dvh - var(--top-h) - var(--strip-h, 52px) - 72px - env(safe-area-inset-bottom));
     min-height: 360px;
   }
   .gc-dn {
@@ -2007,6 +2095,7 @@
 
 :root {
   --g-blue: #0b57d0;
+  --g-on-blue: #fff;
   --g-blue-hover: #0a4fbd;
   --g-blue-soft: #d3e3fd;
   --g-on-blue-soft: #041e49;
@@ -2016,6 +2105,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --g-blue: #a8c7fa;
+    --g-on-blue: #062e6f;
     --g-blue-hover: #c2d7fb;
     --g-blue-soft: #004a77;
     --g-on-blue-soft: #c2e7ff;
@@ -2025,6 +2115,7 @@
 }
 :root[data-theme='dark'] {
   --g-blue: #a8c7fa;
+  --g-on-blue: #062e6f;
   --g-blue-hover: #c2d7fb;
   --g-blue-soft: #004a77;
   --g-on-blue-soft: #c2e7ff;
@@ -2533,7 +2624,7 @@
 }
 .g-day.on {
   background: var(--g-blue);
-  color: #fff;
+  color: var(--g-on-blue);
 }
 .g-ends-date {
   width: 150px;
@@ -2891,4 +2982,441 @@
 }
 .g-qc .qc-foot {
   align-items: center;
+}
+
+/* ---------------- a phone's calendar bar, as Google Calendar's app ---------------- */
+/* the month (a tap opens it), today with its date, the views and "more" - one row that stays on top */
+.schedule-page.is-phone.has-strip {
+  --strip-h: 52px;
+}
+.gph-bar {
+  position: sticky;
+  top: var(--top-h);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 52px;
+  margin: -4px -14px 6px;
+  padding: 4px 6px 4px 4px;
+  background: var(--topbar-bg, var(--bg));
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
+}
+.gph-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gph-title:active {
+  background: var(--hover);
+}
+.gph-chev {
+  color: var(--ink-2);
+  transition: transform 0.25s var(--spring, ease-out);
+}
+.gph-chev.is-open {
+  transform: rotate(180deg);
+}
+.gph-btn,
+.gph-today {
+  width: 44px;
+  height: 44px;
+  color: var(--ink-2);
+}
+/* today: a little calendar with today's date in it, as Google's */
+.gph-today-num {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid currentColor;
+  border-top-width: 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+.gph-today:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.gph-month {
+  margin: 0 0 10px;
+  animation: gph-drop 0.22s var(--spring, ease-out) both;
+  transform-origin: top center;
+}
+@keyframes gph-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scaleY(0.96);
+  }
+}
+/* the month under the title in Google's colours: today a blue circle, the day being read a light blue one */
+.gph-month .mdots-day.today .n {
+  background: var(--tint-fill);
+  color: #fff;
+}
+.gph-month .mdots-day.on:not(.today) .n {
+  background: var(--g-blue-soft);
+  color: var(--g-on-blue-soft);
+}
+.gph-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 10px;
+}
+.gph-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 52px;
+  margin-inline-end: 14px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 0 26px 26px 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  text-align: start;
+  cursor: pointer;
+}
+[dir='rtl'] .gph-item {
+  border-radius: 26px 0 0 26px;
+}
+.gph-item svg {
+  color: var(--ink-2);
+}
+.gph-item.on {
+  background: var(--g-blue-soft);
+  color: var(--g-on-blue-soft);
+  font-weight: 600;
+}
+.gph-item.on svg {
+  color: var(--g-on-blue-soft);
+}
+.gph-item:active {
+  background: var(--hover);
+}
+@media print {
+  .gph-bar {
+    display: none !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gph-month {
+    animation: none;
+  }
+}
+
+/* ---------------- the schedule ("סדר יום"), as Google Calendar's ---------------- */
+/* each day a row: its date on the side (today in blue), its events beside it - a dot of their colour, the
+   hours, the title and the place; on a phone, chips filled with their colour, as Google's app */
+.cal-page .agenda .gs-day {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  align-items: start;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cal-page .gs-date {
+  position: sticky;
+  top: calc(var(--top-h) + var(--strip-h, 0px) + 6px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 8px 2px 0;
+  font-size: inherit;
+  font-weight: 400;
+}
+.cal-page .gs-num {
+  order: 0;
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 22px;
+  color: var(--ink);
+}
+.cal-page .gs-mon {
+  order: 1;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.cal-page .gs-mon::after {
+  content: ',';
+}
+.cal-page .gs-wd {
+  order: 2;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+/* today: the same circle as the grid's (white on the deep blue, in both themes) */
+.cal-page .gs-day.is-today .gs-num {
+  color: #fff;
+  background: var(--tint-fill);
+}
+.cal-page .gs-day.is-today .gs-mon,
+.cal-page .gs-day.is-today .gs-wd {
+  color: var(--tint);
+  font-weight: 600;
+}
+.cal-page .gs-day.is-past .gs-num,
+.cal-page .gs-day.is-past .gs-mon,
+.cal-page .gs-day.is-past .gs-wd {
+  color: var(--ink-3, var(--ink-2));
+}
+.cal-page .gs-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.cal-page .gs-items .event-row {
+  display: grid;
+  grid-template-columns: 12px 116px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 40px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  box-shadow: none;
+}
+@media (hover: hover) {
+  .cal-page .gs-items .event-row:hover {
+    background: var(--hover);
+  }
+}
+.cal-page .gs-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c, var(--tint-fill));
+}
+.cal-page .gs-dot.gs-flag {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-inline-start: -2px;
+  background: none;
+  color: var(--orange);
+}
+.cal-page .gs-items .event-time {
+  display: block;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cal-page .gs-items .event-time .end {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.cal-page .gs-items .event-time.small {
+  font-size: 13px;
+}
+.cal-page .gs-items .event-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.cal-page .gs-items .task-meta {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.cal-page .gs-items .event-row.past .event-time,
+.cal-page .gs-items .event-row.past .event-title {
+  color: var(--ink-3, var(--ink-2));
+}
+.cal-page .gs-items .event-row.past .gs-dot {
+  opacity: 0.55;
+}
+.cal-page .gs-items .event-row.now {
+  background: color-mix(in srgb, var(--g-blue) 7%, transparent);
+}
+.cal-page .gs-items .event-row.cancelled .event-title {
+  text-decoration: line-through;
+}
+.cal-page .gs-empty {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: start;
+  cursor: pointer;
+}
+.cal-page .gs-empty:disabled {
+  cursor: default;
+}
+@media (hover: hover) {
+  .cal-page .gs-empty:not(:disabled):hover {
+    background: var(--hover);
+  }
+}
+.cal-page .gs-empty-add {
+  margin-inline-start: 4px;
+  color: var(--g-blue);
+}
+/* the days with nothing in them: one quiet line where the list skips them */
+.cal-page .agenda .agenda-gap {
+  margin: 0;
+  padding: 8px 10px;
+  padding-inline-start: 128px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  font-size: 12.5px;
+  color: var(--ink-3, var(--ink-2));
+}
+.cal-page .agenda .agenda-gap .agenda-add {
+  display: none;
+}
+/* where a course week starts: a quiet heading across the list */
+.cal-page .agenda .agenda-week {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.cal-page .agenda-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 14px 0 24px;
+}
+.cal-page .agenda-more {
+  color: var(--ink-2);
+}
+
+@media (max-width: 860px) {
+  .cal-page.is-phone .agenda .gs-day {
+    grid-template-columns: 48px minmax(0, 1fr);
+    padding: 4px 0;
+    border-bottom: 0;
+  }
+  .cal-page.is-phone .gs-date {
+    flex-direction: column;
+    gap: 0;
+    padding: 2px 0;
+  }
+  .cal-page.is-phone .gs-wd {
+    order: 0;
+    font-size: 11.5px;
+  }
+  .cal-page.is-phone .gs-num {
+    order: 1;
+    min-width: 34px;
+    height: 34px;
+    font-size: 19px;
+  }
+  .cal-page.is-phone .gs-mon {
+    display: none;
+  }
+  .cal-page.is-phone .gs-items {
+    gap: 6px;
+    padding-block: 2px;
+  }
+  /* an event: a chip filled with its colour - its title, then its hours and place */
+  .cal-page.is-phone .gs-items .event-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+    min-height: 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--c, var(--tint-fill));
+    color: var(--c-on, #fff);
+  }
+  .cal-page.is-phone .gs-items .event-row > div:not(.event-time):not(.row) {
+    order: 0;
+  }
+  .cal-page.is-phone .gs-items .event-row > .event-time {
+    order: 1;
+  }
+  .cal-page.is-phone .gs-items .event-row > .row {
+    order: 2;
+  }
+  .cal-page.is-phone .gs-items .event-row > .gs-dot {
+    display: none;
+  }
+  .cal-page.is-phone .gs-items .event-title,
+  .cal-page.is-phone .gs-items .event-time,
+  .cal-page.is-phone .gs-items .task-meta {
+    color: inherit;
+  }
+  .cal-page.is-phone .gs-items .event-title {
+    font-weight: 600;
+  }
+  .cal-page.is-phone .gs-items .event-time,
+  .cal-page.is-phone .gs-items .task-meta {
+    font-size: 12.5px;
+    opacity: 0.92;
+  }
+  .cal-page.is-phone .gs-items .event-notes {
+    display: none;
+  }
+  .cal-page.is-phone .gs-items .event-row .badge {
+    background: rgba(255, 255, 255, 0.24);
+    color: inherit;
+  }
+  .cal-page.is-phone .gs-items .event-row.past {
+    opacity: 0.6;
+  }
+  .cal-page.is-phone .gs-items .event-row.past .event-time,
+  .cal-page.is-phone .gs-items .event-row.past .event-title {
+    color: inherit;
+  }
+  .cal-page.is-phone .gs-items .event-row.now {
+    box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--c, var(--tint-fill));
+  }
+  /* a deadline is a flag, not a block of time: outlined, not filled */
+  .cal-page.is-phone .gs-items .event-row.deadline {
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--line-2);
+  }
+  .cal-page.is-phone .agenda .agenda-gap {
+    padding-inline-start: 56px;
+    border-bottom: 0;
+  }
+  .cal-page.is-phone .gs-empty {
+    padding: 8px 10px;
+  }
 }

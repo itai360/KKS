@@ -48,6 +48,9 @@ export interface CalendarProps {
   onCreate: (d: { date: string; start: string | null; end: string | null }, at: Anchor) => void;
   onMove: (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }) => void;
   onPickDay: (date: string) => void;
+  /** a phone: the month as Google Calendar's app draws it - the whole screen, everything a small filled bar,
+   *  and a tap on a day opens that day */
+  compact?: boolean;
 }
 
 export function CalendarView(props: CalendarProps) {
@@ -65,11 +68,24 @@ function tip(i: CalItem): string {
   return [what, when, i.sub, i.overdue ? 'באיחור' : '', i.src.kind === 'external' ? `${i.src.e.sourceName} (Google)` : ''].filter(Boolean).join('\n');
 }
 
-function Chip({ item, lane, hourly, onOpen, draggable, onDragStart, onDragEnd, selected }: {
+/**
+ * Over already: drawn pale, as Google Calendar draws what is behind you ("reduce the brightness of past
+ * events"), so what is next stands out. Not what was called off (struck through instead), and not a late
+ * deadline (it stays red until it is done).
+ */
+function isPast(i: CalItem, today: string, nowMin: number): boolean {
+  if (i.faded || i.overdue) return false;
+  if (i.endDate < today) return true;
+  if (i.endDate > today || !i.start) return false;
+  return eventSpan(i.start, i.end).end <= nowMin;
+}
+
+function Chip({ item, lane, hourly, past, onOpen, draggable, onDragStart, onDragEnd, selected }: {
   item: CalItem;
   lane?: Lane<CalItem>;
   /** the month: an event with hours is a dot, its hour and its title - not a bar */
   hourly?: boolean;
+  past?: boolean;
   onOpen: (item: CalItem, el: HTMLElement) => void;
   draggable?: boolean;
   onDragStart?: (e: DragEvent) => void;
@@ -89,6 +105,7 @@ function Chip({ item, lane, hourly, onOpen, draggable, onDragStart, onDragEnd, s
         `k-${k}`,
         `c-${item.color}`,
         item.faded && 'is-faded',
+        past && 'is-past',
         item.overdue && 'is-overdue',
         lane?.cutStart && 'cut-start',
         lane?.cutEnd && 'cut-end',
@@ -330,7 +347,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
         </div>
         <div className="gc-allday" style={{ '--rows': Math.max(1, rows) } as CSSProperties} onClick={clickAllDay}>
           {fit.shown.map((l) => (
-            <Chip key={l.item.key} item={l.item} lane={l} onOpen={onOpen} selected={!!(bulk?.active && eventOf(l.item) && bulk.selected.has(eventOf(l.item)!.id))} />
+            <Chip key={l.item.key} item={l.item} lane={l} past={isPast(l.item, today, nowMin)} onOpen={onOpen} selected={!!(bulk?.active && eventOf(l.item) && bulk.selected.has(eventOf(l.item)!.id))} />
           ))}
           {fit.more.map((n, i) =>
             n > 0 ? (
@@ -386,6 +403,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                   const short = p.end - p.start < 50;
                   const isDragged = !!e && drag?.kind !== 'create' && drag?.id === e.id;
                   const isNow = d === today && !item.faded && nowMin >= p.start && nowMin < p.end;
+                  const past = !isDragged && !item.faded && (d < today || (d === today && p.end <= nowMin));
                   const movable = !!e && canMove(e) && !bulk?.active;
                   const prep = e && e.taskTotal > 0 ? `הכנה ${e.taskDone}/${e.taskTotal}` : '';
                   const selected = !!(e && bulk?.selected.has(e.id));
@@ -400,6 +418,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                         short && 'is-short',
                         item.faded && 'is-faded',
                         isNow && 'is-now',
+                        past && 'is-past',
                         isDragged && 'is-dragging',
                         movable && 'is-movable',
                         p.col > 0 && 'is-overlap',
@@ -450,12 +469,15 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
 
 // ---------------- the month ----------------
 
-/** a row of a month's week: its height in rows of things, as the screen has room for */
+/** a row of a month's week: its height in rows of things, as the screen has room for (a phone's are smaller) */
 const ROW_PX = 22;
 const DAYNUM_PX = 26;
+const ROW_PX_PHONE = 17;
+const DAYNUM_PX_PHONE = 22;
 
-function MonthGrid({ date, today, items, draft, canCreate, canMove, onOpen, onCreate, onMove, onPickDay }: CalendarProps) {
+function MonthGrid({ date, today, nowTime, items, draft, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, compact = false }: CalendarProps) {
   const draftTitle = draft?.title?.trim() || '(ללא כותרת)';
+  const nowMin = eventSpan(nowTime, null).start;
   const bulk = useBulk();
   const weeks = monthWeeks(date);
   const month = date.slice(0, 7);
@@ -469,13 +491,13 @@ function MonthGrid({ date, today, items, draft, canCreate, canMove, onOpen, onCr
     if (!el || typeof ResizeObserver !== 'function') return;
     const measure = () => {
       const h = el.clientHeight / weeks.length;
-      setRows(Math.max(1, Math.floor((h - DAYNUM_PX - 4) / ROW_PX)));
+      setRows(Math.max(1, Math.floor((h - (compact ? DAYNUM_PX_PHONE : DAYNUM_PX) - 4) / (compact ? ROW_PX_PHONE : ROW_PX))));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [weeks.length]);
+  }, [weeks.length, compact]);
 
   const drop = (ev: DragEvent, day: string) => {
     ev.preventDefault();
@@ -486,9 +508,9 @@ function MonthGrid({ date, today, items, draft, canCreate, canMove, onOpen, onCr
   };
 
   return (
-    <div className="gc-month">
+    <div className={`gc-month${compact ? ' is-compact' : ''}`}>
       <div className="gc-month-head" aria-hidden="true">
-        {WEEKDAY_NAMES.map((n) => (
+        {(compact ? WEEKDAY_LETTERS : WEEKDAY_NAMES).map((n) => (
           <div key={n}>{n}</div>
         ))}
       </div>
@@ -528,18 +550,19 @@ function MonthGrid({ date, today, items, draft, canCreate, canMove, onOpen, onCr
               <div className="gc-week-fg" style={{ '--rows': rows } as CSSProperties}>
                 {w.map((d, i) => (
                   <button key={d} type="button" className={`gc-daynum${d === today ? ' is-today' : ''}${d.slice(0, 7) !== month ? ' is-out' : ''}`} style={{ gridColumn: i + 1 }} onClick={() => onPickDay(d)} aria-label={dayLabel(d, today)}>
-                    {Number(d.slice(8)) === 1 ? `${Number(d.slice(8))} ב${MONTH_NAMES[Number(d.slice(5, 7)) - 1]}` : Number(d.slice(8))}
+                    {Number(d.slice(8)) === 1 && !compact ? `1 ב${MONTH_NAMES[Number(d.slice(5, 7)) - 1]}` : Number(d.slice(8))}
                   </button>
                 ))}
                 {shown.map((l) => {
                   const e = eventOf(l.item);
-                  const movable = !!e && canMove(e) && !bulk?.active;
+                  const movable = !!e && canMove(e) && !bulk?.active && !compact;
                   return (
                     <Chip
                       key={l.item.key}
                       item={l.item}
                       lane={l}
-                      hourly
+                      hourly={!compact}
+                      past={isPast(l.item, today, nowMin)}
                       onOpen={onOpen}
                       selected={!!(e && bulk?.selected.has(e.id))}
                       draggable={movable}
@@ -557,8 +580,8 @@ function MonthGrid({ date, today, items, draft, canCreate, canMove, onOpen, onCr
                 })}
                 {more.map((n, i) =>
                   n > 0 ? (
-                    <button key={w[i]} type="button" className="gc-more" style={{ gridColumn: i + 1, gridRow: rows + 1 }} onClick={() => onPickDay(w[i])}>
-                      עוד {n}
+                    <button key={w[i]} type="button" className="gc-more" style={{ gridColumn: i + 1, gridRow: rows + 1 }} onClick={() => onPickDay(w[i])} aria-label={`עוד ${n}`}>
+                      {compact ? <bdi dir="ltr">+{n}</bdi> : `עוד ${n}`}
                     </button>
                   ) : null,
                 )}

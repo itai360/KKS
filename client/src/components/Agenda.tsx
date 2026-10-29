@@ -1,26 +1,19 @@
-// The schedule read day by day, from what the calendar apps people keep opening share: a strip of
-// the week with a dot for each thing on a day (Fantastical's DayTicker, Apple's week row), a month
-// with dots to jump by (Apple's month list), one running list of days (Google Calendar's Schedule
-// view), what goes on now and what comes next (the "Up Next" widgets), and adding an event by
-// writing one line (Fantastical, Google's quick add). The list's arithmetic is in lib/agenda.ts.
+// The schedule read day by day, as Google Calendar's Schedule view: one running list of days, each with
+// its date at the start and its events as rows; a month with dots to jump by; and what goes on now and
+// what comes next (the "Up Next" widgets). The list's arithmetic is in lib/agenda.ts.
 
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { MONTH_NAMES, monthWeeks } from '@shared/calendarGrid';
-import { addDays, diffDays, parseDateKey, shortDate, startOfWeek, weekdayName } from '@shared/dates';
-import { parseEventText, type ParsedEvent } from '@shared/eventParser';
-import type { EventDetail, ExternalEvent, ScheduleEvent, Task, Week } from '@shared/types';
+import { diffDays, parseDateKey, shortDate, weekdayName, weekdayOf } from '@shared/dates';
+import type { ExternalEvent, ScheduleEvent, Task, Week } from '@shared/types';
 import { endMinutes, inMinutes, leftMinutes, nowAndNext, type AgendaItem, type AgendaRow } from '../lib/agenda';
-import { api } from '../lib/api';
 import { finishedJustNow, leaveClass, useLeaving } from '../lib/leaving';
-import { emitLocalChange } from '../lib/realtime';
-import { useSession } from '../lib/session';
 import { BulkCheck, bulkClick, SwipeRow, useBulk } from './Bulk';
 import { DoneDrawer } from './DoneDrawer';
 import { Icon } from './Icon';
 import { usePeriodSwipe } from './periodSwipe';
 import { usePhonePicker } from './pickers';
-import { useToast } from './Toasts';
 import { openable } from './ui';
 
 export const WEEKDAY_LETTERS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'] as const;
@@ -37,76 +30,13 @@ export function dayLabel(date: string, today: string): string {
   return `${rel ? `${rel} · ` : ''}${weekdayName(date)} ${shortDate(date)}`;
 }
 
+/** Google's short forms for the side of the schedule: "ג׳", "אוק׳" */
+const WEEKDAY_SHORT = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'] as const;
+const MONTH_SHORT = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'] as const;
+/** a day's label, with its year when it is not this year's */
+const withYear = (d: string, today: string) => `${dayLabel(d, today)}${d.slice(0, 4) !== today.slice(0, 4) ? `.${d.slice(2, 4)}` : ''}`;
 const countLabel = (n: number) => (n === 1 ? 'אירוע אחד' : `${n} אירועים`);
 const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-
-// ---------------- the week as a strip of days ----------------
-
-/**
- * Seven days with a dot for each thing on them (three at most). A tap picks a day; the arrows - or a
- * swipe of the strip - go a week back or on.
- */
-export function WeekStrip({
-  date,
-  today,
-  inView,
-  load,
-  onPick,
-  onStep,
-}: {
-  /** the day picked: the strip shows its week */
-  date: string;
-  today: string;
-  /** the days the screen shows below (three in the 3-day view) */
-  inView: (d: string) => boolean;
-  load: (d: string) => number;
-  onPick: (d: string) => void;
-  onStep: (dir: 1 | -1) => void;
-}) {
-  const start = startOfWeek(date);
-  const swipe = useRef<HTMLDivElement>(null);
-  usePeriodSwipe(swipe, { enabled: usePhonePicker(), onStep });
-  return (
-    <div className="week-strip" role="group" aria-label="ימי השבוע">
-      <button type="button" className="ws-step" aria-label="השבוע הקודם" onClick={() => onStep(-1)}>
-        <Icon name="chevronRight" size={18} />
-      </button>
-      <div className="period-clip ws-clip">
-        <div className="ws-days period-swipe" ref={swipe}>
-          {WEEKDAY_LETTERS.map((letter, i) => {
-            const d = addDays(start, i);
-            const n = load(d);
-            return (
-              <button
-                key={d}
-                type="button"
-                className={`ws-day${d === date ? ' on' : ''}${inView(d) ? ' in-view' : ''}${d === today ? ' today' : ''}`}
-                aria-pressed={d === date}
-                aria-label={`${dayLabel(d, today)}${n ? `, ${countLabel(n)}` : ''}`}
-                onClick={() => onPick(d)}
-              >
-                <span className="ws-w" aria-hidden="true">
-                  {letter}
-                </span>
-                <span className="ws-n" aria-hidden="true">
-                  {Number(d.slice(8))}
-                </span>
-                <span className="ws-dots" aria-hidden="true">
-                  {Array.from({ length: Math.min(3, n) }, (_, k) => (
-                    <i key={k} />
-                  ))}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <button type="button" className="ws-step" aria-label="השבוע הבא" onClick={() => onStep(1)}>
-        <Icon name="chevronLeft" size={18} />
-      </button>
-    </div>
-  );
-}
 
 // ---------------- the month, with dots ----------------
 
@@ -241,140 +171,6 @@ export interface EventPrefill {
   ownerId?: number | null;
 }
 
-/**
- * "מטווח מחר 10-12 @שטח 30" and Enter: the event is in. What was read shows as it is typed (the
- * title, the day, the hours, the place, who is in charge), so nothing is made that was not meant;
- * without a time - or for more - the full form opens with what was read.
- */
-export function QuickAdd({
-  defaultDate,
-  today,
-  allowed,
-  onMore,
-  onAdded,
-}: {
-  /** the day open in the calendar: an event with no day written goes there */
-  defaultDate: string;
-  today: string;
-  /** may this person add an event on that day (with that owner) */
-  allowed: (date: string, ownerId: number | null) => boolean;
-  onMore: (p: EventPrefill) => void;
-  onAdded?: (e: ScheduleEvent) => void;
-}) {
-  const { users, userName } = useSession();
-  const toast = useToast();
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
-  const readId = useId();
-  const parsed: ParsedEvent | null = useMemo(() => (text.trim() ? parseEventText(text, { users, defaultDate }) : null), [text, users, defaultDate]);
-  const may = parsed ? allowed(parsed.date, parsed.ownerId) : true;
-  const prefill = (p: ParsedEvent): EventPrefill => ({ date: p.date, start: p.startTime ?? undefined, end: p.endTime, title: p.title, location: p.location, ownerId: p.ownerId });
-
-  const submit = async (ev?: FormEvent) => {
-    ev?.preventDefault();
-    if (!parsed?.title || !may || busy) return;
-    // an event needs its hour: the form asks for it, with the rest filled in
-    if (!parsed.startTime) {
-      onMore(prefill(parsed));
-      setText('');
-      return;
-    }
-    setBusy(true);
-    try {
-      const r = await api.post<EventDetail>('/api/events', {
-        date: parsed.date,
-        startTime: parsed.startTime,
-        endTime: parsed.endTime,
-        title: parsed.title,
-        location: parsed.location,
-        ownerId: parsed.ownerId,
-        notes: '',
-      });
-      emitLocalChange('events');
-      setText('');
-      toast({
-        title: `נוסף ללו"ז: ${parsed.title} · ${dayLabel(parsed.date, today)} ${parsed.startTime}`,
-        tone: 'green',
-        action: onAdded ? { label: 'פתיחה', run: () => onAdded(r.event) } : undefined,
-      });
-      input.current?.focus();
-    } catch (e) {
-      toast({ title: (e as Error).message, tone: 'red' });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className={`quick-add${parsed ? ' has-text' : ''}`}>
-      <form className="qa-field" onSubmit={(e) => void submit(e)}>
-        <Icon name="zap" size={17} />
-        <input
-          ref={input}
-          className="qa-input"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' && text) {
-              e.preventDefault();
-              e.stopPropagation();
-              setText('');
-            }
-          }}
-          placeholder='הוספה מהירה: "מטווח מחר 10-12 @שטח 30"'
-          aria-label="הוספה מהירה של אירוע - שם, יום, שעות, @מיקום ואחראי"
-          aria-describedby={readId}
-          enterKeyHint="done"
-          autoComplete="off"
-        />
-        {parsed && (
-          <button type="submit" className="btn btn-primary btn-sm" disabled={!parsed.title || !may || busy}>
-            {parsed.startTime ? 'הוספה' : 'המשך'}
-          </button>
-        )}
-      </form>
-      <div id={readId} className="qa-read" aria-live="polite">
-        {parsed ? (
-          <>
-            <span className={`qa-chip strong${parsed.title ? '' : ' warn'}`}>{parsed.title || 'חסר שם לפעילות'}</span>
-            <span className={`qa-chip${parsed.dateGiven ? '' : ' soft'}`}>
-              <Icon name="calendar" size={13} /> {dayLabel(parsed.date, today)}
-            </span>
-            <span className={`qa-chip${parsed.startTime ? '' : ' warn'}`}>
-              <Icon name="clock" size={13} /> {parsed.startTime ? `${parsed.startTime}${parsed.endTime ? ` - ${parsed.endTime}` : ''}` : 'בלי שעה - בוחרים בטופס'}
-            </span>
-            {parsed.location && (
-              <span className="qa-chip">
-                <Icon name="pin" size={13} /> {parsed.location}
-              </span>
-            )}
-            {parsed.ownerId && <span className="qa-chip">אחראי: {userName(parsed.ownerId)}</span>}
-            {!may && <span className="qa-chip bad">אין הרשאה להוסיף אירוע ביום הזה</span>}
-            {parsed.title && may && (
-              <button
-                type="button"
-                className="qa-more"
-                onClick={() => {
-                  onMore(prefill(parsed));
-                  setText('');
-                }}
-              >
-                עוד פרטים
-              </button>
-            )}
-          </>
-        ) : (
-          focused && <span className="qa-hint">שם, יום ושעות - ואפשר גם @מיקום ו"אחראי" עם שם. למשל: תדריך ביום שלישי ב-8 בבוקר @כיתה 4</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ---------------- the running list ----------------
 
 export interface AgendaProps {
@@ -395,7 +191,7 @@ export interface AgendaProps {
 
 /** where the list goes under what stays on top (the top bar, the strip of days) */
 function stickyLine(from: HTMLElement): number {
-  const strip = from.closest('.schedule-page')?.querySelector<HTMLElement>('.ws-sticky');
+  const strip = from.closest('.schedule-page')?.querySelector<HTMLElement>('.ws-sticky, .gph-bar');
   const top = document.querySelector<HTMLElement>('.topbar');
   return Math.max(strip?.getBoundingClientRect().bottom ?? 0, top?.getBoundingClientRect().bottom ?? 0);
 }
@@ -462,7 +258,7 @@ export function AgendaList({ rows, today, nowTime, weeks, canAddOn, onAdd, onOpe
             {weekHead && <WeekHead week={weekHead} />}
             {r.kind === 'gap' ? (
               <div className="agenda-gap" data-from={r.from} data-to={r.to}>
-                <span>{r.from === r.to ? dayLabel(r.from, today) : `${dayLabel(r.from, today)} - ${dayLabel(r.to, today)}`}</span>
+                <span>{r.from === r.to ? withYear(r.from, today) : `${withYear(r.from, today)} - ${withYear(r.to, today)}`}</span>
                 <span className="muted">· {onlyMine ? 'אין אירועים שלך' : 'אין אירועים'}</span>
                 <span className="grow" />
                 {canAddOn(r.from) && (
@@ -534,17 +330,9 @@ function AgendaDaySection({
   const events = items.filter((i) => i.kind === 'event').map((i) => i.e as ScheduleEvent);
   const live = isToday ? nowAndNext(events, today, nowTime) : null;
   const at = minutesOf(nowTime);
-  // today, what is over is out of the way - one line at the top that opens to it; one that ends while the
-  // page is open goes there (a moment, then folded). A deadline stays: what is still open is not over.
-  const liveNow = live?.now?.id;
-  const { over, rest } = useMemo(() => {
-    const ended = (it: AgendaItem) =>
-      isToday &&
-      (it.kind === 'event'
-        ? !it.e.allDay && it.e.id !== liveNow && endMinutes(it.e) <= at
-        : it.kind === 'external' && !!it.e.startTime && endMinutes({ startTime: it.e.startTime, endTime: it.e.endTime }) <= at);
-    return { over: items.filter(ended), rest: items.filter((it) => !ended(it)) };
-  }, [items, isToday, at, liveNow]);
+  // as Google's schedule: what is over today stays in the list, dimmed (each row knows it is past)
+  const over: AgendaItem[] = [];
+  const rest = items;
   // a deadline gone because its task was done here (its page, the bell) goes done too, then folds
   const leaving = useLeaving(
     rest,
@@ -564,22 +352,17 @@ function AgendaDaySection({
   // after the last thing of the day only once it is over: an event still going on shows now itself
   const nowLast = isToday && rows.length > 0 && nowAt === -1 && !live?.now;
   const row = (it: AgendaItem) => <ItemRow key={it.key} it={it} date={date} today={today} at={at} live={live} onOpen={onOpen} onOpenExternal={onOpenExternal} onOpenTask={onOpenTask} />;
+  const { month, day } = parseDateKey(date);
+  const label = [count ? countLabel(count) : '', dueCount ? (dueCount === 1 ? 'דד-ליין אחד' : `${dueCount} דד-ליינים`) : ''].filter(Boolean).join(', ');
   return (
-    <section className={`agenda-day${isToday ? ' is-today' : ''}${date < today ? ' is-past' : ''}`} data-day={date} aria-labelledby={`ad-${date}`}>
-      <h3 className="agenda-dayhead" id={`ad-${date}`}>
-        <span className="ad-name">{relDay(date, today) ?? weekdayName(date)}</span>
-        <span className="ad-date">{relDay(date, today) ? `${weekdayName(date)} ${shortDate(date)}` : shortDate(date)}</span>
-        <span className="grow" />
-        <span className="ad-count">
-          {[count ? countLabel(count) : '', dueCount ? (dueCount === 1 ? 'דד-ליין אחד' : `${dueCount} דד-ליינים`) : ''].filter(Boolean).join(' · ')}
-        </span>
-        {canAdd && (
-          <button type="button" className="icon-btn agenda-add" aria-label={`אירוע חדש ב${dayLabel(date, today)}`} title="אירוע חדש" onClick={onAdd}>
-            <Icon name="plus" size={16} />
-          </button>
-        )}
+    <section className={`agenda-day gs-day${isToday ? ' is-today' : ''}${date < today ? ' is-past' : ''}`} data-day={date} aria-labelledby={`ad-${date}`}>
+      {/* the day as Google's schedule has it: its date on the side - the weekday small, the day of the month large */}
+      <h3 className="gs-date" id={`ad-${date}`} aria-label={`${dayLabel(date, today)}${label ? `, ${label}` : ''}`}>
+        <span className="gs-wd">{WEEKDAY_SHORT[weekdayOf(date)]}</span>
+        <span className="gs-num">{day}</span>
+        <span className="gs-mon">{MONTH_SHORT[month - 1]}</span>
       </h3>
-      <div className="card agenda-items">
+      <div className="agenda-items gs-items">
         {over.length > 0 && (
           <DoneDrawer row id="agenda-earlier" count={over.length} label="מוקדם יותר היום">
             {over.map(row)}
@@ -588,14 +371,10 @@ function AgendaDaySection({
         {over.length > 0 && !rows.length ? (
           <div className="agenda-empty">אין עוד אירועים היום</div>
         ) : items.length === 0 ? (
-          <div className="agenda-empty">
+          <button type="button" className="agenda-empty gs-empty" onClick={canAdd ? onAdd : undefined} disabled={!canAdd}>
             {`אין אירועים${onlyMine ? ' שלך' : ''}${isToday ? ' היום' : ''}`}
-            {canAdd && (
-              <button type="button" className="btn btn-sm" onClick={onAdd}>
-                <Icon name="plus" size={15} /> אירוע
-              </button>
-            )}
-          </div>
+            {canAdd && <span className="gs-empty-add">· הוספה</span>}
+          </button>
         ) : (
           rows.flatMap((it, i) => {
             const one = (
@@ -670,14 +449,15 @@ export function CourseEventRow({
   return (
     <SwipeRow itemId={e.id} label={e.title}>
       <div
-        className={`event-row${e.cancelled ? ' cancelled' : ''}${now ? ' now' : ''}${past ? ' past' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`}
+        className={`event-row c-${e.color || 'blue'}${e.cancelled ? ' cancelled' : ''}${now ? ' now' : ''}${past ? ' past' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`}
         {...openable(bulkClick(bulk, e.id, onOpen))}
       >
+        <span className="gs-dot" aria-hidden="true" />
         <div className={`event-time${e.allDay ? ' small' : ''}`}>
           <BulkCheck id={e.id} />
           {e.allDay ? 'כל היום' : e.startTime}
-          {!e.allDay && e.endTime && <span className="end">עד {e.endTime}</span>}
-          {e.allDay && e.endDate && e.endDate !== e.date && <span className="end">עד {shortDate(e.endDate)}</span>}
+          {!e.allDay && e.endTime && <span className="end"> – {e.endTime}</span>}
+          {e.allDay && e.endDate && e.endDate !== e.date && <span className="end"> עד {shortDate(e.endDate)}</span>}
         </div>
         <div style={{ minWidth: 0 }}>
           <div className="event-title">
@@ -718,10 +498,11 @@ export function CourseEventRow({
 /** An event of a connected Google calendar: read-only, so it only opens its details. */
 export function ExternalRow({ x, past, onOpen }: { x: ExternalEvent; past?: boolean; onOpen: () => void }) {
   return (
-    <div className={`event-row external${past ? ' past' : ''}`} {...openable(onOpen)}>
+    <div className={`event-row external c-teal${past ? ' past' : ''}`} {...openable(onOpen)}>
+      <span className="gs-dot" aria-hidden="true" />
       <div className={`event-time${x.startTime ? '' : ' small'}`}>
         {x.startTime ?? 'כל היום'}
-        {x.endTime && <span className="end">עד {x.endTime}</span>}
+        {x.endTime && <span className="end"> – {x.endTime}</span>}
       </div>
       <div style={{ minWidth: 0 }}>
         <div className="event-title">{x.title}</div>
@@ -744,9 +525,10 @@ function DeadlineRow({ t, time, onOpen }: { t: Task; time: string; onOpen: () =>
   const done = t.status === 'done';
   return (
     <div className={`event-row deadline${t.overdue ? ' overdue' : ''}${done ? ' done' : ''}`} {...openable(onOpen)}>
-      <div className="event-time">
-        <Icon name={done ? 'check' : 'flag'} size={13} /> {time}
-      </div>
+      <span className="gs-dot gs-flag" aria-hidden="true">
+        <Icon name={done ? 'check' : 'flag'} size={12} />
+      </span>
+      <div className="event-time">{time}</div>
       <div style={{ minWidth: 0 }}>
         <div className="event-title">{t.title}</div>
         <div className="task-meta dotted">

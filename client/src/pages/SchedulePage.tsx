@@ -29,8 +29,8 @@ import {
 } from '@shared/calendarLayers';
 import { addDays, diffDays, isDateKey, parseDateKey, shortDate, startOfWeek, weekdayName } from '@shared/dates';
 import type { Absence, CalendarSource, Debrief, EventDetail, Experience, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
-import { AgendaList, MonthDots, QuickAdd, scrollToDay, WeekStrip } from '../components/Agenda';
-import { BulkScope, BulkToggle, useBulk } from '../components/Bulk';
+import { AgendaList, MonthDots, scrollToDay } from '../components/Agenda';
+import { BulkScope, useBulk } from '../components/Bulk';
 import { CalendarView, YearGrid, type GridView } from '../components/CalendarView';
 import { ContextPanel, PanelStrip } from '../components/ContextPanel';
 import { KindBadge, PriorLessons } from '../components/DebriefBits';
@@ -45,7 +45,8 @@ import { useNewTask } from '../components/NewTask';
 import { QuickCreate, type Draft } from '../components/QuickCreate';
 import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, ErrorBox, Field, Loading, Modal, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, ErrorBox, Field, Loading, Modal, Seg, TimeInput } from '../components/ui';
+import { Sheet } from '../components/pickers';
 import { agendaDays, endMinutes, foldQuiet, isMine, type AgendaRow } from '../lib/agenda';
 import { api } from '../lib/api';
 import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
@@ -95,6 +96,8 @@ const VIEW_CODES: Record<string, CalView> = {
   KeyY: 'year',
   Digit6: 'year',
 };
+/** each view's mark in a phone's menu of views */
+const VIEW_ICONS: Record<CalView, string> = { agenda: 'menu', day: 'calendar', three: 'board', four: 'board', week: 'board', month: 'apps', year: 'apps' };
 const VIEW_STEP: Record<CalView, string> = { agenda: 'שבוע', day: 'יום', three: '3 ימים', four: '4 ימים', week: 'שבוע', month: 'חודש', year: 'שנה' };
 
 const earliest = (a: string[]) => a.reduce((m, x) => (x < m ? x : m));
@@ -121,6 +124,39 @@ function nextHour(): { start: string; end: string } {
 /** the middle of the screen, for a card opened by the keyboard or from a list */
 const middle = (): Anchor => ({ top: innerHeight / 2 - 120, bottom: innerHeight / 2 - 120, left: innerWidth / 2, right: innerWidth / 2 });
 
+/**
+ * The running list goes on by itself, as Google's schedule: a week more as its end comes into sight - and
+ * a button for whoever moves by the keyboard.
+ */
+function MoreOnScroll({ onMore, done }: { onMore: () => void; done: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const asked = useRef(false);
+  const fn = useRef(onMore);
+  fn.current = onMore;
+  // only as the list is scrolled to its end: a short list (empty days) does not load a year by itself
+  useEffect(() => {
+    if (done) return;
+    const onScroll = () => {
+      const se = document.scrollingElement;
+      if (asked.current || !se || se.scrollHeight <= innerHeight + 40) return;
+      if (window.scrollY + innerHeight >= se.scrollHeight - 500) {
+        asked.current = true;
+        fn.current();
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [done]);
+  if (done) return null;
+  return (
+    <div ref={ref} className="agenda-more-wrap no-print">
+      <button type="button" className="btn btn-sm agenda-more" onClick={() => fn.current()}>
+        <Icon name="chevronDown" size={16} /> עוד ימים
+      </button>
+    </div>
+  );
+}
+
 /** the selection of the events shown, started from the view's menu in the top bar */
 function BulkBridge({ onReady }: { onReady: (toggle: (() => void) | null) => void }) {
   const bulk = useBulk();
@@ -146,14 +182,15 @@ export function SchedulePage() {
   usePageTitle('לו"ז');
   useTick(60_000);
 
-  const set = (patch: Record<string, string | null>) => {
+  /** to another day or view: in place - or, opening a day from the month or a week (`push`), a step that "back" returns from */
+  const set = (patch: Record<string, string | null>, push = false) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries(patch)) {
       if (v === null) next.delete(k);
       else next.set(k, v);
     }
     next.delete('new');
-    setParams(next, { replace: true });
+    setParams(next, { replace: !push });
   };
 
   // the day: back where it was left in this tab - moving through other screens and back keeps it
@@ -186,9 +223,13 @@ export function SchedulePage() {
   const focus = view === 'agenda' && focusFor.date === date ? focusFor.day : date;
   // the month to jump by on a phone, under the title
   const [pickerOpen, setPickerOpen] = useState(false);
+  // a phone's menus, as sheets from below (Google Calendar's app keeps the views in its menu)
+  const [sheet, setSheet] = useState<'views' | 'more' | null>(null);
+  const viewBtn = useRef<HTMLButtonElement>(null);
+  const moreBtn = useRef<HTMLButtonElement>(null);
   const [miniFor, setMiniFor] = useState<{ day: string; month: string } | null>(null);
   const miniMonth = miniFor?.day === focus ? miniFor.month : focus;
-  const miniShown = phone && (pickerOpen || view === 'month');
+  const miniShown = phone && pickerOpen && view !== 'month';
 
   const shown = view === 'agenda' ? [] : viewDays(view, date);
   const needed = view === 'agenda' ? [startOfWeek(date), addDays(startOfWeek(agendaTo), 6)] : [shown[0], shown[shown.length - 1], ...(phone ? viewDays('week', date) : [])];
@@ -298,9 +339,6 @@ export function SchedulePage() {
   const leadOn = (d: string) => weekOf(d)?.leadId === user.id;
   const canAdd = !viewing && (isCommander || week?.leadId === user.id);
   const canAddOn = (d: string) => !viewing && (isCommander || leadOn(d));
-  // as the server has it: the commander, the week's lead - or anyone, for an event in their own charge
-  const mayAdd = (d: string, ownerId: number | null) => canAddOn(d) || (!viewing && ownerId === user.id);
-  const canQuick = !viewing && (isCommander || weeks.some((w) => w.leadId === user.id));
   const canManage = (e: ScheduleEvent) => !viewing && (isCommander || e.ownerId === user.id || leadOn(e.date));
   const nowTime = fmtTime(new Date().toISOString());
 
@@ -320,7 +358,7 @@ export function SchedulePage() {
   }, [asked]);
 
   const swipeArea = useRef<HTMLDivElement>(null);
-  const grid = view !== 'agenda' && view !== 'year' && !(phone && view === 'month');
+  const grid = view !== 'agenda' && view !== 'year';
   usePeriodSwipe(swipeArea, { enabled: phone && grid, onStep: step });
 
   // t: today, j/k: next/previous, d/w/m/x/a/y or 1-6: the views, c: a new event, g: a day to go to
@@ -355,21 +393,17 @@ export function SchedulePage() {
   }, [events, externalEvents]);
   const rows: AgendaRow[] = useMemo(() => {
     if (view === 'agenda') return foldQuiet(agendaDays(date, span, events, externalEvents, taskList, deadlineAt), new Set([today, date]));
-    if (phone && view === 'month') return agendaDays(date, 1, events, externalEvents, taskList, deadlineAt).map((d) => ({ kind: 'day' as const, ...d }));
     return [];
-  }, [view, phone, date, span, events, externalEvents, taskList, today]);
-  const listed = view === 'agenda' ? (d: string) => d >= date && d <= agendaTo : phone && view === 'month' ? (d: string) => d === date : (d: string) => shown.includes(d);
+  }, [view, date, span, events, externalEvents, taskList, today]);
+  const listed = view === 'agenda' ? (d: string) => d >= date && d <= agendaTo : (d: string) => shown.includes(d);
   const bulkIds = events.filter((e) => listed(e.date)).map((e) => e.id);
   const onToday = view === 'agenda' ? date === today && focus === today : view === 'day' ? date === today : view === 'year' ? date.slice(0, 4) === today.slice(0, 4) : listed(today);
   const title = view === 'agenda' ? viewTitle('day', focus) : viewTitle(view, date);
   const stripDate = view === 'agenda' ? focus : date;
-  // a phone's title is the month: a tap on it opens the month to jump by
-  const phoneTitle = phone && view !== 'month';
   const monthName = (d: string) => {
     const { year, month } = parseDateKey(d);
     return `${MONTH_NAMES[month - 1]}${year !== Number(today.slice(0, 4)) ? ` ${year}` : ''}`;
   };
-  const inView = (d: string) => (view === 'agenda' || view === 'month' ? d === stripDate : shown.includes(d));
   const monthPick = (d: string) => {
     setPickerOpen(false);
     goTo(d);
@@ -535,7 +569,6 @@ export function SchedulePage() {
   );
   const list = (
     <>
-      {canQuick && <QuickAdd defaultDate={focus} today={today} allowed={mayAdd} onMore={(p) => setCreating(p)} onAdded={openEvent} />}
       {loading ? (
         <div className="card card-body">
           <Loading rows={5} />
@@ -543,11 +576,7 @@ export function SchedulePage() {
       ) : (
         <div ref={listRef}>
           {agenda}
-          {view === 'agenda' && (
-            <button type="button" className="btn agenda-more no-print" onClick={() => setMore({ date, days: span + 7 })}>
-              <Icon name="chevronDown" size={16} /> עוד שבוע
-            </button>
-          )}
+          {view === 'agenda' && <MoreOnScroll key={`${date}:${span}`} onMore={() => setMore({ date, days: Math.min(span + 7, 366) })} done={span >= 366} />}
         </div>
       )}
     </>
@@ -562,22 +591,9 @@ export function SchedulePage() {
         today={today}
         items={items}
         weeks={on('weeks') ? weeks : []}
-        onPickDay={(d) => set({ date: d === today ? null : d, view: 'day', event: null })}
-        onPickMonth={(m) => set({ date: m, view: 'month', event: null })}
+        onPickDay={(d) => set({ date: d === today ? null : d, view: 'day', event: null }, true)}
+        onPickMonth={(m) => set({ date: m, view: 'month', event: null }, true)}
       />
-    ) : phone && view === 'month' ? (
-      <>
-        <div className="card mdots-card">
-          <MonthDots month={date} selected={date} today={today} load={loadOf} onPick={(d) => set({ date: d === today ? null : d, event: null })} onStep={step} />
-        </div>
-        {loading ? (
-          <div className="card card-body">
-            <Loading rows={3} />
-          </div>
-        ) : (
-          agenda
-        )}
-      </>
     ) : loading ? (
       <div className="card card-body">
         <Loading rows={6} />
@@ -596,7 +612,7 @@ export function SchedulePage() {
             draft={draft ? { date: draft.date, start: draft.allDay ? null : (draft.start ?? null), end: draft.end ?? null, title: draft.title, color: draft.color } : null}
             allDayOpen={prefs.allDayOpen}
             onAllDayToggle={() => setCalendarPrefs((p) => ({ allDayOpen: !p.allDayOpen }))}
-            canCreate={() => !viewing}
+            canCreate={() => !viewing && !(phone && view === 'month')}
             canMove={canManage}
             onOpen={openItem}
             onCreate={(d, at) => {
@@ -604,7 +620,8 @@ export function SchedulePage() {
               setDraft({ date: d.date, start: d.start ?? undefined, end: d.end, allDay: d.start === null, endDate: d.date, anchor: at });
             }}
             onMove={(e, to) => void move(e, to)}
-            onPickDay={(d) => set({ date: d, view: 'day', event: null })}
+            onPickDay={(d) => set({ date: d === today ? null : d, view: 'day', event: null }, true)}
+            compact={phone}
           />
         </div>
       </div>
@@ -625,70 +642,81 @@ export function SchedulePage() {
     >
       <BulkBridge onReady={(fn) => void (bulkToggle.current = fn)} />
       <div
-        className={`page schedule-page cal-page view-${view}${phone ? ' is-phone' : ' is-desk'}${phone && view !== 'month' && !pickerOpen ? ' has-strip' : ''}${!phone && prefs.panel ? ' has-panel' : ''}`}
+        className={`page schedule-page cal-page view-${view}${phone ? ' is-phone' : ' is-desk'}${phone ? ' has-strip' : ''}${!phone && prefs.panel ? ' has-panel' : ''}`}
         onPointerDownCapture={(e) => void (lastDown.current = { top: e.clientY - 10, bottom: e.clientY + 10, left: e.clientX - 10, right: e.clientX + 10 })}
       >
         {phone ? (
           <>
-            <PageHead
-              eyebrow={phoneTitle ? `לו"ז${week ? ` · ${week.name}` : ''}` : week?.name}
-              title={
-                phoneTitle ? (
-                  // the month, in the title's own font - a tap on it (or on its arrow) opens the month to jump by
-                  <span className="cal-month-title" onClick={() => setPickerOpen((o) => !o)}>
-                    {monthName(stripDate)}
-                    <button
-                      type="button"
-                      className="icon-btn cal-month-btn"
-                      aria-expanded={pickerOpen}
-                      aria-label={pickerOpen ? 'סגירת החודש' : 'בחירת יום מהחודש'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPickerOpen((o) => !o);
-                      }}
-                    >
-                      <Icon name="chevronDown" size={20} />
-                    </button>
-                  </span>
-                ) : (
-                  'לו"ז'
-                )
-              }
-              docTitle='לו"ז'
-              actions={
-                <>
-                  {canAdd && <BulkToggle />}
-                  <button className="btn" onClick={() => setGoogle(true)}>
-                    <Icon name="calendar" /> יומן Google
-                  </button>
-                  <button className="btn" onClick={() => window.print()}>
-                    <Icon name="print" /> הדפסה
-                  </button>
-                  {!viewing && (
-                    <button className="btn btn-primary" onClick={() => createHere()}>
-                      <Icon name="plus" /> אירוע
-                    </button>
-                  )}
-                </>
-              }
-            />
-            <div className="cal-toolbar">
-              <Seg value={view} options={PHONE_VIEWS.map((v) => ({ value: v, label: VIEW_LABELS[v] }))} onChange={setView} />
+            {/* the title of the days is in the bar below; this names the screen for screen readers */}
+            <h1 className="sr-only">לו"ז - {title}</h1>
+            {/* Google Calendar's app bar: the month (a tap opens it), today, the views, and more */}
+            <div className="gph-bar">
+              <button type="button" className="gph-title" aria-expanded={view === 'month' ? undefined : pickerOpen} onClick={() => view !== 'month' && setPickerOpen((o) => !o)}>
+                <span>{monthName(stripDate)}</span>
+                {view !== 'month' && <Icon name="chevronDown" size={20} className={`gph-chev${pickerOpen ? ' is-open' : ''}`} />}
+              </button>
               <span className="grow" />
-              <button className="btn btn-sm" onClick={goToday} disabled={onToday}>
-                היום
+              <button type="button" className="icon-btn gph-today" onClick={goToday} disabled={onToday} aria-label="מעבר להיום" title="היום">
+                <span className="gph-today-num">{Number(today.slice(8, 10))}</span>
+              </button>
+              <button ref={viewBtn} type="button" className="icon-btn gph-btn" onClick={() => setSheet('views')} aria-label={`תצוגה: ${VIEW_LABELS[view]}`} title="תצוגה">
+                <Icon name={VIEW_ICONS[view]} size={22} />
+              </button>
+              <button ref={moreBtn} type="button" className="icon-btn gph-btn" onClick={() => setSheet('more')} aria-label="עוד" title="עוד">
+                <Icon name="moreVertical" size={22} />
               </button>
             </div>
-            {view !== 'month' &&
-              (pickerOpen ? (
-                <div className="card mdots-card">
-                  <MonthDots month={miniMonth} selected={stripDate} today={today} load={loadOf} onPick={monthPick} onStep={monthStep} />
-                </div>
-              ) : (
-                <div className="ws-sticky">
-                  <WeekStrip date={stripDate} today={today} inView={inView} load={loadOf} onPick={goTo} onStep={(dir) => goTo(addDays(stripDate, 7 * dir))} />
-                </div>
-              ))}
+            <Sheet open={sheet === 'views'} title="תצוגה" back={viewBtn} onClose={() => setSheet(null)} className="gph-sheet">
+              <div className="gph-list" role="menu">
+                {PHONE_VIEWS.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={v === view}
+                    className={`gph-item${v === view ? ' on' : ''}`}
+                    onClick={() => {
+                      setSheet(null);
+                      setView(v);
+                    }}
+                  >
+                    <Icon name={VIEW_ICONS[v]} size={22} />
+                    <span className="grow">{VIEW_LABELS[v]}</span>
+                    {v === view && <Icon name="check" size={20} />}
+                  </button>
+                ))}
+              </div>
+            </Sheet>
+            <Sheet open={sheet === 'more'} title="עוד" back={moreBtn} onClose={() => setSheet(null)} className="gph-sheet">
+              <div className="gph-list" role="menu">
+                {[
+                  { label: 'מעבר לתאריך', icon: 'goto', run: () => setAskDate(true) },
+                  ...(canAdd ? [{ label: 'בחירת אירועים לפעולה משותפת', icon: 'check', run: () => bulkToggle.current?.() }] : []),
+                  { label: 'יומן Google', icon: 'calendar', run: () => setGoogle(true) },
+                  { label: 'אשפה', icon: 'trash', run: () => navigate('/trash') },
+                  { label: 'הדפסה', icon: 'print', run: () => window.print() },
+                ].map((m) => (
+                  <button
+                    key={m.label}
+                    type="button"
+                    role="menuitem"
+                    className="gph-item"
+                    onClick={() => {
+                      setSheet(null);
+                      m.run();
+                    }}
+                  >
+                    <Icon name={m.icon} size={22} />
+                    <span className="grow">{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            </Sheet>
+            {view !== 'month' && pickerOpen && (
+              <div className="card mdots-card gph-month">
+                <MonthDots month={miniMonth} selected={stripDate} today={today} load={loadOf} onPick={monthPick} onStep={monthStep} />
+              </div>
+            )}
             {prefs.onlyMine && (
               <div className="mine-bar" role="status">
                 <Icon name="my" size={15} />
