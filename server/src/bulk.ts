@@ -64,7 +64,7 @@ const OPS: Record<string, Record<string, Op>> = {
     restore: { run: (a, id) => restoreEvent(a, id) },
     shift: {
       run: (a, id, v) => {
-        const date = db().get<{ date: string }>('SELECT date FROM events WHERE id = ?', id)?.date;
+        const date = db().get<{ date: string }>('SELECT date FROM events WHERE id = ? AND deleted_at IS NULL', id)?.date;
         if (!date) throw badRequest('האירוע לא נמצא');
         updateEvent(a, id, { date: addDays(date, days(v)) });
       },

@@ -33,7 +33,7 @@ export function morningBrief(now: Date): number {
       u.id,
     )!;
     const events = db().all<{ start_time: string; title: string }>(
-      'SELECT start_time, title FROM events WHERE owner_id = ? AND date = ? AND cancelled = 0 ORDER BY start_time',
+      'SELECT start_time, title FROM events WHERE owner_id = ? AND date = ? AND cancelled = 0 AND deleted_at IS NULL ORDER BY start_time',
       u.id,
       today,
     );

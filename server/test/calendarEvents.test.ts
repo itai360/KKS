@@ -9,7 +9,7 @@ beforeEach(async () => {
 });
 
 const ev = (body: Record<string, unknown>) => ({ startTime: '08:00', title: 'פעילות', ...body });
-const list = async (from: string, to: string) => (await c.cmd.get(`/api/events?from=${from}&to=${to}`)).body as { id: number; title: string; date: string; endDate: string | null; allDay: boolean; color: string | null; seriesId: number | null; startTime: string; endTime: string | null }[];
+const list = async (from: string, to: string) => (await c.cmd.get(`/api/events?from=${from}&to=${to}`)).body as { id: number; title: string; date: string; endDate: string | null; allDay: boolean; color: string | null; seriesId: number | null; recurrence?: string | null; startTime: string; endTime: string | null }[];
 
 describe('the calendar: an event all day, over several days, in a colour', () => {
   it('keeps an all-day event of several days, and lists it on every day it runs into', async () => {
@@ -69,10 +69,11 @@ describe('the calendar: a repeating event', () => {
     const series = all[0].seriesId;
     expect(series).toBeTruthy();
     expect(all.every((x) => x.seriesId === series && x.startTime === '07:30' && x.title === 'מסדר בוקר')).toBe(true);
-    // each its own: its own activity log line, one for the series
+    // one activity log line for the series, its rule in words as Google says it
     const log = db().all<{ text: string }>("SELECT text FROM activity WHERE action = 'event_created'");
     expect(log).toHaveLength(1);
-    expect(log[0].text).toContain('4 אירועים');
+    expect(log[0].text).toContain('כל שבוע ביום שני, עד 26 באוקטובר 2026');
+    expect(all[0].recurrence).toBe('FREQ=WEEKLY;UNTIL=20261026');
     // working days: Sunday to Thursday
     await c.cmd.post('/api/events', ev({ date: '2026-11-01', title: 'שיחת בוקר', repeat: { freq: 'weekdays', until: '2026-11-10' } }));
     expect((await list('2026-11-01', '2026-11-10')).filter((x) => x.title === 'שיחת בוקר').map((x) => x.date)).toEqual(['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-08', '2026-11-09', '2026-11-10']);
@@ -88,9 +89,14 @@ describe('the calendar: a repeating event', () => {
     const r = await c.cmd.patch(`/api/events/${b.id}`, { startTime: '07:00', date: '2026-10-13', scope: 'following' });
     expect(r.status).toBe(200);
     expect((await list('2026-10-01', '2026-10-31')).map((x) => `${x.date} ${x.startTime}`)).toEqual(['2026-10-05 07:30', '2026-10-13 07:00', '2026-10-20 07:00', '2026-10-27 07:00']);
-    // all of it: a place for every one
+    // "this and following" split the series in two, as Google does: all of the later one gets a place
     await c.cmd.patch(`/api/events/${d.id}`, { location: 'רחבת המסדרים', scope: 'all' });
-    expect((await list('2026-10-01', '2026-10-31')).every((x) => (x as unknown as { location: string }).location === 'רחבת המסדרים')).toBe(true);
+    expect((await list('2026-10-01', '2026-10-31')).map((x) => (x as unknown as { location: string }).location)).toEqual(['', 'רחבת המסדרים', 'רחבת המסדרים', 'רחבת המסדרים']);
+    // a day renamed on its own keeps its name when the whole series is renamed (as Google keeps an exception)
+    const [, , third] = await list('2026-10-01', '2026-10-31');
+    await c.cmd.patch(`/api/events/${third.id}`, { title: 'מסדר מפקד' });
+    await c.cmd.patch(`/api/events/${d.id}`, { title: 'מסדר בוקר', scope: 'all' });
+    expect((await list('2026-10-01', '2026-10-31')).map((x) => x.title)).toEqual(['מסדר פתיחה', 'מסדר בוקר', 'מסדר מפקד', 'מסדר בוקר']);
   });
 
   it('deletes one event of a series, it and the later ones, or all of it', async () => {

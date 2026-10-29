@@ -131,7 +131,7 @@ export function attendanceHistory(cadetId: number, days = 60): AttendanceHistory
 
 /** a day of the course: something is on the schedule */
 function courseDay(date: string): boolean {
-  return !!db().get('SELECT 1 FROM events WHERE date = ? AND cancelled = 0', date);
+  return !!db().get("SELECT 1 FROM events WHERE date = ? AND cancelled = 0 AND deleted_at IS NULL AND calendar = 'course'", date);
 }
 
 /**

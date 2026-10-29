@@ -17,6 +17,7 @@ import { applyTemplate } from './templates';
 import { weeklyDebriefTasks } from './weeklyDebriefTask';
 import { experienceFeedbackTasks } from './cadets';
 import { ENTRY_KEEP_DAYS } from './entries';
+import { extendRecurrences, purgeOldTrash, sendEventReminders } from './schedule';
 
 export interface AutomationResult {
   overdue: number;
@@ -29,12 +30,13 @@ export interface AutomationResult {
   feedbackTasks: number;
   briefs: number;
   roll: number;
+  eventReminders: number;
 }
 
 export function runAutomation(): AutomationResult {
   const now = clock.now();
   const nowS = now.toISOString();
-  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, debriefTasks: 0, feedbackTasks: 0, briefs: 0, roll: 0 };
+  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, debriefTasks: 0, feedbackTasks: 0, briefs: 0, roll: 0, eventReminders: 0 };
 
   // 1. Deadline passed -> overdue (derived status) + alerts, once per deadline.
   for (const t of queryTasks("t.status NOT IN ('done', 'cancelled') AND t.overdue_notified = 0 AND t.deadline < ?", nowS)) {
@@ -158,6 +160,13 @@ export function runAutomation(): AutomationResult {
     console.error('[automation] roll call', e);
   }
 
+  // 10. The calendar's reminders: "in 30 minutes" to the people in an event (Google Calendar's notifications).
+  try {
+    res.eventReminders = db().tx(() => sendEventReminders(now));
+  } catch (e) {
+    console.error('[automation] event reminders', e);
+  }
+
   if (res.overdue || res.reminders24 || res.reminders2 || res.recurring || res.templates) changed('tasks', 'weeks');
   housekeeping(now);
   return res;
@@ -188,7 +197,16 @@ export function housekeeping(now: Date): number {
     removed += db().run('DELETE FROM automation_marks WHERE at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
     // a visitor's details, a week after the visit
     removed += db().run('DELETE FROM entry_requests WHERE visit_date < ?', addDays(today, -ENTRY_KEEP_DAYS)).changes;
+    // reminders sent for events long over
+    removed += db().run('DELETE FROM event_reminders_sent WHERE starts_at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
   });
+  // the calendar: what waited in the trash 30 days goes, and each repeating series grows a day ahead
+  try {
+    removed += purgeOldTrash(now);
+    extendRecurrences();
+  } catch (e) {
+    console.error('[automation] calendar housekeeping', e);
+  }
   return removed;
 }
 

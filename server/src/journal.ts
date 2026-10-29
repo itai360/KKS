@@ -87,7 +87,7 @@ interface NotificationRow {
 // ---------------- what is finished leaves the bell ----------------
 
 /** the news of something done (completed, approved, cancelled, closed, summed up): finished as it comes */
-const NEWS_OF_DONE = ['task_done', 'group_done', 'approved', 'cancelled', 'deleted', 'week_closed', 'week_approved', 'weekly_summary', 'event_cancelled', 'entry_sent'];
+const NEWS_OF_DONE = ['task_done', 'group_done', 'approved', 'cancelled', 'deleted', 'week_closed', 'week_approved', 'weekly_summary', 'event_cancelled', 'entry_sent', 'event_reminder', 'event_response'];
 /** the kinds about one task: once the task is gone (deleted, done, cancelled), so are they */
 const TASK_KINDS = [
   'task_assigned',
@@ -165,8 +165,10 @@ export const FINISHED = `coalesce((CASE
   WHEN n.type = 'debrief' AND n.link LIKE '/debriefs?new=weekly&week=%' THEN EXISTS (SELECT 1 FROM debriefs d WHERE d.kind = 'weekly' AND d.status = 'final' AND n.link = '/debriefs?new=weekly&week=' || d.week_id)
   WHEN n.type = 'week_lead' THEN NOT EXISTS (SELECT 1 FROM weeks w WHERE w.status <> 'closed' AND w.lead_id = n.user_id AND n.link = '/weeks/' || w.id)
   WHEN n.type = 'track_lead' THEN NOT EXISTS (SELECT 1 FROM tracks tr WHERE tr.lead_id = n.user_id AND n.link = '/tracks/' || tr.id)
-  WHEN n.type = 'event_owner' AND n.link LIKE '%&event=%' THEN NOT EXISTS (SELECT 1 FROM events e WHERE e.cancelled = 0 AND e.owner_id = n.user_id AND e.id = ${eventOf('n.link')})
-  WHEN n.type = 'event_changed' AND n.link LIKE '%&event=%' THEN NOT EXISTS (SELECT 1 FROM events e WHERE e.cancelled = 0 AND e.id = ${eventOf('n.link')})
+  WHEN n.type = 'event_owner' AND n.link LIKE '%&event=%' THEN NOT EXISTS (SELECT 1 FROM events e WHERE e.cancelled = 0 AND e.deleted_at IS NULL AND e.owner_id = n.user_id AND e.id = ${eventOf('n.link')})
+  WHEN n.type = 'event_changed' AND n.link LIKE '%&event=%' THEN NOT EXISTS (SELECT 1 FROM events e WHERE e.cancelled = 0 AND e.deleted_at IS NULL AND e.id = ${eventOf('n.link')})
+  WHEN n.type = 'event_invite' AND n.ref LIKE 'event:%' THEN NOT EXISTS (SELECT 1 FROM events e JOIN event_guests g ON g.event_id = e.id AND g.user_id = n.user_id
+    WHERE e.id = ${REF_ID} AND e.deleted_at IS NULL AND e.cancelled = 0 AND g.response = 'needsAction')
   WHEN n.ref LIKE 'attendance:%' THEN NOT EXISTS (SELECT 1 FROM cadets c WHERE c.status = 'active'
     AND (length(n.ref) <= 21 OR c.team_id = CAST(substr(n.ref, 23) AS INTEGER))
     AND NOT EXISTS (SELECT 1 FROM attendance att WHERE att.cadet_id = c.id AND att.date = substr(n.ref, 12, 10)))

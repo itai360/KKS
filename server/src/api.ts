@@ -35,6 +35,7 @@ import { deleteRule, listRules, saveRule } from './recurring';
 import { briefing, dashboard, dayEnd, lookAhead, myTasks, search, staffPage, team, weeklyReport } from './reports';
 import { streamHandler } from './realtime';
 import { v3Router } from './api3';
+import { gcalRouter } from './gcalApi';
 import { driveCallback, takpatzRouter } from './takpatzRoutes';
 import { newPassword } from './netguard';
 import { completeSignIn, disable, enable, issueTicket, recoveryLeft, regenerateRecovery, startSetup, turnOff } from './twofactor';
@@ -64,8 +65,13 @@ import {
   deleteEvent,
   eventDetail,
   listEventsFor,
+  listTrash,
+  purgeEvent,
+  respondEvent,
   restoreEvent,
+  RESPONSES,
   shiftEventTasks,
+  untrashEvent,
   updateEvent,
   SERIES_SCOPES,
   type SeriesScope,
@@ -637,8 +643,8 @@ export function apiRouter(): Router {
     return t;
   };
   const assertEventAttachable = (u: UserRow, eventId: number) => {
-    const e = db().get<{ id: number; date: string; owner_id: number | null; created_by: number | null; title: string }>(
-      'SELECT id, date, owner_id, created_by, title FROM events WHERE id = ?',
+    const e = db().get<{ id: number; date: string; owner_id: number | null; created_by: number | null; title: string; calendar: 'course' | 'personal'; guests_can_modify: number }>(
+      'SELECT id, date, owner_id, created_by, title, calendar, guests_can_modify FROM events WHERE id = ? AND deleted_at IS NULL',
       eventId,
     );
     if (!e) throw notFound('הפעילות לא נמצאה');
@@ -887,6 +893,16 @@ export function apiRouter(): Router {
     res.json(listEventsFor(me(req), from, to));
   });
   r.post('/events', (req, res) => res.json(eventDetail(me(req), createEvent(me(req), req.body))));
+  // the trash: what was deleted in the last 30 days, back again or gone for good
+  r.get('/events/trash', (req, res) => res.json(listTrash(me(req))));
+  r.post('/events/:id/untrash', (req, res) => res.json({ restored: untrashEvent(me(req), id(req.params.id)) }));
+  r.delete('/events/:id/forever', (req, res) => res.json({ deleted: purgeEvent(me(req), id(req.params.id)) }));
+  // a guest's answer: { response: 'accepted' | 'declined' | 'tentative', scope: 'one' | 'all' }
+  r.post('/events/:id/respond', (req, res) => {
+    const body = z.object({ response: z.enum(RESPONSES), scope: z.enum(['one', 'all']).optional() }).parse(req.body ?? {});
+    respondEvent(me(req), id(req.params.id), body.response, body.scope ?? 'one');
+    res.json(eventDetail(me(req), id(req.params.id)));
+  });
   r.get('/events/:id', (req, res) => res.json(eventDetail(me(req), id(req.params.id))));
   // one of a repeating series: { scope: 'following' | 'all' } takes the change to the rest of it
   r.patch('/events/:id', (req, res) => {
@@ -1024,6 +1040,8 @@ export function apiRouter(): Router {
     res.json({ unread: unreadCount(u.id) });
   });
 
+  // the calendar in the shape of the Google Calendar API
+  r.use('/calendar/v3', gcalRouter());
   r.use(v3Router());
   r.use(takpatzRouter());
 

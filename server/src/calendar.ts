@@ -16,7 +16,7 @@ import { badRequest, clock, getSettings, notFound, nowIso, tz, updateSettings } 
 import { readLimited, safeFetch } from './netguard';
 import { db } from './db';
 import { getFile, putFile, removeFile } from './files';
-import { listEvents } from './schedule';
+import { listEventsFor } from './schedule';
 import { queryTasks, type TaskRow } from './taskRepo';
 import { createWeek, inferWeekNumber, listWeeks, updateWeek } from './weeks';
 
@@ -96,6 +96,9 @@ function eventLines(e: ScheduleEvent, origin: string, zone: string, stamp: strin
     `DESCRIPTION:${escapeText(description)}`,
     `URL:${link}`,
     `STATUS:${e.cancelled ? 'CANCELLED' : 'CONFIRMED'}`,
+    // free (not "busy") and private, as Google reads them
+    ...(e.transparency === 'transparent' ? ['TRANSP:TRANSPARENT'] : []),
+    ...(e.visibility === 'private' ? ['CLASS:PRIVATE'] : []),
     'END:VEVENT',
   ];
 }
@@ -148,7 +151,10 @@ export function scheduleIcs(origin: string, user: UserRow): string {
     `X-WR-TIMEZONE:${zone}`,
     'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
     'X-PUBLISHED-TTL:PT1H',
-    ...listEvents(addDays(today, -60), addDays(today, 365)).flatMap((e) => eventLines(e, origin, zone, stamp)),
+    // the course's events, the person's own calendar's and those they are invited to - not the ones they declined
+    ...listEventsFor(user, addDays(today, -60), addDays(today, 365))
+      .filter((e) => e.myResponse !== 'declined')
+      .flatMap((e) => eventLines(e, origin, zone, stamp)),
     ...openTasksOf(user.id, today, zone).flatMap((t) => taskLines(t, origin, stamp)),
     'END:VCALENDAR',
   ];

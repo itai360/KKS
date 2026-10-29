@@ -861,7 +861,7 @@ FROM experiences x
 JOIN cadets c ON c.id = x.cadet_id
 LEFT JOIN teams tm ON tm.id = c.team_id
 LEFT JOIN weeks w ON w.id = x.week_id
-LEFT JOIN events e ON e.id = x.event_id
+LEFT JOIN events e ON e.id = x.event_id AND e.deleted_at IS NULL
 LEFT JOIN users m ON m.id = x.mentor_id
 LEFT JOIN users ev ON ev.id = x.evaluated_by
 LEFT JOIN users mk ON mk.id = x.marked_by

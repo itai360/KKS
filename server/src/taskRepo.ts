@@ -80,7 +80,7 @@ JOIN users o ON o.id = t.owner_id
 JOIN users c ON c.id = t.created_by
 LEFT JOIN weeks w ON w.id = t.week_id
 LEFT JOIN tracks tr ON tr.id = t.track_id
-LEFT JOIN events e ON e.id = t.event_id
+LEFT JOIN events e ON e.id = t.event_id AND e.deleted_at IS NULL
 LEFT JOIN cadets cd ON cd.id = t.cadet_id
 LEFT JOIN debriefs db ON db.id = t.debrief_id
 `;

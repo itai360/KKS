@@ -1229,6 +1229,123 @@ const SCHEMA_V50 = `
 ALTER TABLE calendar_sources ADD COLUMN color TEXT;
 `;
 
+// The calendar's events as Google Calendar keeps them (schedule.ts):
+// - a repeating event is a recurrence rule (RRULE: every N days/weeks/months/years, days of the week,
+//   "the last Thursday", until a day / N times / no end) with the days it skips; each of its days is a
+//   row of its own up to a rolling horizon, so preparation tasks, files and debriefs still belong to one
+//   day of it. A day changed alone is "detached": a change to the whole series passes it by.
+// - guests from the staff with their answers (yes / no / maybe), and what guests may do;
+// - reminders before it, and those already sent (each once);
+// - the calendar it is in (the course's, or one's own), busy or free, its visibility;
+// - the trash: a deleted event stays there 30 days and can be brought back.
+// The series of before (event_series) carry over as rules; every event keeps its meaning.
+function V51_GOOGLE_EVENTS(db: Db): void {
+  db.exec(`
+CREATE TABLE event_recurrences (
+  id INTEGER PRIMARY KEY,
+  rrule TEXT NOT NULL,
+  dtstart TEXT NOT NULL,
+  exdates TEXT NOT NULL DEFAULT '[]',
+  horizon TEXT NOT NULL,
+  template TEXT NOT NULL DEFAULT '{}',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT,
+  prev_rrule TEXT
+);
+ALTER TABLE events ADD COLUMN recurrence_id INTEGER REFERENCES event_recurrences(id) ON DELETE SET NULL;
+ALTER TABLE events ADD COLUMN original_date TEXT;
+ALTER TABLE events ADD COLUMN detached INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE events ADD COLUMN calendar TEXT NOT NULL DEFAULT 'course';
+ALTER TABLE events ADD COLUMN transparency TEXT NOT NULL DEFAULT 'opaque';
+ALTER TABLE events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'default';
+ALTER TABLE events ADD COLUMN reminders TEXT;
+ALTER TABLE events ADD COLUMN guests_can_modify INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE events ADD COLUMN guests_can_invite INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE events ADD COLUMN guests_can_see INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE events ADD COLUMN deleted_at TEXT;
+ALTER TABLE events ADD COLUMN deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX events_occurrence ON events(recurrence_id, original_date);
+CREATE INDEX events_deleted ON events(deleted_at);
+CREATE TABLE event_guests (
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  response TEXT NOT NULL DEFAULT 'needsAction' CHECK (response IN ('needsAction', 'accepted', 'declined', 'tentative')),
+  optional INTEGER NOT NULL DEFAULT 0,
+  responded_at TEXT,
+  PRIMARY KEY (event_id, user_id)
+);
+CREATE INDEX event_guests_user ON event_guests(user_id);
+CREATE TABLE event_reminders_sent (
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  minutes INTEGER NOT NULL,
+  starts_at TEXT NOT NULL,
+  sent_at TEXT NOT NULL,
+  PRIMARY KEY (event_id, user_id, minutes, starts_at)
+);
+`);
+  // the series of before, as rules: their days are all there already (each series had an end)
+  const series = db.all<{ id: number; freq: string; interval: number; until: string; created_by: number | null; created_at: string }>('SELECT * FROM event_series');
+  const WORKDAYS = 'SU,MO,TU,WE,TH';
+  const DAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+  for (const s of series) {
+    const rows = db.all<{ id: number; date: string; start_time: string; end_time: string | null; title: string; location: string; owner_id: number | null; notes: string; color: string | null; all_day: number; end_date: string | null }>(
+      'SELECT id, date, start_time, end_time, title, location, owner_id, notes, color, all_day, end_date FROM events WHERE series_id = ? ORDER BY date, id',
+      s.id,
+    );
+    if (!rows.length) continue;
+    const first = rows[0];
+    const weekday = DAY_CODES[new Date(`${first.date}T00:00:00Z`).getUTCDay()];
+    const parts = [`FREQ=${s.freq === 'daily' ? 'DAILY' : s.freq === 'monthly' ? 'MONTHLY' : 'WEEKLY'}`];
+    if (s.interval > 1 && s.freq !== 'weekdays') parts.push(`INTERVAL=${s.interval}`);
+    if (s.freq === 'weekdays') parts.push(`BYDAY=${WORKDAYS}`);
+    else if (s.freq === 'weekly') parts.push(`BYDAY=${weekday}`);
+    parts.push(`UNTIL=${s.until.replace(/-/g, '')}`);
+    const span = first.end_date ? Math.round((Date.parse(`${first.end_date}T00:00:00Z`) - Date.parse(`${first.date}T00:00:00Z`)) / 86_400_000) : 0;
+    const template = {
+      title: first.title,
+      location: first.location,
+      ownerId: first.owner_id,
+      notes: first.notes,
+      color: first.color,
+      allDay: !!first.all_day,
+      startTime: first.start_time,
+      endTime: first.end_time,
+      spanDays: span,
+      calendar: 'course',
+      transparency: 'opaque',
+      visibility: 'default',
+      reminders: null,
+      guests: [],
+      responses: {},
+      guestsCanModify: false,
+      guestsCanInvite: true,
+      guestsCanSee: true,
+    };
+    const last = rows[rows.length - 1].date;
+    const rec = db.run(
+      'INSERT INTO event_recurrences(rrule, dtstart, exdates, horizon, template, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      parts.join(';'),
+      first.date,
+      '[]',
+      s.until > last ? s.until : last,
+      JSON.stringify(template),
+      s.created_by,
+      s.created_at,
+      s.created_at,
+    ).id;
+    // two of a series moved to the same day before: the later one stays an event of its own
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (seen.has(r.date)) continue;
+      seen.add(r.date);
+      db.run('UPDATE events SET recurrence_id = ?, original_date = ? WHERE id = ?', rec, r.date, r.id);
+    }
+  }
+}
+
 // the team commander's takpatz (takpatz.ts): each cadet's goals, notes, third and rank; the experiences
 // planned week by week in the main plan and a second one; the tracking of each from its handing down to
 // its feedback; the course's catalog of experiences (the spreadsheet's planning by halves) and a short
@@ -1310,7 +1427,7 @@ CREATE TABLE google_drive_requests (
   DEFAULT_TAKPATZ_CATALOG.forEach((c, i) => db.run('INSERT INTO takpatz_catalog(half, kind, name, sort, created_at) VALUES (?, ?, ?, ?, ?)', c.half, c.kind, c.name, i, now));
 }
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50, V51_GOOGLE_EVENTS];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

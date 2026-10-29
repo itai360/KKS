@@ -90,7 +90,7 @@ function courseStats(): CourseStats {
     tasks: count('SELECT count(*) AS n FROM tasks WHERE parent_id IS NULL'),
     doneTasks: count("SELECT count(*) AS n FROM tasks WHERE parent_id IS NULL AND status = 'done'"),
     weeks: count('SELECT count(*) AS n FROM weeks'),
-    events: count('SELECT count(*) AS n FROM events'),
+    events: count('SELECT count(*) AS n FROM events WHERE deleted_at IS NULL'),
     cadets: count('SELECT count(*) AS n FROM cadets'),
     debriefs: count('SELECT count(*) AS n FROM debriefs'),
     lessons: count("SELECT count(*) AS n FROM debrief_items WHERE kind = 'lesson' AND horizon = 'next'"),

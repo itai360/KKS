@@ -71,7 +71,7 @@ SELECT d.*, coalesce(e.title, nullif(d.activity, '')) AS event_title, w.name AS 
   (SELECT count(*) FROM tasks t WHERE t.debrief_id = d.id AND t.status NOT IN ('done', 'cancelled')) AS open_tasks
 FROM debriefs d
 JOIN users c ON c.id = d.created_by
-LEFT JOIN events e ON e.id = d.event_id
+LEFT JOIN events e ON e.id = d.event_id AND e.deleted_at IS NULL
 LEFT JOIN weeks w ON w.id = d.week_id
 LEFT JOIN users f ON f.id = d.facilitator_id
 LEFT JOIN users sb ON sb.id = d.submitted_by
@@ -222,7 +222,7 @@ function weekRow(id: number): { id: number; number: number; name: string; goals:
 
 export function createDebrief(actor: UserRow, raw: z.input<typeof debriefSchema>): number {
   const d = debriefSchema.parse(raw);
-  if (d.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', d.eventId)) throw badRequest('הפעילות לא נמצאה');
+  if (d.eventId && !db().get('SELECT 1 FROM events WHERE id = ? AND deleted_at IS NULL', d.eventId)) throw badRequest('הפעילות לא נמצאה');
   if (d.facilitatorId && !getUserRow(d.facilitatorId)?.active) throw badRequest('מנחה התחקיר אינו פעיל');
   const week = isWeekDebrief(d.kind) && d.weekId ? weekRow(d.weekId) : null;
   if (isWeekDebrief(d.kind) && !week) throw badRequest('בחרו את השבוע שהתחקיר עוסק בו');
@@ -266,7 +266,7 @@ export function updateDebrief(actor: UserRow, id: number, raw: Partial<z.input<t
   const p = patchSchema(debriefSchema).extend({ status: z.enum(['draft', 'final']).optional() }).parse(raw);
   const occurredOn = p.occurredOn ?? cur.occurred_on;
   const eventId = p.eventId !== undefined ? p.eventId : cur.event_id;
-  if (p.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', p.eventId)) throw badRequest('הפעילות לא נמצאה');
+  if (p.eventId && !db().get('SELECT 1 FROM events WHERE id = ? AND deleted_at IS NULL', p.eventId)) throw badRequest('הפעילות לא נמצאה');
   // answers come per question: two people filling different parts of the form both keep theirs
   if (p.answers) checkPresenter(p.answers);
   const answers = p.answers ? { ...parseAnswers(cur.answers), ...tidyAnswers(cur.kind, p.answers) } : parseAnswers(cur.answers);
@@ -753,7 +753,7 @@ function reviewsFor(context: string): Map<number, LessonReview> {
 }
 
 function eventRow(id: number): { id: number; title: string; date: string; owner_id: number | null; week_id: number | null } {
-  const e = db().get<{ id: number; title: string; date: string; owner_id: number | null; week_id: number | null }>('SELECT id, title, date, owner_id, week_id FROM events WHERE id = ?', id);
+  const e = db().get<{ id: number; title: string; date: string; owner_id: number | null; week_id: number | null }>('SELECT id, title, date, owner_id, week_id FROM events WHERE id = ? AND deleted_at IS NULL', id);
   if (!e) throw notFound('הפעילות לא נמצאה');
   return e;
 }
@@ -958,7 +958,7 @@ export function learningReminders(now: Date): number {
   const rows = bankRows().filter((r) => r.target_week === null);
   if (rows.length) {
     const events = db().all<{ id: number; title: string; date: string; owner_id: number | null; week_id: number | null }>(
-      'SELECT id, title, date, owner_id, week_id FROM events WHERE cancelled = 0 AND date >= ? AND date <= ?',
+      "SELECT id, title, date, owner_id, week_id FROM events WHERE cancelled = 0 AND deleted_at IS NULL AND calendar = 'course' AND date >= ? AND date <= ?",
       today,
       addDays(today, 7),
     );

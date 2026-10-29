@@ -131,7 +131,7 @@ export function applyTemplate(actor: UserRow, templateId: number, raw: z.input<t
   const tpl = getTemplate(templateId);
   const event = input.eventId
     ? db().get<{ id: number; date: string; owner_id: number | null; week_id: number | null; title: string }>(
-        'SELECT id, date, owner_id, week_id, title FROM events WHERE id = ?',
+        'SELECT id, date, owner_id, week_id, title FROM events WHERE id = ? AND deleted_at IS NULL',
         input.eventId,
       )
     : undefined;

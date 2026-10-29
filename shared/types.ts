@@ -316,8 +316,37 @@ export interface ScheduleEvent {
   allDay?: boolean;
   /** its colour in the calendar (shared/calendarLayers.ts CAL_COLORS); missing: the course's blue */
   color?: string | null;
-  /** one of a repeating series of events (each a whole event of its own) */
+  /** one of a repeating series of events (each a whole event of its own): the series' id */
   seriesId?: number | null;
+  /** the series' rule, as Google Calendar keeps it (RRULE, e.g. "FREQ=WEEKLY;BYDAY=TH"), and in words */
+  recurrence?: string | null;
+  recurrenceText?: string | null;
+  /** of a series: changed on its own, so a change to the whole series passes it by */
+  detached?: boolean;
+  /** the calendar it is in: the course's (everyone sees it) or one's own (only its maker and its guests) */
+  calendar?: EventCalendar;
+  /** busy (opaque) or free (transparent) */
+  transparency?: 'opaque' | 'transparent';
+  /** default, public or private (a private event of the course shows only "busy" to others) */
+  visibility?: 'default' | 'public' | 'private';
+  /** reminders before it, in minutes; null or missing: the default */
+  reminders?: EventReminder[] | null;
+  /** the staff invited, with their answers */
+  guests?: EventGuest[];
+  /** the reader's own answer, when invited */
+  myResponse?: GuestResponse | null;
+  /** what guests may do */
+  guestsCanModify?: boolean;
+  guestsCanInvite?: boolean;
+  guestsCanSee?: boolean;
+  createdBy?: number | null;
+  createdByName?: string | null;
+  /** the reader may change it */
+  canEdit?: boolean;
+  /** private, and the reader is not in it: only "busy" is shown */
+  hidden?: boolean;
+  /** in the trash since (the trash's own list only) */
+  deletedAt?: string | null;
   startTime: string;
   endTime: string | null;
   title: string;
@@ -331,6 +360,33 @@ export interface ScheduleEvent {
   taskDone: number;
   /** the schedule's list only: how many of its preparation tasks are the reader's (in charge or taking part) */
   myTasks?: number;
+}
+
+export type EventCalendar = 'course' | 'personal';
+export type GuestResponse = 'needsAction' | 'accepted' | 'declined' | 'tentative';
+export interface EventGuest {
+  userId: number;
+  name: string;
+  response: GuestResponse;
+  optional?: boolean;
+}
+export interface EventReminder {
+  /** how long before it starts */
+  minutes: number;
+}
+/** what is in the trash: an event, or the days of a series deleted together */
+export interface TrashedEvent {
+  /** the event (of a series: the first of those deleted together) */
+  id: number;
+  title: string;
+  date: string;
+  startTime: string;
+  allDay: boolean;
+  /** how many days of a series were deleted together (1: one event) */
+  count: number;
+  deletedAt: string;
+  deletedByName: string | null;
+  calendar: EventCalendar;
 }
 
 /** An event from a Google (or any iCal) calendar shown in the schedule. Read-only. */

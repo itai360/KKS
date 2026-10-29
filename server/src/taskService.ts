@@ -139,7 +139,7 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
   if (trackId && !db().get('SELECT 1 FROM tracks WHERE id = ?', trackId)) throw badRequest('הציר לא נמצא');
   if (weekId === undefined) weekId = weekForDate(localDateKey(input.deadline, tz()));
   if (weekId && !db().get('SELECT 1 FROM weeks WHERE id = ?', weekId)) throw badRequest('השבוע לא נמצא');
-  if (input.eventId && !db().get('SELECT 1 FROM events WHERE id = ?', input.eventId)) throw badRequest('הפעילות לא נמצאה');
+  if (input.eventId && !db().get('SELECT 1 FROM events WHERE id = ? AND deleted_at IS NULL', input.eventId)) throw badRequest('הפעילות לא נמצאה');
   if (input.cadetId && !db().get('SELECT 1 FROM cadets WHERE id = ?', input.cadetId)) throw badRequest('הצוער לא נמצא');
   if (input.experienceId && !db().get('SELECT 1 FROM experiences WHERE id = ?', input.experienceId)) throw badRequest('ההתנסות לא נמצאה');
   if (input.debriefId && !db().get('SELECT 1 FROM debriefs WHERE id = ?', input.debriefId)) throw badRequest('התחקיר לא נמצא');
@@ -363,7 +363,7 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
       logs.push({ action: 'track', text: tr ? `${who} שייך את המשימה לציר "${tr.name}"` : `${who} הסיר את השיוך לציר` });
     }
     if (patch.eventId !== undefined && patch.eventId !== t.event_id) {
-      const e = patch.eventId ? db().get<{ title: string }>('SELECT title FROM events WHERE id = ?', patch.eventId) : null;
+      const e = patch.eventId ? db().get<{ title: string }>('SELECT title FROM events WHERE id = ? AND deleted_at IS NULL', patch.eventId) : null;
       if (patch.eventId && !e) throw badRequest('הפעילות לא נמצאה');
       set('event_id', patch.eventId);
       logs.push({ action: 'event', text: e ? `${who} קישר את המשימה לפעילות "${e.title}"` : `${who} הסיר את הקישור לפעילות` });
