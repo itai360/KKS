@@ -11,6 +11,8 @@
 :root {
   --g-line: var(--line);
   --g-sheet: var(--card);
+  /* the free strip at the end of a day's column, beside its events (Google's) */
+  --g-end-gap: 12px;
   --g-hour: 48px;
   --g-gutter: 56px;
   --g-now: #e8453c;
@@ -1103,6 +1105,25 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* as Google's: a title goes on to the next lines, word by word, while the event is tall enough, the hours under it */
+.gc-event:not(.is-short) .gc-event-title {
+  flex-shrink: 0;
+  white-space: normal;
+}
+/* a narrow event (lying on another, or a phone's column): one line of as many letters as fit, and when
+   it starts rather than the whole span */
+.gc-event {
+  container-type: inline-size;
+}
+@container (max-width: 76px) {
+  .gc-t-end {
+    display: none;
+  }
+  .gc-event:not(.is-short) .gc-event-title {
+    white-space: nowrap;
+    text-overflow: clip;
+  }
+}
 .gc-event-meta {
   opacity: 0.92;
   overflow: hidden;
@@ -2009,6 +2030,8 @@
   :root {
     --g-gutter: 44px;
     --g-hour: 52px;
+    /* a phone's column is narrow: a thin strip only, as the app's */
+    --g-end-gap: 5px;
   }
   .cal-page.is-phone .period-clip {
     border-radius: 14px;

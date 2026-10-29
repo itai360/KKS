@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutSpans, monthWeeks, movedSpan, resizedEnd, stepDate, viewDays, viewTitle, yearMonths } from '../calendarGrid';
+import { CASCADE_INDENT, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutSpans, monthWeeks, movedSpan, resizedEnd, stepDate, viewDays, viewTitle, yearMonths } from '../calendarGrid';
 
 describe('calendar grid', () => {
   it('reads event times as minutes', () => {
@@ -43,22 +43,47 @@ describe('calendar grid', () => {
     expect(viewTitle('day', '2026-10-01')).toBe('אוקטובר 2026');
   });
 
-  it('puts overlapping events side by side and the rest at full width', () => {
+  it('lays a later event on the one under it, as Google draws them; events that start together sit side by side', () => {
     const items = [
-      { id: 'a', s: '08:00', e: '10:00' },
-      { id: 'b', s: '09:00', e: '09:30' },
-      { id: 'c', s: '09:30', e: '11:00' }, // b has ended: takes b's column
-      { id: 'd', s: '12:00', e: '13:00' }, // alone
-      { id: 'e', s: '14:00', e: '14:10' }, // shown 30 minutes tall
-      { id: 'f', s: '14:20', e: '15:00' }, // so it shares the row with e
+      { id: 'drill', s: '06:00', e: '22:00' }, // a whole day's drill
+      { id: 'class', s: '08:00', e: '09:00' }, // starts two hours into it: lies on it
+      { id: 'brief', s: '08:15', e: '08:45' }, // starts with the class: beside it, on the drill
+      { id: 'talk', s: '13:00', e: '14:00' }, // on the drill again
+      { id: 'late', s: '13:45', e: '15:00' }, // on the talk
+      { id: 'alone', s: '05:00', e: '05:30' },
+      { id: 'short', s: '23:00', e: '23:10' }, // shown 30 minutes tall...
+      { id: 'e', s: '23:20', e: '23:50' }, // ...so it is beside this one, which starts within it
     ];
     const placed = Object.fromEntries(layoutDay(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
-    expect([placed.a.col, placed.a.cols]).toEqual([0, 2]);
-    expect([placed.b.col, placed.b.cols]).toEqual([1, 2]);
-    expect([placed.c.col, placed.c.cols]).toEqual([1, 2]);
-    expect([placed.d.col, placed.d.cols]).toEqual([0, 1]);
-    expect([placed.e.col, placed.f.col, placed.f.cols]).toEqual([0, 1, 2]);
-    expect([placed.a.span, placed.b.span, placed.d.span]).toEqual([1, 1, 1]);
+    expect(placed.drill).toMatchObject({ depth: 0, col: 0, cols: 1, left: 0, width: 1 });
+    expect(placed.class).toMatchObject({ depth: 1, col: 0, cols: 2 });
+    expect(placed.brief).toMatchObject({ depth: 1, col: 1, cols: 2 });
+    expect(placed.talk).toMatchObject({ depth: 1, col: 0, cols: 1 });
+    expect(placed.late.depth).toBe(2);
+    // each inside the one under it, moved in from the start side; the two that started together share that room
+    expect(placed.class.left).toBeCloseTo(CASCADE_INDENT);
+    expect(placed.brief.left).toBeCloseTo(placed.class.left + placed.class.width);
+    expect(placed.brief.left + placed.brief.width).toBeCloseTo(1);
+    expect(placed.talk).toMatchObject({ left: expect.closeTo(CASCADE_INDENT), width: expect.closeTo(1 - CASCADE_INDENT) });
+    expect(placed.late.left).toBeCloseTo(placed.talk.left + placed.talk.width * CASCADE_INDENT);
+    expect(placed.alone).toMatchObject({ depth: 0, left: 0, width: 1 });
+    expect([placed.short.col, placed.e.col, placed.e.cols, placed.e.depth]).toEqual([0, 1, 2, 0]);
+  });
+
+  it('puts events starting less than half an hour apart side by side, and one after a free column in it', () => {
+    const items = [
+      { id: 'a', s: '08:00', e: '10:00' },
+      { id: 'b', s: '08:20', e: '09:00' }, // with a
+      { id: 'c', s: '09:00', e: '09:45' }, // b has ended: its column is free, so c takes it rather than lying on a
+      { id: 'd', s: '12:00', e: '13:00' }, // alone
+    ];
+    const placed = Object.fromEntries(layoutDay(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
+    expect([placed.a.col, placed.a.cols, placed.a.depth]).toEqual([0, 2, 0]);
+    expect([placed.b.col, placed.b.cols, placed.b.depth]).toEqual([1, 2, 0]);
+    expect([placed.c.col, placed.c.cols, placed.c.depth]).toEqual([1, 2, 0]);
+    expect(placed.a).toMatchObject({ left: 0, width: 0.5 });
+    expect(placed.c).toMatchObject({ left: 0.5, width: 0.5 });
+    expect(placed.d).toMatchObject({ col: 0, cols: 1, depth: 0, left: 0, width: 1 });
   });
 
   it('stretches an event over the columns that are free during it', () => {

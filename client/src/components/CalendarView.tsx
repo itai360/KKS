@@ -394,14 +394,18 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                   const item = p.item.i;
                   const e = eventOf(item);
                   const height = Math.max(p.end - p.start, MIN_VISIBLE);
+                  const isDragged = !!e && drag?.kind !== 'create' && drag?.id === e.id;
+                  // as Google's: what reaches the column's end leaves a strip there free, to click and add at that hour
+                  const atEnd = p.left + p.width > 0.999;
                   const style: CSSProperties = {
                     top: `calc(var(--hour) * ${hours(p.start)})`,
                     height: `calc(var(--hour) * ${hours(height)} - 2px)`,
-                    insetInlineStart: `calc(${(p.col / p.cols) * 100}% + 1px)`,
-                    width: `calc(${(100 * p.span) / p.cols}% - 4px)`,
+                    insetInlineStart: `calc(${p.left * 100}% + 1px)`,
+                    width: `calc(${p.width * 100}% - ${atEnd ? 'var(--g-end-gap)' : '2px'})`,
+                    // what lies on another is drawn over it
+                    zIndex: isDragged ? undefined : 1 + Math.min(p.depth, 2),
                   };
                   const short = p.end - p.start < 50;
-                  const isDragged = !!e && drag?.kind !== 'create' && drag?.id === e.id;
                   const isNow = d === today && !item.faded && nowMin >= p.start && nowMin < p.end;
                   const past = !isDragged && !item.faded && (d < today || (d === today && p.end <= nowMin));
                   const movable = !!e && canMove(e) && !bulk?.active;
@@ -421,7 +425,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                         past && 'is-past',
                         isDragged && 'is-dragging',
                         movable && 'is-movable',
-                        p.col > 0 && 'is-overlap',
+                        p.depth > 0 && 'is-on',
                         selected && 'is-selected',
                       ]
                         .filter(Boolean)
@@ -437,8 +441,10 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                         {item.title}
                       </span>
                       <span className="gc-event-meta">
-                        {range(p.start, p.end)}
-                        {item.sub && !short ? ` · ${item.sub}` : ''}
+                        {fromMinutes(p.start)}
+                        {/* a narrow event says its start only (gcal.css) */}
+                        <span className="gc-t-end"> - {p.end >= DAY_MINUTES ? '24:00' : fromMinutes(p.end)}</span>
+                        {item.sub && !short && <span className="gc-t-end"> · {item.sub}</span>}
                       </span>
                       {!short && prep && <span className={`gc-prep${e!.taskDone === e!.taskTotal ? ' is-done' : ''}`}>{prep}</span>}
                       {movable && <span className="gc-resize" onPointerDown={(ev) => startMove(ev, e!, 'resize')} aria-hidden="true" />}
