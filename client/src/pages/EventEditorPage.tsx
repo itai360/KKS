@@ -12,6 +12,7 @@ import { parseRRule } from '@shared/rrule';
 import type { EventCalendar, EventDetail, EventReminder, ScheduleEvent, Task } from '@shared/types';
 import { ask } from '../components/Confirm';
 import { ColorMenu, GuestsEditor, RemindersEditor, RepeatSelect, ScopeDialog, ShiftTasks, type Scope } from '../components/EventDialogs';
+import { FindTime, type FindTimePerson } from '../components/FindTime';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { DateInput, ErrorBox, Loading, Select, TimeInput } from '../components/ui';
@@ -100,6 +101,7 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
   const [deleteScope, setDeleteScope] = useState(false);
   const [affected, setAffected] = useState<{ tasks: Task[]; delta: number; id: number } | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+  const [tab, setTab] = useState<'details' | 'time'>('details');
 
   useEffect(() => {
     if (!event) titleRef.current?.focus();
@@ -108,6 +110,19 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
   // the course's calendar for one who may not add to it that day: in their own charge (as the server has it)
   const courseFree = mayCourse(date);
   const forcedOwner = calendar === 'course' && !courseFree;
+  // who is in it, for finding a time: who runs it, who made it, its guests
+  const people = useMemo<FindTimePerson[]>(() => {
+    const nameOf = (id: number) => users.find((u) => u.id === id)?.displayName ?? '';
+    const list: FindTimePerson[] = [];
+    const add = (id: number | null | undefined, role?: string) => {
+      if (!id || list.some((p) => p.id === id) || !nameOf(id)) return;
+      list.push({ id, name: nameOf(id), role });
+    };
+    add(Number(owner) || null, 'אחראי');
+    add(event?.createdBy ?? user.id, 'מארגן/ת');
+    for (const g of guests) add(g.userId, g.optional ? 'רשות' : undefined);
+    return list;
+  }, [users, owner, event?.createdBy, user.id, guests]);
   const ownerValue = forcedOwner ? String(user.id) : owner;
 
   const body = useMemo(
@@ -320,12 +335,32 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
           </div>
         </div>
 
+        {/* as Google's: the event's details, and finding a time when everyone in it is free */}
         <div className="g-ed-tabs" role="tablist">
-          <span role="tab" aria-selected="true" className="g-ed-tab on">
+          <button type="button" role="tab" aria-selected={tab === 'details'} className={`g-ed-tab${tab === 'details' ? ' on' : ''}`} onClick={() => setTab('details')}>
             פרטי האירוע
-          </span>
+          </button>
+          {!allDay && (
+            <button type="button" role="tab" aria-selected={tab === 'time'} className={`g-ed-tab${tab === 'time' ? ' on' : ''}`} onClick={() => setTab('time')}>
+              מציאת זמן
+            </button>
+          )}
         </div>
 
+        {tab === 'time' && !allDay ? (
+          <FindTime
+            date={date}
+            start={start}
+            end={end}
+            people={people}
+            exceptId={event?.id}
+            onPick={(d, s, e) => {
+              onDate(d);
+              setStart(s);
+              setEnd(e);
+            }}
+          />
+        ) : (
         <div className="g-ed-cols">
           <section className="g-ed-details" aria-label="פרטי האירוע">
             <div className="g-ed-row">
@@ -385,6 +420,7 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
             <GuestsEditor guests={guests} onChange={setGuests} perms={perms} onPerms={setPerms} organizerId={event?.createdBy ?? user.id} />
           </section>
         </div>
+        )}
       </form>
 
       {askScope && (

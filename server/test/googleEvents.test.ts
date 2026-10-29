@@ -224,6 +224,32 @@ describe('the search over the events', () => {
   });
 });
 
+describe('finding a time', () => {
+  it("shows each person's busy hours on a day - their events and absences; what is not the reader's reads as busy", async () => {
+    await staffMay(c, { schedule: false });
+    const day = '2026-10-14';
+    await c.cmd.post('/api/events', ev({ date: day, startTime: '10:00', endTime: '11:00', title: 'מטווח', ownerId: c.ids.s1 }));
+    const asked = (await c.cmd.post('/api/events', ev({ date: day, startTime: '12:00', endTime: '13:00', title: 'ישיבה', guests: [{ userId: c.ids.s2 }, { userId: c.ids.s3 }] }))).body.event.id;
+    await c.s3.post(`/api/events/${asked}/respond`, { response: 'declined' });
+    await c.s1.post('/api/events', ev({ date: day, startTime: '16:00', endTime: '17:00', title: 'רופא שיניים', calendar: 'personal' }));
+    await c.cmd.post('/api/events', ev({ date: day, startTime: '18:00', endTime: '19:00', title: 'פנוי', ownerId: c.ids.s1, transparency: 'transparent' }));
+    await c.cmd.post('/api/absences', { userId: c.ids.s3, startDate: day, endDate: day, reason: 'leave' });
+    const busy = (await c.s2.get(`/api/events/busy?date=${day}&users=${c.ids.s1},${c.ids.s2},${c.ids.s3}`)).body;
+    expect(busy[c.ids.s1]).toEqual([
+      { start: '10:00', end: '11:00', title: 'מטווח' },
+      // their own calendar: s2 is not in it - busy, nothing more
+      { start: '16:00', end: '17:00', title: 'עסוק' },
+    ]);
+    expect(busy[c.ids.s2]).toEqual([{ start: '12:00', end: '13:00', title: 'ישיבה' }]);
+    // declined: not busy; away: the whole day
+    expect(busy[c.ids.s3]).toEqual([{ start: null, end: null, title: 'לא זמין/ה' }]);
+    // the event being edited is not in the way of itself; the maker sees their own event by name
+    expect((await c.cmd.get(`/api/events/busy?date=${day}&users=${c.ids.s2}&except=${asked}`)).body[c.ids.s2]).toEqual([]);
+    expect((await c.s1.get(`/api/events/busy?date=${day}&users=${c.ids.s1}`)).body[c.ids.s1].map((b: { title: string }) => b.title)).toEqual(['מטווח', 'רופא שיניים']);
+    expect((await c.s1.get('/api/events/busy?users=1')).status).toBe(400);
+  });
+});
+
 describe('reminders', () => {
   const at = (date: string, time: string) => new Date(zonedIso(date, time, 'Asia/Jerusalem'));
 

@@ -59,6 +59,7 @@ import {
 } from './calendar';
 import { googleClientId, googleSignInEnabled, verifyGoogleIdToken } from './google';
 import {
+  busyOn,
   calendarSettings,
   cancelEvent,
   canManageEvent,
@@ -906,6 +907,13 @@ export function apiRouter(): Router {
     const to = isDateKey(req.query.to) ? req.query.to : addDays(today, 366);
     if (to < from || to > addDays(from, 3 * 366)) throw badRequest('טווח של עד שלוש שנים');
     res.json(searchEvents(me(req), str(req.query.q) ?? '', from, to));
+  });
+  // who is busy when on a day, for finding a time: ?date=&users=1,2,3 (&except= the event being edited)
+  r.get('/events/busy', (req, res) => {
+    if (!isDateKey(req.query.date)) throw badRequest('חסר תאריך');
+    const users = (str(req.query.users) ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    const except = Number(req.query.except);
+    res.json(busyOn(me(req), req.query.date, users, Number.isInteger(except) && except > 0 ? except : undefined));
   });
   r.post('/events', (req, res) => res.json(eventDetail(me(req), createEvent(me(req), req.body))));
   // the trash: what was deleted in the last 30 days, back again or gone for good

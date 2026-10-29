@@ -243,6 +243,48 @@ export function searchEvents(actor: UserRow, q: string, from: string, to: string
     .slice(0, 500);
 }
 
+/** one person's busy time on a day, as Google's free/busy shows it: what the reader may know of it */
+export interface BusyBlock {
+  /** null: the whole day */
+  start: string | null;
+  end: string | null;
+  /** its title - or "עסוק" when it is not the reader's to see, "לא זמין/ה" when away */
+  title: string;
+}
+
+/**
+ * Who is busy when on a day, for finding a time (Google's "find a time"): each person's events on it - the
+ * course's that they run or are a guest of (not declined), and their own calendar's - and their absences.
+ * A free event (Google's "available") does not count, nor the event being edited. What the reader may not
+ * see of an event reads "עסוק".
+ */
+export function busyOn(actor: UserRow, date: string, userIds: number[], exceptId?: number): Record<number, BusyBlock[]> {
+  const ids = [...new Set(userIds)].filter((uid) => !!getUserRow(uid)).slice(0, 30);
+  const rows = db().all<EventRow>(
+    `${EVENT_BASE} WHERE ${LIVE} AND e.cancelled = 0 AND e.transparency <> 'transparent' AND e.date <= ? AND COALESCE(e.end_date, e.date) >= ?`,
+    date,
+    date,
+  );
+  const guests = guestsInRange(date, date);
+  const out: Record<number, BusyBlock[]> = {};
+  for (const uid of ids) {
+    const blocks: BusyBlock[] = [];
+    for (const r of rows) {
+      if (r.id === exceptId) continue;
+      const gs = guests.get(r.id) ?? [];
+      const asGuest = gs.some((g) => g.userId === uid && g.response !== 'declined');
+      if (!(r.calendar === 'personal' ? r.created_by === uid || asGuest : r.owner_id === uid || asGuest)) continue;
+      const known = canSeeRow(actor, r) && !forReader(actor, r, gs).hidden;
+      // a day of several (or one that began the day before) is all of this day
+      const whole = !!r.all_day || r.date !== date;
+      blocks.push({ start: whole ? null : r.start_time, end: whole ? null : r.end_time, title: known ? r.title : 'עסוק' });
+    }
+    if (db().get('SELECT 1 FROM absences WHERE user_id = ? AND start_date <= ? AND end_date >= ?', uid, date, date)) blocks.push({ start: null, end: null, title: 'לא זמין/ה' });
+    out[uid] = blocks.sort((a, b) => (a.start ?? '').localeCompare(b.start ?? ''));
+  }
+  return out;
+}
+
 function eventRow(id: number, withTrash = false): EventRow {
   const r = db().get<EventRow>(`${EVENT_BASE} WHERE e.id = ? ${withTrash ? '' : `AND ${LIVE}`}`, id);
   if (!r) throw notFound('הפעילות לא נמצאה');

@@ -2395,12 +2395,25 @@
 }
 .g-ed-tab {
   padding: 12px 4px;
-  color: var(--g-blue);
-  font-size: 14px;
-  font-weight: 500;
-  border-bottom: 3px solid var(--g-blue);
+  border: 0;
+  border-bottom: 3px solid transparent;
   margin-bottom: -1px;
   border-radius: 3px 3px 0 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.g-ed-tab.on {
+  color: var(--g-blue);
+  border-bottom-color: var(--g-blue);
+}
+@media (hover: hover) {
+  .g-ed-tab:not(.on):hover {
+    color: var(--ink);
+  }
 }
 .g-ed-cols {
   display: grid;
@@ -2776,7 +2789,8 @@
     width: 140px;
   }
   .g-ed-tabs {
-    display: none;
+    gap: 20px;
+    margin: 0 0 8px;
   }
   .g-ed-cols {
     grid-template-columns: minmax(0, 1fr);
@@ -3622,4 +3636,173 @@
 }
 .cal-page.is-phone .gs-items .event-row.rsvp-no {
   opacity: 0.6;
+}
+
+/* ---------------- "מציאת זמן", as Google's "Find a time" ---------------- */
+/* the day's hours, a column for each person with their busy times, the event as a band across them all */
+.ft {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-inline-start: 60px;
+}
+.ft-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.ft-day {
+  font-size: 15px;
+  font-weight: 500;
+}
+.ft-says {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.ft-says.is-free {
+  background: color-mix(in srgb, #188038 12%, transparent);
+  color: var(--green-ink, #137333);
+}
+.ft-says.is-busy {
+  background: color-mix(in srgb, #d93025 10%, transparent);
+  color: var(--red-ink, #b3261e);
+}
+.ft-grid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--g-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--g-sheet);
+}
+.ft-people,
+.ft-body {
+  display: grid;
+  grid-template-columns: 52px repeat(var(--n), minmax(0, 1fr));
+}
+.ft-people {
+  border-bottom: 1px solid var(--g-line);
+}
+.ft-person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 4px;
+  border-inline-start: 1px solid var(--g-line);
+  text-align: center;
+}
+.ft-person b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ft-person small {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.ft-person.is-busy b {
+  color: var(--red-ink, #b3261e);
+}
+.ft-allday {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--hover-2);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.ft-scroll {
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.ft-body {
+  position: relative;
+}
+.ft-hours {
+  position: relative;
+}
+.ft-hours span {
+  position: absolute;
+  inset-inline-end: 6px;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ft-hours span:first-child {
+  transform: none;
+}
+.ft-cols {
+  position: relative;
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  background-image: repeating-linear-gradient(to bottom, var(--g-line) 0, var(--g-line) 1px, transparent 1px, transparent 44px);
+  cursor: pointer;
+}
+.ft-col {
+  position: relative;
+  border-inline-start: 1px solid var(--g-line);
+}
+.ft-busy {
+  position: absolute;
+  inset-inline: 3px 6px;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink-2) 16%, var(--g-sheet));
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.ft-busy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ft-band {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 2;
+  border: 2px solid var(--g-blue);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--g-blue) 14%, transparent);
+  pointer-events: none;
+}
+.ft-band span {
+  position: absolute;
+  inset-inline-start: 6px;
+  top: 2px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--g-blue);
+  color: var(--g-on-blue);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 860px) {
+  .ft {
+    padding-inline: 12px;
+  }
+  .ft-people,
+  .ft-body {
+    grid-template-columns: 40px repeat(var(--n), minmax(0, 1fr));
+  }
 }
