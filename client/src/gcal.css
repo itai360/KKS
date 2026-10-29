@@ -439,14 +439,17 @@
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
+/* a phone: bigger, and as wide as the menu lets them be */
 @media (max-width: 860px) {
   .gpal {
-    grid-template-columns: repeat(6, 30px);
-    gap: 12px;
+    grid-template-columns: repeat(6, minmax(24px, 30px));
+    gap: 10px;
+    padding-inline-start: 12px;
   }
   .gpal-swatch {
-    width: 30px;
-    height: 30px;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
   }
 }
 .layer-empty {
@@ -520,9 +523,6 @@
     color: var(--ink);
   }
 }
-.gside .rail-main {
-  margin-top: 4px;
-}
 .gside .rail-settings {
   margin-top: 10px;
 }
@@ -546,6 +546,85 @@
 .rail-collapsed .gside .rail-link,
 .rail-collapsed .gside .rail-group-head {
   padding-inline: 13px;
+}
+
+/* ---------------- a phone: the same menu sliding in from its side, sized for a finger ---------------- */
+
+@media (max-width: 860px) {
+  /* clear of the clock and the notch above, of the screen's rounded edge on its side, and down to the bottom */
+  .rail.gside {
+    padding: 0 8px;
+    padding-inline-start: calc(8px + env(safe-area-inset-right, 0px));
+  }
+  .gside-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .gside .rail-link,
+  .gside .rail-group-head {
+    min-height: 44px;
+    gap: 12px;
+    border-radius: 22px;
+  }
+  .gside .rail-link {
+    font-size: 16px;
+  }
+  .gside .rail-group-head {
+    font-size: 15px;
+  }
+  .gside :is(.rail-link, .rail-group-head) > svg:first-child {
+    width: 20px;
+    height: 20px;
+  }
+  /* the person and leaving: across the menu, on its own ground, at the very bottom */
+  .gside .rail-foot {
+    bottom: 0;
+    margin: auto -8px 0;
+    margin-inline-start: calc(-8px - env(safe-area-inset-right, 0px));
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-inline-start: calc(16px + env(safe-area-inset-right, 0px));
+    background: var(--paper);
+  }
+  /* the calendars: rows for a finger too */
+  .layers-toggle {
+    min-height: 44px;
+    border-radius: 22px;
+    font-size: 15px;
+  }
+  .layers-add {
+    width: 44px;
+    height: 44px;
+  }
+  .layer-row {
+    min-height: 44px;
+    gap: 14px;
+    border-radius: 22px;
+    font-size: 16px;
+  }
+  .layer-box {
+    width: 20px;
+    height: 20px;
+  }
+  .layer-sub {
+    padding-inline-start: 34px;
+  }
+  .layer-sub.check {
+    min-height: 40px;
+    font-size: 15px;
+  }
+  .layer-filter-btn {
+    min-height: 40px;
+    border-radius: 20px;
+    font-size: 14px;
+  }
+  .layer-more {
+    width: 40px;
+    height: 40px;
+  }
+  .layer-link {
+    min-height: 44px;
+    border-radius: 22px;
+    font-size: 15px;
+  }
 }
 
 /* ---------------- the top bar (a computer): the calendar's controls on the same ground ---------------- */

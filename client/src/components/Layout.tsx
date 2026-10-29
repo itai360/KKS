@@ -49,8 +49,10 @@ interface NavItem {
   keywords?: string;
 }
 
+/** the menu's last group: the course's calendar and, on it, which calendars it shows */
+const CAL_GROUP = 'יומן';
 /** each group of the menu, by its title - shown alone when the menu is folded to icons */
-const GROUP_ICONS: Record<string, string> = { 'ניהול משימות': 'tasks', 'תכנון הקורס': 'plan', 'פיקוד ובקרה': 'pulse', צוערים: 'cap', 'תחקירים ולמידה': 'lightbulb', 'סגל וכלים': 'wrench' };
+const GROUP_ICONS: Record<string, string> = { 'ניהול משימות': 'tasks', 'תכנון הקורס': 'plan', 'פיקוד ובקרה': 'pulse', צוערים: 'cap', 'תחקירים ולמידה': 'lightbulb', 'סגל וכלים': 'wrench', [CAL_GROUP]: 'calendar' };
 const GROUPS_KEY = 'kks.navGroups';
 function readGroups(): Record<string, boolean> {
   try {
@@ -165,7 +167,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
   };
   const learning = { title: 'תחקירים ולמידה', items: [{ to: '/debriefs', label: 'תחקירים ולקחים', icon: 'lightbulb', keywords: 'תחקיר שבועי פעילות עצימה תחק"ש פלוגתי לקחים בנק לקחים' }] };
   const threeWeek = { to: '/three-week', label: 'אישור תוכניות תלת שבועי', icon: 'threeWeeks', keywords: 'תלת שבועי תלת-שבועי שלושה שבועות ארבעה שבועות תוכנית' };
-  const home = { items: [{ to: '/', label: 'יומן', icon: 'calendar', end: true, keywords: 'לו"ז לוז בית אירועים יומן' }] };
+  const home = { items: [{ to: '/', label: 'יומן הקורס', icon: 'calendar', end: true, keywords: 'לו"ז לוז בית אירועים יומן' }] };
   if (isCommander) {
     return [
       home,
@@ -616,14 +618,55 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [drawer]);
 
   // the menu's groups (תכנון הקורס, צוערים, בקרה, כלים) open and close; each remembers how it was left,
-  // and the group of the screen on show opens by itself
+  // and the group of the screen on show opens by itself (the calendar's: its last group, "יומן")
   const [groups, setGroups] = useState<Record<string, boolean>>(readGroups);
-  const here = sections.find((s) => s.title && s.items.some((it) => (it.end ? path === it.to : path === it.to || path.startsWith(`${it.to}/`))))?.title;
+  const hereSection = sections.find((s) => s.items.some((it) => (it.end ? path === it.to : path === it.to || path.startsWith(`${it.to}/`))));
+  const here = hereSection ? (hereSection.title ?? CAL_GROUP) : undefined;
   useEffect(() => {
     if (here) setGroups((g) => (g[here] ? g : saveGroups({ ...g, [here]: true })));
   }, [here]);
   const groupOpen = (title: string) => groups[title] ?? false;
   const toggleGroup = (title: string) => setGroups((g) => saveGroups({ ...g, [title]: !g[title] }));
+  // with the phone's bar below, home is its first tab - not in the menu too
+  const railLinks = (items: NavItem[]) =>
+    items
+      .filter((it) => !(phone && it.to === '/'))
+      .map((it) => (
+        <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
+          <Icon name={it.icon} />
+          <span className="rail-label">{it.label}</span>
+          <Count n={it.count ?? 0} />
+        </NavLink>
+      ));
+  const railGroup = (title: string, id: string, body: ReactNode, total = 0) => {
+    const open = groupOpen(title);
+    return (
+      <nav key={id} aria-label={title} className={`rail-group${open ? ' open' : ''}${title === here ? ' here' : ''}`}>
+        <button
+          type="button"
+          className="rail-group-head"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => toggleGroup(title)}
+          title={title === here && !open ? `${title} - המסך הפתוח נמצא כאן` : title}
+        >
+          <Icon name={GROUP_ICONS[title] ?? 'layers'} />
+          <span className="rail-label">{title}</span>
+          {/* closed, with the screen on show inside: marked, so it is clear where one is */}
+          {!open && title === here && <span className="rail-group-here" aria-hidden="true" />}
+          {!open && <Count n={total} />}
+          <Icon name="chevronDown" size={15} className="rail-group-chev" />
+        </button>
+        <div className="rail-group-body" id={id} inert={!open}>
+          <div className="rail-group-inner">{body}</div>
+        </div>
+      </nav>
+    );
+  };
+  // the calendar's group: the course's calendar (on a computer - a phone has it as its bar's first tab), and on
+  // the calendar, which calendars it shows ("היומנים שלי", "יומנים נוספים")
+  const calLinks = railLinks(sections.filter((s) => !s.title).flatMap((s) => s.items));
+  const calLayers = onCalendar && !folded;
 
   return (
     <div className={`app${folded ? ' rail-collapsed' : ''}${drawer ? ' menu-open' : ''}${viewing ? ' viewing-past' : ''}`}>
@@ -682,49 +725,21 @@ export function Layout({ children }: { children: ReactNode }) {
               onPick={(d) => (calBar ? calBar.goTo(d) : navigate(d === today ? '/' : `/?date=${d}`))}
             />
           )}
-          {onCalendar && !folded && <CalendarLayers />}
           {sections.map((s, i) => {
-            // with the phone's bar below, home is its first tab - not in the menu too
-            const links = s.items.filter((it) => !(phone && it.to === '/')).map((it) => (
-              <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `rail-link${isActive ? ' active' : ''}`}>
-                <Icon name={it.icon} />
-                <span className="rail-label">{it.label}</span>
-                <Count n={it.count ?? 0} />
-              </NavLink>
-            ));
-            if (!links.length) return null;
-            if (!s.title)
-              return (
-                <nav key={i} aria-label="ראשי" className="rail-main">
-                  {links}
-                </nav>
-              );
-            const open = groupOpen(s.title);
-            const total = s.items.reduce((n, it) => n + (it.count ?? 0), 0);
-            const id = `rail-group-${i}`;
-            return (
-              <nav key={i} aria-label={s.title} className={`rail-group${open ? ' open' : ''}${s.title === here ? ' here' : ''}`}>
-                <button
-                  type="button"
-                  className="rail-group-head"
-                  aria-expanded={open}
-                  aria-controls={id}
-                  onClick={() => toggleGroup(s.title!)}
-                  title={s.title === here && !open ? `${s.title} - המסך הפתוח נמצא כאן` : s.title}
-                >
-                  <Icon name={GROUP_ICONS[s.title] ?? 'layers'} />
-                  <span className="rail-label">{s.title}</span>
-                  {/* closed, with the screen on show inside: marked, so it is clear where one is */}
-                  {!open && s.title === here && <span className="rail-group-here" aria-hidden="true" />}
-                  {!open && <Count n={total} />}
-                  <Icon name="chevronDown" size={15} className="rail-group-chev" />
-                </button>
-                <div className="rail-group-body" id={id} inert={!open}>
-                  <div className="rail-group-inner">{links}</div>
-                </div>
-              </nav>
-            );
+            const links = s.title ? railLinks(s.items) : [];
+            if (!s.title || !links.length) return null;
+            return railGroup(s.title, `rail-group-${i}`, links, s.items.reduce((n, it) => n + (it.count ?? 0), 0));
           })}
+          {/* last, under "סגל וכלים": the calendar - a phone has it on its bar, so there only its calendars, on it */}
+          {(calLinks.length > 0 || calLayers) &&
+            railGroup(
+              CAL_GROUP,
+              'rail-group-cal',
+              <>
+                {calLinks}
+                {calLayers && <CalendarLayers />}
+              </>,
+            )}
           <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
             <Icon name="settings" />
             <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
