@@ -1,6 +1,6 @@
 // The calendar's own settings, as Google Calendar's (Settings): the reminder an event left as it is gives
 // me - kept on the server, for me alone - and how the calendar looks on this device: what is over drawn
-// paler, and the events I said no to shown (struck through) or not.
+// paler, the weekend shown or not, and the events I said no to shown (struck through) or not.
 
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -94,6 +94,16 @@ export function CalendarSettings({ onClose }: { onClose: () => void }) {
           </span>
           <span className="switch">
             <input type="checkbox" role="switch" checked={prefs.dimPast} onChange={(e) => setCalendarPrefs({ dimPast: e.target.checked })} />
+            <span className="switch-track" aria-hidden="true" />
+          </span>
+        </label>
+        <label className="g-set-row">
+          <span className="g-set-text">
+            <b>הצגת סופי שבוע</b>
+            <small>שישי ושבת בתצוגת השבוע והחודש. כבוי - ראשון עד חמישי, עמודות רחבות יותר</small>
+          </span>
+          <span className="switch">
+            <input type="checkbox" role="switch" checked={prefs.showWeekend} onChange={(e) => setCalendarPrefs({ showWeekend: e.target.checked })} />
             <span className="switch-track" aria-hidden="true" />
           </span>
         </label>

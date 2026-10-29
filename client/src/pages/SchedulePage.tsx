@@ -693,6 +693,7 @@ export function SchedulePage() {
             onPickDay={(d) => set({ date: d === today ? null : d, view: 'day', event: null }, true)}
             compact={phone}
             dimPast={prefs.dimPast}
+            hideWeekend={!prefs.showWeekend}
           />
         </div>
       </div>

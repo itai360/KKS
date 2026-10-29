@@ -23,13 +23,15 @@ export interface CalendarPrefs {
   /** Google's view options: what is over drawn paler; the events one said no to shown (struck through) */
   dimPast: boolean;
   showDeclined: boolean;
+  /** Friday and Saturday in the week and the month (Google's "show weekends") */
+  showWeekend: boolean;
 }
 
 const KEY = 'kks.calendar';
 
 /** what the schedule remembered before (its deadlines and "only mine" choices) carries over */
 function fromBefore(): CalendarPrefs {
-  const prefs: CalendarPrefs = { layers: {}, taskFilter: NO_TASK_FILTER, onlyMine: false, panel: null, allDayOpen: false, folded: {}, dimPast: true, showDeclined: true };
+  const prefs: CalendarPrefs = { layers: {}, taskFilter: NO_TASK_FILTER, onlyMine: false, panel: null, allDayOpen: false, folded: {}, dimPast: true, showDeclined: true, showWeekend: true };
   try {
     const tasks = localStorage.getItem('kks.scheduleTasks');
     if (tasks === 'none') prefs.layers.myTasks = false;
@@ -57,6 +59,7 @@ export function readCalendarPrefs(): CalendarPrefs {
       folded: v.folded && typeof v.folded === 'object' ? v.folded : {},
       dimPast: v.dimPast !== false,
       showDeclined: v.showDeclined !== false,
+      showWeekend: v.showWeekend !== false,
     };
   } catch {
     return fromBefore();

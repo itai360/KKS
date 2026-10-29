@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type M
 import { DAY_MINUTES, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutSpans, MIN_VISIBLE, MONTH_NAMES, monthWeeks, movedSpan, resizedEnd, snap, viewDays, yearMonths, type Lane } from '@shared/calendarGrid';
 import { dayOrder, isTimed, itemDays, loadByDay, type CalItem } from '@shared/calendarLayers';
 import { WEEKDAY_NAMES } from '@shared/constants';
-import { addDays, shortDate, weekdayName } from '@shared/dates';
+import { addDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { ScheduleEvent, Week } from '@shared/types';
 import { useBulk } from './Bulk';
 import { Icon } from './Icon';
@@ -53,7 +53,12 @@ export interface CalendarProps {
   compact?: boolean;
   /** what is over drawn paler (Google's "reduce the brightness of past events"); on unless turned off */
   dimPast?: boolean;
+  /** Google's "show weekends" turned off: the week and the month without Friday and Saturday */
+  hideWeekend?: boolean;
 }
+
+/** Friday and Saturday - the weekend here */
+const isWeekend = (d: string) => weekdayOf(d) >= 5;
 
 export function CalendarView(props: CalendarProps) {
   return props.view === 'month' ? <MonthGrid {...props} /> : <TimeGrid {...props} />;
@@ -173,9 +178,9 @@ const range = (start: number, end: number) => `${fromMinutes(start)} - ${end >= 
 /** the rows above the hours show this many until opened up */
 const ALLDAY_ROWS = 3;
 
-function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, dimPast = true }: CalendarProps) {
+function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, dimPast = true, hideWeekend = false }: CalendarProps) {
   const draftTitle = draft?.title?.trim() || '(ללא כותרת)';
-  const days = viewDays(view, date);
+  const days = viewDays(view, date).filter((d) => !(hideWeekend && view === 'week' && isWeekend(d)));
   const bulk = useBulk();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -485,11 +490,12 @@ const DAYNUM_PX = 26;
 const ROW_PX_PHONE = 17;
 const DAYNUM_PX_PHONE = 22;
 
-function MonthGrid({ date, today, nowTime, items, draft, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, compact = false, dimPast = true }: CalendarProps) {
+function MonthGrid({ date, today, nowTime, items, draft, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, compact = false, dimPast = true, hideWeekend = false }: CalendarProps) {
   const draftTitle = draft?.title?.trim() || '(ללא כותרת)';
   const nowMin = eventSpan(nowTime, null).start;
   const bulk = useBulk();
-  const weeks = monthWeeks(date);
+  const weeks = monthWeeks(date).map((w) => (hideWeekend ? w.filter((d) => !isWeekend(d)) : w));
+  const cols = weeks[0].length;
   const month = date.slice(0, 7);
   const dragged = useRef<ScheduleEvent | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -518,21 +524,21 @@ function MonthGrid({ date, today, nowTime, items, draft, canCreate, canMove, onO
   };
 
   return (
-    <div className={`gc-month${compact ? ' is-compact' : ''}`}>
+    <div className={`gc-month${compact ? ' is-compact' : ''}`} style={{ '--cols': cols } as CSSProperties}>
       <div className="gc-month-head" aria-hidden="true">
-        {(compact ? WEEKDAY_LETTERS : WEEKDAY_NAMES).map((n) => (
+        {(compact ? WEEKDAY_LETTERS : WEEKDAY_NAMES).slice(0, cols).map((n) => (
           <div key={n}>{n}</div>
         ))}
       </div>
       <div className="gc-month-body" ref={body} style={{ '--weeks': weeks.length } as CSSProperties}>
         {weeks.map((w) => {
           const lanes = layoutSpans(
-            items.filter((i) => i.date <= w[6] && i.endDate >= w[0]),
+            items.filter((i) => i.date <= w[w.length - 1] && i.endDate >= w[0]),
             w,
             itemDays,
             dayOrder,
           );
-          const { shown, more } = fitLanes(lanes, 7, rows);
+          const { shown, more } = fitLanes(lanes, w.length, rows);
           return (
             <div key={w[0]} className="gc-week">
               <div className="gc-week-bg">
