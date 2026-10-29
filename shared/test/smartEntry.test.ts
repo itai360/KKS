@@ -109,6 +109,35 @@ describe('placing each thing', () => {
     expect(sick.fields).toMatchObject({ userId: 11, absenceReason: 'sick', date: '2026-10-30' });
   });
 
+  it('staff named by their first name own what they were given; a sentence opening with a to-do is a task', () => {
+    const bus = one('להזמין אוטובוס לסיור ביום חמישי');
+    expect(bus.kind).toBe('task');
+    expect(bus.fields.title).toBe('הזמנת אוטובוס לסיור');
+    expect(one('צריך לסגור מטווח לשבוע הבא - אחראי גלית').fields).toMatchObject({ ownerIds: [12], title: 'סגירת מטווח' });
+    expect(one('להכין מצגת לתדריך ניווט עד יום שני, רון וגלית').fields).toMatchObject({ ownerIds: [11, 12], title: 'הכנת מצגת לתדריך ניווט', date: '2026-11-02' });
+    expect(one('רון, תבדוק את הציוד עד מחר').fields).toMatchObject({ ownerIds: [11], date: '2026-10-30' });
+    expect(one('בשבועי סגירה מקצועית על הניווט - רון').fields).toMatchObject({ weeklyKind: 'closure', ownerIds: [11], title: 'על הניווט' });
+    // "רון" is also a word: not a name where no name is expected
+    expect(one('שיר של רון ושמחה בטקס').fields.ownerIds).not.toContain(11);
+    // "לקבוע" is a time - the calendar, not a task
+    expect(one('לקבוע שיחה אישית עם נועה ביום ראשון').kind).toBe('event');
+  });
+
+  it('each line is a thing of its own, also a line that names no one the app knows', () => {
+    const items = read('להזמין אוטובוס לסיור ביום חמישי\nצריך לסגור מטווח לשבוע הבא\nלבדוק את הציוד לשטח');
+    expect(items.map((i) => [i.kind, i.fields.title])).toEqual([
+      ['task', 'הזמנת אוטובוס לסיור'],
+      ['task', 'סגירת מטווח'],
+      ['task', 'בדיקת ציוד לשטח'],
+    ]);
+  });
+
+  it('a staff member on a course is away, for the days said', () => {
+    const away = one('גלית בקורס ביום שני ושלישי');
+    expect(away.kind).toBe('absence');
+    expect(away.fields).toMatchObject({ userId: 12, absenceReason: 'course', date: '2026-11-02', endDate: '2026-11-03' });
+  });
+
   it('tasks, events, the weekly, the debrief and announcements', () => {
     expect(one('משימה לרון אלמוג לסגור את המטווח עד יום רביעי בשעה 18:00').fields).toMatchObject({ title: 'סגירת מטווח', ownerIds: [11], date: '2026-11-04', time: '18:00' });
     expect(one('תזכיר לי להתקשר להורים של איתמר שושן ביום ראשון').fields).toMatchObject({ title: 'להתקשר להורים של איתמר שושן', ownerIds: [10], date: '2026-11-01' });

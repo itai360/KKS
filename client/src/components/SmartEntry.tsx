@@ -94,7 +94,7 @@ type Phase = 'write' | 'review' | 'done';
 function SmartEntryDialog({ initial, onClose }: { initial: string; onClose: () => void }) {
   const toast = useToast();
   const navigate = useNavigate();
-  const { users, user } = useSession();
+  const { users, user, isCommander } = useSession();
   const cadetsApi = useApi<Cadet[]>('/api/cadets', ['cadets']);
   const guide = useApi<DisciplineGuide>('/api/discipline/guide', ['settings']);
   const status = useApi<{ ai: boolean }>('/api/smart/status', []);
@@ -336,10 +336,12 @@ function SmartEntryDialog({ initial, onClose }: { initial: string; onClose: () =
             <div className="sm-meta">
               <span className={`sm-engine${ai ? ' is-ai' : ''}`}>
                 <Icon name={ai ? 'sparkle' : 'zap'} size={14} />
-                {ai ? 'ניתוח מעמיק עם Claude' : 'ניתוח מובנה'}
+                {ai ? 'ניתוח מעמיק עם Claude' : 'ניתוח בסיסי, בלי AI'}
               </span>
               <span className="tiny muted">Ctrl+Enter לניתוח</span>
             </div>
+            {/* without Claude the reading goes by words and names: it says so, and how to turn the AI on */}
+            {status.data && !ai && <AiOff commander={isCommander} />}
             <div className="sm-examples" aria-label="דוגמאות">
               <span className="sm-examples-head">דוגמאות - לחיצה מוסיפה לטקסט</span>
               <div className="sm-example-list">
@@ -371,9 +373,14 @@ function SmartEntryDialog({ initial, onClose }: { initial: string; onClose: () =
               <span className="sm-found">{items.length === 0 ? 'לא נמצא מה להזין' : items.length === 1 ? 'מצאתי דבר אחד להזין' : `מצאתי ${items.length} דברים להזין`}</span>
               <span className={`sm-engine${source === 'ai' ? ' is-ai' : ''}`}>
                 <Icon name={source === 'ai' ? 'sparkle' : 'zap'} size={14} />
-                {source === 'ai' ? 'נותח עם Claude' : 'ניתוח מובנה'}
+                {source === 'ai' ? 'נותח עם Claude' : 'ניתוח בסיסי, בלי AI'}
               </span>
             </div>
+            {source !== 'ai' && items.length > 0 && (
+              <p className="sm-check-note">
+                {ai ? 'Claude לא ענה הפעם, אז הטקסט נקרא בניתוח הבסיסי. ' : ''}כדאי לעבור על כל פריט: אם משהו לא במקום הנכון, אפשר להחליף לו מקום או להשלים פרטים לפני ההזנה.
+              </p>
+            )}
             <ul className="sm-cards">
               {items.map((it) => (
                 <SmartCard
@@ -970,4 +977,27 @@ function Fields({ item, cadets, people, offenses, set }: { item: SmartItem; cade
         </div>
       );
   }
+}
+
+/** said when the server has no Claude: the reading goes by words and names, and how the AI is turned on */
+function AiOff({ commander }: { commander: boolean }) {
+  return (
+    <div className="sm-ai-off" role="note">
+      <Icon name="sparkle" size={18} />
+      <div className="col">
+        <b>ההזנה עובדת עכשיו בלי בינה מלאכותית</b>
+        <span>
+          בלי AI האפליקציה מזהה את הטקסט לפי מילים ושמות, ולכן לפעמים לא מבינה לאן לשייך משפט חופשי.{' '}
+          {commander ? (
+            <>
+              כדי שתבין כמו AI מקצועי (Claude) - כל ניסוח, כמה דברים במשפט אחד, שמות פרטיים - צריך להוסיף בהגדרות השרת (Vercel) את המפתח{' '}
+              <code dir="ltr">ANTHROPIC_API_KEY</code>. זה אותו מפתח שמפעיל את סיכום השיחות האישיות מהקלטה.
+            </>
+          ) : (
+            'כדי שתבין כמו AI מקצועי (Claude), מפקד הקורס צריך לחבר את Claude בהגדרות השרת.'
+          )}
+        </span>
+      </div>
+    </div>
+  );
 }

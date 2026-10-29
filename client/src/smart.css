@@ -545,3 +545,36 @@
     animation: none;
   }
 }
+
+/* without Claude: the reading goes by words and names - said plainly, with how the AI is turned on */
+.sm-ai-off {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--g-blue-soft, var(--tint-bg));
+  color: var(--g-on-blue-soft, var(--ink));
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.sm-ai-off svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.sm-ai-off b {
+  font-size: 14px;
+}
+.sm-check-note {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.sm-ai-off code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  font-size: 12.5px;
+  unicode-bidi: isolate;
+}

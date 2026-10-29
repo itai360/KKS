@@ -431,6 +431,9 @@ const RULES: Rule[] = [
   { kind: 'task', re: word('תזכורת|להזכיר|תזכיר|תזכירי'), w: 3, why: 'תזכורת' },
   { kind: 'task', re: new RegExp(`${LB}עד\\s+(?:ה|ל)?(?:יום|מחר|היום|סוף|-?\\d)`), w: 2, why: 'דד-ליין' },
   { kind: 'task', re: word('דדליין|דד-ליין|לבצע|לטפל'), w: 1.5, why: 'לבצע' },
+  // a sentence that opens with what to do ("להזמין אוטובוס...", "לבדוק את..."): a task - not the words
+  // that say where something goes ("לשבועי", "לתחקיר", "לשימור"), and not "לקבוע" (a time: the calendar)
+  { kind: 'task', re: new RegExp(`^\\s*ל(?!שבועי|ישיבת|תחקיר|שימור|שיפור|יומן|לו"ז|כל|סגל|הודיע|עדכן|קבוע)[${HB}]{3,}${RB}`), w: 2.5, why: 'מה לעשות' },
 
   // an event in the calendar
   { kind: 'event', re: word('פגישה|פגישת|ישיבה|ישיבת|שיעור|הרצאה|מסדר|תרגיל|סיור|מטווח|טקס|כנס|אימון|מבחן|בוחן|ארוחה|ארוחת|הסעה|תדריך|הדרכה|סדנה|פעילות|אירוע'), w: 1.5, why: 'פעילות' },
@@ -564,6 +567,11 @@ function makeStaffSources(staff: SmartContext['staff']): NameSource[] {
     const first = normalizeHebrew(u.displayName).split(' ')[0];
     if (first && first.length >= 3 && firsts.get(first) === 1 && !COMMON.has(first) && first !== normalizeHebrew(u.displayName)) {
       out.push({ id: u.id, source: looseNameSource(first), len: first.length, strength: 'part' });
+    } else if (first && first.length >= 2 && firsts.get(first) === 1 && COMMON.has(first) && first !== normalizeHebrew(u.displayName)) {
+      // also a word ("רון", "טל"): a name only where a name is expected - "אחראי רון", "באחריות טל", "- רון",
+      // ", רון", or spoken to at the start ("רון, תבדוק...")
+      const name = looseNameSource(first);
+      out.push({ id: u.id, source: `(?<=(?:אחראי(?:ת)?|באחריות|[-–,])\\s*)${name}|(?<=^\\s*)${name}(?=\\s*,)`, len: first.length, strength: 'part' });
     }
   }
   return out.sort((a, b) => b.len - a.len);
@@ -573,6 +581,22 @@ interface Hit {
   id: number;
   at: number;
   strength: 'full' | 'part';
+}
+
+/** a title without the staff it names as owners ("סגירת מטווח - אחראי גלית" → "סגירת מטווח") */
+function dropStaffNames(title: string, ctx: SmartContext, ids: number[]): string {
+  if (!ids.length) return title;
+  let t = title;
+  for (const u of ctx.staff.filter((s) => ids.includes(s.id))) {
+    const names = [u.displayName, u.title, u.displayName.split(' ')[0]].filter((x): x is string => !!x && x.trim().length >= 2).sort((a, b) => b.length - a.length);
+    for (const n of names) t = t.replace(new RegExp(`${LB}[ול]?(?:${looseNameSource(normalizeHebrew(n))})${RB}`, 'g'), ' ');
+  }
+  return t
+    .replace(new RegExp(`${LB}(?:אחראי(?:ת)?|באחריות)${RB}\\s*:?`, 'g'), ' ')
+    .replace(/\s*[-–,:]\s*(?=[-–,:]|$)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s,\-–:]+|[\s,\-–:]+$/g, '')
+    .trim();
 }
 
 /** the people named, in the order they are named; their names are taken out of what is left of the text */
@@ -955,6 +979,11 @@ function read(text: string, ctx: SmartContext): Reading {
     add('absence', Math.max(4, att), fields.attendance === 'sick' ? 'מחלה' : 'לא יהיה');
     if (!fields.absenceReason) fields.absenceReason = fields.attendance === 'sick' ? 'sick' : fields.attendance === 'leave' ? 'leave' : 'other';
   }
+  // a staff member "בקורס" / "בהשתלמות": away on a course (a cadet "בקורס" is only in the course)
+  if (staff.length && !cadets.length && new RegExp(`${LB}(?:בקורס|בהשתלמות|בהכשרה)${RB}`).test(text)) {
+    add('absence', 3.5, 'בקורס');
+    if (!fields.absenceReason) fields.absenceReason = 'course';
+  }
   // who it is about tells as much as the words
   if (cadets.length) {
     for (const k of READ_CADET_KINDS) if (scores.has(k)) add(k, 1.5);
@@ -1034,10 +1063,16 @@ function splitClauses(sentence: string, ctx: SmartContext): string[] {
 /** the text's things: its sentences (and their clauses), each joined to the one before when it says nothing of its own */
 export function splitSegments(text: string, ctx: SmartContext): string[] {
   const out: string[] = [];
-  for (const sentence of splitSentences(text)) {
-    for (const s of splitClauses(sentence, ctx)) {
-      if (out.length && !anchored(s, ctx)) out[out.length - 1] = `${out[out.length - 1]} ${s}`;
-      else out.push(s);
+  for (const line of text.replace(/\r/g, '').split('\n')) {
+    let first = true;
+    for (const sentence of splitSentences(line)) {
+      for (const s of splitClauses(sentence, ctx)) {
+        // a part that names nobody and says nothing of its own place belongs with the one before it - in
+        // its own line: a new line is a new thing, as the writer is asked to write them
+        if (!first && out.length && !anchored(s, ctx)) out[out.length - 1] = `${out[out.length - 1]} ${s}`;
+        else out.push(s);
+        first = false;
+      }
     }
   }
   return out;
@@ -1193,7 +1228,11 @@ function fill(kind: ReadKind, text: string, r: Reading, ctx: SmartContext, today
       const plain = text.replace(new RegExp(`^(?:(?:תזכיר(?:י)?|להזכיר)\\s+(?:לי|ל[${HB}]+)\\s+|תזכורת\\s*:?\\s*|(?:צריך|צריכה|צריכים|חייב|חייבת|חייבים|יש)\\s+(?=ל[${HB}]{2}))`), '');
       const t = parseTaskText(plain, { users, now, tz });
       f.title = t.title || heading(rest(ex), 80);
-      f.ownerIds = t.ownerIds.length ? t.ownerIds : [ctx.me];
+      // the owners: as the task parser read them, else the staff named anywhere in it (a first name too,
+      // "אחראי גלית", "רון וגלית") - their names then leave the title - else the writer
+      const named = [...new Set(r.staff.map((h) => h.id))];
+      f.ownerIds = t.ownerIds.length ? t.ownerIds : named.length ? named : [ctx.me];
+      if (!t.ownerIds.length && named.length) f.title = dropStaffNames(f.title, ctx, named) || f.title;
       f.date = t.deadlineDate;
       f.time = t.deadlineTime;
       f.priority = t.priority;
@@ -1222,9 +1261,13 @@ function fill(kind: ReadKind, text: string, r: Reading, ctx: SmartContext, today
     case 'weekly': {
       if (!f.weeklyKind) f.weeklyKind = 'topic';
       f.ownerIds = r.staff.map((h) => h.id).slice(0, 1);
-      const words = rest(ex, [/(?:ל|ב)שבועי(?:\s+(?:ה)?קרוב)?|לישיבת\s+(?:ה)?שבועי|סגירה\s+מקצועית|נושא\s+לשיח|לשיח|לדיון|הערה\s+ללו"?ז|דגש(?:ים)?/])
-        .replace(f.ownerIds.length ? /,?\s*(?:אחראי(?:ת)?|באחריות|אחריות)\s*:?\s*[^,.;]*$/ : /$^/, '')
-        .trim();
+      const words = dropStaffNames(
+        rest(ex, [/(?:ל|ב)שבועי(?:\s+(?:ה)?קרוב)?|לישיבת\s+(?:ה)?שבועי|סגירה\s+מקצועית|נושא\s+לשיח|לשיח|לדיון|הערה\s+ללו"?ז|דגש(?:ים)?/])
+          .replace(f.ownerIds.length ? /,?\s*(?:אחראי(?:ת)?|באחריות|אחריות)\s*:?\s*[^,.;]*$/ : /$^/, '')
+          .trim(),
+        ctx,
+        f.ownerIds,
+      );
       f.title = heading(words, 120).replace(/\.\.\.$/, '');
       f.details = words.length > f.title.length ? words : '';
       break;
