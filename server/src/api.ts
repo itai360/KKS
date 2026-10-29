@@ -59,6 +59,7 @@ import {
 } from './calendar';
 import { googleClientId, googleSignInEnabled, verifyGoogleIdToken } from './google';
 import {
+  calendarSettings,
   cancelEvent,
   canManageEvent,
   createEvent,
@@ -70,6 +71,7 @@ import {
   respondEvent,
   restoreEvent,
   RESPONSES,
+  saveCalendarSettings,
   searchEvents,
   shiftEventTasks,
   untrashEvent,
@@ -372,6 +374,10 @@ export function apiRouter(): Router {
     changed('users');
     res.json(toUser(getUserRow(newId)!));
   });
+
+  // my own calendar settings, as Google's: the reminder an event left as it is gives me (null: none)
+  r.get('/me/calendar', (req, res) => res.json(calendarSettings(me(req).id)));
+  r.patch('/me/calendar', (req, res) => res.json(saveCalendarSettings(me(req).id, req.body)));
 
   // my own phone and email, for the directory (the rest of a user is the commander's)
   r.patch('/me/contact', (req, res) => {

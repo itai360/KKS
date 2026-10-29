@@ -31,6 +31,7 @@ import { addDays, diffDays, isDateKey, parseDateKey, shortDate, startOfWeek, wee
 import type { Absence, CalendarSource, Debrief, EventDetail, Experience, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
 import { AgendaList, MonthDots, scrollToDay } from '../components/Agenda';
 import { BulkScope, useBulk } from '../components/Bulk';
+import { CalendarSettings } from '../components/CalendarSettings';
 import { CalendarView, YearGrid, type GridView } from '../components/CalendarView';
 import { ContextPanel, PanelStrip } from '../components/ContextPanel';
 import { KindBadge, PriorLessons } from '../components/DebriefBits';
@@ -258,7 +259,11 @@ export function SchedulePage() {
   const searchApi = useApi<ScheduleEvent[]>(q ? `/api/events/search?q=${encodeURIComponent(q)}` : null, ['events']);
 
   const allEvents = on('events') ? (eventsApi.data ?? NO_EVENTS) : NO_EVENTS;
-  const events = useMemo(() => (prefs.onlyMine ? allEvents.filter((e) => isMine(e, user.id)) : allEvents), [allEvents, prefs.onlyMine, user.id]);
+  // only mine, if so chosen; the events I said no to only while they are shown (Google's view option)
+  const events = useMemo(
+    () => allEvents.filter((e) => (!prefs.onlyMine || isMine(e, user.id)) && (prefs.showDeclined || e.myResponse !== 'declined')),
+    [allEvents, prefs.onlyMine, prefs.showDeclined, user.id],
+  );
   const externalEvents = useMemo(
     () => (extOn ? (external.data ?? NO_EXTERNAL).filter((x) => sourceIndex.has(x.sourceId) && layerShown(prefs.layers, `ext:${x.sourceId}`)) : NO_EXTERNAL),
     [extOn, external.data, sourceIndex, prefs.layers],
@@ -292,6 +297,7 @@ export function SchedulePage() {
   const setCreating = (prefill: EventPrefill) => navigate('/event/new', { state: { prefill } });
   const setEditing = (e: ScheduleEvent) => navigate(editPath(e.id));
   const [google, setGoogle] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [card, setCard] = useState<{ item: CalItem; anchor: Anchor } | null>(null);
   const [draft, setDraft] = useState<(Draft & { anchor: Anchor }) | null>(null);
   const [askDate, setAskDate] = useState(false);
@@ -429,8 +435,8 @@ export function SchedulePage() {
   const monthStep = (dir: 1 | -1) => setMiniFor({ day: focus, month: stepDate('month', miniMonth, dir) });
 
   // ---------------- the top bar: the calendar's controls (a computer) ----------------
-  const bar = useRef({ today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash') });
-  bar.current = { today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash') };
+  const bar = useRef({ today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash'), settings: () => setSettingsOpen(true) });
+  bar.current = { today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash'), settings: () => setSettingsOpen(true) };
   const markShown = view === 'week' || view === 'four' || view === 'three' ? shown : view === 'day' ? [date] : [];
   const extrasKey = `${canAdd}`;
   useEffect(() => {
@@ -450,6 +456,7 @@ export function SchedulePage() {
         ...(canAdd ? [{ label: 'בחירת אירועים לפעולה משותפת', icon: 'check', run: () => bulkToggle.current?.() }] : []),
         { label: 'הדפסה', icon: 'print', run: () => window.print() },
         { label: 'אשפה', icon: 'trash', run: () => bar.current.trash() },
+        { label: 'הגדרות יומן', icon: 'settings', run: () => bar.current.settings() },
       ],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -685,6 +692,7 @@ export function SchedulePage() {
             onMove={(e, to) => void move(e, to)}
             onPickDay={(d) => set({ date: d === today ? null : d, view: 'day', event: null }, true)}
             compact={phone}
+            dimPast={prefs.dimPast}
           />
         </div>
       </div>
@@ -705,7 +713,7 @@ export function SchedulePage() {
     >
       <BulkBridge onReady={(fn) => void (bulkToggle.current = fn)} />
       <div
-        className={`page schedule-page cal-page view-${view}${phone ? ' is-phone' : ' is-desk'}${phone ? ' has-strip' : ''}${!phone && prefs.panel ? ' has-panel' : ''}${q ? ' is-searching' : ''}`}
+        className={`page schedule-page cal-page view-${view}${phone ? ' is-phone' : ' is-desk'}${phone ? ' has-strip' : ''}${!phone && prefs.panel ? ' has-panel' : ''}${q ? ' is-searching' : ''}${prefs.dimPast ? '' : ' no-dim-past'}`}
         onPointerDownCapture={(e) => void (lastDown.current = { top: e.clientY - 10, bottom: e.clientY + 10, left: e.clientX - 10, right: e.clientX + 10 })}
       >
         {phone ? (
@@ -758,6 +766,7 @@ export function SchedulePage() {
                   { label: 'יומן Google', icon: 'calendar', run: () => setGoogle(true) },
                   { label: 'אשפה', icon: 'trash', run: () => navigate('/trash') },
                   { label: 'הדפסה', icon: 'print', run: () => window.print() },
+                  { label: 'הגדרות יומן', icon: 'settings', run: () => setSettingsOpen(true) },
                 ].map((m) => (
                   <button
                     key={m.label}
@@ -805,6 +814,7 @@ export function SchedulePage() {
           </>
         )}
         {card && <PopCard card={card} actions={actions} onClose={() => setCard(null)} />}
+        {settingsOpen && <CalendarSettings onClose={() => setSettingsOpen(false)} />}
         {draft && (
           <QuickCreate
             anchor={draft.anchor}

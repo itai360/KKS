@@ -150,7 +150,14 @@ export interface CalItem {
   faded: boolean;
   /** a task past its deadline */
   overdue: boolean;
+  /** an event one is invited to, as Google draws it: not answered (an outline), "maybe" (stripes), or said no (struck through) */
+  rsvp?: 'pending' | 'maybe' | 'no';
   src: CalSource;
+}
+
+/** how an invitation looks by the answer given to it (none: as any event) */
+export function rsvpOf(e: Pick<ScheduleEvent, 'myResponse'>): CalItem['rsvp'] {
+  return e.myResponse === 'needsAction' ? 'pending' : e.myResponse === 'tentative' ? 'maybe' : e.myResponse === 'declined' ? 'no' : undefined;
 }
 
 export function fromEvent(e: ScheduleEvent): CalItem {
@@ -166,6 +173,7 @@ export function fromEvent(e: ScheduleEvent): CalItem {
     color: isCalColor(e.color) ? e.color : 'blue',
     faded: e.cancelled,
     overdue: false,
+    rsvp: rsvpOf(e),
     src: { kind: 'event', e },
   };
 }

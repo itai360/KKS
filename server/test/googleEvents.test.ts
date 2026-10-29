@@ -272,6 +272,25 @@ describe('reminders', () => {
       setDefaultReminders(true);
     }
   });
+
+  it("each person's own default, as Google's settings: none, or another time - an event's own reminders stay as they are", async () => {
+    expect((await c.s1.get('/api/me/calendar')).body).toEqual({ defaultReminder: 30 });
+    expect((await c.s1.patch('/api/me/calendar', { defaultReminder: null })).body).toEqual({ defaultReminder: null });
+    expect((await c.s2.patch('/api/me/calendar', { defaultReminder: 10 })).body).toEqual({ defaultReminder: 10 });
+    expect((await c.s2.patch('/api/me/calendar', { defaultReminder: -5 })).status).toBe(400);
+    clock.set(at('2026-10-01', '08:00'));
+    // left as it is: s1 (none) is not reminded, s2 ten minutes before, s3 (never set) thirty
+    await c.cmd.post('/api/events', ev({ date: '2026-10-02', startTime: '12:00', title: 'תדריך', ownerId: c.ids.s1, guests: [{ userId: c.ids.s2 }, { userId: c.ids.s3 }] }));
+    // with its own reminder: everyone, whatever their default
+    await c.cmd.post('/api/events', ev({ date: '2026-10-02', startTime: '16:00', title: 'מטווח', ownerId: c.ids.s1, reminders: [{ minutes: 15 }] }));
+    for (const t of ['11:30', '11:50', '15:45']) {
+      clock.set(at('2026-10-02', t));
+      runAutomation();
+    }
+    expect(notes(c.ids.s1, 'event_reminder').map((n) => n.title)).toEqual(['בעוד 15 דקות: מטווח']);
+    expect(notes(c.ids.s2, 'event_reminder').map((n) => n.title)).toEqual(['בעוד 10 דקות: תדריך']);
+    expect(notes(c.ids.s3, 'event_reminder').map((n) => n.title)).toEqual(['בעוד 30 דקות: תדריך']);
+  });
 });
 
 describe('the series of before', () => {

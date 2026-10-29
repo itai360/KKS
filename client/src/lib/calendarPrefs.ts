@@ -20,13 +20,16 @@ export interface CalendarPrefs {
   allDayOpen: boolean;
   /** the "היומנים שלי" / "יומנים נוספים" lists folded in the side bar */
   folded: Partial<Record<'mine' | 'other', boolean>>;
+  /** Google's view options: what is over drawn paler; the events one said no to shown (struck through) */
+  dimPast: boolean;
+  showDeclined: boolean;
 }
 
 const KEY = 'kks.calendar';
 
 /** what the schedule remembered before (its deadlines and "only mine" choices) carries over */
 function fromBefore(): CalendarPrefs {
-  const prefs: CalendarPrefs = { layers: {}, taskFilter: NO_TASK_FILTER, onlyMine: false, panel: null, allDayOpen: false, folded: {} };
+  const prefs: CalendarPrefs = { layers: {}, taskFilter: NO_TASK_FILTER, onlyMine: false, panel: null, allDayOpen: false, folded: {}, dimPast: true, showDeclined: true };
   try {
     const tasks = localStorage.getItem('kks.scheduleTasks');
     if (tasks === 'none') prefs.layers.myTasks = false;
@@ -52,6 +55,8 @@ export function readCalendarPrefs(): CalendarPrefs {
       panel: v.panel === 'day' || v.panel === 'week' || v.panel === 'tasks' || v.panel === 'approvals' ? v.panel : null,
       allDayOpen: !!v.allDayOpen,
       folded: v.folded && typeof v.folded === 'object' ? v.folded : {},
+      dimPast: v.dimPast !== false,
+      showDeclined: v.showDeclined !== false,
     };
   } catch {
     return fromBefore();

@@ -1325,6 +1325,38 @@
 .gc-chip.is-past.is-note svg {
   opacity: 0.5;
 }
+/* an invitation as Google draws it: not answered - an outline in its colour; "maybe" - stripes; said no -
+   an outline, struck through */
+.gc-event.rsvp-pending,
+.gc-event.rsvp-maybe,
+.gc-event.rsvp-no,
+.gc-chip.is-bar.rsvp-pending,
+.gc-chip.is-bar.rsvp-maybe,
+.gc-chip.is-bar.rsvp-no {
+  border: 1.5px solid var(--c);
+  background: var(--g-sheet);
+  color: var(--c-ink);
+}
+.gc-event.rsvp-maybe,
+.gc-chip.is-bar.rsvp-maybe {
+  background: repeating-linear-gradient(-45deg, var(--g-sheet) 0 5px, var(--c-soft) 5px 10px);
+}
+.gc-event.rsvp-no .gc-event-title,
+.gc-chip.rsvp-no .gc-chip-title {
+  text-decoration: line-through;
+}
+.gc-event.rsvp-no,
+.gc-chip.rsvp-no,
+.gc-event.is-past[class*='rsvp-'],
+.gc-chip.is-past[class*='rsvp-'] {
+  opacity: 0.6;
+}
+.gc-chip.rsvp-pending .gc-dot,
+.gc-chip.rsvp-maybe .gc-dot,
+.gc-chip.rsvp-no .gc-dot {
+  background: none;
+  box-shadow: inset 0 0 0 2px var(--c);
+}
 @media (hover: hover) {
   .gc-chip:not(.is-bar):hover {
     background: var(--hover-2);
@@ -3500,4 +3532,94 @@
 }
 .cal-page.is-phone .cal-search .gs-mon::after {
   content: none;
+}
+
+/* ---------------- the calendar's settings, as Google's ---------------- */
+.g-settings .g-set + .g-set {
+  margin-top: 18px;
+}
+.g-settings .g-set h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.g-set-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--g-line);
+  cursor: pointer;
+}
+.g-set-row:last-child {
+  border-bottom: 0;
+}
+.g-set-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.g-set-text b {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.g-set-text small {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+.g-set-select {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--g-field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.g-set-select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* the dimming of what is over, turned off: the list's past rows as the rest */
+.cal-page.is-desk.no-dim-past .gs-items .event-row.past .event-time,
+.cal-page.is-desk.no-dim-past .gs-items .event-row.past .event-title {
+  color: var(--ink);
+}
+.cal-page.no-dim-past .gs-items .event-row.past .gs-dot {
+  opacity: 1;
+}
+.cal-page.is-phone.no-dim-past .gs-items .event-row.past {
+  opacity: 1;
+}
+/* an invitation in the list: a hollow dot (on a phone, an outlined chip), "maybe" striped, said no struck through */
+.cal-page .gs-items .event-row[class*='rsvp-'] .gs-dot {
+  background: none;
+  box-shadow: inset 0 0 0 2px var(--c);
+}
+.cal-page .gs-items .event-row.rsvp-no .event-title {
+  text-decoration: line-through;
+}
+.cal-page.is-phone .gs-items .event-row.rsvp-pending,
+.cal-page.is-phone .gs-items .event-row.rsvp-no {
+  background: var(--card);
+  color: var(--c-ink);
+  box-shadow: inset 0 0 0 1.5px var(--c);
+}
+.cal-page.is-phone .gs-items .event-row.rsvp-maybe {
+  background: repeating-linear-gradient(-45deg, var(--card) 0 6px, var(--c-soft) 6px 12px);
+  color: var(--c-ink);
+  box-shadow: inset 0 0 0 1.5px var(--c);
+}
+.cal-page.is-phone .gs-items .event-row.rsvp-no {
+  opacity: 0.6;
 }

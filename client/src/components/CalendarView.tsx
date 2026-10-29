@@ -51,6 +51,8 @@ export interface CalendarProps {
   /** a phone: the month as Google Calendar's app draws it - the whole screen, everything a small filled bar,
    *  and a tap on a day opens that day */
   compact?: boolean;
+  /** what is over drawn paler (Google's "reduce the brightness of past events"); on unless turned off */
+  dimPast?: boolean;
 }
 
 export function CalendarView(props: CalendarProps) {
@@ -106,6 +108,7 @@ function Chip({ item, lane, hourly, past, onOpen, draggable, onDragStart, onDrag
         `c-${item.color}`,
         item.faded && 'is-faded',
         past && 'is-past',
+        item.rsvp && `rsvp-${item.rsvp}`,
         item.overdue && 'is-overdue',
         lane?.cutStart && 'cut-start',
         lane?.cutEnd && 'cut-end',
@@ -170,7 +173,7 @@ const range = (start: number, end: number) => `${fromMinutes(start)} - ${end >= 
 /** the rows above the hours show this many until opened up */
 const ALLDAY_ROWS = 3;
 
-function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onPickDay }: CalendarProps) {
+function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, dimPast = true }: CalendarProps) {
   const draftTitle = draft?.title?.trim() || '(ללא כותרת)';
   const days = viewDays(view, date);
   const bulk = useBulk();
@@ -347,7 +350,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
         </div>
         <div className="gc-allday" style={{ '--rows': Math.max(1, rows) } as CSSProperties} onClick={clickAllDay}>
           {fit.shown.map((l) => (
-            <Chip key={l.item.key} item={l.item} lane={l} past={isPast(l.item, today, nowMin)} onOpen={onOpen} selected={!!(bulk?.active && eventOf(l.item) && bulk.selected.has(eventOf(l.item)!.id))} />
+            <Chip key={l.item.key} item={l.item} lane={l} past={dimPast && isPast(l.item, today, nowMin)} onOpen={onOpen} selected={!!(bulk?.active && eventOf(l.item) && bulk.selected.has(eventOf(l.item)!.id))} />
           ))}
           {fit.more.map((n, i) =>
             n > 0 ? (
@@ -407,7 +410,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                   };
                   const short = p.end - p.start < 50;
                   const isNow = d === today && !item.faded && nowMin >= p.start && nowMin < p.end;
-                  const past = !isDragged && !item.faded && (d < today || (d === today && p.end <= nowMin));
+                  const past = dimPast && !isDragged && !item.faded && (d < today || (d === today && p.end <= nowMin));
                   const movable = !!e && canMove(e) && !bulk?.active;
                   const prep = e && e.taskTotal > 0 ? `הכנה ${e.taskDone}/${e.taskTotal}` : '';
                   const selected = !!(e && bulk?.selected.has(e.id));
@@ -423,6 +426,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                         item.faded && 'is-faded',
                         isNow && 'is-now',
                         past && 'is-past',
+                        item.rsvp && `rsvp-${item.rsvp}`,
                         isDragged && 'is-dragging',
                         movable && 'is-movable',
                         p.depth > 0 && 'is-on',
@@ -481,7 +485,7 @@ const DAYNUM_PX = 26;
 const ROW_PX_PHONE = 17;
 const DAYNUM_PX_PHONE = 22;
 
-function MonthGrid({ date, today, nowTime, items, draft, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, compact = false }: CalendarProps) {
+function MonthGrid({ date, today, nowTime, items, draft, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, compact = false, dimPast = true }: CalendarProps) {
   const draftTitle = draft?.title?.trim() || '(ללא כותרת)';
   const nowMin = eventSpan(nowTime, null).start;
   const bulk = useBulk();
@@ -568,7 +572,7 @@ function MonthGrid({ date, today, nowTime, items, draft, canCreate, canMove, onO
                       item={l.item}
                       lane={l}
                       hourly={!compact}
-                      past={isPast(l.item, today, nowMin)}
+                      past={dimPast && isPast(l.item, today, nowMin)}
                       onOpen={onOpen}
                       selected={!!(e && bulk?.selected.has(e.id))}
                       draggable={movable}

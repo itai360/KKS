@@ -5,6 +5,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { MONTH_NAMES, monthWeeks } from '@shared/calendarGrid';
+import { rsvpOf } from '@shared/calendarLayers';
 import { diffDays, parseDateKey, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { ExternalEvent, ScheduleEvent, Task, Week } from '@shared/types';
 import { endMinutes, inMinutes, leftMinutes, nowAndNext, type AgendaItem, type AgendaRow } from '../lib/agenda';
@@ -453,7 +454,7 @@ export function CourseEventRow({
   return (
     <SwipeRow itemId={e.id} label={e.title}>
       <div
-        className={`event-row c-${e.color || 'blue'}${e.cancelled ? ' cancelled' : ''}${now ? ' now' : ''}${past ? ' past' : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`}
+        className={`event-row c-${e.color || 'blue'}${e.cancelled ? ' cancelled' : ''}${now ? ' now' : ''}${past ? ' past' : ''}${rsvpOf(e) ? ` rsvp-${rsvpOf(e)}` : ''}${bulk?.selected.has(e.id) ? ' selected' : ''}`}
         {...openable(bulkClick(bulk, e.id, onOpen))}
       >
         <span className="gs-dot" aria-hidden="true" />

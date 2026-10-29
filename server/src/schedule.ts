@@ -1234,6 +1234,29 @@ export const setDefaultReminders = (on: boolean) => {
   defaultRemindersOn = on;
 };
 
+/** one's own calendar settings, as Google's: the reminder an event left as it is gives them (null: none) */
+export interface CalendarSettings {
+  defaultReminder: number | null;
+}
+
+export function calendarSettings(userId: number): CalendarSettings {
+  const row = db().get<{ default_reminder: number | null }>('SELECT default_reminder FROM user_calendar_settings WHERE user_id = ?', userId);
+  return { defaultReminder: row ? row.default_reminder : DEFAULT_REMINDERS[0].minutes };
+}
+
+export const calendarSettingsSchema = z.object({ defaultReminder: z.number().int().min(0).max(MAX_REMINDER_MINUTES).nullable() });
+
+export function saveCalendarSettings(userId: number, input: unknown): CalendarSettings {
+  const v = calendarSettingsSchema.parse(input);
+  db().run(
+    'INSERT INTO user_calendar_settings(user_id, default_reminder, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET default_reminder = excluded.default_reminder, updated_at = excluded.updated_at',
+    userId,
+    v.defaultReminder,
+    nowIso(),
+  );
+  return calendarSettings(userId);
+}
+
 /**
  * Sends the reminders that are due (from the scheduler, about every minute): to the event's owner, to
  * its guests who did not decline, and - one's own calendar - to its maker. Each reminder once for each
@@ -1244,28 +1267,29 @@ export function sendEventReminders(now: Date): number {
   const from = localDateKey(new Date(now.getTime() - 86_400_000), zone);
   const to = localDateKey(new Date(now.getTime() + MAX_REMINDER_MINUTES * 60_000 + 86_400_000), zone);
   const rows = db().all<EventRow>(`${EVENT_BASE} WHERE ${LIVE} AND e.cancelled = 0 AND e.date >= ? AND e.date <= ?`, from, to);
+  // an event left as it is reminds each person by their own setting (none set: 30 minutes before)
+  const chosen = new Map(db().all<{ user_id: number; default_reminder: number | null }>('SELECT user_id, default_reminder FROM user_calendar_settings').map((s) => [s.user_id, s.default_reminder]));
+  const defaultFor = (uid: number): EventReminder[] => (!chosen.has(uid) ? DEFAULT_REMINDERS : chosen.get(uid) == null ? [] : [{ minutes: chosen.get(uid)! }]);
   let sent = 0;
   for (const r of rows) {
     const own = parseReminders(r.reminders);
-    const reminders = own ?? (r.all_day || !defaultRemindersOn ? [] : DEFAULT_REMINDERS);
-    if (!reminders.length) continue;
+    if (!own && (r.all_day || !defaultRemindersOn)) continue;
     const startsAt = zonedToUtc(r.date, r.all_day ? '00:00' : r.start_time, zone);
     if (startsAt.getTime() <= now.getTime() - REMINDER_LATE_MS) continue;
     const recipients = new Set<number>();
     if (r.owner_id) recipients.add(r.owner_id);
     if (r.calendar === 'personal' && r.created_by) recipients.add(r.created_by);
     for (const g of guestsOf(r.id)) if (g.response !== 'declined') recipients.add(g.userId);
-    if (!recipients.size) continue;
     const startIso = startsAt.toISOString();
-    for (const rem of reminders) {
-      const due = startsAt.getTime() - rem.minutes * 60_000;
-      if (now.getTime() < due || now.getTime() > startsAt.getTime() + REMINDER_LATE_MS) continue;
-      // made after its reminder's time: that reminder is not owed (Google does not send it either)
-      if (Date.parse(r.created_at) > due) continue;
-      // the time actually left (the scheduler may come a little late), in round minutes; begun already: since when
-      const left = Math.round((startsAt.getTime() - now.getTime()) / 60_000);
-      const lead = r.all_day ? reminderLead(rem.minutes, true) : left < 0 ? `התחיל לפני ${-left === 1 ? 'דקה' : `${-left} דקות`}` : reminderLead(left < 10 ? left : Math.round(left / 5) * 5);
-      for (const uid of recipients) {
+    for (const uid of recipients) {
+      for (const rem of own ?? defaultFor(uid)) {
+        const due = startsAt.getTime() - rem.minutes * 60_000;
+        if (now.getTime() < due || now.getTime() > startsAt.getTime() + REMINDER_LATE_MS) continue;
+        // made after its reminder's time: that reminder is not owed (Google does not send it either)
+        if (Date.parse(r.created_at) > due) continue;
+        // the time actually left (the scheduler may come a little late), in round minutes; begun already: since when
+        const left = Math.round((startsAt.getTime() - now.getTime()) / 60_000);
+        const lead = r.all_day ? reminderLead(rem.minutes, true) : left < 0 ? `התחיל לפני ${-left === 1 ? 'דקה' : `${-left} דקות`}` : reminderLead(left < 10 ? left : Math.round(left / 5) * 5);
         const ok = db().run('INSERT OR IGNORE INTO event_reminders_sent(event_id, user_id, minutes, starts_at, sent_at) VALUES (?, ?, ?, ?, ?)', r.id, uid, rem.minutes, startIso, now.toISOString()).changes;
         if (!ok) continue;
         notify([uid], { type: 'event_reminder', category: 'info', title: `${lead}: ${r.title}`, body: `${whenOf(r.date, !!r.all_day, r.start_time, r.end_date)}${r.location ? ` · ${r.location}` : ''}`, link: `/?date=${r.date}&event=${r.id}`, ref: `event:${r.id}` });
