@@ -864,8 +864,24 @@ export function SchedulePage() {
   );
 }
 
-/** a thing's card, beside it (a phone: a sheet) */
+/** a thing's card, beside it (a phone: a sheet). As Google's: E edits the event, Delete deletes it */
 function PopCard({ card, actions, onClose }: { card: { item: CalItem; anchor: Anchor }; actions: EventActions; onClose: () => void }) {
+  const e = card.item.src.kind === 'event' ? card.item.src.e : null;
+  const keys = useRef({ e, actions });
+  keys.current = { e, actions };
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      const { e: event, actions: act } = keys.current;
+      if (!event || ev.ctrlKey || ev.metaKey || ev.altKey || takesKeys(ev.target as HTMLElement)) return;
+      if (document.querySelector('.modal') || !act.canManage(event)) return;
+      if (ev.code === 'KeyE') act.onEdit(event);
+      else if (ev.key === 'Delete' || ev.key === 'Backspace') void act.onDelete(event);
+      else return;
+      ev.preventDefault();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   return (
     <Popover anchor={card.anchor} label={card.item.title} sheetTitle={kindLabel(card.item)} onClose={onClose} className="item-pop">
       <ItemCard item={card.item} onClose={onClose} actions={actions} />
