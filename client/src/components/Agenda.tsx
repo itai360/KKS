@@ -190,8 +190,15 @@ export interface AgendaProps {
   onlyMine?: boolean;
 }
 
+/** the box a list scrolls in: a phone's calendar has its own (the page itself does not scroll) - or the page */
+export function scrollBoxOf(el: HTMLElement | null): HTMLElement | null {
+  return el?.closest<HTMLElement>('.gph-scroll') ?? null;
+}
+
 /** where the list goes under what stays on top (the top bar, the strip of days) */
 function stickyLine(from: HTMLElement): number {
+  const box = scrollBoxOf(from);
+  if (box) return box.getBoundingClientRect().top;
   // the calendar's bar on a phone, or the search's in its place - whichever stays on top
   const bars = [...(from.closest('.schedule-page')?.querySelectorAll<HTMLElement>('.gph-bar, .cal-search-bar') ?? [])].filter((b) => getComputedStyle(b).position === 'sticky');
   const top = document.querySelector<HTMLElement>('.topbar');
@@ -202,11 +209,14 @@ function stickyLine(from: HTMLElement): number {
 export function scrollToDay(list: HTMLElement | null, d: string, unlessSeen = false): boolean {
   const row = list?.querySelector<HTMLElement>(`[data-day="${d}"]`) ?? [...(list?.querySelectorAll<HTMLElement>('[data-from]') ?? [])].find((g) => g.dataset.from! <= d && g.dataset.to! >= d);
   if (!row || !list) return false;
+  const box = scrollBoxOf(list);
   const line = stickyLine(list);
   const top = row.getBoundingClientRect().top;
-  if (unlessSeen && top >= line && top < window.innerHeight * 0.6) return true;
+  const seen = box ? line + box.clientHeight * 0.6 : window.innerHeight * 0.6;
+  if (unlessSeen && top >= line && top < seen) return true;
   const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-  window.scrollTo({ top: Math.max(0, top + window.scrollY - line - 6), behavior: smooth ? 'smooth' : 'auto' });
+  if (box) box.scrollTo({ top: Math.max(0, box.scrollTop + top - line - 6), behavior: smooth ? 'smooth' : 'auto' });
+  else window.scrollTo({ top: Math.max(0, top + window.scrollY - line - 6), behavior: smooth ? 'smooth' : 'auto' });
   return true;
 }
 
@@ -238,9 +248,11 @@ export function AgendaList({ rows, today, nowTime, weeks, canAddOn, onAdd, onOpe
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(measure);
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
+    // a phone's calendar scrolls in its own box, a computer's page scrolls
+    const scroller = scrollBoxOf(list) ?? window;
+    scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => {
-      window.removeEventListener('scroll', onScroll);
+      scroller.removeEventListener('scroll', onScroll);
       cancelAnimationFrame(frame);
     };
   }, [rows]);

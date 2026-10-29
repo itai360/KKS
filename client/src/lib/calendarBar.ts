@@ -30,6 +30,8 @@ export const VIEW_KEYS: Partial<Record<CalView, [string, string]>> = {
 /** a computer's views, in Google Calendar's order; a phone's (seven columns do not fit it) */
 export const DESK_VIEWS: CalView[] = ['day', 'week', 'month', 'year', 'agenda', 'four'];
 export const PHONE_VIEWS: CalView[] = ['agenda', 'day', 'three', 'month'];
+/** each view's mark in a phone's menu of views */
+export const VIEW_ICONS: Record<CalView, string> = { agenda: 'menu', day: 'calendar', three: 'board', four: 'board', week: 'board', month: 'apps', year: 'apps' };
 
 export interface CalendarBar {
   view: CalView;
@@ -50,6 +52,8 @@ export interface CalendarBar {
   askDate(): void;
   /** more the calendar can do, under its views: selecting events, printing, Google Calendar */
   extras: { label: string; icon: string; run(): void }[];
+  /** a phone: what the side menu offers on the calendar, under its views (going to a day, Google Calendar...) */
+  drawer?: { label: string; icon: string; run(): void }[];
 }
 
 let current: CalendarBar | null = null;

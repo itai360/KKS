@@ -123,6 +123,9 @@ export interface Placed<T> {
   /** its place across the day's column, as parts of the column's width from the start side */
   left: number;
   width: number;
+  /** and pixels added to those (the phone's layout moves an event lying on another in by a fixed step) */
+  leftPx?: number;
+  widthPx?: number;
 }
 
 /** events that start less than this apart sit side by side; one that starts later lies on the earlier */
@@ -191,6 +194,99 @@ export function layoutDay<T>(items: T[], span: (item: T) => { start: number; end
       while (p.col + p.span < g.cols && !g.members.some((q) => q.col === p.col + p.span && overlap(p, q))) p.span++;
       p.left = left + (width * p.col) / g.cols;
       p.width = (width * p.span) / g.cols;
+    }
+  }
+  return spots.map(({ group: _group, ...p }) => p);
+}
+
+/** the phone's layout: events that start this close (or closer) sit side by side */
+export const APP_TOGETHER_MINUTES = 30;
+/** the phone's layout: an event lying on another begins this many pixels in from that one's start side */
+export const APP_INDENT_PX = 24;
+/** the phone's layout: the shortest an event is drawn, in minutes (one line of its title) */
+export const APP_MIN_VISIBLE = 20;
+
+/**
+ * Lays out one day's timed events the way Google Calendar's phone app does (its day and three days).
+ * Events that start within half an hour of one another share a group and divide its width - the longest
+ * in the first column, each in the first column free during it, stretched over the next columns while they
+ * are free. An event that starts later than every event it overlaps lies on the one most directly under
+ * it: moved in from that one's start side by a fixed step, and reaching on over the columns beside it that
+ * are free while it lasts - to the day's end side when they all are. Positions are parts of the column's
+ * width plus pixels (`leftPx`, `widthPx`).
+ */
+export function layoutDayApp<T>(items: T[], span: (item: T) => { start: number; end: number }, minVisible = APP_MIN_VISIBLE, indentPx = APP_INDENT_PX): Placed<T>[] {
+  interface Box {
+    pct: number;
+    px: number;
+  }
+  interface Group {
+    members: Spot[];
+    cols: number;
+    /** the event this group lies on, if any */
+    on: Spot | null;
+    left: Box;
+    width: Box;
+  }
+  type Spot = Placed<T> & { group: Group; leftPx: number; widthPx: number };
+  const visibleEnd = (x: { start: number; end: number }) => Math.max(x.end, x.start + minVisible);
+  const overlap = (a: { start: number; end: number }, b: { start: number; end: number }) => a.start < visibleEnd(b) && b.start < visibleEnd(a);
+  const sorted = items.map((item) => ({ item, ...span(item) })).sort((a, b) => a.start - b.start || b.end - a.end);
+  const spots: Spot[] = [];
+  const groups: Group[] = [];
+  const newGroup = (on: Spot | null): Group => {
+    const g: Group = { members: [], cols: 1, on, left: { pct: 0, px: 0 }, width: { pct: 1, px: 0 } };
+    groups.push(g);
+    return g;
+  };
+  for (const x of sorted) {
+    const over = spots.filter((p) => overlap(p, x));
+    const together = over.filter((p) => x.start - p.start <= APP_TOGETHER_MINUTES);
+    // the one it lies most directly on: the deepest, the latest of those
+    const under = over.reduce<Spot | null>((m, p) => (!m || p.depth > m.depth || (p.depth === m.depth && p.start > m.start) ? p : m), null);
+    const group = together.length ? together.reduce((m, p) => (p.depth > m.depth ? p : m)).group : newGroup(under);
+    const depth = group.on ? group.on.depth + 1 : 0;
+    const spot: Spot = { item: x.item, start: x.start, end: x.end, col: 0, cols: 1, span: 1, depth, left: 0, width: 1, leftPx: 0, widthPx: 0, group };
+    group.members.push(spot);
+    spots.push(spot);
+  }
+  // the columns of each group: the longest first (then the one that ends later), each in the first column free during it
+  for (const g of groups) {
+    const order = [...g.members].sort((a, b) => b.end - b.start - (a.end - a.start) || b.end - a.end || a.start - b.start);
+    const done: Spot[] = [];
+    for (const p of order) {
+      let col = 0;
+      while (done.some((q) => q.col === col && overlap(p, q))) col++;
+      p.col = col;
+      done.push(p);
+    }
+    g.cols = Math.max(...g.members.map((m) => m.col)) + 1;
+    for (const p of g.members) {
+      p.cols = g.cols;
+      while (p.col + p.span < g.cols && !g.members.some((q) => q.col === p.col + p.span && overlap(p, q))) p.span++;
+    }
+  }
+  // the room of each group (one lying on another comes after it): the whole column, or from the event under
+  // it moved in by the step, on over the columns beside that one that are free while the group lasts
+  const at = (b: Box, w: Box, part: number): Box => ({ pct: b.pct + w.pct * part, px: b.px + w.px * part });
+  for (const g of groups) {
+    const on = g.on;
+    if (on) {
+      const og = on.group;
+      const from = Math.min(...g.members.map((m) => m.start));
+      const to = Math.max(...g.members.map(visibleEnd));
+      let end = on.col + on.span;
+      while (end < og.cols && !og.members.some((q) => q.col <= end && end < q.col + q.span && q.start < to && from < visibleEnd(q))) end++;
+      const right = at(og.left, og.width, end / og.cols);
+      g.left = { pct: on.left, px: on.leftPx + indentPx };
+      g.width = { pct: right.pct - g.left.pct, px: right.px - g.left.px };
+    }
+    for (const p of g.members) {
+      const l = at(g.left, g.width, p.col / g.cols);
+      p.left = l.pct;
+      p.leftPx = l.px;
+      p.width = (g.width.pct * p.span) / g.cols;
+      p.widthPx = (g.width.px * p.span) / g.cols;
     }
   }
   return spots.map(({ group: _group, ...p }) => p);

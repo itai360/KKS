@@ -23,7 +23,8 @@ import { TopSearch } from './TopSearch';
 import { CalendarLayers } from './SideBar';
 import { MiniMonth } from './MiniMonth';
 import { CalendarControls, HelpButton, UserMenu, ViewSwitcher } from './TopBarParts';
-import { useCalendarBar } from '../lib/calendarBar';
+import { PHONE_VIEWS, useCalendarBar, VIEW_ICONS, VIEW_LABELS } from '../lib/calendarBar';
+import { setMainMenuHost } from '../lib/mainMenu';
 import { todayKey } from '../lib/format';
 import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
@@ -486,6 +487,13 @@ export function Layout({ children }: { children: ReactNode }) {
   }, []);
   // a phone: the same menu slides in from the side whole - never folded to icons
   const phone = useMedia(BOTTOM_BAR_MEDIA);
+  // a phone's calendar is Google Calendar's app: its own bar on top (no site bar), the whole screen, and
+  // the page itself never scrolls - only what is inside it (the hours, the list)
+  const calShell = phone && onCalendar;
+  useEffect(() => {
+    document.documentElement.classList.toggle('cal-shell', calShell);
+    return () => document.documentElement.classList.remove('cal-shell');
+  }, [calShell]);
   const deskBar = !phone && onCalendar ? calBar : null;
   const folded = !phone && (railPref ? railPref === 'collapsed' : mediumScreen);
   // just folded: it stays folded under the pointer (no opening on hover) until the pointer leaves it
@@ -602,6 +610,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const railRef = useRef<HTMLElement>(null);
   const scrimRef = useRef<HTMLDivElement>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
+  // the menu opened from elsewhere (the calendar's own bar on a phone): focus goes back there
+  const opener = useRef<HTMLElement | null>(null);
+  useEffect(
+    () =>
+      setMainMenuHost((from) => {
+        opener.current = from;
+        setMenuOpen(true);
+      }),
+    [],
+  );
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   useEffect(() => {
     setMenuOpen(false);
@@ -636,7 +654,9 @@ export function Layout({ children }: { children: ReactNode }) {
       unlock();
       // back to the button that opened it
       const now = document.activeElement;
-      if (!now || now === document.body || rail.contains(now)) menuButton.current?.focus({ preventScroll: true });
+      const back = opener.current?.isConnected ? opener.current : menuButton.current;
+      opener.current = null;
+      if (!now || now === document.body || rail.contains(now)) back?.focus({ preventScroll: true });
     };
   }, [drawer]);
 
@@ -740,6 +760,41 @@ export function Layout({ children }: { children: ReactNode }) {
           </NavLink>
         </div>
         <div className="gside-body">
+          {/* a phone's calendar: its views first, then what it can do - as Google Calendar's app opens its menu */}
+          {phone && onCalendar && calBar && (
+            <div className="gside-cal" role="group" aria-label="תצוגת היומן">
+              {PHONE_VIEWS.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={`gside-view${calBar.view === v ? ' on' : ''}`}
+                  aria-pressed={calBar.view === v}
+                  onClick={() => {
+                    closeMenu();
+                    calBar.setView(v);
+                  }}
+                >
+                  <Icon name={VIEW_ICONS[v]} />
+                  <span className="rail-label">{VIEW_LABELS[v]}</span>
+                </button>
+              ))}
+              {!!calBar.drawer?.length && <span className="gside-sep" aria-hidden="true" />}
+              {calBar.drawer?.map((m) => (
+                <button
+                  key={m.label}
+                  type="button"
+                  className="gside-view"
+                  onClick={() => {
+                    closeMenu();
+                    m.run();
+                  }}
+                >
+                  <Icon name={m.icon} />
+                  <span className="rail-label">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {!phone && !folded && (
             <MiniMonth
               selected={calBar?.date ?? today}

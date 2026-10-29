@@ -11265,9 +11265,6 @@ html {
     flex: 1 1 auto;
     padding: 0 8px;
   }
-  .schedule-page.has-strip {
-    --strip-h: 69px;
-  }
   /* 16px: a phone does not zoom into the field when it is tapped */
   .qa-input {
     font-size: 16px;

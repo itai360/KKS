@@ -2065,17 +2065,6 @@
     /* a phone's column is narrow: a thin strip only, as the app's */
     --g-end-gap: 5px;
   }
-  .cal-page.is-phone .period-clip {
-    border-radius: 14px;
-    background: var(--g-sheet);
-    overflow: hidden;
-  }
-  /* the grid takes the screen down to the bottom bar, as Google's app: under the top bar and the calendar's own bar */
-  .cal-page.is-phone .gc,
-  .cal-page.is-phone .gc-month {
-    height: calc(100dvh - var(--top-h) - var(--strip-h, 52px) - 72px - env(safe-area-inset-bottom));
-    min-height: 360px;
-  }
   .gc-dn {
     width: 36px;
     height: 36px;
@@ -3053,143 +3042,6 @@
   align-items: center;
 }
 
-/* ---------------- a phone's calendar bar, as Google Calendar's app ---------------- */
-/* the month (a tap opens it), today with its date, the views and "more" - one row that stays on top */
-.schedule-page.is-phone.has-strip {
-  --strip-h: 52px;
-}
-.gph-bar {
-  position: sticky;
-  top: var(--top-h);
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-height: 52px;
-  margin: -4px -14px 6px;
-  padding: 4px 6px 4px 4px;
-  background: var(--topbar-bg, var(--bg));
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  backdrop-filter: blur(20px) saturate(1.8);
-}
-.gph-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  min-height: 44px;
-  padding: 0 10px 0 6px;
-  border: 0;
-  border-radius: 22px;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: 22px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.gph-title:active {
-  background: var(--hover);
-}
-.gph-chev {
-  color: var(--ink-2);
-  transition: transform 0.25s var(--spring, ease-out);
-}
-.gph-chev.is-open {
-  transform: rotate(180deg);
-}
-.gph-btn,
-.gph-today {
-  width: 44px;
-  height: 44px;
-  color: var(--ink-2);
-}
-/* today: a little calendar with today's date in it, as Google's */
-.gph-today-num {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 2px solid currentColor;
-  border-top-width: 5px;
-  border-radius: 4px;
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 1;
-}
-.gph-today:disabled {
-  opacity: 1;
-  cursor: default;
-}
-.gph-month {
-  margin: 0 0 10px;
-  animation: gph-drop 0.22s var(--spring, ease-out) both;
-  transform-origin: top center;
-}
-@keyframes gph-drop {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scaleY(0.96);
-  }
-}
-/* the month under the title in Google's colours: today a blue circle, the day being read a light blue one */
-.gph-month .mdots-day.today .n {
-  background: var(--tint-fill);
-  color: #fff;
-}
-.gph-month .mdots-day.on:not(.today) .n {
-  background: var(--g-blue-soft);
-  color: var(--g-on-blue-soft);
-}
-.gph-list {
-  display: flex;
-  flex-direction: column;
-  padding: 2px 0 10px;
-}
-.gph-item {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  min-height: 52px;
-  margin-inline-end: 14px;
-  padding: 0 22px;
-  border: 0;
-  border-radius: 0 26px 26px 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: 16px;
-  text-align: start;
-  cursor: pointer;
-}
-[dir='rtl'] .gph-item {
-  border-radius: 26px 0 0 26px;
-}
-.gph-item svg {
-  color: var(--ink-2);
-}
-.gph-item.on {
-  background: var(--g-blue-soft);
-  color: var(--g-on-blue-soft);
-  font-weight: 600;
-}
-.gph-item.on svg {
-  color: var(--g-on-blue-soft);
-}
-.gph-item:active {
-  background: var(--hover);
-}
-@media print {
-  .gph-bar {
-    display: none !important;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .gph-month {
-    animation: none;
-  }
-}
 
 /* ---------------- the schedule ("סדר יום"), as Google Calendar's ---------------- */
 /* each day a row: its date on the side (today in blue), its events beside it - a dot of their colour, the
@@ -3528,12 +3380,9 @@
 }
 /* a phone: the search takes the calendar's bar - a white pill over the page - and stays on top as the
    list goes under it; the results say their month, as they are far apart */
-.cal-page.is-searching .gph-bar {
-  display: none;
-}
 .cal-page.is-phone .cal-search-bar {
   position: sticky;
-  top: calc(var(--top-h) + 4px);
+  top: 0;
   z-index: 6;
   background: var(--g-sheet);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
@@ -3805,4 +3654,644 @@
   .ft-body {
     grid-template-columns: 40px repeat(var(--n), minmax(0, 1fr));
   }
+}
+
+/* ---------------- a phone's calendar: Google Calendar's app, the whole screen ---------------- */
+/* As the app (the screenshot it was matched to): its own bar on top - the menu in a light circle, the month
+   with a small triangle, the search and today in one pill, the person in a ringed circle - then what lasts
+   all day as full-width coloured bars ("(יום 2/7)"), and the hours under them with the times on the left
+   ("8:00"), 88px an hour, big white titles set to the left. The page itself never scrolls: the hours (or
+   the list) scroll inside it, the floating bar of screens over them, and the "+" in the corner. */
+:root {
+  --g-fab: #d3e3fd;
+  --g-on-fab: #0c41a3;
+  --g-ring: #2c86ff;
+  --g-hour-ink: #70757a;
+  --g-round-line: rgba(0, 0, 0, 0.1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --g-fab: #004a77;
+    --g-on-fab: #c2e7ff;
+    --g-ring: #7cacf8;
+    --g-hour-ink: #9aa0a6;
+    --g-round-line: rgba(255, 255, 255, 0.14);
+  }
+}
+:root[data-theme='dark'] {
+  --g-fab: #004a77;
+  --g-on-fab: #c2e7ff;
+  --g-ring: #7cacf8;
+  --g-hour-ink: #9aa0a6;
+  --g-round-line: rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 860px) {
+  /* nothing moves the page: no scroll, no bounce - only the boxes inside it scroll */
+  html.cal-shell,
+  html.cal-shell body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  html.cal-shell .topbar {
+    display: none;
+  }
+  html.cal-shell .cal-page.is-phone {
+    height: 100vh;
+    height: 100dvh;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--g-sheet);
+  }
+  .cal-page.is-phone .gph-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* the list (and the search) scroll in their box, clear of the floating bar at its end */
+  .cal-page.is-phone .gph-body.gph-scroll {
+    display: block;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 14px calc(110px + env(safe-area-inset-bottom, 0px));
+  }
+  .cal-page.is-phone.is-searching .gph-body.gph-scroll {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+  }
+  /* what stays on top while the list goes under it: the top of its own box, not of the page */
+  .cal-page.is-phone .gph-scroll .agenda-dayhead {
+    top: 0;
+  }
+  .cal-page.is-phone .gph-scroll .gs-date {
+    top: 6px;
+  }
+  .cal-page.is-phone .gph-body > .period-clip,
+  .cal-page.is-phone .gph-body > .period-clip > .period-swipe {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .cal-page.is-phone .gph-body > .period-clip {
+    overflow: hidden;
+    background: var(--g-sheet);
+  }
+  .cal-page.is-phone .gc,
+  .cal-page.is-phone .gc-month {
+    flex: 1;
+    min-height: 0;
+  }
+  /* the month ends above the floating bar */
+  .cal-page.is-phone .gc-month {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+  .cal-page.is-phone .gph-body > .card {
+    margin: 0 14px;
+  }
+  .cal-page.is-phone > .mine-bar,
+  .cal-page.is-phone > .error-box {
+    margin: 0 14px 8px;
+  }
+
+  /* ---- the bar ---- */
+  .gph-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: calc(env(safe-area-inset-top, 0px) + 6px) max(16px, env(safe-area-inset-right, 0px)) 10px max(20px, env(safe-area-inset-left, 0px));
+    background: var(--g-sheet);
+  }
+  .gph-round,
+  .gph-pill {
+    height: 42px;
+    border: 1px solid var(--g-round-line);
+    background: var(--g-sheet);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+    color: var(--ink-2);
+  }
+  .gph-round {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 42px;
+    padding: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gph-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    min-width: 0;
+    margin-inline-start: 8px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 21px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 21px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gph-title > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* the small filled triangle after the month, as the app's */
+  .gph-caret {
+    flex-shrink: 0;
+    width: 0;
+    height: 0;
+    border-inline: 6px solid transparent;
+    border-top: 6px solid var(--ink-2);
+    transition: transform 0.25s var(--spring, ease-out);
+  }
+  .gph-caret.is-open {
+    transform: rotate(180deg);
+  }
+  .gph-pill {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 6px;
+    padding: 0 8px;
+    border-radius: 21px;
+  }
+  .gph-pill-btn {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--ink-2);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gph-round:active,
+  .gph-pill-btn:active,
+  .gph-title:active {
+    background: var(--hover);
+  }
+  /* today: a little calendar with today's date in it, as Google's */
+  .gph-today-num {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 21px;
+    height: 21px;
+    border: 2px solid currentColor;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .gph-today-num::before,
+  .gph-today-num::after {
+    content: '';
+    position: absolute;
+    top: -5px;
+    width: 2px;
+    height: 5px;
+    border-radius: 1px;
+    background: currentColor;
+  }
+  .gph-today-num::before {
+    left: 3px;
+  }
+  .gph-today-num::after {
+    right: 3px;
+  }
+  /* the person: a letter in a coloured circle with a ring, and how many notifications are new */
+  .gph-avatar {
+    position: relative;
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    margin-inline-start: 14px;
+    padding: 2px;
+    border: 2.5px solid var(--g-ring);
+    border-radius: 50%;
+    background: var(--g-sheet);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gph-avatar:active {
+    transform: scale(0.95);
+  }
+  .gph-avatar-count {
+    position: absolute;
+    top: -5px;
+    inset-inline-end: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border: 2px solid var(--g-sheet);
+    border-radius: 9px;
+    background: var(--red, #d93025);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .gph-month {
+    margin: 0 14px 10px;
+    animation: gph-drop 0.22s var(--spring, ease-out) both;
+    transform-origin: top center;
+  }
+  @keyframes gph-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scaleY(0.96);
+    }
+  }
+  .gph-month .mdots-day.today .n {
+    background: var(--g-blue);
+    color: #fff;
+  }
+  .gph-month .mdots-day.on:not(.today) .n {
+    background: var(--g-blue-soft);
+    color: var(--g-on-blue-soft);
+  }
+
+  /* a small phone: the bar's parts a little smaller, so the month keeps its whole name */
+  @media (max-width: 359px) {
+    .gph-bar {
+      padding-inline: max(10px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
+    }
+    .gph-round,
+    .gph-avatar {
+      width: 38px;
+      height: 38px;
+    }
+    .gph-round,
+    .gph-pill {
+      height: 38px;
+    }
+    .gph-pill {
+      gap: 2px;
+      padding: 0 3px;
+    }
+    .gph-pill-btn {
+      width: 34px;
+      height: 34px;
+    }
+    .gph-avatar {
+      margin-inline-start: 8px;
+    }
+    .gph-title {
+      margin-inline-start: 4px;
+      gap: 8px;
+      font-size: 19px;
+    }
+  }
+  /* ---- the "+" in the corner: above the floating bar, lower while it is small ---- */
+  .gph-fab {
+    position: fixed;
+    left: max(16px, env(safe-area-inset-left, 0px));
+    bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+    z-index: 35;
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border: 0;
+    border-radius: 16px;
+    background: var(--g-fab);
+    color: var(--g-on-fab);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2),
+      0 4px 12px -2px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      bottom 0.42s var(--spring),
+      transform 0.15s;
+  }
+  body:has(.bottom-nav.compact) .gph-fab {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.bottom-nav.away) .gph-fab {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .gph-fab:active {
+    transform: scale(0.94);
+  }
+
+  /* ---- the sheet of the person, and lists of choices in a sheet ---- */
+  .gph-who {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 22px 14px;
+  }
+  .gph-avatar-face {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: var(--av, var(--g-blue));
+    color: #fff;
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .gph-avatar-face.is-big {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    font-size: 21px;
+  }
+}
+
+/* lists of choices in a phone's sheet, as the app's menus */
+.gph-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 10px;
+}
+.gph-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 52px;
+  margin-inline-end: 14px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 26px 0 0 26px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.gph-item svg {
+  color: var(--ink-2);
+}
+.gph-item:active {
+  background: var(--hover);
+}
+
+/* ---- the hours, as the app draws them ---- */
+.gc-app {
+  /* the app keeps its hours on the left, also in Hebrew: the grid goes left to right, the titles stay Hebrew */
+  direction: ltr;
+  --hour: 88px;
+  --g-gutter: 58px;
+  --g-end-gap: 11px;
+}
+.gc-app .gc-head {
+  position: relative;
+  z-index: 6;
+  border-bottom: 0;
+  background: var(--g-sheet);
+  transition: box-shadow 0.2s ease;
+}
+/* the hours scrolled under what lasts all day: a shadow under it */
+.gc-app.is-scrolled .gc-head {
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.16);
+}
+.gc-app .gc-allday {
+  grid-template-rows: repeat(var(--rows), 27px);
+  grid-auto-rows: 27px;
+  row-gap: 2px;
+  min-height: 12px;
+  padding: 8px 0 6px;
+  border-inline-start: 1px solid var(--g-line);
+}
+.gc-app .gc-allday-gutter {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 6px 0 6px;
+}
+.gc-appday {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.gc-appday .gc-dw {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-hour-ink);
+}
+.gc-appday .gc-dn {
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+  cursor: default;
+}
+.gc-appday.is-today .gc-dw {
+  color: var(--g-blue);
+}
+.gc-appday.is-today .gc-dn {
+  background: var(--g-blue);
+  color: var(--g-on-blue);
+}
+.gc-app .gc-dayhead.is-today .gc-dw {
+  color: var(--g-blue);
+}
+.gc-app .gc-dayhead.is-today .gc-dn {
+  background: var(--g-blue);
+  color: var(--g-on-blue);
+}
+.gc-app .gc-dayhead .gc-dw {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-hour-ink);
+}
+.gc-app .gc-dayhead + .gc-dayhead,
+.gc-app .gc-dayhead {
+  border-inline-start: 1px solid transparent;
+}
+/* what lasts all day: a full-width bar of its colour, its title (and which of its days) set to the left */
+.gc-app .gc-chip.is-bar {
+  direction: rtl;
+  justify-content: flex-end;
+  height: 27px;
+  margin: 0 var(--g-end-gap) 0 1px;
+  padding: 0 12px;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.gc-app .gc-chip.is-bar.k-week {
+  border-inline-start: 0;
+  background: var(--c);
+  color: var(--c-on, #fff);
+}
+.gc-app .gc-chip.is-bar.is-past.k-week {
+  background: color-mix(in srgb, var(--c) 58%, var(--g-sheet));
+  color: var(--c-on, #fff);
+}
+.gc-app .gc-chip:not(.is-bar) {
+  direction: rtl;
+  justify-content: flex-end;
+  height: 27px;
+  font-size: 14px;
+}
+.gc-app .gc-chip-count {
+  white-space: pre;
+}
+.gc-app .gc-more {
+  direction: rtl;
+}
+/* the times on the left, "8:00", at their lines - the lines reaching a little into the margin */
+.gc-app .gc-hours {
+  background-image: repeating-linear-gradient(to bottom, var(--g-line) 0, var(--g-line) 1px, transparent 1px, transparent var(--hour));
+  background-size: 7px 100%;
+  background-position: right top;
+  background-repeat: no-repeat;
+}
+.gc-app .gc-hours span {
+  inset-inline-start: 16px;
+  inset-inline-end: auto;
+  font-size: 12px;
+  color: var(--g-hour-ink);
+}
+/* the hours go on under the floating bar: room to scroll the last of them above it */
+.gc-app .gc-scroll {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.gc-app .gc-scroll::-webkit-scrollbar {
+  display: none;
+}
+.gc-app .gc-event {
+  direction: rtl;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 5px 11px 3px;
+  border-radius: 4px;
+  font-size: 15px;
+  line-height: 1.25;
+  text-align: left;
+}
+.gc-app .gc-event-title {
+  max-width: 100%;
+  font-weight: 500;
+}
+.gc-app .gc-event:not(.is-short) .gc-event-title {
+  overflow-wrap: anywhere;
+}
+.gc-app .gc-event-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  opacity: 0.9;
+}
+.gc-app .gc-event.is-short {
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-end;
+  padding-block: 3px 0;
+}
+.gc-app .gc-event.is-ghost {
+  inset-inline: 1px var(--g-end-gap);
+}
+/* the app marks no event as going on now - the line across the hours says it */
+.gc-app .gc-event.is-now {
+  box-shadow: none;
+}
+/* a title goes on to the next lines in every width, as the app's (a narrow column too) */
+.gc-app .gc-event:not(.is-short) .gc-event-title {
+  white-space: normal;
+}
+/* three days: narrower columns, the app's smaller type */
+.gc-app.gc-three .gc-event {
+  padding: 4px 6px 2px;
+  font-size: 13px;
+}
+.gc-app.gc-three .gc-event-sub {
+  font-size: 11.5px;
+}
+.gc-app.gc-three .gc-chip.is-bar {
+  padding: 0 8px;
+  font-size: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gph-month {
+    animation: none;
+  }
+  .gph-fab,
+  .gph-caret,
+  .gc-app .gc-head {
+    transition: none;
+  }
+}
+@media print {
+  .gph-bar,
+  .gph-fab {
+    display: none !important;
+  }
+}
+
+/* ---- a phone's side menu on the calendar: its views first, as Google Calendar's app opens its menu ---- */
+.gside-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0 8px;
+}
+.gside-view {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 24px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gside-view svg {
+  flex-shrink: 0;
+  color: var(--ink-2);
+}
+.gside-view.on {
+  background: var(--g-blue-soft);
+  color: var(--g-on-blue-soft);
+  font-weight: 600;
+}
+.gside-view.on svg {
+  color: var(--g-on-blue-soft);
+}
+.gside-view:active {
+  background: var(--hover);
+}
+.gside-sep {
+  display: block;
+  height: 1px;
+  margin: 6px 16px;
+  background: var(--line);
 }

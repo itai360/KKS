@@ -29,7 +29,7 @@ import {
 } from '@shared/calendarLayers';
 import { addDays, diffDays, isDateKey, parseDateKey, shortDate, startOfWeek, weekdayName } from '@shared/dates';
 import type { Absence, CalendarSource, Debrief, EventDetail, Experience, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
-import { AgendaList, MonthDots, scrollToDay } from '../components/Agenda';
+import { AgendaList, MonthDots, scrollBoxOf, scrollToDay } from '../components/Agenda';
 import { BulkScope, useBulk } from '../components/Bulk';
 import { CalendarSettings } from '../components/CalendarSettings';
 import { CalendarView, YearGrid, type GridView } from '../components/CalendarView';
@@ -47,11 +47,12 @@ import { QuickCreate, type Draft } from '../components/QuickCreate';
 import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { DateInput, ErrorBox, Field, Loading, Modal, Seg, TimeInput } from '../components/ui';
-import { Sheet } from '../components/pickers';
 import { agendaDays, endMinutes, foldQuiet, isMine, type AgendaItem, type AgendaRow } from '../lib/agenda';
 import { api } from '../lib/api';
 import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
-import { PHONE_VIEWS, setCalendarBar, VIEW_LABELS, type CalView } from '../lib/calendarBar';
+import { setCalendarBar, type CalView } from '../lib/calendarBar';
+import { openMainMenu } from '../lib/mainMenu';
+import { AppAccount } from '../components/TopBarParts';
 import { setCalendarPrefs, useCalendarPrefs } from '../lib/calendarPrefs';
 import { dateKeyOf, fileSize, fmtTime, isoAt, todayKey } from '../lib/format';
 import { useMedia } from '../lib/media';
@@ -65,15 +66,17 @@ import { Link } from 'react-router';
 import { takesKeys } from '../lib/keyboard';
 
 const ALL_VIEWS: CalView[] = ['agenda', 'day', 'three', 'four', 'week', 'month', 'year'];
+/** the view last chosen - a computer's and a phone's apart (a phone opens on the day, as Google's app) */
 const VIEW_KEY = 'kks.scheduleView';
+const PHONE_VIEW_KEY = 'kks.scheduleView.phone';
 /** the day the calendar was left on, in this tab */
 const DATE_KEY = 'kks.calendarDate';
 /** "list" was a list of one day: the running list took its place */
 const asView = (v: string | null): CalView | null => (v === 'list' ? 'agenda' : ALL_VIEWS.includes(v as CalView) ? (v as CalView) : null);
 // a remembered view is a convenience: storage can be missing or blocked
-function savedView(): CalView | null {
+function savedView(phone: boolean): CalView | null {
   try {
-    return asView(localStorage.getItem(VIEW_KEY));
+    return asView(localStorage.getItem(phone ? PHONE_VIEW_KEY : VIEW_KEY));
   } catch {
     return null;
   }
@@ -97,8 +100,6 @@ const VIEW_CODES: Record<string, CalView> = {
   KeyY: 'year',
   Digit6: 'year',
 };
-/** each view's mark in a phone's menu of views */
-const VIEW_ICONS: Record<CalView, string> = { agenda: 'menu', day: 'calendar', three: 'board', four: 'board', week: 'board', month: 'apps', year: 'apps' };
 const VIEW_STEP: Record<CalView, string> = { agenda: 'שבוע', day: 'יום', three: '3 ימים', four: '4 ימים', week: 'שבוע', month: 'חודש', year: 'שנה' };
 
 const earliest = (a: string[]) => a.reduce((m, x) => (x < m ? x : m));
@@ -134,19 +135,23 @@ function MoreOnScroll({ onMore, done }: { onMore: () => void; done: boolean }) {
   const asked = useRef(false);
   const fn = useRef(onMore);
   fn.current = onMore;
-  // only as the list is scrolled to its end: a short list (empty days) does not load a year by itself
+  // only as the list is scrolled to its end: a short list (empty days) does not load a year by itself. A
+  // phone's calendar scrolls in its own box (the page does not), a computer's page scrolls
   useEffect(() => {
     if (done) return;
+    const box = scrollBoxOf(ref.current);
     const onScroll = () => {
-      const se = document.scrollingElement;
-      if (asked.current || !se || se.scrollHeight <= innerHeight + 40) return;
-      if (window.scrollY + innerHeight >= se.scrollHeight - 500) {
+      const se = box ?? document.scrollingElement;
+      if (asked.current || !se) return;
+      const seen = box ? box.clientHeight : innerHeight;
+      if (se.scrollHeight <= seen + 40) return;
+      if (se.scrollTop + seen >= se.scrollHeight - 500) {
         asked.current = true;
         fn.current();
       }
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    (box ?? window).addEventListener('scroll', onScroll, { passive: true });
+    return () => (box ?? window).removeEventListener('scroll', onScroll);
   }, [done]);
   if (done) return null;
   return (
@@ -176,7 +181,7 @@ export function SchedulePage() {
   const eventId = params.get('event');
   // the search over the events (?q=): what it finds, as the schedule's list, in place of the calendar
   const q = (params.get('q') ?? '').trim();
-  const view = fitView(asView(params.get('view')) ?? savedView() ?? (phone ? 'agenda' : 'week'), phone);
+  const view = fitView(asView(params.get('view')) ?? savedView(phone) ?? (phone ? 'day' : 'week'), phone);
   const { can, weeks, user, viewing, isCommander: commanderRole } = useSession();
   const isCommander = can('schedule');
   const prefs = useCalendarPrefs();
@@ -226,10 +231,11 @@ export function SchedulePage() {
   const focus = view === 'agenda' && focusFor.date === date ? focusFor.day : date;
   // the month to jump by on a phone, under the title
   const [pickerOpen, setPickerOpen] = useState(false);
-  // a phone's menus, as sheets from below (Google Calendar's app keeps the views in its menu)
-  const [sheet, setSheet] = useState<'views' | 'more' | null>(null);
-  const viewBtn = useRef<HTMLButtonElement>(null);
-  const moreBtn = useRef<HTMLButtonElement>(null);
+  // a phone: the menu's button (its views and the rest are in the side menu, as Google Calendar's app has
+  // them), and the search, opened from the bar before anything is typed
+  const menuBtn = useRef<HTMLButtonElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searching = !!q || (phone && searchOpen);
   const [miniFor, setMiniFor] = useState<{ day: string; month: string } | null>(null);
   const miniMonth = miniFor?.day === focus ? miniFor.month : focus;
   const miniShown = phone && pickerOpen && view !== 'month';
@@ -310,7 +316,7 @@ export function SchedulePage() {
 
   const setView = (v: CalView) => {
     try {
-      localStorage.setItem(VIEW_KEY, v);
+      localStorage.setItem(phone ? PHONE_VIEW_KEY : VIEW_KEY, v);
     } catch {
       /* not remembered */
     }
@@ -407,7 +413,7 @@ export function SchedulePage() {
     searchedFor.current = q;
     const next = searchRows.find((r) => r.kind === 'day' && r.date >= today);
     if (next?.kind === 'day') requestAnimationFrame(() => scrollToDay(listRef.current, next.date));
-    else window.scrollTo(0, 0);
+    else (scrollBoxOf(listRef.current) ?? window).scrollTo(0, 0);
   }, [q, searchApi.data, searchRows, today]);
   const loadOf = useMemo(() => {
     const n = new Map<string, number>();
@@ -435,8 +441,8 @@ export function SchedulePage() {
   const monthStep = (dir: 1 | -1) => setMiniFor({ day: focus, month: stepDate('month', miniMonth, dir) });
 
   // ---------------- the top bar: the calendar's controls (a computer) ----------------
-  const bar = useRef({ today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash'), settings: () => setSettingsOpen(true) });
-  bar.current = { today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash'), settings: () => setSettingsOpen(true) };
+  const bar = useRef({ today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash'), settings: () => setSettingsOpen(true), google: () => setGoogle(true) });
+  bar.current = { today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash'), settings: () => setSettingsOpen(true), google: () => setGoogle(true) };
   const markShown = view === 'week' || view === 'four' || view === 'three' ? shown : view === 'day' ? [date] : [];
   const extrasKey = `${canAdd}`;
   useEffect(() => {
@@ -455,6 +461,13 @@ export function SchedulePage() {
       extras: [
         ...(canAdd ? [{ label: 'בחירת אירועים לפעולה משותפת', icon: 'check', run: () => bulkToggle.current?.() }] : []),
         { label: 'הדפסה', icon: 'print', run: () => window.print() },
+        { label: 'אשפה', icon: 'trash', run: () => bar.current.trash() },
+        { label: 'הגדרות יומן', icon: 'settings', run: () => bar.current.settings() },
+      ],
+      drawer: [
+        { label: 'מעבר לתאריך', icon: 'goto', run: () => bar.current.askDate() },
+        ...(canAdd ? [{ label: 'בחירת אירועים לפעולה משותפת', icon: 'check', run: () => bulkToggle.current?.() }] : []),
+        { label: 'יומן Google', icon: 'calendar', run: () => bar.current.google() },
         { label: 'אשפה', icon: 'trash', run: () => bar.current.trash() },
         { label: 'הגדרות יומן', icon: 'settings', run: () => bar.current.settings() },
       ],
@@ -619,19 +632,28 @@ export function SchedulePage() {
           set({ q: v || null, event: null });
         }}
       >
-        <button type="button" className="icon-btn" aria-label="סגירת החיפוש וחזרה ליומן" title="חזרה ליומן" onClick={() => set({ q: null })}>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="סגירת החיפוש וחזרה ליומן"
+          title="חזרה ליומן"
+          onClick={() => {
+            setSearchOpen(false);
+            set({ q: null });
+          }}
+        >
           <Icon name="chevronRight" size={22} />
         </button>
-        <input key={q} name="q" defaultValue={q} className="cal-search-input" placeholder="חיפוש אירועים" aria-label="חיפוש אירועים" enterKeyHint="search" autoComplete="off" />
+        <input key={q} name="q" defaultValue={q} className="cal-search-input" placeholder="חיפוש אירועים" aria-label="חיפוש אירועים" enterKeyHint="search" autoComplete="off" autoFocus={phone && !q} />
         <button type="submit" className="icon-btn" aria-label="חיפוש" title="חיפוש">
           <Icon name="search" size={20} />
         </button>
       </form>
       <p className="cal-search-count" role="status">
-        {!searchApi.data ? 'מחפש...' : found === 0 ? `לא נמצאו אירועים עבור "${q}"` : `${found === 1 ? 'אירוע אחד' : `${found} אירועים`} עבור "${q}"`}
+        {!q ? 'מה לחפש? שם של אירוע, מקום או מילה מההערות' : !searchApi.data ? 'מחפש...' : found === 0 ? `לא נמצאו אירועים עבור "${q}"` : `${found === 1 ? 'אירוע אחד' : `${found} אירועים`} עבור "${q}"`}
       </p>
       <ErrorBox error={searchApi.error} />
-      {!searchApi.data && searchApi.loading ? (
+      {!q ? null : !searchApi.data && searchApi.loading ? (
         <Loading rows={4} />
       ) : (
         <div ref={listRef}>
@@ -714,93 +736,63 @@ export function SchedulePage() {
     >
       <BulkBridge onReady={(fn) => void (bulkToggle.current = fn)} />
       <div
-        className={`page schedule-page cal-page view-${view}${phone ? ' is-phone' : ' is-desk'}${phone ? ' has-strip' : ''}${!phone && prefs.panel ? ' has-panel' : ''}${q ? ' is-searching' : ''}${prefs.dimPast ? '' : ' no-dim-past'}`}
+        className={`page schedule-page cal-page view-${view}${phone ? ' is-phone' : ' is-desk'}${!phone && prefs.panel ? ' has-panel' : ''}${searching ? ' is-searching' : ''}${prefs.dimPast ? '' : ' no-dim-past'}`}
         onPointerDownCapture={(e) => void (lastDown.current = { top: e.clientY - 10, bottom: e.clientY + 10, left: e.clientX - 10, right: e.clientX + 10 })}
       >
         {phone ? (
           <>
             {/* the title of the days is in the bar below; this names the screen for screen readers */}
             <h1 className="sr-only">לו"ז - {title}</h1>
-            {/* Google Calendar's app bar: the month (a tap opens it), today, the views, and more */}
-            <div className="gph-bar">
-              <button type="button" className="gph-title" aria-expanded={view === 'month' ? undefined : pickerOpen} onClick={() => view !== 'month' && setPickerOpen((o) => !o)}>
-                <span>{monthName(stripDate)}</span>
-                {view !== 'month' && <Icon name="chevronDown" size={20} className={`gph-chev${pickerOpen ? ' is-open' : ''}`} />}
-              </button>
-              <span className="grow" />
-              <button type="button" className="icon-btn gph-today" onClick={goToday} disabled={onToday} aria-label="מעבר להיום" title="היום">
-                <span className="gph-today-num">{Number(today.slice(8, 10))}</span>
-              </button>
-              <button ref={viewBtn} type="button" className="icon-btn gph-btn" onClick={() => setSheet('views')} aria-label={`תצוגה: ${VIEW_LABELS[view]}`} title="תצוגה">
-                <Icon name={VIEW_ICONS[view]} size={22} />
-              </button>
-              <button ref={moreBtn} type="button" className="icon-btn gph-btn" onClick={() => setSheet('more')} aria-label="עוד" title="עוד">
-                <Icon name="moreVertical" size={22} />
-              </button>
-            </div>
-            <Sheet open={sheet === 'views'} title="תצוגה" back={viewBtn} onClose={() => setSheet(null)} className="gph-sheet">
-              <div className="gph-list" role="menu">
-                {PHONE_VIEWS.map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={v === view}
-                    className={`gph-item${v === view ? ' on' : ''}`}
-                    onClick={() => {
-                      setSheet(null);
-                      setView(v);
-                    }}
-                  >
-                    <Icon name={VIEW_ICONS[v]} size={22} />
-                    <span className="grow">{VIEW_LABELS[v]}</span>
-                    {v === view && <Icon name="check" size={20} />}
+            {searching ? (
+              <div className="gph-body gph-scroll">{searchView}</div>
+            ) : (
+              <>
+                {/* Google Calendar's app bar, as the app has it: the menu, the month (a tap opens it), the search
+                    and today in one pill, and the person */}
+                <div className="gph-bar">
+                  <button ref={menuBtn} type="button" className="gph-round" onClick={() => openMainMenu(menuBtn.current)} aria-label="תפריט: תצוגות היומן וכל המסכים" title="תפריט">
+                    <Icon name="menu" size={22} />
                   </button>
-                ))}
-              </div>
-            </Sheet>
-            <Sheet open={sheet === 'more'} title="עוד" back={moreBtn} onClose={() => setSheet(null)} className="gph-sheet">
-              <div className="gph-list" role="menu">
-                {[
-                  { label: 'מעבר לתאריך', icon: 'goto', run: () => setAskDate(true) },
-                  ...(canAdd ? [{ label: 'בחירת אירועים לפעולה משותפת', icon: 'check', run: () => bulkToggle.current?.() }] : []),
-                  { label: 'יומן Google', icon: 'calendar', run: () => setGoogle(true) },
-                  { label: 'אשפה', icon: 'trash', run: () => navigate('/trash') },
-                  { label: 'הדפסה', icon: 'print', run: () => window.print() },
-                  { label: 'הגדרות יומן', icon: 'settings', run: () => setSettingsOpen(true) },
-                ].map((m) => (
-                  <button
-                    key={m.label}
-                    type="button"
-                    role="menuitem"
-                    className="gph-item"
-                    onClick={() => {
-                      setSheet(null);
-                      m.run();
-                    }}
-                  >
-                    <Icon name={m.icon} size={22} />
-                    <span className="grow">{m.label}</span>
+                  <button type="button" className="gph-title" aria-expanded={view === 'month' ? undefined : pickerOpen} onClick={() => view !== 'month' && setPickerOpen((o) => !o)}>
+                    <span>{monthName(stripDate)}</span>
+                    {view !== 'month' && <span className={`gph-caret${pickerOpen ? ' is-open' : ''}`} aria-hidden="true" />}
                   </button>
-                ))}
-              </div>
-            </Sheet>
-            {view !== 'month' && pickerOpen && !q && (
-              <div className="card mdots-card gph-month">
-                <MonthDots month={miniMonth} selected={stripDate} today={today} load={loadOf} onPick={monthPick} onStep={monthStep} />
-              </div>
+                  <span className="grow" />
+                  <div className="gph-pill">
+                    <button type="button" className="gph-pill-btn" onClick={() => setSearchOpen(true)} aria-label="חיפוש אירועים" title="חיפוש">
+                      <Icon name="search" size={22} />
+                    </button>
+                    <button type="button" className="gph-pill-btn" onClick={goToday} aria-label={onToday ? 'היום מוצג' : 'מעבר להיום'} title="היום">
+                      <span className="gph-today-num">{Number(today.slice(8, 10))}</span>
+                    </button>
+                  </div>
+                  <AppAccount />
+                </div>
+                {view !== 'month' && pickerOpen && (
+                  <div className="card mdots-card gph-month">
+                    <MonthDots month={miniMonth} selected={stripDate} today={today} load={loadOf} onPick={monthPick} onStep={monthStep} />
+                  </div>
+                )}
+                {prefs.onlyMine && (
+                  <div className="mine-bar" role="status">
+                    <Icon name="my" size={15} />
+                    <span className="grow">רק האירועים שלך - אחראי או משימת הכנה</span>
+                    <button type="button" className="btn btn-sm" onClick={() => setCalendarPrefs({ onlyMine: false })}>
+                      הצג הכל
+                    </button>
+                  </div>
+                )}
+                <ErrorBox error={error} />
+                {/* the whole screen under the bar: the hours scroll inside it, the page itself does not */}
+                <div className={`gph-body${view === 'agenda' ? ' gph-scroll' : ''}`}>{calendar}</div>
+                {/* a new event, from the corner - as the app's button */}
+                {canAdd && (
+                  <button type="button" className="gph-fab" onClick={() => createHere()} aria-label="אירוע חדש" title="אירוע חדש">
+                    <Icon name="plus" size={28} />
+                  </button>
+                )}
+              </>
             )}
-            {prefs.onlyMine && (
-              <div className="mine-bar" role="status">
-                <Icon name="my" size={15} />
-                <span className="grow">רק האירועים שלך - אחראי או משימת הכנה</span>
-                <button type="button" className="btn btn-sm" onClick={() => setCalendarPrefs({ onlyMine: false })}>
-                  הצג הכל
-                </button>
-              </div>
-            )}
-            <ErrorBox error={error} />
-            {q ? searchView : calendar}
           </>
         ) : (
           <>

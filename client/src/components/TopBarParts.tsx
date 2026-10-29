@@ -6,7 +6,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { DESK_VIEWS, VIEW_KEYS, VIEW_LABELS, type CalendarBar } from '../lib/calendarBar';
 import { useSession } from '../lib/session';
+import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 import { Icon } from './Icon';
+import { NotificationsPanel } from './Notifications';
+import { Sheet } from './pickers';
 import { OPEN_SHORTCUTS } from './Shortcuts';
 import { initials } from './ui';
 
@@ -195,5 +198,98 @@ export function UserMenu() {
         </>
       )}
     </Dropdown>
+  );
+}
+
+/** the colours of a letter avatar, as Google gives one to whoever has no picture - the same for the same name */
+const AVATAR_COLORS = ['#eb417b', '#1a73e8', '#188038', '#e8710a', '#9334e6', '#d93025', '#12a4af', '#5f6368'];
+const avatarColor = (name: string) => AVATAR_COLORS[[...name].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7) % AVATAR_COLORS.length];
+
+/**
+ * The person, at the edge of a phone's calendar bar - as Google Calendar's app has the account there: a
+ * letter in a coloured circle with a ring, and how many notifications are new. A tap opens a sheet of the
+ * person's things: the notifications, light or dark, the settings and leaving.
+ */
+export function AppAccount() {
+  const { user, isCommander, unread, logout } = useSession();
+  const role = isCommander ? 'מפקד הקורס' : user.title || 'איש סגל';
+  const [open, setOpen] = useState(false);
+  const [bell, setBell] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const [shown, setShown] = useState(shownTheme);
+  useEffect(() => onThemeChange(() => setShown(shownTheme())), []);
+  const close = () => setOpen(false);
+  const color = avatarColor(user.displayName);
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        className="gph-avatar"
+        style={{ '--av': color } as React.CSSProperties}
+        aria-label={`${user.displayName} - ${role}${unread ? ` · ${unread} התראות חדשות` : ''}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+      >
+        <span className="gph-avatar-face">{initials(user.displayName).slice(0, 1)}</span>
+        {unread > 0 && <span className="gph-avatar-count">{unread > 99 ? '99+' : unread}</span>}
+      </button>
+      <Sheet open={open} title="חשבון" onClose={close} back={button} className="gph-sheet">
+        <div className="gph-who">
+          <span className="gph-avatar-face is-big" style={{ '--av': color } as React.CSSProperties}>
+            {initials(user.displayName).slice(0, 1)}
+          </span>
+          <span className="col">
+            <b>{user.displayName}</b>
+            <span className="small muted">{role}</span>
+          </span>
+        </div>
+        <div className="gph-list" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            className="gph-item"
+            onClick={() => {
+              close();
+              setBell(true);
+            }}
+          >
+            <Icon name="bell" size={22} />
+            <span className="grow">התראות</span>
+            {unread > 0 && <span className="count">{unread}</span>}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="gph-item"
+            onClick={() => {
+              close();
+              setThemePref(shown === 'dark' ? 'light' : 'dark');
+            }}
+          >
+            <Icon name={shown === 'dark' ? 'sun' : 'moon'} size={22} />
+            <span className="grow">{shown === 'dark' ? 'מצב בהיר' : 'מצב כהה'}</span>
+          </button>
+          <Link to="/settings" role="menuitem" className="gph-item" onClick={close}>
+            <Icon name="settings" size={22} />
+            <span className="grow">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            className="gph-item"
+            onClick={() => {
+              close();
+              void logout();
+            }}
+          >
+            <Icon name="logout" size={22} />
+            <span className="grow">יציאה</span>
+          </button>
+        </div>
+      </Sheet>
+      <NotificationsPanel open={bell} onClose={() => setBell(false)} anchor={button} />
+    </>
   );
 }

@@ -7,10 +7,10 @@
 // thing is in shared/calendarLayers.ts.
 
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { DAY_MINUTES, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutSpans, MIN_VISIBLE, MONTH_NAMES, monthWeeks, movedSpan, resizedEnd, snap, viewDays, yearMonths, type Lane } from '@shared/calendarGrid';
+import { APP_MIN_VISIBLE, DAY_MINUTES, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutDayApp, layoutSpans, MIN_VISIBLE, MONTH_NAMES, monthWeeks, movedSpan, resizedEnd, snap, viewDays, yearMonths, type Lane } from '@shared/calendarGrid';
 import { dayOrder, isTimed, itemDays, loadByDay, type CalItem } from '@shared/calendarLayers';
 import { WEEKDAY_NAMES } from '@shared/constants';
-import { addDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
+import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { ScheduleEvent, Week } from '@shared/types';
 import { useBulk } from './Bulk';
 import { Icon } from './Icon';
@@ -48,8 +48,9 @@ export interface CalendarProps {
   onCreate: (d: { date: string; start: string | null; end: string | null }, at: Anchor) => void;
   onMove: (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }) => void;
   onPickDay: (date: string) => void;
-  /** a phone: the month as Google Calendar's app draws it - the whole screen, everything a small filled bar,
-   *  and a tap on a day opens that day */
+  /** a phone, as Google Calendar's app draws it: the day and the three days with the hours on the left
+   *  (as the app keeps them in Hebrew too), big titles and its own way of laying events side by side; the
+   *  month the whole screen, everything a small filled bar, and a tap on a day opens that day */
   compact?: boolean;
   /** what is over drawn paler (Google's "reduce the brightness of past events"); on unless turned off */
   dimPast?: boolean;
@@ -59,6 +60,13 @@ export interface CalendarProps {
 
 /** Friday and Saturday - the weekend here */
 const isWeekend = (d: string) => weekdayOf(d) >= 5;
+/** "יום א׳" ... "יום ו׳", "שבת" - as the phone app names the day over its hours */
+const dayShort = (d: string) => (weekdayOf(d) === 6 ? 'שבת' : `יום ${WEEKDAY_LETTERS[weekdayOf(d)]}׳`);
+/** a thing of several days on one of them, as the phone app says it: "(יום 2/7)" */
+function dayOfSpan(i: CalItem, day: string): string {
+  const total = diffDays(i.endDate, i.date) + 1;
+  return total > 1 ? `(יום ${Math.min(total, diffDays(day, i.date) + 1)}/${total})` : '';
+}
 
 export function CalendarView(props: CalendarProps) {
   return props.view === 'month' ? <MonthGrid {...props} /> : <TimeGrid {...props} />;
@@ -87,12 +95,16 @@ function isPast(i: CalItem, today: string, nowMin: number): boolean {
   return eventSpan(i.start, i.end).end <= nowMin;
 }
 
-function Chip({ item, lane, hourly, past, onOpen, draggable, onDragStart, onDragEnd, selected }: {
+function Chip({ item, lane, hourly, past, onOpen, draggable, onDragStart, onDragEnd, selected, counter, plain }: {
   item: CalItem;
   lane?: Lane<CalItem>;
   /** the month: an event with hours is a dot, its hour and its title - not a bar */
   hourly?: boolean;
   past?: boolean;
+  /** which of its days this is, after the title: "(יום 2/7)" */
+  counter?: string;
+  /** the title alone (a course week without its lead) */
+  plain?: boolean;
   onOpen: (item: CalItem, el: HTMLElement) => void;
   draggable?: boolean;
   onDragStart?: (e: DragEvent) => void;
@@ -137,7 +149,10 @@ function Chip({ item, lane, hourly, past, onOpen, draggable, onDragStart, onDrag
       {shape === 'note' && <Icon name="lightbulb" size={12} />}
       {shape === 'dot' && <span className="gc-dot" aria-hidden="true" />}
       {(shape === 'dot' || shape === 'task') && item.start && <b className="gc-chip-time">{item.start}</b>}
-      <span className="gc-chip-title">{k === 'week' && item.sub ? `${item.title} · ${item.sub.replace('מפק"צ מוביל: ', '')}` : item.title}</span>
+      <span className="gc-chip-title">
+        {k === 'week' && item.sub && !plain ? `${item.title} · ${item.sub.replace('מפק"צ מוביל: ', '')}` : item.title}
+        {counter && <span className="gc-chip-count"> {counter}</span>}
+      </span>
     </button>
   );
 }
@@ -178,11 +193,16 @@ const range = (start: number, end: number) => `${fromMinutes(start)} - ${end >= 
 /** the rows above the hours show this many until opened up */
 const ALLDAY_ROWS = 3;
 
-function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, dimPast = true, hideWeekend = false }: CalendarProps) {
+function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, compact = false, dimPast = true, hideWeekend = false }: CalendarProps) {
+  // a phone: Google Calendar's app - its layout, its hours on the left, the day named beside the all-day rows
+  const app = compact;
+  const appDay = app && view === 'day';
   const draftTitle = draft?.title?.trim() || '(ללא כותרת)';
   const days = viewDays(view, date).filter((d) => !(hideWeekend && view === 'week' && isWeekend(d)));
   const bulk = useBulk();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // the hours scrolled under the rows above them: a shadow under those, as the app has
+  const [scrolled, setScrolled] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const suppressClick = useRef(false);
 
@@ -198,8 +218,10 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
   const rows = allDayOpen ? allRows : Math.min(allRows, ALLDAY_ROWS);
   const canOpen = allRows > ALLDAY_ROWS;
 
-  // open on the morning (or the first event, if earlier) - once per day or week shown, not on every refresh
+  // open on the morning (or the first event, if earlier) - once per day or week shown, not on every refresh.
+  // The phone app opens today at the hour it is now, a little of what came before above it
   const firstStart = Math.min(8 * 60, ...timed.map((i) => eventSpan(i.start!, i.end).start));
+  const openAt = app && days.includes(today) ? Math.max(0, eventSpan(nowTime, null).start - 75) : firstStart - 45;
   const scrollKey = `${view}:${days[0]}`;
   const scrolledFor = useRef('');
   useEffect(() => {
@@ -207,8 +229,9 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
     if (!el || !ready || scrolledFor.current === scrollKey) return;
     scrolledFor.current = scrollKey;
     const body = el.querySelector<HTMLElement>('.gc-col');
-    if (body) el.scrollTop = Math.max(0, (body.offsetHeight / DAY_MINUTES) * (firstStart - 45));
-  }, [scrollKey, firstStart, ready]);
+    if (body) el.scrollTop = Math.max(0, (body.offsetHeight / DAY_MINUTES) * openAt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- where it opens, once for the days shown
+  }, [scrollKey, ready]);
 
   const columns = () => [...(scrollRef.current?.querySelectorAll<HTMLElement>('.gc-col') ?? [])];
   /** the day column under x (the nearest one when outside) */
@@ -312,12 +335,13 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
   const clickAllDay = (ev: MouseEvent<HTMLDivElement>) => {
     if (ev.target !== ev.currentTarget || bulk?.active) return;
     const r = ev.currentTarget.getBoundingClientRect();
-    // right to left: the first day is on the right
-    const i = Math.min(days.length - 1, Math.max(0, Math.floor(((r.right - ev.clientX) / r.width) * days.length)));
+    // right to left: the first day is on the right (a phone's grid goes left to right, as the app's)
+    const fromStart = app ? ev.clientX - r.left : r.right - ev.clientX;
+    const i = Math.min(days.length - 1, Math.max(0, Math.floor((fromStart / r.width) * days.length)));
     const day = days[i];
     if (!canCreate(day)) return;
     const w = r.width / days.length;
-    onCreate({ date: day, start: null, end: null }, { top: r.top, bottom: r.bottom, right: r.right - i * w, left: r.right - (i + 1) * w });
+    onCreate({ date: day, start: null, end: null }, app ? { top: r.top, bottom: r.bottom, left: r.left + i * w, right: r.left + (i + 1) * w } : { top: r.top, bottom: r.bottom, right: r.right - i * w, left: r.right - (i + 1) * w });
   };
   const clickEvent = (ev: MouseEvent<HTMLElement>, item: CalItem) => {
     ev.stopPropagation();
@@ -334,19 +358,30 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
   const draftShown = draft && draft.start && days.includes(draft.date) ? eventSpan(draft.start, draft.end) : null;
 
   return (
-    <div className={`gc gc-${view}`} style={{ '--days': days.length } as CSSProperties}>
+    <div className={`gc gc-${view}${app ? ' gc-app' : ''}${scrolled ? ' is-scrolled' : ''}`} style={{ '--days': days.length } as CSSProperties}>
       <div className="gc-head">
-        <div className="gc-gutter gc-tz" aria-hidden="true" />
-        {days.map((d) => (
-          <div key={d} className={`gc-dayhead${d === today ? ' is-today' : ''}${d < today ? ' is-past' : ''}`}>
-            <span className="gc-dw">{weekdayName(d)}</span>
-            <button type="button" className="gc-dn" onClick={() => onPickDay(d)} aria-label={dayLabel(d, today)} disabled={view === 'day'}>
-              {Number(d.slice(8))}
-            </button>
-          </div>
-        ))}
+        {/* a phone's day names itself beside the rows above the hours, as the app does */}
+        {!appDay && (
+          <>
+            <div className="gc-gutter gc-tz" aria-hidden="true" />
+            {days.map((d) => (
+              <div key={d} className={`gc-dayhead${d === today ? ' is-today' : ''}${d < today ? ' is-past' : ''}`}>
+                <span className="gc-dw">{app ? dayShort(d) : weekdayName(d)}</span>
+                <button type="button" className="gc-dn" onClick={() => onPickDay(d)} aria-label={dayLabel(d, today)} disabled={view === 'day'}>
+                  {Number(d.slice(8))}
+                </button>
+              </div>
+            ))}
+          </>
+        )}
         {/* what lasts all day, the course's weeks, who is away, the deadlines - rows over the days */}
         <div className="gc-gutter gc-allday-gutter">
+          {appDay && (
+            <div className={`gc-appday${days[0] === today ? ' is-today' : ''}`} aria-label={dayLabel(days[0], today)}>
+              <span className="gc-dw">{dayShort(days[0])}</span>
+              <span className="gc-dn">{Number(days[0].slice(8))}</span>
+            </div>
+          )}
           {canOpen && (
             <button type="button" className="icon-btn gc-allday-toggle" onClick={onAllDayToggle} aria-expanded={allDayOpen} aria-label={allDayOpen ? 'צמצום השורות שמעל השעות' : 'הצגת כל מה שמעל השעות'} title={allDayOpen ? 'צמצום' : 'הכל'}>
               <Icon name="chevronDown" size={16} />
@@ -355,7 +390,16 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
         </div>
         <div className="gc-allday" style={{ '--rows': Math.max(1, rows) } as CSSProperties} onClick={clickAllDay}>
           {fit.shown.map((l) => (
-            <Chip key={l.item.key} item={l.item} lane={l} past={dimPast && isPast(l.item, today, nowMin)} onOpen={onOpen} selected={!!(bulk?.active && eventOf(l.item) && bulk.selected.has(eventOf(l.item)!.id))} />
+            <Chip
+              key={l.item.key}
+              item={l.item}
+              lane={l}
+              past={dimPast && isPast(l.item, today, nowMin)}
+              onOpen={onOpen}
+              selected={!!(bulk?.active && eventOf(l.item) && bulk.selected.has(eventOf(l.item)!.id))}
+              counter={appDay ? dayOfSpan(l.item, days[0]) : undefined}
+              plain={app}
+            />
           ))}
           {fit.more.map((n, i) =>
             n > 0 ? (
@@ -371,19 +415,20 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
           )}
         </div>
       </div>
-      <div className="gc-scroll" ref={scrollRef}>
+      <div className="gc-scroll" ref={scrollRef} onScroll={(ev) => setScrolled(ev.currentTarget.scrollTop > 0)}>
         <div className="gc-body">
           <div className="gc-gutter gc-hours" aria-hidden="true">
             {Array.from({ length: 23 }, (_, i) => (
               <span key={i} style={{ top: `calc(var(--hour) * ${i + 1})` }}>
-                {String(i + 1).padStart(2, '0')}:00
+                {/* the app: "8:00"; a computer: "08:00" */}
+                {app ? i + 1 : String(i + 1).padStart(2, '0')}:00
               </span>
             ))}
           </div>
           {days.map((d) => {
             const own = timed.filter((i) => i.date === d && !(drag && drag.kind !== 'create' && eventOf(i)?.id === drag.id));
             const movingItem = drag && drag.kind !== 'create' && drag.date === d ? timed.find((i) => eventOf(i)?.id === drag.id) : undefined;
-            const placed = layoutDay(
+            const placed = (app ? layoutDayApp : layoutDay)(
               [
                 ...own.map((i) => ({ i, span: eventSpan(i.start!, i.end) })),
                 ...(movingItem && drag ? [{ i: movingItem, span: { start: drag.start, end: drag.end } }] : []),
@@ -401,19 +446,22 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                 {placed.map((p) => {
                   const item = p.item.i;
                   const e = eventOf(item);
-                  const height = Math.max(p.end - p.start, MIN_VISIBLE);
+                  const height = Math.max(p.end - p.start, app ? APP_MIN_VISIBLE : MIN_VISIBLE);
                   const isDragged = !!e && drag?.kind !== 'create' && drag?.id === e.id;
                   // as Google's: what reaches the column's end leaves a strip there free, to click and add at that hour
                   const atEnd = p.left + p.width > 0.999;
+                  const leftPx = (p.leftPx ?? 0) + 1;
+                  const widthPx = p.widthPx ?? 0;
                   const style: CSSProperties = {
                     top: `calc(var(--hour) * ${hours(p.start)})`,
                     height: `calc(var(--hour) * ${hours(height)} - 2px)`,
-                    insetInlineStart: `calc(${p.left * 100}% + 1px)`,
-                    width: `calc(${p.width * 100}% - ${atEnd ? 'var(--g-end-gap)' : '2px'})`,
+                    // the app's grid goes left to right (its titles stay Hebrew, so the side is said outright)
+                    [app ? 'left' : 'insetInlineStart']: `calc(${p.left * 100}% + ${leftPx}px)`,
+                    width: `calc(${p.width * 100}% + ${widthPx}px - ${atEnd ? 'var(--g-end-gap)' : '2px'})`,
                     // what lies on another is drawn over it
                     zIndex: isDragged ? undefined : 1 + Math.min(p.depth, 2),
                   };
-                  const short = p.end - p.start < 50;
+                  const short = p.end - p.start < (app ? 35 : 50);
                   const isNow = d === today && !item.faded && nowMin >= p.start && nowMin < p.end;
                   const past = dimPast && !isDragged && !item.faded && (d < today || (d === today && p.end <= nowMin));
                   const movable = !!e && canMove(e) && !bulk?.active;
@@ -449,13 +497,18 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                         {bulk?.active && e && <span className="gc-check" aria-hidden="true" />}
                         {item.title}
                       </span>
-                      <span className="gc-event-meta">
-                        {fromMinutes(p.start)}
-                        {/* a narrow event says its start only (gcal.css) */}
-                        <span className="gc-t-end"> - {p.end >= DAY_MINUTES ? '24:00' : fromMinutes(p.end)}</span>
-                        {item.sub && !short && <span className="gc-t-end"> · {item.sub}</span>}
-                      </span>
-                      {!short && prep && <span className={`gc-prep${e!.taskDone === e!.taskTotal ? ' is-done' : ''}`}>{prep}</span>}
+                      {app ? (
+                        // the app: the title, and the place under it - the hours are on the side
+                        item.sub && !short && <span className="gc-event-sub">{item.sub}</span>
+                      ) : (
+                        <span className="gc-event-meta">
+                          {fromMinutes(p.start)}
+                          {/* a narrow event says its start only (gcal.css) */}
+                          <span className="gc-t-end"> - {p.end >= DAY_MINUTES ? '24:00' : fromMinutes(p.end)}</span>
+                          {item.sub && !short && <span className="gc-t-end"> · {item.sub}</span>}
+                        </span>
+                      )}
+                      {!app && !short && prep && <span className={`gc-prep${e!.taskDone === e!.taskTotal ? ' is-done' : ''}`}>{prep}</span>}
                       {movable && <span className="gc-resize" onPointerDown={(ev) => startMove(ev, e!, 'resize')} aria-hidden="true" />}
                     </button>
                   );
@@ -467,7 +520,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                   </div>
                 )}
                 {draftShown && draft!.date === d && !drag && (
-                  <div className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}`} style={{ top: `calc(var(--hour) * ${hours(draftShown.start)})`, height: `calc(var(--hour) * ${hours(Math.max(draftShown.end - draftShown.start, MIN_VISIBLE))} - 2px)` }}>
+                  <div className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}`} style={{ top: `calc(var(--hour) * ${hours(draftShown.start)})`, height: `calc(var(--hour) * ${hours(Math.max(draftShown.end - draftShown.start, app ? APP_MIN_VISIBLE : MIN_VISIBLE))} - 2px)` }}>
                     <span className="gc-event-title">{draftTitle}</span>
                     <span className="gc-event-meta">{range(draftShown.start, draftShown.end)}</span>
                   </div>

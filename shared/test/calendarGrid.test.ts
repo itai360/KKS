@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CASCADE_INDENT, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutSpans, monthWeeks, movedSpan, resizedEnd, stepDate, viewDays, viewTitle, yearMonths } from '../calendarGrid';
+import { APP_INDENT_PX, CASCADE_INDENT, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutDayApp, layoutSpans, monthWeeks, movedSpan, resizedEnd, stepDate, viewDays, viewTitle, yearMonths } from '../calendarGrid';
 
 describe('calendar grid', () => {
   it('reads event times as minutes', () => {
@@ -97,6 +97,43 @@ describe('calendar grid', () => {
     expect([placed.long.col, placed.long.span, placed.long.cols]).toEqual([0, 1, 3]);
     expect([placed.x.col, placed.x.span]).toEqual([1, 1]);
     expect([placed.w.col, placed.w.span]).toEqual([1, 2]);
+  });
+
+  it("lays out a day as Google Calendar's phone app does (a real day of the course, as the app showed it)", () => {
+    const items = [
+      { id: 'arrive', s: '07:30', e: '10:00' },
+      { id: 'staff', s: '07:40', e: '08:10' }, // with arrive: beside it
+      { id: 'gantt', s: '09:30', e: '10:00' }, // two hours into arrive: lies on it - not in staff's free column - and reaches the end
+      { id: 'p', s: '10:00', e: '10:30' },
+      { id: 'company', s: '12:30', e: '13:30' },
+      { id: 'prayer', s: '12:45', e: '13:00' }, // drawn 20 minutes tall: it touches weekly
+      { id: 'weekly', s: '13:00', e: '14:00' }, // half an hour after company: still beside it
+      { id: 'break', s: '13:30', e: '14:00' }, // half an hour after weekly: beside it, over the two free columns
+    ];
+    const placed = Object.fromEntries(layoutDayApp(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
+    expect(placed.arrive).toMatchObject({ col: 0, cols: 2, depth: 0, left: 0, width: 0.5, leftPx: 0, widthPx: 0 });
+    expect(placed.staff).toMatchObject({ col: 1, cols: 2, depth: 0, left: 0.5, width: 0.5 });
+    expect(placed.gantt).toMatchObject({ depth: 1, left: 0, leftPx: APP_INDENT_PX, width: 1, widthPx: -APP_INDENT_PX });
+    expect(placed.p).toMatchObject({ depth: 0, left: 0, width: 1 });
+    // the longest first, the later of two as long first: weekly, company, then the prayer in the third column
+    expect([placed.weekly.col, placed.company.col, placed.prayer.col, placed.break.col]).toEqual([0, 1, 2, 1]);
+    expect(placed.weekly).toMatchObject({ cols: 3, span: 1, left: 0, width: expect.closeTo(1 / 3) });
+    expect(placed.break).toMatchObject({ span: 2, left: expect.closeTo(1 / 3), width: expect.closeTo(2 / 3) });
+    expect(placed.prayer.left).toBeCloseTo(2 / 3);
+  });
+
+  it("the phone's layout: a later event reaches only as far as the columns beside it are free; one lies on one lying", () => {
+    const items = [
+      { id: 'a', s: '08:00', e: '12:00' },
+      { id: 'b', s: '08:10', e: '11:00' }, // beside a, to 11:00
+      { id: 'c', s: '09:00', e: '10:00' }, // on b (the latest it overlaps): b's column only - nothing beside b is free
+      { id: 'd', s: '09:40', e: '09:50' }, // on c
+      { id: 'e', s: '11:30', e: '11:45' }, // on a, and b's column is free by then: on to the end
+    ];
+    const placed = Object.fromEntries(layoutDayApp(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
+    expect(placed.c).toMatchObject({ depth: 1, left: 0.5, leftPx: APP_INDENT_PX, width: 0.5, widthPx: -APP_INDENT_PX });
+    expect(placed.d).toMatchObject({ depth: 2, left: 0.5, leftPx: 2 * APP_INDENT_PX, width: 0.5, widthPx: -2 * APP_INDENT_PX });
+    expect(placed.e).toMatchObject({ depth: 1, left: 0, leftPx: APP_INDENT_PX, width: 1, widthPx: -APP_INDENT_PX });
   });
 
   it('moves and resizes in whole steps inside the day', () => {
