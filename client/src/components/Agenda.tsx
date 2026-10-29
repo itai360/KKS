@@ -191,9 +191,10 @@ export interface AgendaProps {
 
 /** where the list goes under what stays on top (the top bar, the strip of days) */
 function stickyLine(from: HTMLElement): number {
-  const strip = from.closest('.schedule-page')?.querySelector<HTMLElement>('.ws-sticky, .gph-bar');
+  // the calendar's bar on a phone, or the search's in its place - whichever stays on top
+  const bars = [...(from.closest('.schedule-page')?.querySelectorAll<HTMLElement>('.gph-bar, .cal-search-bar') ?? [])].filter((b) => getComputedStyle(b).position === 'sticky');
   const top = document.querySelector<HTMLElement>('.topbar');
-  return Math.max(strip?.getBoundingClientRect().bottom ?? 0, top?.getBoundingClientRect().bottom ?? 0);
+  return Math.max(top?.getBoundingClientRect().bottom ?? 0, ...bars.map((b) => b.getBoundingClientRect().bottom));
 }
 
 /** Brings a day of the list to the top, under what stays there - `unlessSeen`: only when it is out of sight. */
@@ -352,7 +353,7 @@ function AgendaDaySection({
   // after the last thing of the day only once it is over: an event still going on shows now itself
   const nowLast = isToday && rows.length > 0 && nowAt === -1 && !live?.now;
   const row = (it: AgendaItem) => <ItemRow key={it.key} it={it} date={date} today={today} at={at} live={live} onOpen={onOpen} onOpenExternal={onOpenExternal} onOpenTask={onOpenTask} />;
-  const { month, day } = parseDateKey(date);
+  const { year, month, day } = parseDateKey(date);
   const label = [count ? countLabel(count) : '', dueCount ? (dueCount === 1 ? 'דד-ליין אחד' : `${dueCount} דד-ליינים`) : ''].filter(Boolean).join(', ');
   return (
     <section className={`agenda-day gs-day${isToday ? ' is-today' : ''}${date < today ? ' is-past' : ''}`} data-day={date} aria-labelledby={`ad-${date}`}>
@@ -360,7 +361,10 @@ function AgendaDaySection({
       <h3 className="gs-date" id={`ad-${date}`} aria-label={`${dayLabel(date, today)}${label ? `, ${label}` : ''}`}>
         <span className="gs-wd">{WEEKDAY_SHORT[weekdayOf(date)]}</span>
         <span className="gs-num">{day}</span>
-        <span className="gs-mon">{MONTH_SHORT[month - 1]}</span>
+        <span className="gs-mon">
+          {MONTH_SHORT[month - 1]}
+          {year !== Number(today.slice(0, 4)) ? ` ${year}` : ''}
+        </span>
       </h3>
       <div className="agenda-items gs-items">
         {over.length > 0 && (

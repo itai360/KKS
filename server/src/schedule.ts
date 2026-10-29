@@ -11,6 +11,7 @@ import { CAL_COLORS } from '../../shared/calendarLayers';
 import { isOpenStatus } from '../../shared/constants';
 import { addDays, diffDays, isDateKey, localDateKey, shortDate, zonedToUtc } from '../../shared/dates';
 import { REPEAT_FREQS } from '../../shared/eventSeries';
+import { matchesSearch, searchKey } from '../../shared/search';
 import { countBefore, describeRRule, endBefore, expandRRule, formatRRule, lastOccurrence, parseRRule, placeInMonth, rruleFromRepeat, WEEKDAYS, type RRule } from '../../shared/rrule';
 import { followEvent } from './cadets';
 import type { EventCalendar, EventDetail, EventGuest, EventReminder, GuestResponse, ScheduleEvent, Task, TrashedEvent } from '../../shared/types';
@@ -227,6 +228,19 @@ export function listEventsFor(actor: UserRow, from: string, to: string): Schedul
       actor.id,
     )
     .map((r) => ({ ...forReader(actor, r, guests.get(r.id) ?? []), myTasks: mine.get(r.id) ?? 0 }));
+}
+
+/**
+ * The search over the events, as Google Calendar's: every word typed somewhere in the title, the place,
+ * the notes, who is in charge or a guest's name - the way the app searches everywhere (final letters,
+ * quote marks and case aside). Only what the reader may see, and not what a private event keeps from
+ * them; by date, at most 500.
+ */
+export function searchEvents(actor: UserRow, q: string, from: string, to: string): ScheduleEvent[] {
+  if (!searchKey(q)) return [];
+  return listEventsFor(actor, from, to)
+    .filter((e) => !e.hidden && matchesSearch(q, e.title, e.location, e.notes, e.ownerName, ...(e.guests ?? []).map((g) => g.name)))
+    .slice(0, 500);
 }
 
 function eventRow(id: number, withTrash = false): EventRow {

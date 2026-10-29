@@ -190,6 +190,40 @@ describe('one\'s own calendar and private events', () => {
   });
 });
 
+describe('the search over the events', () => {
+  const find = async (q: string, who = c.cmd) => ((await who.get(`/api/events/search?q=${encodeURIComponent(q)}`)).body as Ev[]).map((e) => e.title);
+
+  it('finds every word typed, in the title, the place, the notes or who is in charge - however the Hebrew was typed', async () => {
+    await c.cmd.post('/api/events', ev({ date: '2026-10-12', title: 'מטווח לילה', location: 'מטווח 7' }));
+    await c.cmd.post('/api/events', ev({ date: '2026-11-20', title: 'שיעור ניווט', notes: 'להביא מצפנים', ownerId: c.ids.s2 }));
+    await c.cmd.post('/api/events', ev({ date: '2027-03-01', title: 'תדריך מפק"צים' }));
+    expect(await find('מטווח')).toEqual(['מטווח לילה']);
+    // two words, in two of its fields; the one in charge by name
+    expect(await find('ניווט מצפנים')).toEqual(['שיעור ניווט']);
+    expect(await find('מפק"צ 2')).toEqual(['שיעור ניווט']);
+    // no quote mark typed, a final letter as a plain one
+    expect(await find('מפקצים')).toEqual(['תדריך מפק"צים']);
+    expect(await find('מצפנימ')).toEqual(['שיעור ניווט']);
+    // every word must be there; nothing typed finds nothing
+    expect(await find('מטווח ניווט')).toEqual([]);
+    expect(await find('  ')).toEqual([]);
+    // by date, in the days asked
+    expect((await c.cmd.get(`/api/events/search?q=${encodeURIComponent('ו')}&from=2026-11-01&to=2026-12-31`)).body.map((e: Ev) => e.title)).toEqual(['שיעור ניווט']);
+    expect((await c.cmd.get('/api/events/search?q=x&from=2026-12-31&to=2026-11-01')).status).toBe(400);
+  });
+
+  it('gives away nothing the reader may not see: another\'s calendar, or what a private event keeps', async () => {
+    await staffMay(c, { schedule: false });
+    await c.s1.post('/api/events', ev({ date: '2026-10-08', title: 'רופא שיניים', calendar: 'personal' }));
+    await c.cmd.post('/api/events', ev({ date: '2026-10-09', title: 'שיחה אישית', location: 'חדר מפקד', visibility: 'private', ownerId: c.ids.s1 }));
+    expect(await find('רופא', c.s1)).toEqual(['רופא שיניים']);
+    expect(await find('רופא', c.s3)).toEqual([]);
+    expect(await find('שיחה', c.s2)).toEqual([]);
+    expect(await find('עסוק', c.s2)).toEqual([]);
+    expect(await find('שיחה', c.s1)).toEqual(['שיחה אישית']);
+  });
+});
+
 describe('reminders', () => {
   const at = (date: string, time: string) => new Date(zonedIso(date, time, 'Asia/Jerusalem'));
 

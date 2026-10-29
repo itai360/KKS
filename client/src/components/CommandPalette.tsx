@@ -129,6 +129,8 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
       })),
       ...found.cadets.slice(0, capped ? 4 : 5).map((c) => ({ id: `c:${c.id}`, group: 'צוערים', label: c.fullName, sub: c.teamName ?? undefined, icon: 'shield', run: go(`/cadets/${c.id}`) })),
       ...found.events.slice(0, capped ? 3 : 4).map((e) => ({ id: `e:${e.id}`, group: 'לו"ז', label: e.title, sub: `${shortDate(e.date)} ${e.startTime}`, icon: 'calendar', run: go(`/schedule?date=${e.date}&event=${e.id}`) })),
+      // all of them, as Google's search in the calendar: a list by date
+      ...(found.events.length ? [{ id: 'e:all', group: 'לו"ז', label: `חיפוש ביומן: "${q.trim()}"`, sub: 'כל האירועים שנמצאו, לפי תאריך', icon: 'search', run: go(`/?q=${encodeURIComponent(q.trim())}`) }] : []),
       ...found.debriefs.slice(0, capped ? 3 : 4).map((d) => ({ id: `d:${d.id}`, group: 'תחקירים', label: d.title, sub: shortDate(d.occurredOn), icon: 'lightbulb', run: go(`/debriefs/${d.id}`) })),
       ...found.documents.slice(0, capped ? 3 : 4).map((d) => ({ id: `doc:${d.id}`, group: 'מסמכים', label: d.title, sub: d.category, icon: 'file', run: go(`/search?q=${encodeURIComponent(d.title)}`) })),
     ];

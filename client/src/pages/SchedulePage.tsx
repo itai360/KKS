@@ -47,7 +47,7 @@ import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
 import { DateInput, ErrorBox, Field, Loading, Modal, Seg, TimeInput } from '../components/ui';
 import { Sheet } from '../components/pickers';
-import { agendaDays, endMinutes, foldQuiet, isMine, type AgendaRow } from '../lib/agenda';
+import { agendaDays, endMinutes, foldQuiet, isMine, type AgendaItem, type AgendaRow } from '../lib/agenda';
 import { api } from '../lib/api';
 import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { PHONE_VIEWS, setCalendarBar, VIEW_LABELS, type CalView } from '../lib/calendarBar';
@@ -173,6 +173,8 @@ export function SchedulePage() {
   const today = todayKey();
   const date = params.get('date') ?? today;
   const eventId = params.get('event');
+  // the search over the events (?q=): what it finds, as the schedule's list, in place of the calendar
+  const q = (params.get('q') ?? '').trim();
   const view = fitView(asView(params.get('view')) ?? savedView() ?? (phone ? 'agenda' : 'week'), phone);
   const { can, weeks, user, viewing, isCommander: commanderRole } = useSession();
   const isCommander = can('schedule');
@@ -253,6 +255,7 @@ export function SchedulePage() {
   const experiences = useApi<Experience[]>(on('experiences') ? '/api/experiences' : null, ['cadets', 'tasks']);
   const debriefs = useApi<Debrief[]>(on('debriefs') ? '/api/debriefs' : null, ['debriefs', 'tasks']);
   const absences = useApi<Absence[]>(on('absences') ? `/api/absences?from=${from}&to=${to}` : null, ['users', 'tasks']);
+  const searchApi = useApi<ScheduleEvent[]>(q ? `/api/events/search?q=${encodeURIComponent(q)}` : null, ['events']);
 
   const allEvents = on('events') ? (eventsApi.data ?? NO_EVENTS) : NO_EVENTS;
   const events = useMemo(() => (prefs.onlyMine ? allEvents.filter((e) => isMine(e, user.id)) : allEvents), [allEvents, prefs.onlyMine, user.id]);
@@ -385,6 +388,21 @@ export function SchedulePage() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
+  // what the search found: by day, each event on the day it starts
+  const searchRows: AgendaRow[] = useMemo(() => {
+    const byDay = new Map<string, AgendaItem[]>();
+    for (const e of searchApi.data ?? []) byDay.set(e.date, [...(byDay.get(e.date) ?? []), { kind: 'event', key: `e${e.id}`, at: e.allDay ? '' : e.startTime, e }]);
+    return [...byDay.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, items]) => ({ kind: 'day' as const, date, items }));
+  }, [searchApi.data]);
+  // the results open at the first one from today on, the earlier ones above it - as Google's
+  const searchedFor = useRef('');
+  useEffect(() => {
+    if (!q || !searchApi.data || searchedFor.current === q) return;
+    searchedFor.current = q;
+    const next = searchRows.find((r) => r.kind === 'day' && r.date >= today);
+    if (next?.kind === 'day') requestAnimationFrame(() => scrollToDay(listRef.current, next.date));
+    else window.scrollTo(0, 0);
+  }, [q, searchApi.data, searchRows, today]);
   const loadOf = useMemo(() => {
     const n = new Map<string, number>();
     for (const e of events) if (!e.cancelled) n.set(e.date, (n.get(e.date) ?? 0) + 1);
@@ -582,6 +600,51 @@ export function SchedulePage() {
     </>
   );
 
+  const found = searchApi.data?.length ?? 0;
+  const searchView = (
+    <div className="cal-search">
+      <form
+        className="cal-search-bar"
+        role="search"
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          const v = String(new FormData(ev.currentTarget).get('q') ?? '').trim();
+          set({ q: v || null, event: null });
+        }}
+      >
+        <button type="button" className="icon-btn" aria-label="סגירת החיפוש וחזרה ליומן" title="חזרה ליומן" onClick={() => set({ q: null })}>
+          <Icon name="chevronRight" size={22} />
+        </button>
+        <input key={q} name="q" defaultValue={q} className="cal-search-input" placeholder="חיפוש אירועים" aria-label="חיפוש אירועים" enterKeyHint="search" autoComplete="off" />
+        <button type="submit" className="icon-btn" aria-label="חיפוש" title="חיפוש">
+          <Icon name="search" size={20} />
+        </button>
+      </form>
+      <p className="cal-search-count" role="status">
+        {!searchApi.data ? 'מחפש...' : found === 0 ? `לא נמצאו אירועים עבור "${q}"` : `${found === 1 ? 'אירוע אחד' : `${found} אירועים`} עבור "${q}"`}
+      </p>
+      <ErrorBox error={searchApi.error} />
+      {!searchApi.data && searchApi.loading ? (
+        <Loading rows={4} />
+      ) : (
+        <div ref={listRef}>
+          <AgendaList
+            rows={searchRows}
+            today={today}
+            nowTime={nowTime}
+            weeks={weeks}
+            canAddOn={() => false}
+            onAdd={() => undefined}
+            onOpen={openEvent}
+            onOpenExternal={() => undefined}
+            onOpenTask={() => undefined}
+            onlyMine={false}
+          />
+        </div>
+      )}
+    </div>
+  );
+
   const calendar =
     view === 'agenda' ? (
       list
@@ -642,7 +705,7 @@ export function SchedulePage() {
     >
       <BulkBridge onReady={(fn) => void (bulkToggle.current = fn)} />
       <div
-        className={`page schedule-page cal-page view-${view}${phone ? ' is-phone' : ' is-desk'}${phone ? ' has-strip' : ''}${!phone && prefs.panel ? ' has-panel' : ''}`}
+        className={`page schedule-page cal-page view-${view}${phone ? ' is-phone' : ' is-desk'}${phone ? ' has-strip' : ''}${!phone && prefs.panel ? ' has-panel' : ''}${q ? ' is-searching' : ''}`}
         onPointerDownCapture={(e) => void (lastDown.current = { top: e.clientY - 10, bottom: e.clientY + 10, left: e.clientX - 10, right: e.clientX + 10 })}
       >
         {phone ? (
@@ -712,7 +775,7 @@ export function SchedulePage() {
                 ))}
               </div>
             </Sheet>
-            {view !== 'month' && pickerOpen && (
+            {view !== 'month' && pickerOpen && !q && (
               <div className="card mdots-card gph-month">
                 <MonthDots month={miniMonth} selected={stripDate} today={today} load={loadOf} onPick={monthPick} onStep={monthStep} />
               </div>
@@ -727,7 +790,7 @@ export function SchedulePage() {
               </div>
             )}
             <ErrorBox error={error} />
-            {calendar}
+            {q ? searchView : calendar}
           </>
         ) : (
           <>
@@ -735,7 +798,7 @@ export function SchedulePage() {
             <h1 className="sr-only">לו"ז - {title}</h1>
             <ErrorBox error={error} />
             <div className="cal-main">
-              <div className={`cal-sheet${view === 'agenda' ? ' is-list' : ''}`}>{calendar}</div>
+              <div className={`cal-sheet${view === 'agenda' || q ? ' is-list' : ''}`}>{q ? searchView : calendar}</div>
               {prefs.panel && <ContextPanel tab={prefs.panel} date={focus} items={items} week={week} onOpen={openItem} />}
               <PanelStrip panel={prefs.panel} />
             </div>

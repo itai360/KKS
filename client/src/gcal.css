@@ -3443,3 +3443,61 @@
     padding: 8px 10px;
   }
 }
+
+/* ---------------- the search over the events, as Google Calendar's ---------------- */
+/* the words on top (a filled pill), how many were found, and what they found as the schedule's list */
+.cal-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 48px;
+  margin: 0 0 2px;
+  padding: 2px 4px;
+  border-radius: 24px;
+  background: var(--g-field);
+}
+.cal-search-bar:focus-within {
+  background: var(--g-sheet);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--g-line);
+}
+.cal-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+.cal-search-input::placeholder {
+  color: var(--muted);
+}
+.cal-search-count {
+  margin: 8px 12px 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+/* a phone: the search takes the calendar's bar - a white pill over the page - and stays on top as the
+   list goes under it; the results say their month, as they are far apart */
+.cal-page.is-searching .gph-bar {
+  display: none;
+}
+.cal-page.is-phone .cal-search-bar {
+  position: sticky;
+  top: calc(var(--top-h) + 4px);
+  z-index: 6;
+  background: var(--g-sheet);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+.cal-page.is-phone .cal-search .gs-mon {
+  display: block;
+  order: 2;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cal-page.is-phone .cal-search .gs-mon::after {
+  content: none;
+}

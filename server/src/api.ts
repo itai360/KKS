@@ -70,6 +70,7 @@ import {
   respondEvent,
   restoreEvent,
   RESPONSES,
+  searchEvents,
   shiftEventTasks,
   untrashEvent,
   updateEvent,
@@ -891,6 +892,14 @@ export function apiRouter(): Router {
     const from = isDateKey(req.query.from) ? req.query.from : today;
     const to = isDateKey(req.query.to) ? req.query.to : from;
     res.json(listEventsFor(me(req), from, to));
+  });
+  // the search over the events, as Google Calendar's: ?q= every word; from a year back to a year on, or ?from=&to=
+  r.get('/events/search', (req, res) => {
+    const today = localDateKey(clock.now(), tz());
+    const from = isDateKey(req.query.from) ? req.query.from : addDays(today, -366);
+    const to = isDateKey(req.query.to) ? req.query.to : addDays(today, 366);
+    if (to < from || to > addDays(from, 3 * 366)) throw badRequest('טווח של עד שלוש שנים');
+    res.json(searchEvents(me(req), str(req.query.q) ?? '', from, to));
   });
   r.post('/events', (req, res) => res.json(eventDetail(me(req), createEvent(me(req), req.body))));
   // the trash: what was deleted in the last 30 days, back again or gone for good
