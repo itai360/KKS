@@ -11,8 +11,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { MONTH_NAMES, monthWeeks, stepDate, viewDays, viewTitle } from '@shared/calendarGrid';
 import {
-  CAL_COLOR_LABELS,
-  CAL_COLORS,
   dedupe,
   externalColor,
   sourceColor,
@@ -23,16 +21,13 @@ import {
   fromExternal,
   fromTask,
   fromWeek,
-  isCalColor,
   layerShown,
   matchesTaskFilter,
   taskQuery,
-  type CalColor,
   type CalItem,
   type LayerId,
 } from '@shared/calendarLayers';
 import { addDays, diffDays, isDateKey, parseDateKey, shortDate, startOfWeek, weekdayName } from '@shared/dates';
-import { REPEAT_FREQS, REPEAT_LABELS, repeatText, seriesSpan, type RepeatFreq } from '@shared/eventSeries';
 import type { Absence, CalendarSource, Debrief, EventDetail, Experience, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
 import { AgendaList, MonthDots, QuickAdd, scrollToDay, WeekStrip } from '../components/Agenda';
 import { BulkScope, BulkToggle, useBulk } from '../components/Bulk';
@@ -42,19 +37,21 @@ import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { GoogleCalendarModal } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { ItemCard, type EventActions, kindLabel } from '../components/ItemCard';
+import { ScopeDialog, ShiftTasks, type Scope } from '../components/EventDialogs';
+import { editPath, type EventPrefill } from './EventEditorPage';
 import { usePeriodSwipe } from '../components/periodSwipe';
 import { anchorOf, Popover, type Anchor } from '../components/Popover';
 import { useNewTask } from '../components/NewTask';
 import { QuickCreate, type Draft } from '../components/QuickCreate';
 import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select, TimeInput } from '../components/ui';
+import { DateInput, ErrorBox, Field, Loading, Modal, PageHead, Seg, TimeInput } from '../components/ui';
 import { agendaDays, endMinutes, foldQuiet, isMine, type AgendaRow } from '../lib/agenda';
-import { api, changedFields } from '../lib/api';
+import { api } from '../lib/api';
 import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { PHONE_VIEWS, setCalendarBar, VIEW_LABELS, type CalView } from '../lib/calendarBar';
 import { setCalendarPrefs, useCalendarPrefs } from '../lib/calendarPrefs';
-import { dateKeyOf, fileSize, fmtDeadline, fmtTime, isoAt, todayKey } from '../lib/format';
+import { dateKeyOf, fileSize, fmtTime, isoAt, todayKey } from '../lib/format';
 import { useMedia } from '../lib/media';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -246,8 +243,10 @@ export function SchedulePage() {
   const error = eventsApi.error;
 
   // ---------------- what is open over the calendar ----------------
-  const [creating, setCreating] = useState<FormPrefill | null>(null);
-  const [editing, setEditing] = useState<ScheduleEvent | null>(null);
+  const navigate = useNavigate();
+  // the whole form is a page of its own, as Google Calendar's: a new event with what is known, or an event there is
+  const setCreating = (prefill: EventPrefill) => navigate('/event/new', { state: { prefill } });
+  const setEditing = (e: ScheduleEvent) => navigate(editPath(e.id));
   const [google, setGoogle] = useState(false);
   const [card, setCard] = useState<{ item: CalItem; anchor: Anchor } | null>(null);
   const [draft, setDraft] = useState<(Draft & { anchor: Anchor }) | null>(null);
@@ -378,8 +377,8 @@ export function SchedulePage() {
   const monthStep = (dir: 1 | -1) => setMiniFor({ day: focus, month: stepDate('month', miniMonth, dir) });
 
   // ---------------- the top bar: the calendar's controls (a computer) ----------------
-  const bar = useRef({ today: goToday, step, setView, goTo, askDate: () => setAskDate(true) });
-  bar.current = { today: goToday, step, setView, goTo, askDate: () => setAskDate(true) };
+  const bar = useRef({ today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash') });
+  bar.current = { today: goToday, step, setView, goTo, askDate: () => setAskDate(true), trash: () => navigate('/trash') };
   const markShown = view === 'week' || view === 'four' || view === 'three' ? shown : view === 'day' ? [date] : [];
   const extrasKey = `${canAdd}`;
   useEffect(() => {
@@ -398,6 +397,7 @@ export function SchedulePage() {
       extras: [
         ...(canAdd ? [{ label: 'בחירת אירועים לפעולה משותפת', icon: 'check', run: () => bulkToggle.current?.() }] : []),
         { label: 'הדפסה', icon: 'print', run: () => window.print() },
+        { label: 'אשפה', icon: 'trash', run: () => bar.current.trash() },
       ],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -407,19 +407,28 @@ export function SchedulePage() {
   }, []);
 
   // ---------------- doing things ----------------
-  // dragged in the calendar: shown at once, saved, and put back if the server refuses
-  const move = async (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }) => {
+  // dragged in the calendar: shown at once, saved, and put back if the server refuses. One of a series asks
+  // first which of its days it moves (as Google asks); "ביטול" on the message puts it back.
+  const [dragScope, setDragScope] = useState<{ event: ScheduleEvent; to: { date: string; startTime: string; endTime: string | null } } | null>(null);
+  const move = async (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }, scope?: Scope, undoing = false) => {
     const span = e.endDate ? diffDays(e.endDate, e.date) : 0;
     if (eventsApi.data) eventsApi.setData(eventsApi.data.map((x) => (x.id === e.id ? { ...x, ...to, endDate: span ? addDays(to.date, span) : x.endDate } : x)));
+    if (e.seriesId && !scope) return setDragScope({ event: e, to });
     try {
-      const res = await api.patch<EventDetail & { affectedTasks: Task[]; deltaMinutes: number }>(`/api/events/${e.id}`, e.allDay ? { date: to.date } : to);
+      const res = await api.patch<EventDetail & { affectedTasks: Task[]; deltaMinutes: number }>(`/api/events/${e.id}`, { ...(e.allDay ? { date: to.date } : to), ...(scope && scope !== 'one' ? { scope } : {}) });
       emitLocalChange('events');
-      if (res.affectedTasks.length) setAffected({ tasks: res.affectedTasks, delta: res.deltaMinutes, id: e.id });
-      else {
+      if (res.affectedTasks.length && !undoing) setAffected({ tasks: res.affectedTasks, delta: res.deltaMinutes, id: e.id });
+      else if (!undoing) {
         const when = e.allDay ? 'כל היום' : `${to.startTime}${to.endTime ? ` - ${to.endTime}` : ''}`;
         const title =
           to.date !== e.date ? `"${e.title}" הוזז ליום ${weekdayName(to.date)} ${shortDate(to.date)}, ${when}` : to.startTime === e.startTime ? `"${e.title}" עודכן: ${when}` : `"${e.title}" הוזז ל-${when}`;
-        toast({ title, body: e.seriesId ? 'רק האירוע הזה בסדרה' : undefined, tone: 'green' });
+        const moved = { ...e, ...to, endDate: span ? addDays(to.date, span) : e.endDate };
+        toast({
+          title,
+          body: scope === 'all' ? 'כל האירועים בסדרה' : scope === 'following' ? 'האירוע הזה והאירועים הבאים' : undefined,
+          tone: 'green',
+          action: { label: 'ביטול', run: () => void move(moved, { date: e.date, startTime: e.startTime, endTime: e.endTime }, scope, true) },
+        });
       }
     } catch (err) {
       toast({ title: (err as Error).message, tone: 'red' });
@@ -436,12 +445,45 @@ export function SchedulePage() {
     }
   };
   const [scopeFor, setScopeFor] = useState<{ event: ScheduleEvent; verb: 'delete' } | null>(null);
-  const remove = async (e: ScheduleEvent, scope: 'one' | 'following' | 'all' = 'one') => {
+  // deleted: to the trash, and "ביטול" on the message brings it back - as Google's
+  const remove = async (e: ScheduleEvent, scope: Scope = 'one') => {
     setScopeFor(null);
     setCard(null);
-    await run(() => api.del(`/api/events/${e.id}${scope !== 'one' ? `?scope=${scope}` : ''}`), scope === 'one' ? 'האירוע נמחק' : 'האירועים נמחקו');
+    try {
+      await api.del(`/api/events/${e.id}${scope !== 'one' ? `?scope=${scope}` : ''}`);
+      emitLocalChange('events', 'tasks');
+      toast({
+        title: scope === 'one' ? 'האירוע נמחק' : 'האירועים נמחקו',
+        tone: 'green',
+        action: {
+          label: 'ביטול',
+          run: () =>
+            void api
+              .post(`/api/events/${e.id}/untrash`)
+              .then(() => emitLocalChange('events', 'tasks'))
+              .catch((err) => toast({ title: (err as Error).message, tone: 'red' })),
+        },
+      });
+    } catch (err) {
+      toast({ title: (err as Error).message, tone: 'red' });
+    }
+  };
+  // a guest's answer: to this day, or (a series) to all of it - as Google asks
+  const [rsvpFor, setRsvpFor] = useState<{ event: ScheduleEvent; response: 'accepted' | 'declined' | 'tentative' } | null>(null);
+  const respond = async (e: ScheduleEvent, response: 'accepted' | 'declined' | 'tentative', scope: Scope = 'one') => {
+    setRsvpFor(null);
+    try {
+      await api.post(`/api/events/${e.id}/respond`, { response, scope: scope === 'all' ? 'all' : 'one' });
+      const answered = { ...e, myResponse: response, guests: e.guests?.map((g) => (g.userId === user.id ? { ...g, response } : g)) };
+      setCard((c) => (c && c.item.src.kind === 'event' && c.item.src.e.id === e.id ? { ...c, item: { ...c.item, src: { kind: 'event', e: answered } } } : c));
+      emitLocalChange('events');
+      toast({ title: response === 'accepted' ? 'אישרת הגעה' : response === 'declined' ? 'סימנת שלא תגיע/י' : 'סימנת "אולי"', body: e.title, tone: 'green' });
+    } catch (err) {
+      toast({ title: (err as Error).message, tone: 'red' });
+    }
   };
   const actions: EventActions = {
+    onRespond: (e, r) => (e.seriesId ? setRsvpFor({ event: e, response: r }) : void respond(e, r)),
     canManage,
     onEdit: (e) => {
       setCard(null);
@@ -465,7 +507,7 @@ export function SchedulePage() {
     },
     onDelete: async (e) => {
       if (e.seriesId) return setScopeFor({ event: e, verb: 'delete' });
-      if (await ask({ title: 'למחוק את האירוע מהלו"ז?', body: 'משימות מקושרות יישמרו כמשימות עצמאיות.', confirm: 'מחיקה', danger: true })) void remove(e);
+      void remove(e);
     },
   };
   const openItem = (item: CalItem, el: HTMLElement) => {
@@ -551,7 +593,7 @@ export function SchedulePage() {
             ready={!loading}
             nowTime={nowTime}
             items={items}
-            draft={draft ? { date: draft.date, start: draft.allDay ? null : (draft.start ?? null), end: draft.end ?? null } : null}
+            draft={draft ? { date: draft.date, start: draft.allDay ? null : (draft.start ?? null), end: draft.end ?? null, title: draft.title, color: draft.color } : null}
             allDayOpen={prefs.allDayOpen}
             onAllDayToggle={() => setCalendarPrefs((p) => ({ allDayOpen: !p.allDayOpen }))}
             canCreate={() => !viewing}
@@ -696,14 +738,26 @@ export function SchedulePage() {
             }}
           />
         )}
-        {creating && <EventForm prefill={creating} onClose={() => setCreating(null)} />}
         {google && <GoogleCalendarModal onClose={() => setGoogle(false)} />}
         {affected && <ShiftTasks {...affected} onClose={() => setAffected(null)} />}
         {cancelling && <CancelEvent event={cancelling.event} openTasks={cancelling.openTasks} onClose={() => setCancelling(null)} />}
-        {scopeFor && <SeriesScope title={`מחיקת "${scopeFor.event.title}"`} verb="מחיקה" danger onClose={() => setScopeFor(null)} onPick={(scope) => void remove(scopeFor.event, scope)} />}
+        {scopeFor && <ScopeDialog title="מחיקת אירוע חוזר" danger onClose={() => setScopeFor(null)} onPick={(scope) => void remove(scopeFor.event, scope)} />}
+        {rsvpFor && <ScopeDialog title="תשובה לאירוע חוזר" only={['one', 'all']} onClose={() => setRsvpFor(null)} onPick={(scope) => void respond(rsvpFor.event, rsvpFor.response, scope)} />}
+        {dragScope && (
+          <ScopeDialog
+            title="עריכת אירוע חוזר"
+            onClose={() => {
+              setDragScope(null);
+              void eventsApi.reload();
+            }}
+            onPick={(scope) => {
+              const d = dragScope;
+              setDragScope(null);
+              void move(d.event, d.to, scope);
+            }}
+          />
+        )}
         {eventId && <EventDrawer id={Number(eventId)} onClose={() => set({ event: null })} onEdit={(e) => setEditing(e)} />}
-        {/* after the drawer so the edit form stacks on top of it */}
-        {editing && <EventForm event={editing} onClose={() => setEditing(null)} />}
       </div>
     </BulkScope>
   );
@@ -748,306 +802,6 @@ function GoToDate({ initial, onClose, onGo }: { initial: string; onClose: () => 
         </Field>
         <button type="submit" hidden />
       </form>
-    </Modal>
-  );
-}
-
-/** one event of a repeating series: this one, it and the later ones, or all of it */
-function SeriesScope({ title, verb, danger, onClose, onPick }: { title: string; verb: string; danger?: boolean; onClose: () => void; onPick: (scope: 'one' | 'following' | 'all') => void }) {
-  const [scope, setScope] = useState<'one' | 'following' | 'all'>('one');
-  return (
-    <Modal
-      title={title}
-      narrow
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className={`btn ${danger ? 'btn-danger-solid' : 'btn-primary'}`} onClick={() => onPick(scope)}>
-            {verb}
-          </button>
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            ביטול
-          </button>
-        </>
-      }
-    >
-      <div className="col gap-6" role="radiogroup" aria-label="אילו אירועים בסדרה">
-        {(
-          [
-            ['one', 'רק האירוע הזה'],
-            ['following', 'האירוע הזה וכל הבאים אחריו'],
-            ['all', 'כל האירועים בסדרה'],
-          ] as const
-        ).map(([v, l]) => (
-          <label key={v} className="check">
-            <input type="radio" name="series-scope" checked={scope === v} onChange={() => setScope(v)} /> {l}
-          </label>
-        ))}
-      </div>
-    </Modal>
-  );
-}
-
-/** what a new event's form starts from: the day, and what is already known */
-type FormPrefill = Draft & { color?: string | null; notes?: string };
-
-/** The whole form of an event: its day and hours (or all day, over days), what, where, who, its colour, and for a new one - repeating. */
-function EventForm({ event, prefill, onClose }: { event?: ScheduleEvent; prefill?: FormPrefill; onClose: () => void }) {
-  const { users, weeks, settings } = useSession();
-  const toast = useToast();
-  const [date, setDate] = useState(event?.date ?? prefill?.date ?? todayKey());
-  const [start, setStart] = useState(event?.startTime ?? prefill?.start ?? '08:00');
-  const [end, setEnd] = useState(event?.endTime ?? prefill?.end ?? '');
-  const [allDay, setAllDay] = useState(event?.allDay ?? prefill?.allDay ?? false);
-  const [endDate, setEndDate] = useState(event?.endDate ?? prefill?.endDate ?? '');
-  const [title, setTitle] = useState(event?.title ?? prefill?.title ?? '');
-  const [location, setLocation] = useState(event?.location ?? prefill?.location ?? '');
-  const ownerId = event ? event.ownerId : prefill?.ownerId;
-  const [owner, setOwner] = useState<string>(ownerId ? String(ownerId) : '');
-  const [notes, setNotes] = useState(event?.notes ?? prefill?.notes ?? '');
-  const initialColor = event?.color ?? prefill?.color;
-  const [color, setColor] = useState<CalColor | null>(isCalColor(initialColor) && initialColor !== 'blue' ? initialColor : null);
-  // repeating (a new event): how often and up to which day - by default the course's last day, or three months
-  const courseEnd = settings.endDate ?? weeks.reduce<string | null>((m, w) => (!m || w.endDate > m ? w.endDate : m), null);
-  const [repeat, setRepeat] = useState<RepeatFreq | ''>('');
-  const [every, setEvery] = useState(1);
-  const [until, setUntil] = useState(courseEnd && courseEnd > date ? courseEnd : addDays(date, 90));
-  const [error, setError] = useState<string | null>(null);
-  const [affected, setAffected] = useState<{ tasks: Task[]; delta: number; id: number } | null>(null);
-  const [askScope, setAskScope] = useState(false);
-  const rule = repeat ? { freq: repeat, interval: every, until } : null;
-  const span = rule ? seriesSpan(date, rule) : null;
-
-  const save = async (scope?: 'one' | 'following' | 'all') => {
-    setError(null);
-    const body = {
-      date,
-      startTime: allDay ? '00:00' : start,
-      endTime: allDay ? null : end || null,
-      allDay,
-      endDate: allDay && endDate && endDate > date ? endDate : null,
-      color,
-      title,
-      location,
-      ownerId: owner ? Number(owner) : null,
-      notes,
-    };
-    try {
-      if (event) {
-        const patch = changedFields<typeof body>({ ...event, endTime: event.endTime || null, allDay: !!event.allDay, endDate: event.endDate ?? null, color: isCalColor(event.color) && event.color !== 'blue' ? event.color : null }, body);
-        if (!Object.keys(patch).length) return onClose();
-        // one of a series: which of them it takes
-        if (event.seriesId && !scope) return setAskScope(true);
-        const res = await api.patch<EventDetail & { affectedTasks: Task[]; deltaMinutes: number }>(`/api/events/${event.id}`, { ...patch, ...(scope && scope !== 'one' ? { scope } : {}) });
-        emitLocalChange('events');
-        if (res.affectedTasks.length) return setAffected({ tasks: res.affectedTasks, delta: res.deltaMinutes, id: event.id });
-        toast({ title: scope === 'following' || scope === 'all' ? 'האירועים עודכנו' : 'האירוע עודכן', tone: 'green' });
-      } else {
-        await api.post('/api/events', { ...body, repeat: rule ?? undefined });
-        toast({ title: rule ? `נוספו ללו"ז ${span?.count ?? ''} אירועים` : 'האירוע נוסף ללו"ז', body: rule ? `${title} · ${repeatText(rule)}` : undefined, tone: 'green' });
-        emitLocalChange('events');
-      }
-      onClose();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
-  if (affected) return <ShiftTasks {...affected} onClose={onClose} />;
-
-  return (
-    <Modal
-      title={event ? 'עריכת אירוע' : 'אירוע חדש בלו"ז'}
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-primary" onClick={() => void save()} disabled={!title.trim() || (!!rule && !span?.count)}>
-            שמור
-          </button>
-          <button className="btn btn-ghost" onClick={onClose}>
-            ביטול
-          </button>
-        </>
-      }
-    >
-      <div className="form-grid">
-        <Field label="שם הפעילות" required className="span-2">
-          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="לדוגמה: מטווח" data-autofocus />
-        </Field>
-        <Field label={allDay ? 'מתאריך' : 'תאריך'} required>
-          <DateInput value={date} onChange={(v) => v && (setDate(v), endDate && endDate < v && setEndDate(v))} />
-        </Field>
-        {allDay ? (
-          <Field label="עד תאריך" hint="ליום אחד - אותו תאריך">
-            <DateInput value={endDate || date} min={date} onChange={(v) => setEndDate(v)} />
-          </Field>
-        ) : (
-          <div className="row gap-6">
-            <Field label="התחלה" required className="grow">
-              <TimeInput value={start} onChange={setStart} />
-            </Field>
-            <Field label="סיום" className="grow">
-              <TimeInput value={end} onChange={setEnd} />
-            </Field>
-          </div>
-        )}
-        <label className="check span-2">
-          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> כל היום (או כמה ימים)
-        </label>
-        <Field label="מיקום">
-          <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} />
-        </Field>
-        <Field label="אחראי">
-          <Select className="select" value={owner} onChange={(e) => setOwner(e.target.value)} searchable>
-            <option value="">ללא</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.displayName}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="צבע ביומן" className="span-2">
-          <div className="qc-swatches" role="radiogroup" aria-label="צבע ביומן">
-            {CAL_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                role="radio"
-                aria-checked={(color ?? 'blue') === c}
-                className={`qc-swatch c-${c}${(color ?? 'blue') === c ? ' on' : ''}`}
-                onClick={() => setColor(c === 'blue' ? null : c)}
-                aria-label={CAL_COLOR_LABELS[c]}
-                title={CAL_COLOR_LABELS[c]}
-              />
-            ))}
-          </div>
-        </Field>
-        {!event && (
-          <>
-            <Field label="חזרה">
-              <Select className="select" value={repeat} onChange={(e) => setRepeat(e.target.value as RepeatFreq | '')}>
-                <option value="">לא חוזר</option>
-                {REPEAT_FREQS.map((f) => (
-                  <option key={f} value={f}>
-                    {REPEAT_LABELS[f]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            {repeat && (
-              <div className="row gap-6">
-                {repeat !== 'weekdays' && (
-                  <Field label="כל כמה" className="grow">
-                    <Select className="select" value={String(every)} onChange={(e) => setEvery(Number(e.target.value))}>
-                      {[1, 2, 3, 4].map((n) => (
-                        <option key={n} value={n}>
-                          {repeatText({ freq: repeat, interval: n })}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                )}
-                <Field label="עד" className="grow">
-                  <DateInput value={until} min={date} onChange={(v) => v && setUntil(v)} />
-                </Field>
-              </div>
-            )}
-            {span && (
-              <p className="small muted span-2">
-                {span.count ? `${span.count} אירועים, כל אחד אירוע שלם משלו (משימות הכנה, תחקיר וקבצים) - עד ${shortDate(span.last!)}.` : 'אין אף יום שבו האירוע חוזר עד התאריך שנבחר.'}
-              </p>
-            )}
-          </>
-        )}
-        {event?.seriesId && <p className="small muted span-2">האירוע חלק מסדרה חוזרת - בשמירה אפשר לבחור אם לשנות רק אותו, אותו ואת הבאים, או את כולם.</p>}
-        <Field label="הערות" className="span-2">
-          <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} />
-        </Field>
-      </div>
-      <div className="mt-12">
-        <ErrorBox error={error} />
-      </div>
-      {askScope && (
-        <SeriesScope
-          title="עריכת אירוע חוזר"
-          verb="שמירה"
-          onClose={() => setAskScope(false)}
-          onPick={(scope) => {
-            setAskScope(false);
-            void save(scope);
-          }}
-        />
-      )}
-    </Modal>
-  );
-}
-
-function deltaText(min: number): string {
-  const abs = Math.abs(min);
-  const d = Math.floor(abs / 1440);
-  const h = Math.floor((abs % 1440) / 60);
-  const m = abs % 60;
-  const parts = [d && `${d} ימים`, h && `${h} שעות`, m && `${m} דקות`].filter(Boolean).join(' ו-');
-  return `${min > 0 ? 'קדימה' : 'אחורה'} ${parts}`;
-}
-
-function ShiftTasks({ tasks, delta, id, onClose }: { tasks: Task[]; delta: number; id: number; onClose: () => void }) {
-  const toast = useToast();
-  const [selected, setSelected] = useState<Set<number>>(new Set(tasks.map((t) => t.id)));
-  const [error, setError] = useState<string | null>(null);
-  const shift = async () => {
-    try {
-      const r = await api.post<{ shifted: number }>(`/api/events/${id}/shift-tasks`, { taskIds: [...selected], deltaMinutes: delta });
-      toast({ title: `עודכנו ${r.shifted} דד-ליינים`, tone: 'green' });
-      emitLocalChange('tasks');
-      onClose();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <Modal
-      title="משימות שעשויות להיות מושפעות"
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-primary" onClick={() => void shift()} disabled={!selected.size}>
-            הזז {selected.size} דד-ליינים
-          </button>
-          <button className="btn btn-ghost" onClick={onClose}>
-            השאר כמו שהן
-          </button>
-        </>
-      }
-    >
-      <div className="col gap-16">
-        <div className="info-box">
-          הפעילות הוזזה <b>{deltaText(delta)}</b>. לעדכן גם את הדד-ליינים של משימות ההכנה המקושרות?
-        </div>
-        {tasks.map((t) => (
-          <label key={t.id} className="check">
-            <input
-              type="checkbox"
-              checked={selected.has(t.id)}
-              onChange={(e) => {
-                const n = new Set(selected);
-                if (e.target.checked) n.add(t.id);
-                else n.delete(t.id);
-                setSelected(n);
-              }}
-            />
-            <span className="grow">
-              <b>{t.title}</b>
-              <span className="tiny muted">
-                {' '}
-                · {t.ownerName} · {fmtDeadline(t.deadline)} ← {fmtDeadline(new Date(Date.parse(t.deadline) + delta * 60000).toISOString())}
-              </span>
-            </span>
-          </label>
-        ))}
-        <ErrorBox error={error} />
-      </div>
     </Modal>
   );
 }
@@ -1246,9 +1000,8 @@ function EventDrawer({ id, onClose, onEdit }: { id: number; onClose: () => void;
       </div>
       {cancelOpen && <CancelEvent event={e} openTasks={data.tasks.filter((t) => t.status !== 'done' && t.status !== 'cancelled').length} onClose={() => setCancelOpen(false)} />}
       {scopeOpen && (
-        <SeriesScope
-          title={`מחיקת "${e.title}"`}
-          verb="מחיקה"
+        <ScopeDialog
+          title="מחיקת אירוע חוזר"
           danger
           onClose={() => setScopeOpen(false)}
           onPick={(scope) => {

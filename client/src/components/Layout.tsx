@@ -470,6 +470,8 @@ export function Layout({ children }: { children: ReactNode }) {
   // the calendar - the home page - puts its own controls in the top bar on a computer, and its layers in the side bar
   const calBar = useCalendarBar();
   const onCalendar = location.pathname === '/';
+  // an event's whole form is a page of its own, as Google Calendar's: no bars around it
+  const focusPage = location.pathname.startsWith('/event/');
   const today = todayKey();
 
   // the side menu folds to icons on a medium screen (a tablet, a small laptop) unless
@@ -669,7 +671,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const calLayers = onCalendar && !folded;
 
   return (
-    <div className={`app${folded ? ' rail-collapsed' : ''}${drawer ? ' menu-open' : ''}${viewing ? ' viewing-past' : ''}`}>
+    <div className={`app${folded ? ' rail-collapsed' : ''}${drawer ? ' menu-open' : ''}${viewing ? ' viewing-past' : ''}${focusPage ? ' is-focus' : ''}`}>
       {/* keyboard and screen-reader users skip the menu */}
       <a
         className="skip-link"

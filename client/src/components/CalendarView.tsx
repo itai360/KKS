@@ -23,6 +23,9 @@ export interface Draft {
   date: string;
   start: string | null;
   end: string | null;
+  /** what was typed so far, and the colour chosen: the ghost shows them as Google's does */
+  title?: string;
+  color?: string | null;
 }
 
 export interface CalendarProps {
@@ -151,6 +154,7 @@ const range = (start: number, end: number) => `${fromMinutes(start)} - ${end >= 
 const ALLDAY_ROWS = 3;
 
 function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onPickDay }: CalendarProps) {
+  const draftTitle = draft?.title?.trim() || '(ללא כותרת)';
   const days = viewDays(view, date);
   const bulk = useBulk();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -336,8 +340,8 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
             ) : null,
           )}
           {draft && !draft.start && days.includes(draft.date) && (
-            <div className="gc-chip is-bar is-ghost" style={{ gridColumn: days.indexOf(draft.date) + 1, gridRow: rows + 1 > ALLDAY_ROWS && !allDayOpen ? ALLDAY_ROWS : rows + 1 }}>
-              (ללא כותרת)
+            <div className={`gc-chip is-bar is-ghost${draft.color ? ` c-${draft.color}` : ''}`} style={{ gridColumn: days.indexOf(draft.date) + 1, gridRow: rows + 1 > ALLDAY_ROWS && !allDayOpen ? ALLDAY_ROWS : rows + 1 }}>
+              {draftTitle}
             </div>
           )}
         </div>
@@ -429,8 +433,8 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                   </div>
                 )}
                 {draftShown && draft!.date === d && !drag && (
-                  <div className="gc-event is-ghost" style={{ top: `calc(var(--hour) * ${hours(draftShown.start)})`, height: `calc(var(--hour) * ${hours(Math.max(draftShown.end - draftShown.start, MIN_VISIBLE))} - 2px)` }}>
-                    <span className="gc-event-title">(ללא כותרת)</span>
+                  <div className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}`} style={{ top: `calc(var(--hour) * ${hours(draftShown.start)})`, height: `calc(var(--hour) * ${hours(Math.max(draftShown.end - draftShown.start, MIN_VISIBLE))} - 2px)` }}>
+                    <span className="gc-event-title">{draftTitle}</span>
                     <span className="gc-event-meta">{range(draftShown.start, draftShown.end)}</span>
                   </div>
                 )}
@@ -451,6 +455,7 @@ const ROW_PX = 22;
 const DAYNUM_PX = 26;
 
 function MonthGrid({ date, today, items, draft, canCreate, canMove, onOpen, onCreate, onMove, onPickDay }: CalendarProps) {
+  const draftTitle = draft?.title?.trim() || '(ללא כותרת)';
   const bulk = useBulk();
   const weeks = monthWeeks(date);
   const month = date.slice(0, 7);
@@ -558,8 +563,8 @@ function MonthGrid({ date, today, items, draft, canCreate, canMove, onOpen, onCr
                   ) : null,
                 )}
                 {draft && w.includes(draft.date) && (
-                  <div className="gc-chip is-bar is-ghost" style={{ gridColumn: w.indexOf(draft.date) + 1, gridRow: Math.min(rows, laneCount(shown) + 1) + 1 }}>
-                    (ללא כותרת)
+                  <div className={`gc-chip is-bar is-ghost${draft.color ? ` c-${draft.color}` : ''}`} style={{ gridColumn: w.indexOf(draft.date) + 1, gridRow: Math.min(rows, laneCount(shown) + 1) + 1 }}>
+                    {draftTitle}
                   </div>
                 )}
               </div>

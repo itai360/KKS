@@ -214,14 +214,29 @@ describe('reminders', () => {
   });
 
   it('the default is 30 minutes before; an event made after its reminder\'s time does not remind', async () => {
-    setDefaultReminders(true);
     clock.set(at('2026-10-02', '11:40'));
     await c.cmd.post('/api/events', ev({ date: '2026-10-02', startTime: '12:00', title: 'קרוב מדי', ownerId: c.ids.s1 }));
     await c.cmd.post('/api/events', ev({ date: '2026-10-02', startTime: '13:00', title: 'שעה', ownerId: c.ids.s1 }));
     clock.set(at('2026-10-02', '12:30'));
     runAutomation();
     expect(notes(c.ids.s1, 'event_reminder').map((n) => n.title)).toEqual(['בעוד 30 דקות: שעה']);
+  });
+
+  it('a reminder the scheduler reaches after the start says since when; none at all once the default is off', async () => {
+    clock.set(at('2026-10-01', '08:00'));
+    await c.cmd.post('/api/events', ev({ date: '2026-10-02', startTime: '12:00', title: 'באיחור', ownerId: c.ids.s1 }));
+    clock.set(at('2026-10-02', '12:07'));
+    runAutomation();
+    expect(notes(c.ids.s1, 'event_reminder').map((n) => n.title)).toEqual(['התחיל לפני 7 דקות: באיחור']);
     setDefaultReminders(false);
+    try {
+      await c.cmd.post('/api/events', ev({ date: '2026-10-02', startTime: '14:00', title: 'בלי', ownerId: c.ids.s1 }));
+      clock.set(at('2026-10-02', '13:40'));
+      runAutomation();
+      expect(notes(c.ids.s1, 'event_reminder')).toHaveLength(1);
+    } finally {
+      setDefaultReminders(true);
+    }
   });
 });
 

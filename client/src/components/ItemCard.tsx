@@ -16,6 +16,7 @@ import { PriorityBadge, StatusBadge } from './Badges';
 import { Icon } from './Icon';
 import { TaskCheck, useTaskTick } from './TaskRow';
 import { DeadlineText } from './Badges';
+import { GuestAvatar, reminderText } from './EventDialogs';
 
 /** "יום שני, 26 באוקטובר" */
 export function longDay(d: string): string {
@@ -47,6 +48,8 @@ export interface EventActions {
   onCancel: (e: ScheduleEvent) => void;
   onRestore: (e: ScheduleEvent) => void;
   onDelete: (e: ScheduleEvent) => void;
+  /** a guest's answer: yes, no or maybe */
+  onRespond?: (e: ScheduleEvent, response: 'accepted' | 'declined' | 'tentative') => void;
 }
 
 function TaskBody({ item, onClose }: { item: CalItem & { src: { kind: 'task' } }; onClose: () => void }) {
@@ -133,28 +136,70 @@ export function ItemCard({ item, onClose, actions }: { item: CalItem; onClose: (
 
   if (src.kind === 'event') {
     const e = src.e;
-    const may = actions.canManage(e);
+    const may = (e.canEdit ?? actions.canManage(e)) && !e.hidden;
+    const guests = e.guests ?? [];
+    const counts = { accepted: 0, declined: 0, tentative: 0, needsAction: 0 };
+    for (const g of guests) counts[g.response]++;
+    const answer = e.myResponse;
     return (
-      <div className="item-card">
+      <div className="item-card g-card">
         {head(
           may && (
             <>
               <button type="button" className="icon-btn" onClick={() => actions.onEdit(e)} aria-label="עריכת האירוע" title="עריכה">
                 <Icon name="edit" />
               </button>
-              <button type="button" className="icon-btn" onClick={() => actions.onDuplicate(e)} aria-label="שכפול האירוע" title="שכפול">
-                <Icon name="copy" />
-              </button>
               <button type="button" className="icon-btn" onClick={() => actions.onDelete(e)} aria-label="מחיקת האירוע" title="מחיקה">
                 <Icon name="trash" />
+              </button>
+              <button type="button" className="icon-btn" onClick={() => actions.onDuplicate(e)} aria-label="שכפול האירוע" title="שכפול">
+                <Icon name="copy" />
               </button>
             </>
           ),
         )}
         {title}
-        <div className="ic-when">{whenText(item)}</div>
+        <div className="ic-when">
+          {whenText(item)}
+          {e.recurrenceText && <div className="ic-recur">{e.recurrenceText}</div>}
+        </div>
         {e.cancelled && <span className="badge t-red">הפעילות בוטלה</span>}
         {e.location && <Row icon="pin">{e.location}</Row>}
+        {guests.length > 0 && (
+          <Row icon="users">
+            <div className="ic-guests-sum">
+              {guests.length} אורחים
+              <span className="muted small">
+                {[counts.accepted && `${counts.accepted} כן`, counts.declined && `${counts.declined} לא`, counts.tentative && `${counts.tentative} אולי`, counts.needsAction && `${counts.needsAction} ממתינים`].filter(Boolean).join(', ')}
+              </span>
+            </div>
+            <ul className="ic-guests">
+              {guests.slice(0, 8).map((g) => (
+                <li key={g.userId}>
+                  <GuestAvatar name={g.name} response={g.response} />
+                  <span className="grow">
+                    {g.name}
+                    {g.userId === e.createdBy && <span className="tiny muted"> · מארגן</span>}
+                    {g.optional && <span className="tiny muted"> · אופציונלי</span>}
+                  </span>
+                </li>
+              ))}
+              {guests.length > 8 && <li className="tiny muted">ועוד {guests.length - 8}</li>}
+            </ul>
+          </Row>
+        )}
+        {e.notes && (
+          <Row icon="edit">
+            <div className="ic-notes">{e.notes}</div>
+          </Row>
+        )}
+        {!e.hidden && <Row icon="bell">{(e.reminders ?? (e.allDay ? [] : [{ minutes: 30 }])).map((r) => reminderText(r.minutes)).join(', ') || 'ללא התראות'}</Row>}
+        <Row icon="calendar">
+          {e.calendar === 'personal' ? 'היומן שלי' : 'יומן הקורס'}
+          {e.createdByName && <span className="muted small"> · נוצר על ידי {e.createdByName}</span>}
+          {e.visibility === 'private' && <span className="muted small"> · פרטי</span>}
+          {e.transparency === 'transparent' && <span className="muted small"> · פנוי</span>}
+        </Row>
         {e.ownerName && <Row icon="my">אחראי: {e.ownerName}</Row>}
         {e.taskTotal > 0 && (
           <Row icon="tasks">
@@ -164,23 +209,40 @@ export function ItemCard({ item, onClose, actions }: { item: CalItem; onClose: (
             </span>
           </Row>
         )}
-        {e.seriesId && <Row icon="repeat">אירוע חוזר</Row>}
-        {e.notes && <div className="ic-notes">{e.notes}</div>}
-        <div className="ic-foot">
-          <button type="button" className="btn btn-sm btn-primary" onClick={() => actions.onDetails(e)}>
-            פרטים נוספים
-          </button>
-          {may &&
-            (e.cancelled ? (
-              <button type="button" className="btn btn-sm" onClick={() => actions.onRestore(e)}>
-                החזרה ללו"ז
-              </button>
-            ) : (
-              <button type="button" className="btn btn-sm btn-ghost text-red" onClick={() => actions.onCancel(e)}>
-                ביטול פעילות
+        {answer && actions.onRespond && (
+          <div className="g-rsvp" role="group" aria-label="מגיע/ה?">
+            <span className="g-rsvp-q">מגיע/ה?</span>
+            {(
+              [
+                ['accepted', 'כן'],
+                ['declined', 'לא'],
+                ['tentative', 'אולי'],
+              ] as const
+            ).map(([r, l]) => (
+              <button key={r} type="button" className={`g-chip${answer === r ? ' on' : ''}`} aria-pressed={answer === r} onClick={() => actions.onRespond!(e, r)}>
+                {answer === r && <Icon name="check" size={14} />}
+                {l}
               </button>
             ))}
-        </div>
+          </div>
+        )}
+        {!e.hidden && (
+          <div className="ic-foot">
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => actions.onDetails(e)}>
+              פרטים נוספים
+            </button>
+            {may &&
+              (e.cancelled ? (
+                <button type="button" className="btn btn-sm" onClick={() => actions.onRestore(e)}>
+                  החזרה ללו"ז
+                </button>
+              ) : (
+                <button type="button" className="btn btn-sm btn-ghost text-red" onClick={() => actions.onCancel(e)}>
+                  ביטול פעילות
+                </button>
+              ))}
+          </div>
+        )}
       </div>
     );
   }

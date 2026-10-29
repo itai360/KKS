@@ -1214,8 +1214,8 @@ export function respondEvent(actor: UserRow, id: number, response: (typeof RESPO
 
 /** the reminders when an event has none of its own: 30 minutes before, as Google's default; all day: none */
 export const DEFAULT_REMINDERS: EventReminder[] = [{ minutes: 30 }];
-/** the default reminders go out once the event's screen lets each event change them (tests turn them on) */
-let defaultRemindersOn = false;
+/** on, as in Google: an event left as it was reminds 30 minutes before (tests may turn it off) */
+let defaultRemindersOn = true;
 export const setDefaultReminders = (on: boolean) => {
   defaultRemindersOn = on;
 };
@@ -1248,9 +1248,9 @@ export function sendEventReminders(now: Date): number {
       if (now.getTime() < due || now.getTime() > startsAt.getTime() + REMINDER_LATE_MS) continue;
       // made after its reminder's time: that reminder is not owed (Google does not send it either)
       if (Date.parse(r.created_at) > due) continue;
-      // the time actually left (the scheduler may come a little late), in round minutes
-      const left = Math.max(0, Math.round((startsAt.getTime() - now.getTime()) / 60_000));
-      const lead = r.all_day ? reminderLead(rem.minutes, true) : reminderLead(left < 10 ? left : Math.round(left / 5) * 5);
+      // the time actually left (the scheduler may come a little late), in round minutes; begun already: since when
+      const left = Math.round((startsAt.getTime() - now.getTime()) / 60_000);
+      const lead = r.all_day ? reminderLead(rem.minutes, true) : left < 0 ? `התחיל לפני ${-left === 1 ? 'דקה' : `${-left} דקות`}` : reminderLead(left < 10 ? left : Math.round(left / 5) * 5);
       for (const uid of recipients) {
         const ok = db().run('INSERT OR IGNORE INTO event_reminders_sent(event_id, user_id, minutes, starts_at, sent_at) VALUES (?, ?, ?, ?, ?)', r.id, uid, rem.minutes, startIso, now.toISOString()).changes;
         if (!ok) continue;

@@ -33,6 +33,8 @@ const TakpatzTeamPage = lazyPage(() => import('./pages/TakpatzPage'), 'TakpatzTe
 const ExperiencesPage = lazyPage(() => import('./pages/ExperiencesPage'), 'ExperiencesPage');
 const CommandPage = lazyPage(() => import('./pages/CommandPage'), 'CommandPage');
 const MorePage = lazyPage(() => import('./pages/MorePage'), 'MorePage');
+const EventEditorPage = lazyPage(() => import('./pages/EventEditorPage'), 'EventEditorPage');
+const TrashPage = lazyPage(() => import('./pages/TrashPage'), 'TrashPage');
 const NotificationsPage = lazyPage(() => import('./pages/NotificationsPage'), 'NotificationsPage');
 const RecurringPage = lazyPage(() => import('./pages/RecurringPage'), 'RecurringPage');
 const ActivityPage = lazyPage(() => import('./pages/ReportsPage'), 'ActivityPage');
@@ -127,6 +129,10 @@ function AuthedRoutes() {
               <Route path="/three-week" element={can('plans') ? <ThreeWeekPage /> : <Navigate to="/" />} />
               <Route path="/three-week/:weekId" element={can('plans') ? <ThreeWeekPage /> : <Navigate to="/" />} />
               <Route path="/schedule" element={<ToCalendar />} />
+              {/* an event's whole form, as Google Calendar's page; the calendar's trash */}
+              <Route path="/event/new" element={<EventEditorPage />} />
+              <Route path="/event/:id/edit" element={<EventEditorPage />} />
+              <Route path="/trash" element={<TrashPage />} />
               <Route path="/team" element={isCommander ? <TeamPage /> : <Navigate to="/" />} />
               <Route path="/team/:id" element={<StaffPage />} />
               <Route path="/requests" element={<RequestsPage />} />
