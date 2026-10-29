@@ -184,7 +184,7 @@ function EndCourse({ current, onClose }: { current: string; onClose: () => void 
         <div className="course-carry">
           <div>
             <div className="strong small">נשמר כאן במלואו, לקריאה</div>
-            <p className="small muted">המשימות, השבועות, הלו״ז, הצוערים, המצבה, תיקי ההערכה, התחקירים, ההודעות ויומן הפעילות של הקורס הנוכחי.</p>
+            <p className="small muted">המשימות, השבועות, הלו״ז, הצוערים, תיקי ההערכה, התחקירים, ההודעות ויומן הפעילות של הקורס הנוכחי.</p>
           </div>
           <div>
             <div className="strong small">עובר לקורס החדש</div>

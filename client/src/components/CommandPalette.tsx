@@ -74,7 +74,7 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
     const cap = <T,>(list: T[], n: number) => (capped ? list.slice(0, n) : list);
     const cur = weeks.find((w) => w.startDate <= today && w.endDate >= today) ?? weeks.find((w) => w.startDate > today);
     const actions: Item[] = [
-      { id: 'a:smart', group: 'פעולות', label: 'הזנה חכמה - כותבים חופשי והאפליקציה מזינה למקום הנכון', icon: 'sparkle', keywords: 'עונש משמעת אישור כניסה מצבה פטור היעדרות', run: () => openSmartEntry() },
+      { id: 'a:smart', group: 'פעולות', label: 'הזנה חכמה - כותבים חופשי והאפליקציה מזינה למקום הנכון', icon: 'sparkle', keywords: 'עונש משמעת אישור כניסה פטור גימלים היעדרות', run: () => openSmartEntry() },
       { id: 'a:task', group: 'פעולות', label: 'משימה חדשה', icon: 'plus', hint: 'N', run: () => newTask() },
       ...(cur
         ? [
@@ -91,7 +91,6 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
       { id: 'a:eventdebrief', group: 'פעולות', label: 'תחקיר מופע עצים חדש', icon: 'zap', run: go('/debriefs?new=event') },
       ...(can('schedule') ? [{ id: 'a:event', group: 'פעולות', label: 'אירוע חדש בלו"ז', icon: 'calendar', run: go('/schedule?new=1') }] : []),
       ...(can('announcements') ? [{ id: 'a:announce', group: 'פעולות', label: 'הודעה לסגל', icon: 'flag', run: go('/announcements') }] : []),
-      { id: 'a:roll', group: 'פעולות', label: 'מצבה להיום', icon: 'check', run: go('/attendance') },
       { id: 'a:away', group: 'פעולות', label: 'סימון היעדרות (חופשה, מחלה, השתלמות)', icon: 'calendar', run: go('/settings#absences') },
       { id: 'a:bank', group: 'פעולות', label: 'בנק לקחים', icon: 'history', run: go('/debriefs?tab=bank') },
       { id: 'a:dark', group: 'פעולות', label: 'מצב כהה', icon: 'moon', run: () => setThemePref('dark') },

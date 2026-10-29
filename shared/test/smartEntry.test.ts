@@ -89,10 +89,16 @@ describe('placing each thing', () => {
     expect(x.fields).toMatchObject({ cadetId: 3, subject: 'ריצות', until: '2026-11-05', details: 'נקע בקרסול' });
   });
 
-  it("the roll call: a cadet sick, at home or at an appointment - for one day or several", () => {
-    expect(one('יוסי לוי בגימלים היום ומחר').fields).toMatchObject({ attendance: 'sick', date: '2026-10-29', endDate: '2026-10-30' });
-    expect(one('דני כהן בבית היום, חזר מבדיקה').fields).toMatchObject({ attendance: 'leave', details: 'חזר מבדיקה' });
-    expect(one('מיכל אורן בתור לרופא שיניים מחר ב-10').fields).toMatchObject({ attendance: 'appointment', date: '2026-10-30' });
+  it("where a cadet is: sick is an exemption (גימלים) to the last day; at home or at an appointment, a note", () => {
+    const sick = one('יוסי לוי בגימלים היום ומחר');
+    expect(sick.kind).toBe('exemption');
+    expect(sick.fields).toMatchObject({ cadetId: 2, subject: 'גימלים', date: '2026-10-29', until: '2026-10-30' });
+    const home = one('דני כהן בבית היום, חזר מבדיקה');
+    expect(home.kind).toBe('note');
+    expect(home.fields).toMatchObject({ cadetId: 1, title: 'בית / חופשה · היום', details: 'בית / חופשה היום: חזר מבדיקה' });
+    const appointment = one('מיכל אורן בתור לרופא שיניים מחר ב-10');
+    expect(appointment.kind).toBe('note');
+    expect(appointment.fields).toMatchObject({ cadetId: 5, date: '2026-10-30', title: 'תור / בדיקה · 30.10' });
   });
 
   it('a staff member away is an absence - the writer when they speak of themselves', () => {

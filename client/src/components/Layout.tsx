@@ -158,7 +158,6 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
     title: 'צוערים',
     items: [
       { to: '/cadets', label: 'צוערים', icon: 'cap', keywords: 'צוותים פטורים משמעת שיחות אישיות' },
-      { to: '/attendance', label: 'מצבה', icon: 'check' },
       { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder', keywords: 'ציונים מבחנים ועדה' },
       { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
       { to: '/experiences', label: 'התנסויות', icon: 'target', keywords: 'משובים חונך' },
@@ -1032,7 +1031,7 @@ function PlusMenu({
           </span>
           <span className="grow">
             <span className="plus-menu-title">הזנה חכמה</span>
-            <span className="plus-menu-sub">כותבים במילים שלכם - עונש, אישור כניסה, מצבה, משימה - והאפליקציה מזינה למקום הנכון</span>
+            <span className="plus-menu-sub">כותבים במילים שלכם - עונש, אישור כניסה, פטור, משימה - והאפליקציה מזינה למקום הנכון</span>
           </span>
         </button>
         <button type="button" role="menuitem" onClick={onTask}>

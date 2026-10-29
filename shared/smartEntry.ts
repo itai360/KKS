@@ -9,7 +9,7 @@
 // the server) and checks whatever comes back against the same rules.
 
 import { ABSENCE_REASON_LABELS, ATTENDANCE_LABELS, PRIORITY_LABELS, WEEKDAY_NAMES, type AbsenceReason, type AttendanceStatus, type Priority } from './constants';
-import { addDays, DEFAULT_TZ, diffDays, isDateKey, localDateKey, toDateKey, weekdayOf } from './dates';
+import { addDays, DEFAULT_TZ, diffDays, isDateKey, localDateKey, shortDate, toDateKey, weekdayOf } from './dates';
 import { WEEK_NOTE_PART_LABELS, type WeekNotePart } from './debriefForms';
 import { entryMissing, type EntryFields, type VisitorKind } from './entry';
 import { parseEventText } from './eventParser';
@@ -19,7 +19,7 @@ import { WEEKLY_KIND_LABELS, type WeeklyKind } from './weekly';
 
 // ---------------- the items ----------------
 
-export const SMART_KINDS = ['discipline', 'procedure', 'entry', 'exemption', 'attendance', 'note', 'absence', 'task', 'event', 'weekly', 'weekNote', 'announcement'] as const;
+export const SMART_KINDS = ['discipline', 'procedure', 'entry', 'exemption', 'note', 'absence', 'task', 'event', 'weekly', 'weekNote', 'announcement'] as const;
 export type SmartKind = (typeof SMART_KINDS)[number];
 
 export const SMART_KIND_LABELS: Record<SmartKind, string> = {
@@ -27,7 +27,6 @@ export const SMART_KIND_LABELS: Record<SmartKind, string> = {
   procedure: 'אי עמידה בנהלים',
   entry: 'אישור כניסה',
   exemption: 'פטור',
-  attendance: 'מצבה',
   note: 'הערה בתיק הצוער',
   absence: 'היעדרות איש סגל',
   task: 'משימה',
@@ -42,7 +41,6 @@ export const SMART_KIND_ICONS: Record<SmartKind, string> = {
   procedure: 'shield',
   entry: 'stamp',
   exemption: 'hand',
-  attendance: 'check',
   note: 'edit',
   absence: 'calendar',
   task: 'tasks',
@@ -58,7 +56,6 @@ export const SMART_KIND_PLACES: Record<SmartKind, string> = {
   procedure: 'נרשם בתיק הצוער ונספר לפי סוג',
   entry: 'נשלח למפקד הקורס בפורמט הבסיס',
   exemption: 'נרשם בתיק הצוער, וכל הסגל מקבל הודעה',
-  attendance: 'מסומן במצבה של אותו יום',
   note: 'נרשם בתיק הצוער',
   absence: 'נרשם בהיעדרויות הסגל',
   task: 'נפתחת משימה לאחראי',
@@ -69,7 +66,15 @@ export const SMART_KIND_PLACES: Record<SmartKind, string> = {
 };
 
 /** the kinds that are about one cadet: several cadets named in one sentence make an item each */
-export const CADET_KINDS: readonly SmartKind[] = ['discipline', 'procedure', 'exemption', 'attendance', 'note'];
+export const CADET_KINDS: readonly SmartKind[] = ['discipline', 'procedure', 'exemption', 'note'];
+
+/**
+ * What the reading tells apart before it places a thing: the kinds, and a cadet's whereabouts on a day
+ * (sick, at home, at an appointment...) - which, the course keeping no roll call, is filed as an
+ * exemption (גימלים) or a note in the file (fromWhereabouts).
+ */
+type ReadKind = SmartKind | 'whereabouts';
+const READ_CADET_KINDS: readonly ReadKind[] = [...CADET_KINDS, 'whereabouts'];
 
 /** a visitor's details, as the entry form has them (the day is the item's date) */
 export type EntryDraft = Omit<EntryFields, 'visitDate'>;
@@ -78,7 +83,7 @@ export const emptyEntry = (): EntryDraft => ({ fullName: '', phone: '', visitorK
 
 /** every field any kind may need; each kind reads its own */
 export interface SmartFields {
-  /** the cadet it is about (discipline, procedure, exemption, attendance, note) */
+  /** the cadet it is about (discipline, procedure, exemption, note) */
   cadetId: number | null;
   /** the staff member away (absence) */
   userId: number | null;
@@ -110,6 +115,7 @@ export interface SmartFields {
   subject: string;
   until: string | null;
   absenceReason: AbsenceReason | null;
+  /** where a cadet is that day, as the words say it - the reading's own: filed as an exemption or a note */
   attendance: AttendanceStatus | null;
   priority: Priority | null;
   location: string;
@@ -225,11 +231,6 @@ export function smartMissing(item: Pick<SmartItem, 'kind' | 'fields'>): string[]
       need(f.cadetId, 'צוער');
       need(f.subject.trim(), 'ממה הפטור');
       break;
-    case 'attendance':
-      need(f.cadetId, 'צוער');
-      need(f.attendance, 'סטטוס');
-      need(f.date, 'תאריך');
-      break;
     case 'note':
       need(f.cadetId, 'צוער');
       need(f.details.trim() || f.title.trim(), 'תוכן');
@@ -274,8 +275,6 @@ export function smartSummary(item: Pick<SmartItem, 'kind' | 'fields'>, names: { 
       return f.entry?.fullName || 'מבקר';
     case 'exemption':
       return [who, f.subject && `פטור מ${f.subject.replace(/^מ/, '')}`].filter(Boolean).join(' · ');
-    case 'attendance':
-      return [who, f.attendance ? ATTENDANCE_LABELS[f.attendance] : ''].filter(Boolean).join(' · ');
     case 'note':
       return who;
     case 'absence':
@@ -331,7 +330,7 @@ const word = (src: string) => new RegExp(`${LB}${P}(?:${src})${RB}`);
 const exact = (src: string) => new RegExp(`${LB}(?:${src})${RB}`);
 
 interface Rule {
-  kind: SmartKind;
+  kind: ReadKind;
   re: RegExp;
   w: number;
   why: string;
@@ -393,26 +392,25 @@ const RULES: Rule[] = [
   { kind: 'exemption', re: new RegExp(`${LB}(?:ללא|בלי)\\s+(?:נעליים|נעלים|נעל|כומתה|משקל|ציוד|ריצות|ריצה|הליכה|שמירות)|${LB}${P}סנדלים${RB}`), w: 3, why: 'הגבלה' },
   { kind: 'exemption', re: word('הגבלה|הגבלות|מגבלה|מגבלות|הגבלה\\s+רפואית'), w: 2, why: 'הגבלה' },
 
-  // the day's roll call
-  { kind: 'attendance', re: word('מצבה'), w: 4, why: 'מצבה' },
-  { kind: 'attendance', re: word('גימלים|גמלים|גימ"לים'), w: 4, why: 'גימלים', apply: set('attendance', 'sick') },
-  { kind: 'attendance', re: exact('חולה|חולים|חולת'), w: 2, why: 'חולה', apply: set('attendance', 'sick') },
+  // where a cadet is on a day (filed as an exemption or a note)
+  { kind: 'whereabouts', re: word('גימלים|גמלים|גימ"לים'), w: 4, why: 'גימלים', apply: set('attendance', 'sick') },
+  { kind: 'whereabouts', re: exact('חולה|חולים|חולת'), w: 2, why: 'חולה', apply: set('attendance', 'sick') },
   {
-    kind: 'attendance',
+    kind: 'whereabouts',
     re: new RegExp(`${LB}(?:(?:נשאר(?:ה|ו)?|נמצא(?:ת|ים)?|יצא(?:ה|ו)?|שוחרר(?:ה|ו)?|נסע(?:ה|ו)?|הלך|הלכה|הלכו)\\s+(?:ל)?(?:ה)?בית(?:ה)?|בבית\\s+(?:היום|מחר|השבוע)|הביתה)${RB}`),
     w: 3,
     why: 'בבית',
     apply: set('attendance', 'leave'),
   },
   {
-    kind: 'attendance',
+    kind: 'whereabouts',
     re: new RegExp(`${LB}(?:תור\\s+(?:ל|אצל|ב)|${P}(?:מרפאה|מרפאת|קופ"ח|קופת\\s+חולים|בית\\s+חולים|ביה"ח|בי"ח|רופא|רופאה|אורתופד|מיון|בדיקה\\s+רפואית|בדיקות))${RB}`),
     w: 3,
     why: 'תור / בדיקה',
     apply: set('attendance', 'appointment'),
   },
-  { kind: 'attendance', re: exact('נעדר|נעדרת|נעדרו|נפקד|נפקדה|נפקדו'), w: 3, why: 'נעדר', apply: set('attendance', 'absent') },
-  { kind: 'attendance', re: new RegExp(`${LB}(?:(?:הגיע|הגיעה|הגיעו|יגיע|תגיע|יגיעו)\\s+באיחור|מאחר(?:ת)?\\s+היום)`), w: 2, why: 'איחור', apply: set('attendance', 'late') },
+  { kind: 'whereabouts', re: exact('נעדר|נעדרת|נעדרו|נפקד|נפקדה|נפקדו'), w: 3, why: 'נעדר', apply: set('attendance', 'absent') },
+  { kind: 'whereabouts', re: new RegExp(`${LB}(?:(?:הגיע|הגיעה|הגיעו|יגיע|תגיע|יגיעו)\\s+באיחור|מאחר(?:ת)?\\s+היום)`), w: 2, why: 'איחור', apply: set('attendance', 'late') },
 
   // a note in the file
   { kind: 'note', re: exact('הצטיין|הצטיינה|הצטיינו|בלט|בלטה|בלטו|מצטיין|מצטיינת|הפגין|הפגינה|הפגינו|השתפר|השתפרה|השתפרו|התקדם|התקדמה|התקדמו|יוזמה|מקצועי|מקצועית'), w: 3, why: 'הערכה' },
@@ -904,8 +902,8 @@ function heading(s: string, max = 70): string {
 // --- the reading of one sentence ---
 
 interface Reading {
-  scores: Map<SmartKind, number>;
-  whys: Map<SmartKind, string[]>;
+  scores: Map<ReadKind, number>;
+  whys: Map<ReadKind, string[]>;
   fields: SmartFields;
   cadets: Hit[];
   staff: Hit[];
@@ -914,9 +912,9 @@ interface Reading {
 }
 
 /** the kinds a sentence speaks of, by its words alone (and the fields those words set) */
-function scoreWords(text: string): { scores: Map<SmartKind, number>; whys: Map<SmartKind, string[]>; fields: SmartFields } {
-  const scores = new Map<SmartKind, number>();
-  const whys = new Map<SmartKind, string[]>();
+function scoreWords(text: string): { scores: Map<ReadKind, number>; whys: Map<ReadKind, string[]>; fields: SmartFields } {
+  const scores = new Map<ReadKind, number>();
+  const whys = new Map<ReadKind, string[]>();
   const fields = emptyFields();
   const seen = new Set<string>();
   for (const r of RULES) {
@@ -942,7 +940,7 @@ function read(text: string, ctx: SmartContext): Reading {
   const staff = takePeople(ex, staffSources(ctx.staff));
   const { scores, whys, fields } = scoreWords(text);
   const firstPerson = FIRST_PERSON.test(text);
-  const add = (k: SmartKind, w: number, why?: string) => {
+  const add = (k: ReadKind, w: number, why?: string) => {
     scores.set(k, (scores.get(k) ?? 0) + w);
     if (why) whys.set(k, [...(whys.get(k) ?? []), why]);
   };
@@ -951,24 +949,24 @@ function read(text: string, ctx: SmartContext): Reading {
     add('discipline', (1.5 + 3 * ladder.score) * ((scores.get('procedure') ?? 0) >= 3 ? 0.5 : 1));
     fields.offense = ladder.key;
   }
-  // a staff member (or the writer) sick, at home or away: an absence, not the roll call
-  const att = scores.get('attendance') ?? 0;
+  // a staff member (or the writer) sick, at home or away: an absence, not a cadet's whereabouts
+  const att = scores.get('whereabouts') ?? 0;
   if (att && !cadets.length && (staff.length || firstPerson) && fields.attendance && fields.attendance !== 'late') {
     add('absence', Math.max(4, att), fields.attendance === 'sick' ? 'מחלה' : 'לא יהיה');
     if (!fields.absenceReason) fields.absenceReason = fields.attendance === 'sick' ? 'sick' : fields.attendance === 'leave' ? 'leave' : 'other';
   }
   // who it is about tells as much as the words
   if (cadets.length) {
-    for (const k of CADET_KINDS) if (scores.has(k)) add(k, 1.5);
+    for (const k of READ_CADET_KINDS) if (scores.has(k)) add(k, 1.5);
     add('note', 1.2);
   } else {
-    for (const k of CADET_KINDS) if (scores.has(k)) scores.set(k, scores.get(k)! * 0.45);
+    for (const k of READ_CADET_KINDS) if (scores.has(k)) scores.set(k, scores.get(k)! * 0.45);
   }
-  // a staff member away, or the writer: an absence; a cadet away: the roll call
+  // a staff member away, or the writer: an absence; a cadet away: their whereabouts
   if (scores.has('absence')) {
     if (staff.length || firstPerson) add('absence', 1.5);
     else if (cadets.length) {
-      add('attendance', scores.get('absence')! * 0.8, whys.get('absence')?.[0]);
+      add('whereabouts', scores.get('absence')! * 0.8, whys.get('absence')?.[0]);
       if (!fields.attendance) fields.attendance = fields.absenceReason === 'sick' ? 'sick' : 'leave';
       scores.set('absence', scores.get('absence')! * 0.3);
     }
@@ -997,13 +995,13 @@ function anchored(text: string, ctx: SmartContext): boolean {
 }
 
 /** a part of a sentence says where it goes by itself: a kind's words weigh enough (a cadet's kinds need the cadet) */
-function strongKind(text: string, ctx: SmartContext): SmartKind | null {
+function strongKind(text: string, ctx: SmartContext): ReadKind | null {
   const r = read(text, ctx);
-  let best: SmartKind | null = null;
+  let best: ReadKind | null = null;
   let top = 0;
   for (const [k, sc] of r.scores) {
     if (k === 'task' || k === 'note') continue;
-    if (sc >= 4 && sc > top && (!CADET_KINDS.includes(k) || r.cadets.length)) {
+    if (sc >= 4 && sc > top && (!READ_CADET_KINDS.includes(k) || r.cadets.length)) {
       best = k;
       top = sc;
     }
@@ -1061,16 +1059,17 @@ export function analyzeLocal(input: string, ctx: SmartContext): SmartItem[] {
     if (!text) continue;
     const r = read(text, ctx);
     const ranked = [...r.scores.entries()].sort((a, b) => b[1] - a[1]);
-    const kind = ranked[0][0];
+    const read1 = ranked[0][0];
+    const cadetIds = r.cadets.map((h) => h.id);
+    const filled = fill(read1, text, r, ctx, today, now, tz);
+    const { kind, fields: base } = read1 === 'whereabouts' ? fromWhereabouts(filled, today) : { kind: read1, fields: filled };
     const alternatives = ranked
       .slice(1)
-      .filter(([k, s]) => s >= (k === 'event' ? 2.5 : 2) && k !== kind)
-      .map(([k]) => k)
+      .map(([k]) => (k === 'whereabouts' ? 'note' : k))
+      .filter((k, i) => ranked[i + 1][1] >= (k === 'event' ? 2.5 : 2) && k !== kind)
       .slice(0, 3);
-    const cadetIds = r.cadets.map((h) => h.id);
-    const base = fill(kind, text, r, ctx, today, now, tz);
     const complete = smartMissing({ kind, fields: base }).length === 0;
-    const why = whyOf(kind, r, ctx);
+    const why = whyOf(read1, r, ctx);
     const conf = confidence(ranked[0][1], ranked[1]?.[1] ?? 0, complete);
     // one item for each cadet named, when it is about cadets
     const fan = CADET_KINDS.includes(kind) && cadetIds.length > 1 ? cadetIds : [base.cadetId];
@@ -1081,18 +1080,31 @@ export function analyzeLocal(input: string, ctx: SmartContext): SmartItem[] {
   return items;
 }
 
-function whyOf(kind: SmartKind, r: Reading, ctx: SmartContext): string {
+function whyOf(kind: ReadKind, r: Reading, ctx: SmartContext): string {
   const parts: string[] = [];
   const cadet = r.cadets[0] && ctx.cadets.find((c) => c.id === r.cadets[0].id);
-  if (CADET_KINDS.includes(kind) && cadet) parts.push(r.cadets.length > 1 ? `${r.cadets.length} צוערים` : `צוער: ${cadet.firstName} ${cadet.lastName}`);
+  if (READ_CADET_KINDS.includes(kind) && cadet) parts.push(r.cadets.length > 1 ? `${r.cadets.length} צוערים` : `צוער: ${cadet.firstName} ${cadet.lastName}`);
   const words = [...new Set(r.whys.get(kind) ?? [])];
   if (words.length) parts.push(words.slice(0, 3).map((w) => `"${w}"`).join(', '));
   if (kind === 'discipline' && r.fields.offense) parts.push(`במדרג: ${r.fields.offense.split(' · ').pop()}`);
   return parts.join(' · ') || 'לפי מילות המשפט';
 }
 
+/**
+ * A cadet's whereabouts, filed where the course keeps them: sick (גימלים) is an exemption until its last day
+ * - the staff are told; at home, at an appointment, absent or late is a note in the cadet's file.
+ */
+function fromWhereabouts(f: SmartFields, today: string): { kind: SmartKind; fields: SmartFields } {
+  const status = f.attendance ?? 'absent';
+  const start = f.date ?? today;
+  if (status === 'sick') return { kind: 'exemption', fields: { ...f, subject: 'גימלים', until: f.endDate ?? start, date: start } };
+  const days = f.endDate && f.endDate > start ? `${shortDate(start)} - ${shortDate(f.endDate)}` : start === today ? 'היום' : shortDate(start);
+  const label = ATTENDANCE_LABELS[status];
+  return { kind: 'note', fields: { ...f, date: start, title: `${label} · ${days}`, details: f.details ? `${label} ${days}: ${f.details}` : `${label} ${days}` } };
+}
+
 /** the fields of the kind chosen, from the sentence */
-function fill(kind: SmartKind, text: string, r: Reading, ctx: SmartContext, today: string, now: Date, tz: string): SmartFields {
+function fill(kind: ReadKind, text: string, r: Reading, ctx: SmartContext, today: string, now: Date, tz: string): SmartFields {
   const f: SmartFields = { ...emptyFields(), ...pickSet(r.fields, kind) };
   const ex = new Extractor(text);
   takeNumbers(ex);
@@ -1100,7 +1112,7 @@ function fill(kind: SmartKind, text: string, r: Reading, ctx: SmartContext, toda
     takePeople(ex, cadetSources(ctx.cadets));
     takePeople(ex, staffSources(ctx.staff));
   }
-  f.cadetId = CADET_KINDS.includes(kind) ? (r.cadets[0]?.id ?? null) : null;
+  f.cadetId = READ_CADET_KINDS.includes(kind) ? (r.cadets[0]?.id ?? null) : null;
   switch (kind) {
     case 'discipline': {
       const days = takeDays(ex, today, 'past');
@@ -1152,7 +1164,7 @@ function fill(kind: SmartKind, text: string, r: Reading, ctx: SmartContext, toda
       f.details = [reason, lead && `לפי ${lead}`].filter(Boolean).join(' · ').slice(0, 300);
       break;
     }
-    case 'attendance': {
+    case 'whereabouts': {
       const days = takeDays(ex, today, 'future');
       f.date = days.date ?? today;
       f.endDate = days.endDate && days.endDate > f.date ? days.endDate : null;
@@ -1235,13 +1247,13 @@ function fill(kind: SmartKind, text: string, r: Reading, ctx: SmartContext, toda
 }
 
 /** only the fields the words set that belong to the kind chosen */
-function pickSet(f: SmartFields, kind: SmartKind): Partial<SmartFields> {
+function pickSet(f: SmartFields, kind: ReadKind): Partial<SmartFields> {
   switch (kind) {
     case 'discipline':
       return { formal: f.formal };
     case 'procedure':
       return { procedure: f.procedure };
-    case 'attendance':
+    case 'whereabouts':
       return { attendance: f.attendance };
     case 'absence':
       return { absenceReason: f.absenceReason };

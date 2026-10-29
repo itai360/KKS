@@ -58,7 +58,6 @@ const WeeksPage = lazyPage(() => import('./pages/WeeksPage'), 'WeeksPage');
 const TracksPage = lazyPage(() => import('./pages/TracksPage'), 'TracksPage');
 const TrackPage = lazyPage(() => import('./pages/TracksPage'), 'TrackPage');
 const WeekOrderPage = lazyPage(() => import('./pages/WeekOrderPage'), 'WeekOrderPage');
-const AttendancePage = lazyPage(() => import('./pages/AttendancePage'), 'AttendancePage');
 const AnnouncementsPage = lazyPage(() => import('./pages/AnnouncementsPage'), 'AnnouncementsPage');
 const DirectoryPage = lazyPage(() => import('./pages/DirectoryPage'), 'DirectoryPage');
 const CoursesPage = lazyPage(() => import('./pages/CoursesPage'), 'CoursesPage');
@@ -150,7 +149,8 @@ function AuthedRoutes() {
               <Route path="/search" element={<SearchPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/cadets" element={<CadetsPage />} />
-              <Route path="/attendance" element={<AttendancePage />} />
+              {/* the roll call is no more: its old links go to the cadets */}
+              <Route path="/attendance" element={<Navigate to="/cadets" replace />} />
               <Route path="/announcements" element={<AnnouncementsPage />} />
               <Route path="/directory" element={<DirectoryPage />} />
               <Route path="/courses" element={<CoursesPage />} />

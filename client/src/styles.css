@@ -1867,6 +1867,21 @@ input::-webkit-date-and-time-value {
   font-family: var(--mono);
 }
 /* the home card's tracks: the bars line up whether or not a row has something overdue */
+.track-line-name {
+  width: 96px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track-line-bar {
+  min-width: 28px;
+}
+.track-line-count {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: left;
+}
 .track-line-flag {
   width: 74px;
   display: flex;
@@ -1876,6 +1891,22 @@ input::-webkit-date-and-time-value {
 @media (max-width: 600px) {
   .track-line-flag:empty {
     display: none;
+  }
+}
+/* a small phone: the name and the count give the bar its room */
+@media (max-width: 400px) {
+  .track-line {
+    gap: 8px;
+    padding-inline: 14px;
+  }
+  .track-line-name {
+    width: 72px;
+  }
+  .track-line-count {
+    width: auto;
+  }
+  .track-line-flag {
+    width: auto;
   }
 }
 .track-lead-row {
@@ -13270,10 +13301,13 @@ mark.hl {
 .leave-wrap {
   display: grid;
   grid-template-rows: 1fr;
+  /* one column no wider than the list: a long line inside wraps instead of widening the page */
+  grid-template-columns: minmax(0, 1fr);
   transition: grid-template-rows 0.34s var(--spring), opacity 0.22s ease, margin 0.34s var(--spring);
 }
 .leave-wrap > * {
   min-height: 0;
+  min-width: 0;
 }
 .leave-wrap.is-folding {
   grid-template-rows: 0fr;

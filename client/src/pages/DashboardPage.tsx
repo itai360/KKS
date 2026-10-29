@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ABSENCE_REASON_LABELS, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, ATTENDANCE_TONES } from '@shared/constants';
+import { ABSENCE_REASON_LABELS } from '@shared/constants';
 import type { AttentionItem, AttentionKind, DashboardData, ScheduleEvent } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
 import { PendingAnnouncements } from '../components/Announcements';
@@ -127,7 +127,6 @@ export function DashboardPage() {
           </div>
           <div className="dashboard-support">
             <WeeklyCard />
-            {data.roll && <RollCard roll={data.roll} />}
             <DisciplineCard />
             <StaffHealth data={data} />
             <TracksCard />
@@ -447,13 +446,11 @@ function TracksCard() {
       ) : (
         live.map((t) => (
           <Link key={t.id} to={`/tracks/${t.id}`} className="health track-line">
-            <span className="strong" style={{ width: 96 }}>
-              {t.name}
-            </span>
-            <div className="grow">
+            <span className="strong track-line-name">{t.name}</span>
+            <div className="grow track-line-bar">
               <Bar value={t.readiness} label={`מוכנות ${t.name}`} />
             </div>
-            <span className="mono tiny" style={{ width: 52, textAlign: 'left' }}>
+            <span className="mono tiny track-line-count">
               {t.doneTasks}/{t.totalTasks}
             </span>
             <span className="track-line-flag">{t.overdueTasks > 0 && <span className="badge t-red">{t.overdueTasks} באיחור</span>}</span>
@@ -466,34 +463,6 @@ function TracksCard() {
         </div>
       )}
     </section>
-  );
-}
-
-/** today's roll call in a glance: who is in, who is not and why, which teams have not reported */
-function RollCard({ roll }: { roll: NonNullable<DashboardData['roll']> }) {
-  const navigate = useNavigate();
-  const inCourse = roll.counts.present + roll.counts.late;
-  return (
-    <div className="card" {...openable(() => navigate('/attendance'))} aria-label={`מצבה היום: ${roll.line}`}>
-      <div className="card-head">
-        <Icon name="check" />
-        <h3 className="grow">מצבה היום</h3>
-        <span className="mono strong">
-          {inCourse}/{roll.counts.total}
-        </span>
-      </div>
-      <div className="card-body col gap-6">
-        <div className="row wrap gap-6">
-          {ATTENDANCE_STATUSES.filter((s) => s !== 'present' && roll.counts[s] > 0).map((s) => (
-            <span key={s} className={`badge t-${ATTENDANCE_TONES[s]}`}>
-              {ATTENDANCE_LABELS[s]} {roll.counts[s]}
-            </span>
-          ))}
-          {roll.counts.unmarked > 0 && <span className="badge">לא סומנו {roll.counts.unmarked}</span>}
-        </div>
-        {roll.teamsMissing.length > 0 && <span className="small text-orange">עוד לא דיווחו: {roll.teamsMissing.join(', ')}</span>}
-      </div>
-    </div>
   );
 }
 

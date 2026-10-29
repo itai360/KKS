@@ -147,7 +147,7 @@ describe('the built-in reading, through the server', () => {
     expect(again.items[0].ladder).toMatchObject({ occurrence: 2, step: 'שיחת אזהרה עם מפקד הצוות' });
   });
 
-  it('files every kind: procedure, entry, exemption, roll call, note, absence, task, event, weekly, debrief, announcement', async () => {
+  it('files every kind: procedure, entry, exemption, a cadet sick, note, absence, task, event, weekly, debrief, announcement', async () => {
     const text = [
       'נועה ברק - כומתה ושרוך לא תקינים',
       'אישור כניסה לאבי מזרחי מחר, 050-1234567, ת"ז 123456789, לצורך הרצאה',
@@ -162,7 +162,7 @@ describe('the built-in reading, through the server', () => {
       'הודעה לכל הסגל: מחר מסדר ב-7:00',
     ].join('\n');
     const a = await analyze(c.cmd, text);
-    expect(a.items.map((i) => i.kind)).toEqual(['procedure', 'entry', 'exemption', 'attendance', 'note', 'absence', 'task', 'event', 'weekly', 'weekNote', 'announcement']);
+    expect(a.items.map((i) => i.kind)).toEqual(['procedure', 'entry', 'exemption', 'exemption', 'note', 'absence', 'task', 'event', 'weekly', 'weekNote', 'announcement']);
     expect(a.items.every((i) => !i.blocked)).toBe(true);
     const results = await apply(c.cmd, a.items);
     expect(results.filter((r) => !r.ok)).toEqual([]);
@@ -171,10 +171,10 @@ describe('the built-in reading, through the server', () => {
       ['note', 'הצטיינה בניווט'],
     ]);
     expect(db().get<{ full_name: string; status: string }>('SELECT full_name, status FROM entry_requests')).toEqual({ full_name: 'אבי מזרחי', status: 'pending' });
-    expect(db().get<{ subject: string; until: string }>('SELECT subject, until FROM exemptions')).toEqual({ subject: 'ריצות', until: '2026-10-04' });
-    expect(db().all<{ date: string; status: string }>('SELECT date, status FROM attendance WHERE cadet_id = ? ORDER BY date', cadet.dani)).toEqual([
-      { date: '2026-10-01', status: 'sick' },
-      { date: '2026-10-02', status: 'sick' },
+    // a cadet sick is an exemption from everything to the last day - the roll call is no more
+    expect(db().all<{ subject: string; until: string }>('SELECT subject, until FROM exemptions ORDER BY id')).toEqual([
+      { subject: 'ריצות', until: '2026-10-04' },
+      { subject: 'גימלים', until: '2026-10-02' },
     ]);
     expect(db().get<{ user_id: number; start_date: string; end_date: string; reason: string }>('SELECT user_id, start_date, end_date, reason FROM absences')).toEqual({ user_id: c.ids.s2, start_date: '2026-10-04', end_date: '2026-10-06', reason: 'leave' });
     expect(db().get<{ title: string; owner_id: number }>('SELECT title, owner_id FROM tasks ORDER BY id DESC LIMIT 1')).toEqual({ title: 'הכנת מצגת לתדריך', owner_id: c.ids.s3 });

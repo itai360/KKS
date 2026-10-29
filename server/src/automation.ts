@@ -9,7 +9,6 @@ import { clock, nowIso, tz } from './core';
 import { db } from './db';
 import { learningReminders } from './debriefs';
 import { morningBrief } from './digest';
-import { rollCallReminders } from './attendance';
 import { changed, logActivity, notify, wakeSnoozed } from './journal';
 import { generateRecurring } from './recurring';
 import { involvedIds, queryTasks } from './taskRepo';
@@ -29,14 +28,13 @@ export interface AutomationResult {
   debriefTasks: number;
   feedbackTasks: number;
   briefs: number;
-  roll: number;
   eventReminders: number;
 }
 
 export function runAutomation(): AutomationResult {
   const now = clock.now();
   const nowS = now.toISOString();
-  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, debriefTasks: 0, feedbackTasks: 0, briefs: 0, roll: 0, eventReminders: 0 };
+  const res: AutomationResult = { overdue: 0, reminders24: 0, reminders2: 0, recurring: 0, templates: 0, learning: 0, debriefTasks: 0, feedbackTasks: 0, briefs: 0, eventReminders: 0 };
 
   // 1. Deadline passed -> overdue (derived status) + alerts, once per deadline.
   for (const t of queryTasks("t.status NOT IN ('done', 'cancelled') AND t.overdue_notified = 0 AND t.deadline < ?", nowS)) {
@@ -153,14 +151,7 @@ export function runAutomation(): AutomationResult {
     console.error('[automation] snoozed', e);
   }
 
-  // 9. The roll call: a team not reported by 08:30 on a course day.
-  try {
-    res.roll = rollCallReminders(now);
-  } catch (e) {
-    console.error('[automation] roll call', e);
-  }
-
-  // 10. The calendar's reminders: "in 30 minutes" to the people in an event (Google Calendar's notifications).
+  // 9. The calendar's reminders: "in 30 minutes" to the people in an event (Google Calendar's notifications).
   try {
     res.eventReminders = db().tx(() => sendEventReminders(now));
   } catch (e) {

@@ -169,9 +169,7 @@ export const FINISHED = `coalesce((CASE
   WHEN n.type = 'event_changed' AND n.link LIKE '%&event=%' THEN NOT EXISTS (SELECT 1 FROM events e WHERE e.cancelled = 0 AND e.deleted_at IS NULL AND e.id = ${eventOf('n.link')})
   WHEN n.type = 'event_invite' AND n.ref LIKE 'event:%' THEN NOT EXISTS (SELECT 1 FROM events e JOIN event_guests g ON g.event_id = e.id AND g.user_id = n.user_id
     WHERE e.id = ${REF_ID} AND e.deleted_at IS NULL AND e.cancelled = 0 AND g.response = 'needsAction')
-  WHEN n.ref LIKE 'attendance:%' THEN NOT EXISTS (SELECT 1 FROM cadets c WHERE c.status = 'active'
-    AND (length(n.ref) <= 21 OR c.team_id = CAST(substr(n.ref, 23) AS INTEGER))
-    AND NOT EXISTS (SELECT 1 FROM attendance att WHERE att.cadet_id = c.id AND att.date = substr(n.ref, 12, 10)))
+  WHEN n.ref LIKE 'attendance:%' THEN 1
   ELSE 0
 END), 0)`;
 
@@ -263,8 +261,6 @@ function replaceOlder(uid: number, n: NotifyInput, id: number, at: string): void
     db().run(`UPDATE notifications SET finished_at = ? WHERE user_id = ? AND id < ? AND finished_at IS NULL AND ${where}`, at, uid, id, ...params);
   if (n.taskId && SAID_AGAIN.includes(n.type)) mark('task_id = ? AND type = ?', n.taskId, n.type);
   if (n.taskId && [...REMINDERS, 'overdue'].includes(n.type)) mark(`task_id = ? AND type IN (${quoted(REMINDERS)})`, n.taskId);
-  // another team's roll call the same day is its own
-  if (n.type === 'attendance') mark("type = 'attendance' AND (ref IS NULL OR substr(ref, 12, 10) <> ?)", n.ref?.slice(11, 21) ?? '');
   if (n.type === 'brief') mark("type = 'brief'");
   const event = n.type === 'event_changed' ? /&event=(\d+)$/.exec(n.link ?? '')?.[1] : undefined;
   if (event) mark("type = 'event_changed' AND link LIKE ?", `%&event=${event}`);

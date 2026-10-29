@@ -10,8 +10,8 @@
 
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
-import { ABSENCE_REASONS, ATTENDANCE_STATUSES, PRIORITIES, WEEKDAY_NAMES } from '../../shared/constants';
-import { addDays, isDateKey, localDateKey, weekdayOf, zonedIso } from '../../shared/dates';
+import { ABSENCE_REASONS, PRIORITIES, WEEKDAY_NAMES } from '../../shared/constants';
+import { isDateKey, localDateKey, weekdayOf, zonedIso } from '../../shared/dates';
 import { WEEK_NOTE_PARTS } from '../../shared/debriefForms';
 import { VISITOR_KINDS } from '../../shared/entry';
 import { DRESS_ITEMS, PROCEDURE_KINDS, procedureOffense } from '../../shared/procedures';
@@ -34,7 +34,6 @@ import { WEEKLY_KINDS } from '../../shared/weekly';
 import { may } from './abilities';
 import { addAbsence } from './absences';
 import { postAnnouncement } from './announcements';
-import { markAttendance } from './attendance';
 import { getUserRow, type UserRow } from './auth';
 import { addExemption, addRecord, cadetRow, canEditCadet, disciplinePreview, reportProcedure } from './cadets';
 import { badRequest, clock, HttpError, tz } from './core';
@@ -97,8 +96,8 @@ The kinds (where a thing belongs):
 - procedure: the course's quick report of not keeping to procedures. procedure: weapon_left (הפקרת נשק - a weapon left unattended), weapon_back (נשק מאחורה - the weapon carried on the back), phone (a phone where it is not allowed; situation: where/when), dress (דיגום - out of order: dress lists only כומתה, שרוך, גומיות, תג שם), other (another procedure; other: what was not kept, up to 80 characters). Prefer procedure over discipline for these four.
 - entry: a visitor who needs approval to enter the base (אישור כניסה). entry: fullName, phone, visitorKind (soldier when a rank, a personal number or military service is mentioned; civilian otherwise), rank, clearance, idNumber, escort (ליווי), byCar, carNumber, carKind (make and colour), reason. date: the day of the visit.
 - exemption: a cadet excused from something (פטור). subject: from what, in a few words ("ריצות", "נעליים צבאיות"). until: the last day, or null. details: why.
-- attendance: where a cadet is on a day, for the daily roll call (מצבה). attendance: sick (גימלים / ill at home), leave (at home, on leave), appointment (a medical appointment or test), absent (absent, unknown), late (arriving late today - not a discipline matter). date (default today), endDate when it lasts several days. details: a short note.
-- note: something about a cadet worth keeping in the file that is not discipline: praise, progress, a personal matter, an observation. details: what was written. title: a few words.
+- note: something about a cadet worth keeping in the file that is not discipline: praise, progress, a personal matter, an observation - and where a cadet is on a day: at home or on leave, at a medical appointment or test, absent, arriving late (not a discipline matter). details: what was written (with the days). title: a few words ("בבית · היום", "תור לרופא · 30.10").
+  A cadet sick (גימלים, ill, sent home sick) is an exemption, not a note: subject "גימלים", until the last day (today when only today), details what was written.
 - absence: a staff member who will be away. staff: [that member's id] (the writer when they speak of themselves). absenceReason: leave, sick, course (a course or training), duty (reserve duty / duty), other. date, endDate.
 - task: something someone on the staff has to do. staff: the owners (the writer when nobody else is named). title: a short noun phrase of the action ("הזמנת אוטובוס לטיול"). date and time: the deadline (time default "18:00" when only a day is given). priority when said.
 - event: something that happens at a time and belongs in the calendar (a lesson, a meeting, an exercise, a ceremony). title, date, time, endTime, location, staff: [the owner] when named.
@@ -153,7 +152,6 @@ const itemSchema = z.object({
   subject: z.string(),
   until: z.string().nullable().describe('YYYY-MM-DD'),
   absenceReason: z.enum(ABSENCE_REASONS).nullable(),
-  attendance: z.enum(ATTENDANCE_STATUSES).nullable(),
   priority: z.enum(PRIORITIES).nullable(),
   location: z.string(),
   weeklyKind: z.enum(WEEKLY_KINDS).nullable(),
@@ -242,7 +240,7 @@ function fromAi(it: AiItem, values: string[], ctx: SmartContext): SmartItem | nu
     subject: clip(un(it.subject), 80),
     until: dateOr(it.until),
     absenceReason: it.absenceReason,
-    attendance: it.attendance,
+    attendance: null,
     priority: it.priority,
     location: clip(un(it.location), 120),
     weeklyKind: it.weeklyKind,
@@ -366,13 +364,6 @@ function fileOne(actor: UserRow, kind: SmartKind, f: SmartFields): Omit<SmartRes
     case 'exemption':
       addExemption(actor, f.cadetId!, { subject: f.subject, details: f.details, until: f.until });
       return { message: `פטור ל${name(f.cadetId!)}: ${f.subject}`, link: `/cadets/${f.cadetId}` };
-    case 'attendance': {
-      const start = f.date!;
-      const last = f.endDate && f.endDate > start ? f.endDate : start;
-      let n = 0;
-      for (let d = start; d <= last && n < 15; d = addDays(d, 1), n++) markAttendance(actor, { date: d, entries: [{ cadetId: f.cadetId!, status: f.attendance, note: f.details.slice(0, 200) }] });
-      return { message: `${name(f.cadetId!)} סומן במצבה${n > 1 ? ` (${n} ימים)` : ''}`, link: `/attendance?date=${start}` };
-    }
     case 'note':
       addRecord(actor, f.cadetId!, { kind: 'note', title: f.title.slice(0, 200), body: f.details, occurredOn: f.date ?? undefined });
       return { message: `הערה בתיק של ${name(f.cadetId!)}`, link: `/cadets/${f.cadetId}` };

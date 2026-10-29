@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { ABSENCE_REASON_LABELS, ABSENCE_REASONS, ATTENDANCE_LABELS, ATTENDANCE_STATUSES, PRIORITIES, PRIORITY_LABELS, type AbsenceReason, type AttendanceStatus, type Priority } from '@shared/constants';
+import { ABSENCE_REASON_LABELS, ABSENCE_REASONS, PRIORITIES, PRIORITY_LABELS, type AbsenceReason, type Priority } from '@shared/constants';
 import { addDays, localDateKey, shortDate, weekdayName } from '@shared/dates';
 import { WEEK_NOTE_PART_LABELS, WEEK_NOTE_PARTS, type WeekNotePart } from '@shared/debriefForms';
 import { VISITOR_KIND_LABELS } from '@shared/entry';
@@ -77,7 +77,6 @@ const TOPICS: Record<SmartKind, string[]> = {
   procedure: ['cadets'],
   entry: ['entries'],
   exemption: ['cadets'],
-  attendance: ['cadets'],
   note: ['cadets'],
   absence: ['users'],
   task: ['tasks'],
@@ -441,10 +440,6 @@ function fieldsFor(kind: SmartKind, f: SmartFields, me: number): SmartFields {
       next.procedure = f.procedure ?? 'other';
       if (next.procedure === 'other' && !next.other) next.other = (f.title || f.details).slice(0, 80);
       break;
-    case 'attendance':
-      next.attendance = f.attendance ?? 'absent';
-      next.date = f.date ?? today;
-      break;
     case 'exemption':
       if (!next.subject) next.subject = f.title.slice(0, 80);
       break;
@@ -532,7 +527,6 @@ function facts(item: SmartItem, people: { id: number; displayName: string }[]): 
     }
     case 'exemption':
       return [f.until ? `עד ${dayWords(f.until)}` : 'עד להודעה חדשה', f.details].filter(Boolean);
-    case 'attendance':
     case 'absence':
       return [range(f.date, f.endDate), f.details].filter(Boolean);
     case 'task':
@@ -824,29 +818,6 @@ function Fields({ item, cadets, people, offenses, set }: { item: SmartItem; cade
           </Field>
           <Field label="סיבה / פירוט">
             <Text value={f.details} onChange={(details) => set({ details })} label="סיבה" max={300} />
-          </Field>
-        </div>
-      );
-    case 'attendance':
-      return (
-        <div className="sm-grid">
-          {cadet}
-          <Field label="סטטוס" required>
-            <Select value={f.attendance ?? ''} onChange={(e) => set({ attendance: (e.target.value || null) as AttendanceStatus | null })} aria-label="סטטוס במצבה">
-              <option value="">בחירה</option>
-              {ATTENDANCE_STATUSES.filter((s) => s !== 'present').map((s) => (
-                <option key={s} value={s}>
-                  {ATTENDANCE_LABELS[s]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {date('מתאריך')}
-          <Field label="עד תאריך (כמה ימים)">
-            <DateInput value={f.endDate ?? ''} min={f.date ?? undefined} onChange={(v) => set({ endDate: v || null })} aria-label="עד תאריך" />
-          </Field>
-          <Field label="הערה" className="span-2">
-            <Text value={f.details} onChange={(details) => set({ details })} label="הערה" max={200} />
           </Field>
         </div>
       );

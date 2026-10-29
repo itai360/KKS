@@ -1,5 +1,5 @@
 // The bell keeps what is still open: once what a notification is about is finished - the task done, the
-// closing approved, the request decided, the announcement confirmed, the roll call marked - it is out of the
+// closing approved, the request decided, the announcement confirmed - it is out of the
 // list and the count. Nothing is deleted for it: a task opened again brings its notifications back.
 
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -119,27 +119,6 @@ describe('what is finished leaves the bell', () => {
     expect(types(await bell(c.s1))).toEqual(['committee']);
     const committee = (await c.cmd.get(`/api/evaluations/${cadet}`)).body.committees[0].id;
     await c.cmd.post(`/api/evaluations/committees/${committee}/decision`, { decision: 'continue', text: 'ממשיך' });
-    expect(await bell(c.s1)).toEqual([]);
-  });
-
-  it('the roll call reminder leaves once the team is marked; tomorrow\'s takes the place of today\'s', async () => {
-    const team = (await c.cmd.post('/api/teams', { name: 'צוות כרמל', commanderId: c.ids.s1 })).body[0].id;
-    const cadets = [];
-    for (const name of ['עידו', 'רון']) cadets.push((await c.cmd.post('/api/cadets', { firstName: name, lastName: 'לוי', teamId: team })).body.cadet.id as number);
-    for (const date of ['2026-10-02', '2026-10-04']) await c.cmd.post('/api/events', { date, startTime: '08:00', title: 'מסדר בוקר' });
-    clock.set(new Date(at('2026-10-02', '08:31')));
-    runAutomation();
-    const [friday] = await bell(c.s1);
-    expect(friday.type).toBe('attendance');
-    // not marked that day: Sunday's reminder takes its place
-    clock.set(new Date(at('2026-10-04', '08:31')));
-    runAutomation();
-    const sunday = await bell(c.s1);
-    expect(sunday.map((n) => [n.type, n.id === friday.id])).toEqual([['attendance', false]]);
-    // half the team is not the roll call
-    await c.s1.put('/api/attendance', { date: '2026-10-04', entries: [{ cadetId: cadets[0], status: 'present' }] });
-    expect(types(await bell(c.s1))).toEqual(['attendance']);
-    await c.s1.put('/api/attendance', { date: '2026-10-04', entries: [{ cadetId: cadets[1], status: 'sick' }] });
     expect(await bell(c.s1)).toEqual([]);
   });
 

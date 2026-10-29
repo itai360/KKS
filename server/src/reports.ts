@@ -28,7 +28,6 @@ import { listWeeks, weekContaining } from './weeks';
 import { listCadets, listExemptions } from './cadets';
 import { listDebriefs, pendingPriorLessons, weeksWithoutDebrief } from './debriefs';
 import { absencesAtRisk, awayOn } from './absences';
-import { headCountLine, rollCall } from './attendance';
 import { matchesSearch, searchKey } from '../../shared/search';
 import { listDocuments } from './documents';
 
@@ -218,11 +217,9 @@ export function dashboard(actor: UserRow): DashboardData {
     }
   }
 
-  const roll = rollCall(c.today);
   return {
     stats,
     attention,
-    roll: roll.counts.total ? { line: headCountLine(roll), counts: roll.counts, teamsMissing: roll.teams.filter((t) => t.total && !t.marked).map((t) => t.name) } : null,
     staff,
     currentWeek: weeks.find((w) => w.startDate <= c.today && w.endDate >= c.today) ?? null,
     nextWeek: weeks.find((w) => w.startDate > c.today) ?? null,
