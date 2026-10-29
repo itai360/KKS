@@ -4577,56 +4577,119 @@ input::-webkit-date-and-time-value {
     border-radius: 0;
     padding-bottom: calc(14px + env(safe-area-inset-bottom));
   }
-  /* the phone's bar, after Instagram's: the width of the screen, opaque, a hairline on top, and the symbols
-     alone in one ink - the chosen tab's filled (components/TabIcon.tsx) */
+  /* the phone's bar floats over the page as a capsule of glass: the symbols and their words, a mark that
+     slides to the chosen tab, the "+" in the middle */
   .bottom-nav {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     position: fixed;
-    inset-inline: 0;
-    bottom: 0;
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     z-index: 40;
-    padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
-    background: var(--bar-bg);
-    border-top: 0.5px solid var(--bar-line);
-    transition: transform 0.3s var(--spring), opacity 0.2s ease;
+    padding: 6px;
+    border-radius: 28px;
+    background: var(--bar-glass);
+    -webkit-backdrop-filter: blur(24px) saturate(1.8);
+    backdrop-filter: blur(24px) saturate(1.8);
+    box-shadow: var(--bar-shadow);
+    transition:
+      transform 0.3s var(--spring),
+      opacity 0.2s ease,
+      left 0.42s var(--spring),
+      right 0.42s var(--spring);
+  }
+  /* reading down it grows small - a short capsule of the symbols in the middle, every tab still one press
+     away; scrolling up, the top or the end of the page and another screen make it whole again */
+  .bottom-nav.compact {
+    left: calc(50% - 124px);
+    right: calc(50% - 124px);
   }
   /* while a field is typed in it steps aside: the keyboard takes the bottom of the screen */
   .bottom-nav.away:not(:focus-within) {
-    transform: translateY(100%);
+    transform: translateY(calc(100% + 16px + env(safe-area-inset-bottom, 0px)));
     opacity: 0;
     pointer-events: none;
   }
+  /* the mark under the chosen tab: it slides from tab to tab (right to left, as the tabs go) */
+  .nav-ind {
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    inset-inline-start: 6px;
+    width: calc((100% - 12px) / 5);
+    border-radius: 22px;
+    background: var(--bar-mark);
+    transform: translateX(calc(var(--idx, 0) * -100%));
+    transition:
+      transform 0.42s var(--spring),
+      opacity 0.2s ease;
+  }
+  /* a screen that is not one of the bar's tabs: no tab marked */
+  .bottom-nav.no-tab .nav-ind {
+    opacity: 0;
+  }
   .bottom-nav a,
   .bottom-nav button {
-    display: grid;
-    place-items: center;
-    min-height: 50px;
-    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 52px;
+    padding: 4px 0;
     border: none;
-    border-radius: 0;
+    border-radius: 22px;
     background: none;
-    color: var(--ink);
+    color: var(--bar-ink);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
     position: relative;
+    z-index: 1;
     -webkit-tap-highlight-color: transparent;
+    transition:
+      color 0.2s,
+      min-height 0.42s var(--spring),
+      padding 0.42s var(--spring),
+      gap 0.42s var(--spring);
   }
   .bottom-nav :is(a, button):focus-visible {
     outline: 2px solid var(--focus);
-    outline-offset: -6px;
-    border-radius: 14px;
+    outline-offset: -2px;
   }
-  /* no words under the symbols - they stay for screen readers */
-  .bottom-nav .nav-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
+  .bottom-nav .active {
+    color: var(--tint);
+    /* a detail cut out of a filled symbol is drawn in the colour under it: the mark's */
+    --bar-bg: var(--bar-mark);
+  }
+  .nav-label {
+    display: block;
+    height: 1.4em;
+    line-height: 1.4em;
     overflow: hidden;
-    clip-path: inset(50%);
     white-space: nowrap;
+    /* opening again, the words come in once there is room for them */
+    transition:
+      height 0.42s var(--spring),
+      opacity 0.2s ease 0.1s;
+  }
+  .bottom-nav.compact :is(a, button) {
+    min-height: 40px;
+    padding-block: 0;
+    gap: 0;
+  }
+  .bottom-nav.compact .nav-label {
+    height: 0;
+    opacity: 0;
+    /* the words leave first, then the capsule closes in */
+    transition:
+      height 0.42s var(--spring),
+      opacity 0.12s ease;
   }
   .tab-icon {
-    width: 26px;
-    height: 26px;
+    width: 25px;
+    height: 25px;
     transition: transform 0.3s var(--spring-bounce);
   }
   .tab-icon .ti-fill {
@@ -4636,7 +4699,6 @@ input::-webkit-date-and-time-value {
     fill: currentColor;
     stroke: none;
   }
-  /* cut out of a filled symbol: drawn in the bar's colour */
   .tab-icon .ti-cut {
     stroke: var(--bar-bg);
   }
@@ -4645,22 +4707,40 @@ input::-webkit-date-and-time-value {
     stroke: var(--bar-bg);
     stroke-width: 4.4;
   }
-  /* the "+": open, its square fills and the "+" turns into a cross */
-  .tab-icon .ti-box {
-    fill: transparent;
-    transition: fill 0.2s ease;
+  /* the "+": a round button of the tint, turning into a close mark while its menu is open */
+  .bottom-nav .plus {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--tint-fill);
+    color: #fff;
+    box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--tint-fill) 70%, transparent);
+    transition:
+      transform 0.15s,
+      width 0.42s var(--spring),
+      height 0.42s var(--spring);
   }
-  .tab-icon .ti-cross {
-    transform-box: fill-box;
-    transform-origin: center;
-    transition: transform 0.36s var(--spring-bounce), stroke 0.2s ease;
+  .bottom-nav.compact .plus {
+    width: 34px;
+    height: 34px;
   }
-  .tab-icon.is-filled .ti-box {
-    fill: currentColor;
+  .bottom-nav .plus svg {
+    width: 24px;
+    height: 24px;
+    transition:
+      transform 0.36s var(--spring-bounce),
+      scale 0.42s var(--spring);
   }
-  .tab-icon.is-filled .ti-cross {
-    stroke: var(--bar-bg);
+  .bottom-nav.compact .plus svg {
+    scale: 0.84;
+  }
+  .bottom-nav button.plus-open .plus svg {
     transform: rotate(45deg);
+  }
+  .bottom-nav button:not([aria-disabled='true']):active .plus {
+    transform: scale(0.92);
   }
   .login {
     grid-template-columns: minmax(0, 1fr);
@@ -4691,7 +4771,7 @@ input::-webkit-date-and-time-value {
   .toasts {
     left: 12px;
     right: 12px;
-    bottom: calc(62px + env(safe-area-inset-bottom));
+    bottom: calc(86px + env(safe-area-inset-bottom));
     max-width: none;
   }
   .board {
@@ -4797,13 +4877,17 @@ tr.selected td {
 }
 
 @media (max-width: 860px) {
-  /* it rides just above the navigation bar */
+  /* it rides on the floating navigation bar: lower while the bar is small */
   .bulk-bar {
     inset-inline: 10px;
-    bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    transition: bottom 0.42s var(--spring);
+  }
+  body:has(.bottom-nav.compact) .bulk-bar {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
   }
   body:has(.bulk-bar) .toasts {
-    bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(170px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -6107,11 +6191,14 @@ button.fab-missing {
 }
 
 @media (max-width: 860px) {
-  /* just above the navigation bar - and down to the edge while it steps aside */
+  /* above the floating navigation bar, lower while it is small - and down to the edge while it steps aside */
   .page-fab {
-    bottom: calc(62px + env(safe-area-inset-bottom));
+    bottom: calc(80px + env(safe-area-inset-bottom));
     padding-bottom: 0;
-    transition: bottom 0.36s var(--spring);
+    transition: bottom 0.42s var(--spring);
+  }
+  body:has(.bottom-nav.compact) .page-fab {
+    bottom: calc(66px + env(safe-area-inset-bottom));
   }
   body:has(.bottom-nav.away) .page-fab {
     bottom: calc(12px + env(safe-area-inset-bottom));
@@ -9600,7 +9687,7 @@ button.weekly-item-title:hover {
   position: fixed;
   z-index: 41;
   left: 50%;
-  bottom: calc(62px + env(safe-area-inset-bottom));
+  bottom: calc(10px + env(safe-area-inset-bottom) + 64px + 12px);
   width: min(300px, calc(100vw - 32px));
   transform: translateX(-50%);
   display: flex;
@@ -9775,8 +9862,14 @@ button.weekly-item-title:hover {
   .top-plus svg {
     transition: none;
   }
+  /* the bar grows small and whole again at once, its mark jumps to the tab */
   .tab-icon,
-  .tab-icon .ti-cross {
+  .bottom-nav,
+  .bottom-nav :is(a, button),
+  .bottom-nav .plus,
+  .bottom-nav .plus svg,
+  .nav-label,
+  .nav-ind {
     transition: none;
   }
 }
@@ -10418,6 +10511,11 @@ html {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+  .bottom-nav {
+    background: var(--card) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
 }
 /* more contrast: solid surfaces with a clear edge, a darker dimming behind dialogs */
 @media (prefers-contrast: more) {
@@ -10428,7 +10526,10 @@ html {
     border-bottom-color: var(--ink-2);
   }
   .bottom-nav {
-    border-top: 1px solid var(--ink-2);
+    background: var(--card) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    outline: 1px solid var(--ink-2);
   }
   .modal-backdrop,
   .sheet-backdrop {
@@ -11248,7 +11349,7 @@ html {
 }
 
 /* the phone bar: the tab's symbol sinks under the finger and springs back */
-.bottom-nav :is(a, button:not([aria-disabled='true'])):active .tab-icon {
+.bottom-nav a:active .tab-icon {
   transform: scale(0.86);
   transition-duration: 0.08s;
 }
@@ -11349,7 +11450,7 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   .search-palette:active {
     scale: none;
   }
-  .bottom-nav :is(a, button):active .tab-icon {
+  .bottom-nav a:active .tab-icon {
     transform: none;
   }
 }
@@ -12207,10 +12308,13 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   color: var(--ink);
 }
 @media (max-width: 860px) {
-  /* just above the navigation bar - and down to the edge while it steps aside */
+  /* above the floating navigation bar, lower while it is small - and down to the edge while it steps aside */
   .save-bar {
-    bottom: calc(62px + env(safe-area-inset-bottom));
-    transition: bottom 0.36s var(--spring);
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    transition: bottom 0.42s var(--spring);
+  }
+  body:has(.bottom-nav.compact) .save-bar {
+    bottom: calc(70px + env(safe-area-inset-bottom));
   }
   body:has(.bottom-nav.away) .save-bar {
     bottom: calc(16px + env(safe-area-inset-bottom));

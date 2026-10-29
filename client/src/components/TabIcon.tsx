@@ -1,8 +1,8 @@
-// The phone bar's symbols, after Instagram's tab bar: every tab an outline, the chosen one the same symbol
-// filled, all in one ink. A detail cut out of a filled symbol (the check on the board, the cross on an open
-// "+") is drawn in the bar's own colour (--bar-bg), which is why the bar is opaque.
+// The phone bar's symbols: every tab an outline, the chosen one the same symbol filled. A detail cut out of a
+// filled symbol (the check on the board, the gap around its clip) is drawn in the colour under it (--bar-bg:
+// the solid mark under the chosen tab).
 
-export type TabIconName = 'home' | 'cadets' | 'create' | 'weeks' | 'tasks';
+export type TabIconName = 'home' | 'cadets' | 'weeks' | 'tasks';
 
 const HOUSE = 'M4 10.3 12 3.5l8 6.8v9.2a1.5 1.5 0 0 1-1.5 1.5H15v-4.5a3 3 0 0 0-6 0V21H5.5A1.5 1.5 0 0 1 4 19.5z';
 const CAP_TOP = 'M12 5 2.4 9.8 12 14.6l9.6-4.8z';
@@ -52,14 +52,6 @@ function shapes(name: TabIconName, filled: boolean) {
           <path d="M8.4 4.8H6.6a1.8 1.8 0 0 0-1.8 1.8v13a1.8 1.8 0 0 0 1.8 1.8h10.8a1.8 1.8 0 0 0 1.8-1.8v-13a1.8 1.8 0 0 0-1.8-1.8h-1.8" />
           <rect {...CLIP} />
           <path d={CHECK} />
-        </>
-      );
-    case 'create':
-      // one drawing for both, so the change can move: open, the square fills and its "+" turns into a cross
-      return (
-        <>
-          <rect className="ti-box" x="3.2" y="3.2" width="17.6" height="17.6" rx="5.2" />
-          <path className="ti-cross" d="M12 8.2v7.6M8.2 12h7.6" />
         </>
       );
   }

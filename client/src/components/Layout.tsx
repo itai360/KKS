@@ -501,33 +501,54 @@ export function Layout({ children }: { children: ReactNode }) {
     }
   };
 
-  // reading down the page closes the phone bar's "+" menu (it would hang over a moving page); scrolling up,
-  // the end of the page or another screen reset it
-  const [readingDown, setReadingDown] = useState(false);
+  // the phone's bar grows small while reading down - a short capsule of its symbols, every tab still one press
+  // away - and is whole again on scrolling up, at the top or the end, or on moving to another screen. It
+  // follows any scroll that reads down: the page's, and one inside it - the calendar's hours, a long list in
+  // its own box - since a scroll does not bubble, it is heard on its way down (capture)
+  const [barSmall, setBarSmall] = useState(false);
   useEffect(() => {
-    let last = window.scrollY;
+    const lastTop = new WeakMap<object, number>();
     let frame = 0;
-    const onScroll = () => {
+    let target: EventTarget | null = null;
+    const onScroll = (e: Event) => {
+      target = e.target;
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const y = window.scrollY;
-        // the top bar shows its edge only while content passes under it
-        document.documentElement.toggleAttribute('data-scrolled', y > 2);
-        const atEnd = y + window.innerHeight >= document.documentElement.scrollHeight - 8;
-        if (atEnd || y < 60) setReadingDown(false);
-        else if (Math.abs(y - last) > 6) setReadingDown(y > last);
-        last = y;
+        const page = !(target instanceof Element) || target === document.documentElement || target === document.scrollingElement;
+        const el = page ? document.documentElement : (target as Element);
+        // the bar itself, the side menu and an open window are not the page being read
+        if (!page && el.closest('.bottom-nav, .rail, .modal, .sheet, .plus-menu, .popover')) return;
+        const y = page ? window.scrollY : el.scrollTop;
+        // the top bar shows its edge only while content passes under the page's top
+        if (page) document.documentElement.toggleAttribute('data-scrolled', y > 2);
+        const height = page ? window.innerHeight : el.clientHeight;
+        const full = page ? document.documentElement.scrollHeight : el.scrollHeight;
+        // sideways only (days swiped, a strip of chips): not reading down
+        if (full <= height + 4) return;
+        const last = lastTop.get(el);
+        // the first move of a box only says where it was
+        if (last === undefined || last === y) {
+          lastTop.set(el, y);
+          return;
+        }
+        if (y < 40 || y + height >= full - 8) {
+          setBarSmall(false);
+          lastTop.set(el, y);
+        } else if (Math.abs(y - last) > 8) {
+          setBarSmall(y > last);
+          lastTop.set(el, y);
+        }
       });
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
     return () => {
-      window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('scroll', onScroll, { capture: true });
       cancelAnimationFrame(frame);
     };
   }, []);
   useEffect(() => {
-    setReadingDown(false);
+    setBarSmall(false);
   }, [location.pathname]);
   // the line under a chosen tab slides to the next one, on every screen
   useEffect(() => {
@@ -558,8 +579,8 @@ export function Layout({ children }: { children: ReactNode }) {
     setPlusOpen(false);
   }, [location.pathname]);
   useEffect(() => {
-    if (readingDown) setPlusOpen(false);
-  }, [readingDown]);
+    if (barSmall) setPlusOpen(false);
+  }, [barSmall]);
   const path = location.pathname;
   // the phone's bar, right to left: home, cadets, "+", weeks, tasks; on any other screen no tab is marked
   // (everything else is in the menu under the course mark at the top)
@@ -872,8 +893,15 @@ export function Layout({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {/* after Instagram's bar: the symbols alone, the chosen tab's filled (the words stay for screen readers) */}
-      <nav className={`bottom-nav${typingField ? ' away' : ''}`} aria-label="ניווט" inert={drawer || undefined}>
+      {/* the phone's bar floats over the page: a capsule of glass, the symbols and their words, a mark that
+          slides to the chosen tab and the "+" in the middle - small while reading down */}
+      <nav
+        className={`bottom-nav${typingField ? ' away' : barSmall ? ' compact' : ''}${barIdx < 0 ? ' no-tab' : ''}`}
+        aria-label="ניווט"
+        style={{ ['--idx' as string]: Math.max(0, barIdx) }}
+        inert={drawer || undefined}
+      >
+        <span className="nav-ind" aria-hidden />
         <NavLink to="/" end className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
           <TabIcon name="home" filled={barIdx === 0} />
           <span className="nav-label">בית</span>
@@ -889,8 +917,8 @@ export function Layout({ children }: { children: ReactNode }) {
             if (viewing) return;
             setPlusAt('bar');
             setPlusOpen((o) => !o);
-            // so that reading on down closes it again
-            setReadingDown(false);
+            // its menu opens over the whole bar
+            setBarSmall(false);
           }}
           aria-label={viewing ? 'קורס קודם - לקריאה בלבד' : canEvent ? 'הוספה: משימה, אירוע בלו"ז או שבועי' : 'הוספה: משימה או שבועי'}
           aria-disabled={viewing ? 'true' : undefined}
@@ -898,7 +926,9 @@ export function Layout({ children }: { children: ReactNode }) {
           aria-expanded={plusOpen}
           aria-controls={plusOpen ? 'plus-menu' : undefined}
         >
-          <TabIcon name="create" filled={plusOpen} />
+          <span className="plus">
+            <Icon name="plus" />
+          </span>
         </button>
         <NavLink to="/weeks" className={() => (barIdx === 3 ? 'active' : '')} aria-current={barIdx === 3 ? 'page' : undefined}>
           <TabIcon name="weeks" filled={barIdx === 3} />

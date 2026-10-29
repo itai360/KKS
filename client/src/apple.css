@@ -40,9 +40,12 @@
   --material: rgba(249, 249, 249, 0.8);
   --material-strong: rgba(249, 249, 249, 0.94);
   --hud: rgba(30, 30, 32, 0.92);
-  /* the phone's bottom bar: opaque, a hairline on top */
-  --bar-bg: #ffffff;
-  --bar-line: rgba(0, 0, 0, 0.14);
+  /* the phone's bottom bar: a capsule of glass floating over the page, a solid mark under the chosen tab */
+  --bar-glass: rgba(255, 255, 255, 0.82);
+  --bar-mark: #e6e6eb;
+  --bar-ink: #4a4a50;
+  --bar-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(0, 0, 0, 0.1);
+  --bar-bg: var(--bar-mark);
 
   --red: #ff3b30;
   --red-bg: #ffe5e3;
@@ -115,8 +118,11 @@
     --material: rgba(22, 22, 24, 0.78);
     --material-strong: rgba(28, 28, 30, 0.94);
     --hud: rgba(58, 58, 60, 0.94);
-    --bar-bg: #000000;
-    --bar-line: rgba(255, 255, 255, 0.16);
+    --bar-glass: rgba(38, 38, 40, 0.8);
+    --bar-mark: #3a3a3e;
+    --bar-ink: rgba(235, 235, 245, 0.74);
+    --bar-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.75), 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+    --bar-bg: var(--bar-mark);
 
     --red: #ff453a;
     --red-bg: #3b1714;
@@ -181,8 +187,11 @@
     --material: rgba(22, 22, 24, 0.78);
     --material-strong: rgba(28, 28, 30, 0.94);
     --hud: rgba(58, 58, 60, 0.94);
-    --bar-bg: #000000;
-    --bar-line: rgba(255, 255, 255, 0.16);
+    --bar-glass: rgba(38, 38, 40, 0.8);
+    --bar-mark: #3a3a3e;
+    --bar-ink: rgba(235, 235, 245, 0.74);
+    --bar-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.75), 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+    --bar-bg: var(--bar-mark);
 
     --red: #ff453a;
     --red-bg: #3b1714;
@@ -1363,11 +1372,11 @@ input[type='radio'] {
   }
 
   .plus-menu {
-    bottom: calc(env(safe-area-inset-bottom) + 62px);
+    bottom: calc(env(safe-area-inset-bottom) + 86px);
     width: min(340px, calc(100vw - 24px));
   }
   .toasts {
-    bottom: calc(62px + env(safe-area-inset-bottom));
+    bottom: calc(86px + env(safe-area-inset-bottom));
   }
 
   /* a sheet rising from below, its grabber on top */
