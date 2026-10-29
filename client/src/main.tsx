@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import './apple.css';
 import './gcal.css';
+import './smart.css';
 import './takpatz.css';
 import { App } from './App';
 import { reportIssue } from './lib/api';

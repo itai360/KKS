@@ -5,6 +5,7 @@ import { NewTaskProvider } from './components/NewTask';
 import { WeekDebriefAddHost } from './components/WeekDebriefAdd';
 import { EntryAddHost } from './components/EntryAdd';
 import { ProcedureReportHost } from './components/ProcedureReport';
+import { SmartEntryHost } from './components/SmartEntry';
 import { WeeklyAddHost } from './components/WeeklyAdd';
 import { ToastProvider } from './components/Toasts';
 import { Empty, Loading } from './components/ui';
@@ -176,6 +177,7 @@ function AuthedRoutes() {
         <WeekDebriefAddHost />
         <EntryAddHost />
         <ProcedureReportHost />
+        <SmartEntryHost />
       </NewTaskProvider>
     </ToastProvider>
   );

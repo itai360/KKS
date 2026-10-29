@@ -98,6 +98,7 @@ import { changed } from './journal';
 import { requireAbility } from './abilities';
 import { MAX_PART_BYTES, MAX_TRANSCRIPT_CHARS, summarizeTalk, talkAiStatus, transcribePart } from './talkAi';
 import { suggestTraits } from './traitAi';
+import { analyzeSmart, applySmart, checkSmart, smartStatus } from './smartEntry';
 import { SUGGEST_MAX_CHARS } from '../../shared/traitSuggest';
 import { TALK_TYPES } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
@@ -192,6 +193,17 @@ export function v3Router(): Router {
     deleteRecord(me(req), id(req.params.id));
     res.json({ ok: true });
   });
+
+  // ---------------- smart entry: free text read into the right places (smartEntry.ts) ----------------
+
+  // whether Claude reads the text (otherwise the built-in reading)
+  r.get('/smart/status', (_req, res) => res.json(smartStatus()));
+  // the text read into items - nothing is filed yet
+  r.post('/smart/analyze', async (req, res) => res.json(await analyzeSmart(me(req), req.body?.text)));
+  // the ladder and the permissions again, for items the writer changed
+  r.post('/smart/check', (req, res) => res.json({ items: checkSmart(me(req), req.body) }));
+  // the items the writer confirmed, each filed through its screen's own rules
+  r.post('/smart/apply', (req, res) => res.json({ results: applySmart(me(req), req.body) }));
 
   // ---------------- enforcement ladder (from the course's document) ----------------
 

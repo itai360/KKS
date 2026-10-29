@@ -13,6 +13,7 @@ import { useNewTask } from './NewTask';
 import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addEntry } from './EntryAdd';
 import { addProcedure } from './ProcedureReport';
+import { openSmartEntry } from './SmartEntry';
 import { addToWeekly } from './WeeklyAdd';
 import { api } from '../lib/api';
 import { fmtDeadline, todayKey } from '../lib/format';
@@ -73,6 +74,7 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
     const cap = <T,>(list: T[], n: number) => (capped ? list.slice(0, n) : list);
     const cur = weeks.find((w) => w.startDate <= today && w.endDate >= today) ?? weeks.find((w) => w.startDate > today);
     const actions: Item[] = [
+      { id: 'a:smart', group: 'פעולות', label: 'הזנה חכמה - כותבים חופשי והאפליקציה מזינה למקום הנכון', icon: 'sparkle', keywords: 'עונש משמעת אישור כניסה מצבה פטור היעדרות', run: () => openSmartEntry() },
       { id: 'a:task', group: 'פעולות', label: 'משימה חדשה', icon: 'plus', hint: 'N', run: () => newTask() },
       ...(cur
         ? [
@@ -110,7 +112,10 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
     const domains: Item[] = settings.domains
       .filter((d) => matchesSearch(q, d))
       .map((d) => ({ id: `dom:${d}`, group: 'תחומים', label: d, sub: 'משימות בתחום', icon: 'tasks', run: go(`/tasks?domain=${encodeURIComponent(d)}`) }));
-    const near = [...local, ...cap(people, 5), ...cap(weekItems, 4), ...cap(domains, 3)];
+    // a sentence typed (three words or more) can be filed as it is: smart entry reads it
+    const sentence = q.trim().split(/\s+/).length >= 3;
+    const smart: Item[] = sentence ? [{ id: 'smart:q', group: 'הזנה חכמה', label: `להזין: "${q.trim().length > 60 ? `${q.trim().slice(0, 60)}...` : q.trim()}"`, sub: 'האפליקציה תבין לאן זה שייך ותציג לאישור', icon: 'sparkle', run: () => openSmartEntry(q.trim()) }] : [];
+    const near = [...smart, ...local, ...cap(people, 5), ...cap(weekItems, 4), ...cap(domains, 3)];
     if (!found) return near;
     const fromSearch: Item[] = [
       // the open ones first (the search puts them there); one already closed says so instead of its deadline

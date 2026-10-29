@@ -15,6 +15,7 @@ import { useNewTask } from './NewTask';
 import { addToWeekDebrief } from './WeekDebriefAdd';
 import { addToWeekly } from './WeeklyAdd';
 import { addProcedure } from './ProcedureReport';
+import { openSmartEntry } from './SmartEntry';
 import { ScreenBoundary } from './ScreenBoundary';
 import { BackButton } from './BackButton';
 import { CommandPalette } from './CommandPalette';
@@ -914,6 +915,10 @@ export function Layout({ children }: { children: ReactNode }) {
           at={plusAt}
           leaving={plus.leaving}
           onClose={() => setPlusOpen(false)}
+          onSmart={() => {
+            setPlusOpen(false);
+            openSmartEntry();
+          }}
           onTask={() => {
             setPlusOpen(false);
             newTask();
@@ -951,6 +956,7 @@ export function Layout({ children }: { children: ReactNode }) {
 function PlusMenu({
   at,
   onClose,
+  onSmart,
   onTask,
   onWeekly,
   onDebrief,
@@ -960,6 +966,7 @@ function PlusMenu({
 }: {
   at: 'bar' | 'top';
   onClose: () => void;
+  onSmart: () => void;
   onTask: () => void;
   onWeekly: () => void;
   onDebrief: () => void;
@@ -1019,6 +1026,15 @@ function PlusMenu({
         inert={leaving || undefined}
         style={at === 'top' ? (spot ? { top: spot.top, left: spot.left } : { visibility: 'hidden' }) : undefined}
       >
+        <button type="button" role="menuitem" className="plus-menu-smart" onClick={onSmart}>
+          <span className="plus-menu-icon">
+            <Icon name="sparkle" />
+          </span>
+          <span className="grow">
+            <span className="plus-menu-title">הזנה חכמה</span>
+            <span className="plus-menu-sub">כותבים במילים שלכם - עונש, אישור כניסה, מצבה, משימה - והאפליקציה מזינה למקום הנכון</span>
+          </span>
+        </button>
         <button type="button" role="menuitem" onClick={onTask}>
           <span className="plus-menu-icon">
             <Icon name="tasks" />
