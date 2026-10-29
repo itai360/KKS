@@ -1,18 +1,19 @@
 // Visitors' entry to the base (אישור כניסה). The commander sees the requests still to send on - each with its
 // message in the base's format, to send in WhatsApp or copy, then marked sent - and the sent ones folded
-// under them; anyone else sees their own requests and where each stands.
+// under them; anyone else sees their own requests and where each stands, and copies their message too. The
+// base's format pasted anywhere on the screen (Ctrl+V, or "הדבקת פורמט") opens the request filled from it.
 
 import { useEffect, useMemo, useState } from 'react';
-import { longDate } from '@shared/dates';
-import { entryMessage, VISITOR_KIND_LABELS, type EntryPlace } from '@shared/entry';
+import { entryMessage, visitDaysLong, VISITOR_KIND_LABELS, type EntryPlace } from '@shared/entry';
 import type { EntryRequest } from '@shared/types';
 import { ask } from '../components/Confirm';
 import { DoneDrawer } from '../components/DoneDrawer';
-import { addEntry } from '../components/EntryAdd';
+import { addEntry, pasteEntry, readEntryPaste } from '../components/EntryAdd';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Field, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
+import { copyText } from '../lib/clipboard';
 import { leaveClass, useLeaving } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -33,15 +34,34 @@ export function EntriesPage() {
     document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [data]);
 
+  // the base's format pasted on the screen itself (not into a field, not with a dialog open): the request, filled
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input, textarea, [contenteditable="true"], .modal, [role="dialog"]')) return;
+      const text = e.clipboardData?.getData('text') ?? '';
+      if (!text.includes('\n') || !readEntryPaste(text, place).length) return;
+      e.preventDefault();
+      pasteEntry(text);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [place.camp, place.unit]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="page narrow">
       <PageHead
         title="אישורי כניסה"
         sub={isCommander ? 'מבקרים שמגיעים לבסיס: כל בקשה מגיעה אליך עם ההודעה מוכנה לשליחה.' : 'מבקר שמגיע לבסיס? ממלאים כאן, והבקשה מגיעה למפקד הקורס.'}
         actions={
-          <button className="btn btn-primary" onClick={() => addEntry()}>
-            <Icon name="plus" /> בקשה חדשה
-          </button>
+          <>
+            <button className="btn" onClick={() => pasteEntry()} title="מדביקים את הפורמט כמו שהגיע בוואטסאפ, והבקשה מתמלאת לבד">
+              <Icon name="clipboard" /> הדבקת פורמט
+            </button>
+            <button className="btn btn-primary" onClick={() => addEntry()}>
+              <Icon name="plus" /> בקשה חדשה
+            </button>
+          </>
         }
       />
       <ErrorBox error={error} />
@@ -57,7 +77,7 @@ export function EntriesPage() {
               <span className="mono tiny muted">{pending.length}</span>
             </div>
             {!leaving.rows.length ? (
-              <Empty icon="stamp" title={isCommander ? 'אין בקשות שממתינות' : 'אין בקשות שממתינות למפקד'} text={sent.length ? undefined : 'בקשה חדשה נפתחת גם מה-"+".'} />
+              <Empty icon="stamp" title={isCommander ? 'אין בקשות שממתינות' : 'אין בקשות שממתינות למפקד'} text={sent.length ? undefined : 'קיבלתם פורמט בוואטסאפ? מדביקים אותו כאן כמו שהוא. בקשה חדשה נפתחת גם מה-"+".'} />
             ) : (
               leaving.rows.map((e) => (
                 <div key={e.id} className={leaveClass(leaving.phaseOf(e.id))}>
@@ -92,13 +112,12 @@ function EntryCard({ e, place }: { e: EntryRequest; place: EntryPlace }) {
   const isSent = e.status === 'sent';
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(msg);
-      toast({ title: 'ההודעה הועתקה', body: e.fullName, tone: 'green' });
-    } catch {
-      setShowMsg(true);
-      toast({ title: 'לא הצלחנו להעתיק', body: 'ההודעה פתוחה למטה - אפשר לסמן ולהעתיק', tone: 'gray' });
+    if (await copyText(msg)) {
+      toast({ title: 'הפורמט הועתק', body: e.fullName, tone: 'green' });
+      return;
     }
+    setShowMsg(true);
+    toast({ title: 'לא הצלחנו להעתיק', body: 'ההודעה פתוחה למטה - אפשר לסמן ולהעתיק', tone: 'gray' });
   };
   const mark = async (sent: boolean) => {
     setBusy(true);
@@ -129,25 +148,27 @@ function EntryCard({ e, place }: { e: EntryRequest; place: EntryPlace }) {
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="strong entry-name">{e.fullName}</div>
           <div className="small">
-            {longDate(e.visitDate)} · {e.reason}
+            {visitDaysLong(e.visitDate, e.visitEndDate)} · {e.reason}
           </div>
           <div className="tiny muted">
             {VISITOR_KIND_LABELS[e.visitorKind]}
-            {e.rank ? ` · ${e.rank}` : ''} · {e.escort ? 'דרוש ליווי' : 'בלי ליווי'} · {e.byCar ? `רכוב, ${e.carNumber}` : 'רגלי'}
+            {e.rank ? ` · ${e.rank}` : ''} · {e.escort ? 'דרוש ליווי' : 'בלי ליווי'} · {e.byCar ? `רכוב, רכב ${e.carMilitary ? 'צבאי' : 'אזרחי'} ${e.carNumber}` : 'רגלי'}
             {isCommander && e.createdByName ? ` · ביקש/ה: ${e.createdByName}` : ''}
           </div>
         </div>
         {!isCommander && <span className={`chip entry-state${isSent ? ' is-sent' : ''}`}>{isSent ? 'נשלח לבסיס' : 'ממתין למפקד'}</span>}
       </div>
-      {isCommander && (
-        <div className="entry-actions">
+      <div className="entry-actions">
+        {isCommander && (
           <a className="btn btn-sm" href={wa} target="_blank" rel="noopener noreferrer">
             <Icon name="message" /> וואטסאפ
           </a>
-          <button type="button" className="btn btn-sm" onClick={() => void copy()}>
-            <Icon name="copy" /> העתקה
-          </button>
-          {isSent ? (
+        )}
+        <button type="button" className={`btn btn-sm${isCommander ? '' : ' btn-primary'}`} onClick={() => void copy()}>
+          <Icon name="copy" /> העתקת הפורמט
+        </button>
+        {isCommander &&
+          (isSent ? (
             <button type="button" className="btn btn-sm btn-ghost" onClick={() => void mark(false)} disabled={busy}>
               ביטול "נשלח"
             </button>
@@ -155,9 +176,8 @@ function EntryCard({ e, place }: { e: EntryRequest; place: EntryPlace }) {
             <button type="button" className="btn btn-sm btn-primary" onClick={() => void mark(true)} disabled={busy}>
               <Icon name="check" /> נשלח לבסיס
             </button>
-          )}
-        </div>
-      )}
+          ))}
+      </div>
       <div className="entry-foot">
         <button type="button" className="link-btn tiny" onClick={() => setShowMsg((v) => !v)} aria-expanded={showMsg}>
           {showMsg ? 'הסתרת ההודעה' : 'הצגת ההודעה'}

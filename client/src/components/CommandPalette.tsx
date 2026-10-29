@@ -11,7 +11,7 @@ import type { SearchResults } from '@shared/types';
 import { Icon } from './Icon';
 import { useNewTask } from './NewTask';
 import { addToWeekDebrief } from './WeekDebriefAdd';
-import { addEntry } from './EntryAdd';
+import { addEntry, pasteEntry } from './EntryAdd';
 import { addProcedure } from './ProcedureReport';
 import { openSmartEntry } from './SmartEntry';
 import { addToWeekly } from './WeeklyAdd';
@@ -86,6 +86,7 @@ export function useFindItems(q: string, pages: FindPage[], { capped = false }: {
       { id: 'a:weeknote', group: 'פעולות', label: 'לתחקיר השבוע - לשימור, לשיפור או לקח', icon: 'lightbulb', run: () => addToWeekDebrief() },
       { id: 'a:procedure', group: 'פעולות', label: 'אי עמידה בנהלים - הפקרת נשק, נשק מאחורה, טלפון, דיגום', icon: 'shield', run: () => addProcedure() },
       { id: 'a:entry', group: 'פעולות', label: 'אישור כניסה - מבקר שמגיע לבסיס', icon: 'stamp', run: () => addEntry() },
+      { id: 'a:entrypaste', group: 'פעולות', label: 'הדבקת פורמט אישור כניסה - מתמלא לבד', icon: 'clipboard', run: () => pasteEntry() },
       { id: 'a:weeklynow', group: 'פעולות', label: 'השבועי הקרוב', icon: 'weekly', run: go('/weekly') },
       { id: 'a:weekly', group: 'פעולות', label: 'תחקיר שבועי חדש', icon: 'calendar', run: go('/debriefs?new=weekly') },
       { id: 'a:eventdebrief', group: 'פעולות', label: 'תחקיר מופע עצים חדש', icon: 'zap', run: go('/debriefs?new=event') },

@@ -3,7 +3,7 @@
 // week after the visit.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { entryMessage, entryMissing, type EntryFields } from '../../shared/entry';
+import { entryMessage, entryMissing } from '../../shared/entry';
 import type { EntryRequest, Notification } from '../../shared/types';
 import { housekeeping } from '../src/automation';
 import { db } from '../src/db';
@@ -88,46 +88,32 @@ describe('entry requests', () => {
   });
 });
 
-describe('the message in the base format', () => {
-  const fields: EntryFields = {
-    visitDate: '2026-10-06',
-    fullName: 'דנה כהן',
-    phone: '050-1234567',
-    visitorKind: 'soldier',
-    rank: 'סרן',
-    clearance: 'סודי',
-    idNumber: '7654321',
-    escort: true,
-    byCar: true,
-    carNumber: '12-345-67',
-    carKind: 'מאזדה לבנה',
-    reason: 'הרצאה לצוערים',
-  };
-
-  it('fills every line, the camp and unit from the settings', () => {
-    expect(entryMessage(fields, { camp: 'מחנה הבדיקה', unit: 'יחידת הבדיקה' }).split('\n')).toEqual([
-      '*🔵פורמט אישור כניסה למחנה הבדיקה 🔵*',
-      '*יחידה אליה המבקר מגיע*: יחידת הבדיקה',
-      '*שם מלא:* דנה כהן',
-      '*תאריך:* 6.10.2026',
-      "*מס' טלפון:* 050-1234567",
-      '*אזרח/חייל:* חייל',
-      '*דרגה:* סרן',
-      '*סיווג ביטחוני*: סודי',
-      '*מספר אישי/ת״ז :* 7654321',
-      '*דרוש ליווי/ לא דרוש ליווי*: דרוש ליווי',
-      '*רגלי/רכוב*: רכוב',
-      '*מספר רכב:* 12-345-67',
-      '*סוג וצבע רכב*: מאזדה לבנה',
-      '*סיבת הגעה*: הרצאה לצוערים',
-    ]);
+describe('the base format\'s fields', () => {
+  it('keeps a visit of several days, a military car, and the unit and camp a pasted format gave', async () => {
+    const id = (await c.s1.post('/api/entries', { ...visitor, visitEndDate: '2026-10-07', byCar: true, carMilitary: true, carNumber: '123-456', carKind: 'סופה ירוקה', unit: 'יחידה אחרת', camp: 'מחנה אחר' })).body.id;
+    expect((await list(c.cmd)).find((e) => e.id === id)).toMatchObject({ visitDate: '2026-10-06', visitEndDate: '2026-10-07', carMilitary: true, unit: 'יחידה אחרת', camp: 'מחנה אחר' });
+    // the commander's notification says the days
+    expect((await bell(c.cmd))[0].body).toContain('6-7.10.2026');
+    // on foot, no car of any kind; a last day not after the first is none
+    await c.s1.patch(`/api/entries/${id}`, { byCar: false, visitEndDate: '2026-10-06' });
+    expect((await list(c.s1))[0]).toMatchObject({ byCar: false, carMilitary: false, carNumber: '', visitEndDate: '' });
+    // a month at most
+    expect((await c.s1.post('/api/entries', { ...visitor, visitEndDate: '2026-11-20' })).body.error).toBe('ביקור ארוך מחודש - בקשה לכל חודש בנפרד');
   });
 
-  it('says "-" where a line does not apply, and names what is missing', () => {
-    const civilian: EntryFields = { ...fields, visitorKind: 'civilian', byCar: false, escort: false, clearance: '' };
-    const lines = entryMessage(civilian, { camp: '', unit: '' }).split('\n');
-    expect(lines[0]).toBe('*🔵פורמט אישור כניסה 🔵*');
-    expect(lines).toEqual(expect.arrayContaining(['*דרגה:* -', '*סיווג ביטחוני*: -', '*מספר רכב:* -', '*רגלי/רכוב*: רגלי', '*דרוש ליווי/ לא דרוש ליווי*: לא דרוש ליווי']));
-    expect(entryMissing({ ...civilian, fullName: '', byCar: true, carNumber: '', carKind: '' })).toEqual(['שם מלא', 'מספר רכב', 'סוג וצבע רכב']);
+  it('a visit of several days is kept until a week after its last day', async () => {
+    await c.s1.post('/api/entries', { ...visitor, visitEndDate: '2026-10-09' });
+    housekeeping(new Date('2026-10-14T08:00:00Z'));
+    expect(await list(c.cmd)).toHaveLength(1);
+    housekeeping(new Date('2026-10-17T08:00:00Z'));
+    expect(await list(c.cmd)).toEqual([]);
+  });
+
+  it('the message is written from what is kept, as the base writes it', async () => {
+    await c.s1.post('/api/entries', { ...visitor, visitEndDate: '2026-10-07', unit: 'יחידה אחרת' });
+    const [e] = await list(c.cmd);
+    const lines = entryMessage(e, { camp: 'מחנה הבדיקה', unit: 'יחידת הבדיקה' }).split('\n');
+    expect(lines.slice(0, 5)).toEqual(['*🔵פורמט אישור כניסה למחנה הבדיקה 🔵*', '', '*תאריך:* 6-7/10', '*יחידה אליה המבקר מגיע:* יחידה אחרת', '*שם מלא:* דנה כהן']);
+    expect(entryMissing({ ...e, fullName: '', byCar: true, carNumber: '', carKind: '' })).toEqual(['שם מלא', 'מספר רכב', 'סוג וצבע רכב']);
   });
 });

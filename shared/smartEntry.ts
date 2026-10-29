@@ -11,7 +11,7 @@
 import { ABSENCE_REASON_LABELS, ATTENDANCE_LABELS, PRIORITY_LABELS, WEEKDAY_NAMES, type AbsenceReason, type AttendanceStatus, type Priority } from './constants';
 import { addDays, DEFAULT_TZ, diffDays, isDateKey, localDateKey, shortDate, toDateKey, weekdayOf } from './dates';
 import { WEEK_NOTE_PART_LABELS, type WeekNotePart } from './debriefForms';
-import { entryMissing, type EntryFields, type VisitorKind } from './entry';
+import { emptyEntryFields, entryMissing, parseEntryMessages, visitDays, type EntryFields, type VisitorKind } from './entry';
 import { parseEventText } from './eventParser';
 import { Extractor, HB, LB, looseNameSource, normalizeHebrew, parseTaskText, RB } from './parser';
 import { DRESS_ITEMS, PROCEDURE_LABELS, procedureMissing, type ProcedureKind } from './procedures';
@@ -77,9 +77,12 @@ type ReadKind = SmartKind | 'whereabouts';
 const READ_CADET_KINDS: readonly ReadKind[] = [...CADET_KINDS, 'whereabouts'];
 
 /** a visitor's details, as the entry form has them (the day is the item's date) */
-export type EntryDraft = Omit<EntryFields, 'visitDate'>;
+export type EntryDraft = Omit<EntryFields, 'visitDate' | 'visitEndDate'>;
 
-export const emptyEntry = (): EntryDraft => ({ fullName: '', phone: '', visitorKind: 'civilian', rank: '', clearance: '', idNumber: '', escort: false, byCar: false, carNumber: '', carKind: '', reason: '' });
+export const emptyEntry = (): EntryDraft => {
+  const { visitDate: _day, visitEndDate: _last, ...draft } = emptyEntryFields();
+  return draft;
+};
 
 /** every field any kind may need; each kind reads its own */
 export interface SmartFields {
@@ -224,7 +227,7 @@ export function smartMissing(item: Pick<SmartItem, 'kind' | 'fields'>): string[]
     case 'entry': {
       need(f.date, 'תאריך');
       const e = f.entry ?? emptyEntry();
-      out.push(...entryMissing({ ...e, visitDate: f.date ?? '' }).filter((m) => m !== 'תאריך'));
+      out.push(...entryMissing({ ...e, visitDate: f.date ?? '', visitEndDate: '' }).filter((m) => m !== 'תאריך'));
       break;
     }
     case 'exemption':
@@ -1088,8 +1091,10 @@ export function analyzeLocal(input: string, ctx: SmartContext): SmartItem[] {
   const tz = ctx.tz ?? DEFAULT_TZ;
   const now = ctx.now ?? new Date();
   const today = localDateKey(now, tz);
-  const items: SmartItem[] = [];
-  for (const raw of splitSegments(input, ctx)) {
+  // the base's entry format pasted as it came (one or several): each is an entry approval, read field by
+  // field - the rest of the text is read as any other
+  const { items, rest } = entryFormats(input, today);
+  for (const raw of splitSegments(rest, ctx)) {
     const text = normalizeHebrew(raw);
     if (!text) continue;
     const r = read(text, ctx);
@@ -1113,6 +1118,26 @@ export function analyzeLocal(input: string, ctx: SmartContext): SmartItem[] {
     }
   }
   return items;
+}
+
+/** the base's entry format in a text: an item for each message, and what is left of the text */
+export function entryFormats(input: string, today: string): { items: SmartItem[]; rest: string } {
+  const { entries, rest } = parseEntryMessages(input, today);
+  const items = entries.map(({ fields: e }): SmartItem => {
+    const { visitDate, visitEndDate, ...draft } = e;
+    const fields: SmartFields = { ...emptyFields(), date: visitDate || null, endDate: visitEndDate || null, entry: draft };
+    const complete = smartMissing({ kind: 'entry', fields }).length === 0;
+    return {
+      key: newKey(),
+      kind: 'entry',
+      confidence: complete ? 'high' : 'medium',
+      source: [e.fullName, visitDays(visitDate, visitEndDate)].filter(Boolean).join(' · '),
+      why: 'פורמט אישור כניסה',
+      fields,
+      alternatives: [],
+    };
+  });
+  return { items, rest };
 }
 
 function whyOf(kind: ReadKind, r: Reading, ctx: SmartContext): string {

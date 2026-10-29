@@ -14024,6 +14024,71 @@ tr.is-finished.is-folding {
 .entry-foot .text-red {
   color: var(--red);
 }
+/* the base's format, pasted as it came: one tap fills the form */
+.entry-paste-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px dashed color-mix(in srgb, var(--blue) 45%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--blue) 6%, var(--card));
+  color: var(--ink);
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s ease-out, background-color 0.15s ease;
+}
+.entry-paste-btn:hover {
+  background: color-mix(in srgb, var(--blue) 10%, var(--card));
+}
+.entry-paste-btn:active {
+  transform: scale(0.985);
+}
+.entry-paste-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.entry-paste-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+}
+.entry-pasted {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--green-bg);
+  color: var(--green-ink);
+  animation: entry-pasted-in 0.28s var(--spring, ease-out) both;
+}
+@keyframes entry-pasted-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.entry-paste-box .textarea {
+  min-height: 132px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+@media (prefers-reduced-motion: reduce) {
+  .entry-pasted {
+    animation: none;
+  }
+  .entry-paste-btn:active {
+    transform: none;
+  }
+}
 
 /* ---------------- not keeping to procedures, from the "+" (components/ProcedureReport.tsx) ---------------- */
 .proc-group {

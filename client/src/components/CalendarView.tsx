@@ -12,6 +12,7 @@ import { dayOrder, isTimed, itemDays, loadByDay, type CalItem } from '@shared/ca
 import { WEEKDAY_NAMES } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { ScheduleEvent, Week } from '@shared/types';
+import { haptic } from '../lib/haptics';
 import { useBulk } from './Bulk';
 import { Icon } from './Icon';
 import type { Anchor } from './Popover';
@@ -159,7 +160,10 @@ function Chip({ item, lane, hourly, past, onOpen, draggable, onDragStart, onDrag
 
 // ---------------- day, a few days and the week ----------------
 
-type Drag = { kind: 'move' | 'resize'; id: number; date: string; start: number; end: number } | { kind: 'create'; date: string; start: number; end: number };
+type Drag = { kind: 'move' | 'resize'; id: number; date: string; start: number; end: number } | { kind: 'create'; date: string; start: number; end: number; touch?: boolean };
+
+/** how long a finger stays on free time before it becomes a new event there (Google Calendar's app: about this) */
+const PRESS_MS = 380;
 
 /** Follows one pointer until it is released (or Escape is pressed). */
 function track(down: ReactPointerEvent, move: (e: PointerEvent) => void, up: (cancelled: boolean) => void) {
@@ -295,8 +299,70 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
     );
   };
 
+  // a finger held on free time (a phone): while the new event is being drawn, the hours do not scroll under it
+  const pressing = useRef(false);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const hold = (e: TouchEvent) => {
+      if (!pressing.current) return;
+      if (e.cancelable) e.preventDefault();
+      // nor does the day turn sideways (the swipe listens above)
+      e.stopPropagation();
+    };
+    el.addEventListener('touchmove', hold, { passive: false });
+    return () => el.removeEventListener('touchmove', hold);
+  }, []);
+
+  /** a finger on free time: held still a moment, a new event of an hour is there; moved while held, its length
+   *  follows the finger; let go, the new event opens - as Google Calendar's app. A finger that moves before
+   *  that scrolls or turns the day, as always; a short tap is the click below. */
+  const pressCreate = (down: ReactPointerEvent<HTMLDivElement>, day: string) => {
+    const col = down.currentTarget;
+    const x0 = down.clientX;
+    const y0 = down.clientY;
+    let current: Extract<Drag, { kind: 'create' }> | null = null;
+    let anchor = 0;
+    const timer = window.setTimeout(() => {
+      anchor = Math.max(0, Math.min(DAY_MINUTES - 60, Math.floor(minutesAt(col, y0) / 15) * 15));
+      current = { kind: 'create', date: day, start: anchor, end: anchor + 60, touch: true };
+      pressing.current = true;
+      suppressClick.current = true;
+      haptic('tick');
+      setDrag(current);
+    }, PRESS_MS);
+    track(
+      down,
+      (m) => {
+        if (!current) {
+          // moved before it was held: a scroll or a swipe, not a new event
+          if (Math.hypot(m.clientX - x0, m.clientY - y0) > 8) window.clearTimeout(timer);
+          return;
+        }
+        // drawn from where it was pressed: down makes it longer (at least the hour), up starts it earlier
+        const at = Math.max(0, Math.min(DAY_MINUTES, snap(minutesAt(col, m.clientY), 15)));
+        const next = at >= anchor ? { start: anchor, end: Math.max(anchor + 60, at) } : { start: at, end: anchor + 15 };
+        if (next.start === current.start && next.end === current.end) return;
+        current = { ...current, ...next };
+        setDrag(current);
+      },
+      () => {
+        window.clearTimeout(timer);
+        pressing.current = false;
+        if (!current) return;
+        const c = current;
+        setDrag(null);
+        // the click that may follow the finger's lift is not another new event
+        suppressClick.current = true;
+        window.setTimeout(() => void (suppressClick.current = false), 400);
+        onCreate({ date: day, start: fromMinutes(c.start), end: fromMinutes(c.end) }, slotAt(col, c.start, c.end));
+      },
+    );
+  };
+
   const startCreate = (down: ReactPointerEvent<HTMLDivElement>, day: string) => {
     suppressClick.current = false;
+    if (down.pointerType === 'touch' && down.isPrimary && down.target === down.currentTarget && !bulk?.active && canCreate(day)) return pressCreate(down, day);
     if (down.button !== 0 || down.pointerType === 'touch' || bulk?.active || !canCreate(day)) return;
     const col = down.currentTarget;
     const anchor = Math.floor(minutesAt(col, down.clientY) / 15) * 15;
@@ -442,6 +508,8 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                 data-date={d}
                 onPointerDown={(ev) => startCreate(ev, d)}
                 onClick={(ev) => clickColumn(ev, d)}
+                // a long press is ours on a phone, not the browser's menu
+                onContextMenu={(ev) => app && ev.target === ev.currentTarget && ev.preventDefault()}
               >
                 {placed.map((p) => {
                   const item = p.item.i;
@@ -514,7 +582,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                   );
                 })}
                 {drag?.kind === 'create' && drag.date === d && (
-                  <div className="gc-event is-ghost" style={{ top: `calc(var(--hour) * ${hours(drag.start)})`, height: `calc(var(--hour) * ${hours(drag.end - drag.start)} - 2px)` }}>
+                  <div className={`gc-event is-ghost${drag.touch ? ' is-pressed' : ''}`} style={{ top: `calc(var(--hour) * ${hours(drag.start)})`, height: `calc(var(--hour) * ${hours(drag.end - drag.start)} - 2px)` }}>
                     <span className="gc-event-title">(ללא כותרת)</span>
                     <span className="gc-event-meta">{range(drag.start, drag.end)}</span>
                   </div>

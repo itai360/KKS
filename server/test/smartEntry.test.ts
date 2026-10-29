@@ -224,7 +224,7 @@ describe("Claude's reading", () => {
           source: 'אבי מזרחי יגיע מחר ⟦1⟧ ת"ז ⟦2⟧',
           why: 'מבקר שמגיע לבסיס',
           date: '2026-10-02',
-          entry: { fullName: 'אבי מזרחי', phone: '⟦1⟧', visitorKind: 'civilian', rank: '', clearance: '', idNumber: '⟦2⟧', escort: false, byCar: false, carNumber: '', carKind: '', reason: 'הרצאה' },
+          entry: { fullName: 'אבי מזרחי', phone: '⟦1⟧', visitorKind: 'civilian', rank: '', clearance: '', idNumber: '⟦2⟧', escort: false, byCar: false, carMilitary: false, carNumber: '', carKind: '', reason: 'הרצאה' },
         }),
         // an id not in the lists, and a ladder key that is not there: dropped, not trusted
         aiItem({ kind: 'note', source: 'מישהו', cadet: 'c999', offense: 'לא קיים' }),

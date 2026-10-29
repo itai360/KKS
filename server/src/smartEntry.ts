@@ -18,6 +18,7 @@ import { DRESS_ITEMS, PROCEDURE_KINDS, procedureOffense } from '../../shared/pro
 import {
   analyzeLocal,
   CADET_KINDS,
+  entryFormats,
   emptyEntry,
   emptyFields,
   SMART_KIND_LABELS,
@@ -94,7 +95,7 @@ const SYSTEM = `You file what the staff of an officers' course write in free Heb
 The kinds (where a thing belongs):
 - discipline: a cadet broke a rule or got a punishment (עונש, ריתוק, שעה/שעות ביציאה, סגירת שבת, נזיפה, שיחת אזהרה, הערת משמעת), or behaved against the rules (איחור, חוצפה, שינה בשיעור, עישון, לא הגיע, שכחה). offense: the key of the matching offense from the course's enforcement ladder (exactly as listed), or null when none fits. formal: true only when the text says a discipline note (הערת משמעת) is given. title: what happened in a few words. details: what was written about it (the punishment given too). date: the day it happened (default today).
 - procedure: the course's quick report of not keeping to procedures. procedure: weapon_left (הפקרת נשק - a weapon left unattended), weapon_back (נשק מאחורה - the weapon carried on the back), phone (a phone where it is not allowed; situation: where/when), dress (דיגום - out of order: dress lists only כומתה, שרוך, גומיות, תג שם), other (another procedure; other: what was not kept, up to 80 characters). Prefer procedure over discipline for these four.
-- entry: a visitor who needs approval to enter the base (אישור כניסה). entry: fullName, phone, visitorKind (soldier when a rank, a personal number or military service is mentioned; civilian otherwise), rank, clearance, idNumber, escort (ליווי), byCar, carNumber, carKind (make and colour), reason. date: the day of the visit.
+- entry: a visitor who needs approval to enter the base (אישור כניסה). entry: fullName, phone, visitorKind (soldier when a rank, a personal number or military service is mentioned; civilian otherwise), rank, clearance, idNumber, escort (ליווי), byCar, carMilitary (a military vehicle), carNumber, carKind (make and colour), reason. date: the day of the visit; endDate: its last day when it lasts several days ("30-31/10").
 - exemption: a cadet excused from something (פטור). subject: from what, in a few words ("ריצות", "נעליים צבאיות"). until: the last day, or null. details: why.
 - note: something about a cadet worth keeping in the file that is not discipline: praise, progress, a personal matter, an observation - and where a cadet is on a day: at home or on leave, at a medical appointment or test, absent, arriving late (not a discipline matter). details: what was written (with the days). title: a few words ("בבית · היום", "תור לרופא · 30.10").
   A cadet sick (גימלים, ill, sent home sick) is an exemption, not a note: subject "גימלים", until the last day (today when only today), details what was written.
@@ -164,6 +165,7 @@ const itemSchema = z.object({
       idNumber: z.string(),
       escort: z.boolean(),
       byCar: z.boolean(),
+      carMilitary: z.boolean().describe('true for a military vehicle (רכב צבאי), false for a private one'),
       carNumber: z.string(),
       carKind: z.string(),
       reason: z.string(),
@@ -328,11 +330,15 @@ export async function analyzeSmart(actor: UserRow, raw: unknown): Promise<SmartA
   if (!text) throw badRequest('כתבו מה להזין');
   if (text.length > SMART_MAX_CHARS) throw badRequest(`הטקסט ארוך מדי - עד ${SMART_MAX_CHARS} תווים בכל פעם`);
   const ctx = smartContext(actor);
+  // the base's entry format pasted as it came: read here, field by field - exact, and the visitor's details
+  // never leave the server; only what is left of the text goes on to be read
+  const formats = entryFormats(text, today());
+  const restText = formats.items.length ? formats.rest : text;
   let items: SmartItem[] | null = null;
   let source: SmartAnalysis['source'] = 'local';
-  if (aiOn()) {
+  if (aiOn() && restText.trim()) {
     try {
-      const ai = await askClaude(text, ctx, actor);
+      const ai = await askClaude(restText, ctx, actor);
       if (ai.length) {
         items = ai;
         source = 'ai';
@@ -341,7 +347,8 @@ export async function analyzeSmart(actor: UserRow, raw: unknown): Promise<SmartA
       console.error('[smart-entry] Claude did not read it, the built-in reading instead:', (e as Error)?.message);
     }
   }
-  items ??= analyzeLocal(text, ctx);
+  items ??= restText.trim() ? analyzeLocal(restText, ctx) : [];
+  items = [...formats.items, ...items];
   return { source, aiAvailable: aiOn(), items: items.slice(0, SMART_MAX_ITEMS).map((it) => enrich(actor, it)) };
 }
 
@@ -385,7 +392,7 @@ function fileOne(actor: UserRow, kind: SmartKind, f: SmartFields): Omit<SmartRes
     }
     case 'entry': {
       const e = { ...emptyEntry(), ...(f.entry ?? {}) };
-      createEntry(actor, { ...e, visitDate: f.date });
+      createEntry(actor, { ...e, visitDate: f.date, visitEndDate: f.endDate && f.date && f.endDate > f.date ? f.endDate : '' });
       return { message: `בקשת אישור כניסה ל${e.fullName} נשלחה למפקד הקורס`, link: '/entries' };
     }
     case 'exemption':

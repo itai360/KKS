@@ -4,8 +4,8 @@
 // after the visit (housekeeping, automation.ts).
 
 import { z } from 'zod';
-import { isDateKey, localDateKey } from '../../shared/dates';
-import { fullDate, VISITOR_KINDS, type EntryFields } from '../../shared/entry';
+import { diffDays, isDateKey, localDateKey } from '../../shared/dates';
+import { VISITOR_KINDS, visitDaysLong, type EntryFields } from '../../shared/entry';
 import type { EntryRequest } from '../../shared/types';
 import { commanderIds, type UserRow } from './auth';
 import { badRequest, clock, forbidden, notFound, nowIso, patchSchema, tz } from './core';
@@ -19,6 +19,7 @@ export const ENTRY_KEEP_DAYS = 7;
 interface Row {
   id: number;
   visit_date: string;
+  visit_end_date: string | null;
   full_name: string;
   phone: string;
   visitor_kind: EntryFields['visitorKind'];
@@ -27,9 +28,12 @@ interface Row {
   id_number: string;
   escort: number;
   by_car: number;
+  car_military: number;
   car_number: string;
   car_kind: string;
   reason: string;
+  unit: string;
+  camp: string;
   status: EntryRequest['status'];
   created_by: number | null;
   created_by_name: string | null;
@@ -45,6 +49,7 @@ const canEdit = (actor: UserRow, r: Pick<Row, 'created_by' | 'status'>) => isCom
 
 const fieldsOf = (r: Row): EntryFields => ({
   visitDate: r.visit_date,
+  visitEndDate: r.visit_end_date ?? '',
   fullName: r.full_name,
   phone: r.phone,
   visitorKind: r.visitor_kind,
@@ -53,9 +58,12 @@ const fieldsOf = (r: Row): EntryFields => ({
   idNumber: r.id_number,
   escort: !!r.escort,
   byCar: !!r.by_car,
+  carMilitary: !!r.car_military,
   carNumber: r.car_number,
   carKind: r.car_kind,
   reason: r.reason,
+  unit: r.unit,
+  camp: r.camp,
 });
 
 function toEntry(actor: UserRow, r: Row): EntryRequest {
@@ -90,6 +98,8 @@ const text = (max: number) => z.string().trim().max(max);
 
 export const entrySchema = z.object({
   visitDate: z.string().refine(isDateKey, 'תאריך לא תקין'),
+  /** the last day of a visit of several days; '' for one */
+  visitEndDate: z.union([z.literal(''), z.string().refine(isDateKey, 'תאריך הסיום לא תקין')]).optional().default(''),
   fullName: z.string().trim().min(2, 'חובה לכתוב את השם המלא').max(80),
   phone: z.string().trim().regex(/^[0-9+\-\s()]{9,20}$/, 'מספר הטלפון לא תקין'),
   visitorKind: z.enum(VISITOR_KINDS),
@@ -98,9 +108,13 @@ export const entrySchema = z.object({
   idNumber: z.string().trim().regex(/^[0-9]{5,10}$/, 'מספר אישי או ת"ז - ספרות בלבד'),
   escort: z.boolean().optional().default(false),
   byCar: z.boolean().optional().default(false),
+  carMilitary: z.boolean().optional().default(false),
   carNumber: text(20).optional().default(''),
   carKind: text(60).optional().default(''),
   reason: z.string().trim().min(2, 'חובה לכתוב את סיבת ההגעה').max(300),
+  /** where the visitor comes, as a pasted format said it: '' - the course's own (settings) */
+  unit: text(80).optional().default(''),
+  camp: text(80).optional().default(''),
 });
 const entryPatch = patchSchema(entrySchema);
 
@@ -108,6 +122,7 @@ const today = () => localDateKey(clock.now(), tz());
 
 /** what one field says about another: a soldier's rank, a car's number and make */
 function check(e: EntryFields): void {
+  if (e.visitEndDate && diffDays(e.visitEndDate, e.visitDate) > 31) throw badRequest('ביקור ארוך מחודש - בקשה לכל חודש בנפרד');
   if (e.visitorKind === 'soldier' && !e.rank.trim()) throw badRequest('לחייל צריך דרגה');
   if (e.byCar && !e.carNumber.trim()) throw badRequest('מגיע ברכב - חסר מספר הרכב');
   if (e.byCar && !e.carKind.trim()) throw badRequest('מגיע ברכב - חסרים סוג וצבע הרכב');
@@ -116,7 +131,9 @@ function check(e: EntryFields): void {
 /** what is kept: a civilian has no rank, one on foot no car */
 const tidy = (e: EntryFields): EntryFields => ({
   ...e,
+  visitEndDate: e.visitEndDate && e.visitEndDate > e.visitDate ? e.visitEndDate : '',
   rank: e.visitorKind === 'soldier' ? e.rank : '',
+  carMilitary: e.byCar && e.carMilitary,
   carNumber: e.byCar ? e.carNumber : '',
   carKind: e.byCar ? e.carKind : '',
 });
@@ -127,9 +144,10 @@ export function createEntry(actor: UserRow, raw: unknown): number {
   if (e.visitDate < today()) throw badRequest('תאריך הביקור כבר עבר');
   const id = db().tx(() => {
     const id = db().run(
-      `INSERT INTO entry_requests(visit_date, full_name, phone, visitor_kind, rank, clearance, id_number, escort, by_car, car_number, car_kind, reason, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO entry_requests(visit_date, visit_end_date, full_name, phone, visitor_kind, rank, clearance, id_number, escort, by_car, car_military, car_number, car_kind, reason, unit, camp, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       e.visitDate,
+      e.visitEndDate || null,
       e.fullName,
       e.phone,
       e.visitorKind,
@@ -138,9 +156,12 @@ export function createEntry(actor: UserRow, raw: unknown): number {
       e.idNumber,
       e.escort ? 1 : 0,
       e.byCar ? 1 : 0,
+      e.carMilitary ? 1 : 0,
       e.carNumber,
       e.carKind,
       e.reason,
+      e.unit,
+      e.camp,
       actor.id,
       nowIso(),
     ).id;
@@ -151,7 +172,7 @@ export function createEntry(actor: UserRow, raw: unknown): number {
         type: 'entry',
         category: 'action',
         title: `אישור כניסה: ${e.fullName}`,
-        body: `${fullDate(e.visitDate)} · ${e.reason} · ביקש/ה: ${actor.display_name}`,
+        body: `${visitDaysLong(e.visitDate, e.visitEndDate)} · ${e.reason} · ביקש/ה: ${actor.display_name}`,
         link: `/entries#entry-${id}`,
         ref: `entry:${id}`,
       },
@@ -172,9 +193,10 @@ export function updateEntry(actor: UserRow, id: number, raw: unknown): void {
   check(e);
   if (e.visitDate !== r.visit_date && e.visitDate < today()) throw badRequest('תאריך הביקור כבר עבר');
   db().run(
-    `UPDATE entry_requests SET visit_date = ?, full_name = ?, phone = ?, visitor_kind = ?, rank = ?, clearance = ?, id_number = ?, escort = ?, by_car = ?,
-       car_number = ?, car_kind = ?, reason = ? WHERE id = ?`,
+    `UPDATE entry_requests SET visit_date = ?, visit_end_date = ?, full_name = ?, phone = ?, visitor_kind = ?, rank = ?, clearance = ?, id_number = ?, escort = ?, by_car = ?,
+       car_military = ?, car_number = ?, car_kind = ?, reason = ?, unit = ?, camp = ? WHERE id = ?`,
     e.visitDate,
+    e.visitEndDate || null,
     e.fullName,
     e.phone,
     e.visitorKind,
@@ -183,9 +205,12 @@ export function updateEntry(actor: UserRow, id: number, raw: unknown): void {
     e.idNumber,
     e.escort ? 1 : 0,
     e.byCar ? 1 : 0,
+    e.carMilitary ? 1 : 0,
     e.carNumber,
     e.carKind,
     e.reason,
+    e.unit,
+    e.camp,
     id,
   );
   changed('entries');
@@ -201,7 +226,7 @@ export function markEntrySent(actor: UserRow, id: number, sent: boolean): void {
       db().run("UPDATE entry_requests SET status = 'sent', sent_at = ?, sent_by = ? WHERE id = ?", nowIso(), actor.id, id);
       notify(
         [r.created_by],
-        { type: 'entry_sent', category: 'info', title: `אישור הכניסה של ${r.full_name} נשלח לבסיס`, body: fullDate(r.visit_date), link: '/entries', ref: `entry:${id}` },
+        { type: 'entry_sent', category: 'info', title: `אישור הכניסה של ${r.full_name} נשלח לבסיס`, body: visitDaysLong(r.visit_date, r.visit_end_date ?? ''), link: '/entries', ref: `entry:${id}` },
         actor.id,
       );
     } else {

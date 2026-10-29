@@ -187,7 +187,7 @@ export function housekeeping(now: Date): number {
     // reminders and briefs sent once: their marks outlive what they were about
     removed += db().run('DELETE FROM automation_marks WHERE at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
     // a visitor's details, a week after the visit
-    removed += db().run('DELETE FROM entry_requests WHERE visit_date < ?', addDays(today, -ENTRY_KEEP_DAYS)).changes;
+    removed += db().run('DELETE FROM entry_requests WHERE COALESCE(visit_end_date, visit_date) < ?', addDays(today, -ENTRY_KEEP_DAYS)).changes;
     // reminders sent for events long over
     removed += db().run('DELETE FROM event_reminders_sent WHERE starts_at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
   });
