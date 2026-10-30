@@ -4426,6 +4426,31 @@
   .gside .rail-foot {
     background: var(--g-sheet);
   }
+  /* a window floating over the page - a window in a window, rounded, clear of every edge of the screen and of
+     the clock - not a strip glued to the side and cut off under the clock */
+  .rail.gside {
+    inset-block: calc(env(safe-area-inset-top, 0px) + 10px) calc(env(safe-area-inset-bottom, 0px) + 10px);
+    inset-inline-start: calc(env(safe-area-inset-right, 0px) + 10px);
+    width: min(320px, calc(100vw - 64px));
+    height: auto;
+    margin: 0;
+    padding: 0 8px;
+    border-radius: 28px;
+  }
+  .app.menu-open .rail.gside {
+    box-shadow:
+      0 30px 70px -18px rgba(0, 0, 0, 0.45),
+      0 0 0 0.5px var(--line-2);
+  }
+  .gside .gside-top {
+    min-height: 60px;
+    padding-top: 6px;
+  }
+  /* the person and leaving: across the window's foot, its own rounded corners below */
+  .gside .rail-foot {
+    margin: auto -8px 0;
+    padding: 10px 16px 12px;
+  }
   /* the menu's top names the course only - the tab's own name is the heading under it */
   .gside .gside-top .brand-sub {
     display: none;
