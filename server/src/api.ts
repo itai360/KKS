@@ -37,6 +37,7 @@ import { streamHandler } from './realtime';
 import { v3Router } from './api3';
 import { gcalRouter } from './gcalApi';
 import { driveCallback, takpatzRouter } from './takpatzRoutes';
+import { calendarStatus, connectFailure, connectUrl, disconnect, eventGoogle, finishConnect, googleOfMany, setCourseTarget, signInWaiting, setEventTarget, syncAfterChange, syncGoogle, takeCalendarRequest } from './gcalSync';
 import { newPassword } from './netguard';
 import { completeSignIn, disable, enable, issueTicket, recoveryLeft, regenerateRecovery, startSetup, turnOff } from './twofactor';
 import { shareTarget } from './alignment';
@@ -128,6 +129,16 @@ import { createTrack, deleteTrack, getTrack, listTracks, trackDetail, updateTrac
 
 /** The address the app is reached at, for links that leave it (calendar feeds). */
 const origin = (req: Request) => `${req.protocol}://${req.host}`;
+/** an event as the screen reads it, with its copy in Google */
+const detailOf = (actor: UserRow, eid: number) => ({ ...eventDetail(actor, eid), google: eventGoogle(eid) });
+/** the Google calendar chosen with an event: undefined - none said; null or '' - none; else its id */
+const googleChoice = (body: unknown): string | null | undefined => {
+  const v = (body as { googleCalendarId?: unknown } | null)?.googleCalendarId;
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  if (typeof v !== 'string' || v.length > 300) throw badRequest('יומן Google לא תקין');
+  return v;
+};
 
 const id = (v: unknown): number => {
   const n = Number(v);
@@ -272,8 +283,29 @@ export function apiRouter(): Router {
   // the body is read only for someone signed in: a stranger cannot make the server hold large uploads
   r.post('/share-target', (req, res, next) => (req.user ? next() : res.redirect(303, '/alignment?share=login')), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), shareTarget);
 
-  // Google's sign-in for saving a takpatz to Drive comes back here; it checks who is signed in itself
-  r.get('/google/drive/callback', (req, res, next) => void driveCallback(req, res).catch(next));
+  // Google's sign-in comes back here - for saving a takpatz to Drive, or for connecting Google Calendar (the
+  // same return address, so the Google client needs no other); each checks who is signed in itself
+  r.get('/google/drive/callback', (req, res, next) => {
+    const state = String((req.query as Record<string, unknown>).state ?? '');
+    // started a moment ago on another copy of the server: this one reads the newest data first (cloud.ts runs
+    // a "not found" again on it) before saying the sign-in expired
+    if (req.headers['x-kks-fresh'] === '0' && !signInWaiting(state)) return next(notFound('החיבור ל-Google לא נמצא'));
+    const cal = takeCalendarRequest(state);
+    if (!cal) return void driveCallback(req, res).catch(next);
+    void (async () => {
+      const q = req.query as Record<string, string | undefined>;
+      const back = (result: string) => res.redirect(303, `${cal.back}${cal.back.includes('?') ? '&' : '?'}gcal=${result}`);
+      if (!req.user || req.user.id !== cal.userId) return back('denied');
+      if (q.error || !q.code) return back('cancelled');
+      try {
+        await finishConnect(cal.userId, String(q.code), cal.verifier, origin(req));
+        back('connected');
+      } catch (e) {
+        console.error('google calendar connect failed:', (e as Error).message);
+        back(connectFailure((e as Error).message));
+      }
+    })().catch(next);
+  });
 
   r.use(requireAuth);
 
@@ -898,7 +930,9 @@ export function apiRouter(): Router {
     const today = localDateKey(clock.now(), tz());
     const from = isDateKey(req.query.from) ? req.query.from : today;
     const to = isDateKey(req.query.to) ? req.query.to : from;
-    res.json(listEventsFor(me(req), from, to));
+    const list = listEventsFor(me(req), from, to);
+    const google = googleOfMany(list.map((e) => e.id));
+    res.json(google.size ? list.map((e) => (google.has(e.id) ? { ...e, google: google.get(e.id) } : e)) : list);
   });
   // the search over the events, as Google Calendar's: ?q= every word; from a year back to a year on, or ?from=&to=
   r.get('/events/search', (req, res) => {
@@ -915,36 +949,81 @@ export function apiRouter(): Router {
     const except = Number(req.query.except);
     res.json(busyOn(me(req), req.query.date, users, Number.isInteger(except) && except > 0 ? except : undefined));
   });
-  r.post('/events', (req, res) => res.json(eventDetail(me(req), createEvent(me(req), req.body))));
+  r.post('/events', async (req, res) => {
+    const eid = createEvent(me(req), req.body);
+    await setEventTarget(me(req), eid, googleChoice(req.body));
+    await syncAfterChange();
+    res.json(detailOf(me(req), eid));
+  });
   // the trash: what was deleted in the last 30 days, back again or gone for good
   r.get('/events/trash', (req, res) => res.json(listTrash(me(req))));
-  r.post('/events/:id/untrash', (req, res) => res.json({ restored: untrashEvent(me(req), id(req.params.id)) }));
-  r.delete('/events/:id/forever', (req, res) => res.json({ deleted: purgeEvent(me(req), id(req.params.id)) }));
+  r.post('/events/:id/untrash', async (req, res) => {
+    const restored = untrashEvent(me(req), id(req.params.id));
+    await syncAfterChange();
+    res.json({ restored });
+  });
+  r.delete('/events/:id/forever', async (req, res) => {
+    const deleted = purgeEvent(me(req), id(req.params.id));
+    await syncAfterChange();
+    res.json({ deleted });
+  });
   // a guest's answer: { response: 'accepted' | 'declined' | 'tentative', scope: 'one' | 'all' }
   r.post('/events/:id/respond', (req, res) => {
     const body = z.object({ response: z.enum(RESPONSES), scope: z.enum(['one', 'all']).optional() }).parse(req.body ?? {});
     respondEvent(me(req), id(req.params.id), body.response, body.scope ?? 'one');
-    res.json(eventDetail(me(req), id(req.params.id)));
+    res.json(detailOf(me(req), id(req.params.id)));
   });
-  r.get('/events/:id', (req, res) => res.json(eventDetail(me(req), id(req.params.id))));
+  r.get('/events/:id', (req, res) => res.json(detailOf(me(req), id(req.params.id))));
   // one of a repeating series: { scope: 'following' | 'all' } takes the change to the rest of it
-  r.patch('/events/:id', (req, res) => {
+  r.patch('/events/:id', async (req, res) => {
     const { scope, ...patch } = (req.body ?? {}) as Record<string, unknown>;
     const out = updateEvent(me(req), id(req.params.id), patch, seriesScope(scope));
-    res.json({ ...eventDetail(me(req), id(req.params.id)), ...out });
+    await setEventTarget(me(req), id(req.params.id), googleChoice(patch));
+    await syncAfterChange();
+    res.json({ ...detailOf(me(req), id(req.params.id)), ...out });
   });
   r.post('/events/:id/shift-tasks', (req, res) => res.json({ shifted: shiftEventTasks(me(req), id(req.params.id), req.body) }));
-  r.post('/events/:id/cancel', (req, res) => {
+  r.post('/events/:id/cancel', async (req, res) => {
     cancelEvent(me(req), id(req.params.id), req.body);
-    res.json(eventDetail(me(req), id(req.params.id)));
+    await syncAfterChange();
+    res.json(detailOf(me(req), id(req.params.id)));
   });
-  r.post('/events/:id/restore', (req, res) => {
+  r.post('/events/:id/restore', async (req, res) => {
     restoreEvent(me(req), id(req.params.id));
-    res.json(eventDetail(me(req), id(req.params.id)));
+    await syncAfterChange();
+    res.json(detailOf(me(req), id(req.params.id)));
   });
-  r.delete('/events/:id', (req, res) => {
+  r.delete('/events/:id', async (req, res) => {
     const deleted = deleteEvent(me(req), id(req.params.id), seriesScope(req.query.scope));
+    await syncAfterChange();
     res.json({ ok: true, deleted });
+  });
+
+  // ---------------- writing into Google Calendar (gcalSync.ts) ----------------
+
+  r.get('/google/calendar', async (req, res) => res.json(await calendarStatus(me(req))));
+  r.post('/google/calendar/connect', (req, res) => {
+    const { back } = z.object({ back: z.string().max(300).optional() }).parse(req.body ?? {});
+    res.json({ url: connectUrl(me(req), origin(req), back) });
+  });
+  r.delete('/google/calendar', async (req, res) => {
+    disconnect(me(req).id);
+    changed('events');
+    res.json(await calendarStatus(me(req)));
+  });
+  // the Google calendar every event of the course's calendar goes to (from today on): the commander's choice
+  r.put('/google/calendar/course', async (req, res) => {
+    const { calendarId } = z.object({ calendarId: z.string().max(300).nullable() }).parse(req.body ?? {});
+    await setCourseTarget(me(req), calendarId);
+    await syncGoogle(4000, 10);
+    changed('events');
+    res.json(await calendarStatus(me(req)));
+  });
+  // what still waits goes out (the calendar asks while some wait)
+  r.post('/google/calendar/sync', async (req, res) => {
+    const out = await syncGoogle(8000, 25);
+    if (out.done) changed('events');
+    res.json({ ...out, status: await calendarStatus(me(req)) });
   });
 
   // ---------------- Google Calendar ----------------
@@ -989,7 +1068,7 @@ export function apiRouter(): Router {
     const today = localDateKey(clock.now(), tz());
     const from = isDateKey(req.query.from) ? req.query.from : today;
     const to = isDateKey(req.query.to) && req.query.to >= from ? req.query.to : from;
-    res.json(await externalEvents(from, to));
+    res.json(await externalEvents(from, to, me(req).id));
   });
 
   // ---------------- views & reports ----------------

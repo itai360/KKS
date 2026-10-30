@@ -28,7 +28,7 @@ import {
   type LayerId,
 } from '@shared/calendarLayers';
 import { addDays, diffDays, isDateKey, parseDateKey, shortDate, startOfWeek, weekdayName } from '@shared/dates';
-import type { Absence, CalendarSource, Debrief, EventDetail, Experience, ExternalEvent, ScheduleEvent, Task, Template } from '@shared/types';
+import type { Absence, CalendarSource, Debrief, EventDetail, Experience, ExternalEvent, GoogleCalendarStatus, ScheduleEvent, Task, Template } from '@shared/types';
 import { AgendaList, MonthDots, scrollBoxOf, scrollToDay } from '../components/Agenda';
 import { BulkScope, useBulk } from '../components/Bulk';
 import { CalendarSettings } from '../components/CalendarSettings';
@@ -57,6 +57,7 @@ import { setCalendarPrefs, useCalendarPrefs } from '../lib/calendarPrefs';
 import { dateKeyOf, fileSize, fmtTime, isoAt, todayKey } from '../lib/format';
 import { useMedia } from '../lib/media';
 import { emitLocalChange } from '../lib/realtime';
+import { useGoogleCalendar } from '../lib/googleWrite';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
 import { useApi, useTick } from '../lib/useApi';
@@ -172,6 +173,18 @@ function BulkBridge({ onReady }: { onReady: (toggle: (() => void) | null) => voi
   }, [bulk, onReady]);
   return null;
 }
+
+/** back from connecting Google Calendar: each outcome in a few words (the return's ?gcal=) */
+const GCAL_RESULTS: Record<string, [string, string]> = {
+  connected: ['Google Calendar מחובר', 'עכשיו באירוע חדש אפשר לבחור באיזה יומן Google הוא יהיה.'],
+  cancelled: ['החיבור ל-Google בוטל', ''],
+  denied: ['החיבור לא הושלם', 'חזרת מ-Google עם משתמש אחר מזה שהתחיל את החיבור.'],
+  scope: ['לא ניתנה הרשאה לערוך אירועים', 'בחלון של Google צריך לסמן את ההרשאה "צפייה ועריכה של אירועים ביומנים שלך".'],
+  redirect: ['Google לא מכיר את כתובת החזרה של האתר', 'בהגדרות הלקוח של Google צריך להוסיף את הכתובת /api/google/drive/callback של האתר.'],
+  client: ['Google לא אישר את מפתחות האתר', 'כדאי לבדוק ש-GOOGLE_CLIENT_SECRET הועתק נכון מאותו לקוח OAuth.'],
+  api: ['ה-Google Calendar API לא מופעל', 'בפרויקט של Google צריך להפעיל את Google Calendar API.'],
+  failed: ['החיבור ל-Google נכשל', 'נסו שוב בעוד רגע.'],
+};
 
 export function SchedulePage() {
   const [params, setParams] = useSearchParams();
@@ -303,7 +316,39 @@ export function SchedulePage() {
   const setCreating = (prefill: EventPrefill) => navigate('/event/new', { state: { prefill } });
   const setEditing = (e: ScheduleEvent) => navigate(editPath(e.id));
   const [google, setGoogle] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(params.get('settings') === 'calendar');
+  // back from Google's sign-in (connecting Google Calendar): what happened, said once; the address left clean
+  useEffect(() => {
+    const result = params.get('gcal');
+    if (!result && !params.get('settings')) return;
+    if (result) {
+      const said = GCAL_RESULTS[result] ?? GCAL_RESULTS.failed;
+      toast({ title: said[0], body: said[1], tone: result === 'connected' ? 'green' : result === 'cancelled' ? 'gray' : 'red' });
+      emitLocalChange('google');
+    }
+    const next = new URLSearchParams(params);
+    next.delete('gcal');
+    next.delete('settings');
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, as the page opens with it
+  }, []);
+  // events still waiting to be written into Google go out while the calendar is open, a batch at a time
+  const gcal = useGoogleCalendar();
+  const waiting = gcal.data?.pending ?? 0;
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setTimeout(() => {
+      void api
+        .post<{ done: number; status: GoogleCalendarStatus }>('/api/google/calendar/sync')
+        .then((r) => {
+          gcal.setData(r.status);
+          if (r.done) emitLocalChange('events');
+        })
+        .catch(() => undefined);
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on each change of how many wait
+  }, [waiting]);
   const [card, setCard] = useState<{ item: CalItem; anchor: Anchor } | null>(null);
   const [draft, setDraft] = useState<(Draft & { anchor: Anchor }) | null>(null);
   const [askDate, setAskDate] = useState(false);

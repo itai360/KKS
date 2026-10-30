@@ -308,6 +308,8 @@ export interface DomainReadiness {
 
 export interface ScheduleEvent {
   id: number;
+  /** its copy in Google Calendar (the calendar's list and an event's own read add it) */
+  google?: EventGoogle | null;
   date: string;
   /** the last day of an event of several days (null or missing: one day) */
   endDate?: string | null;
@@ -389,8 +391,46 @@ export interface TrashedEvent {
 }
 
 /** An event from a Google (or any iCal) calendar shown in the schedule. Read-only. */
+/** an event's copy in Google Calendar (server/src/gcalSync.ts) */
+export interface EventGoogle {
+  calendarId: string;
+  calendarName: string;
+  /** written; waiting to be written; Google refused it (tried again); its account cannot write now */
+  state: 'pending' | 'synced' | 'error' | 'off';
+  error: string | null;
+  /** chosen for it, for its series, or the course's calendar in Google */
+  src: 'event' | 'series' | 'course';
+}
+
+/** a Google calendar one can write events into */
+export interface GoogleCalendarChoice {
+  id: string;
+  summary: string;
+  color: string;
+  primary: boolean;
+}
+
+export interface GoogleCalendarStatus {
+  /** the server has a Google client */
+  available: boolean;
+  connected: boolean;
+  /** connected once, the permission since taken back */
+  reconnect: boolean;
+  email: string;
+  calendars: GoogleCalendarChoice[];
+  error: string | null;
+  /** the Google calendar the course's events go to */
+  course: { calendarId: string; name: string; color: string; ownerName: string; mine: boolean } | null;
+  canSetCourse: boolean;
+  /** waiting to be written; refused or waiting for an account */
+  pending: number;
+  failed: number;
+}
+
 export interface ExternalEvent {
   id: string;
+  /** its id in its calendar (the same event written from here is left out, so it shows once) */
+  uid?: string;
   sourceId: number;
   sourceName: string;
   date: string;
@@ -452,6 +492,8 @@ export interface EventDetail {
   tasks: Task[];
   attachments: Attachment[];
   debriefs: Debrief[];
+  /** its copy in Google Calendar, when it has one (the routes add it) */
+  google?: EventGoogle | null;
 }
 
 export interface TemplateItem {

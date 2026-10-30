@@ -3448,6 +3448,40 @@
   line-height: 1.4;
   color: var(--ink-2);
 }
+.g-set-text b svg {
+  vertical-align: -3px;
+  color: var(--g-blue, var(--focus));
+}
+.g-set-text small.text-red {
+  color: var(--red);
+}
+.g-set-note {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+/* a Google calendar's choice can be long: the select gives way on a narrow screen */
+.g-set .g-set-select {
+  max-width: 48%;
+  text-overflow: ellipsis;
+}
+/* the event card: where it is in Google, and whether Google has it as it is here */
+.ic-google {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 4px;
+}
+.ic-google-ok {
+  color: var(--green-ink, #188038);
+}
+.ic-google-err {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  color: var(--red);
+}
 .g-set-select {
   flex-shrink: 0;
   height: 40px;

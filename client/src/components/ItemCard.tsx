@@ -10,7 +10,10 @@ import { MONTH_NAMES } from '@shared/calendarGrid';
 import type { CalItem } from '@shared/calendarLayers';
 import { DEBRIEF_KIND_LABELS } from '@shared/debriefForms';
 import { parseDateKey, shortDate, weekdayName } from '@shared/dates';
-import type { ScheduleEvent } from '@shared/types';
+import type { EventGoogle, ScheduleEvent } from '@shared/types';
+import { useState } from 'react';
+import { api } from '../lib/api';
+import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { PriorityBadge, StatusBadge } from './Badges';
 import { Icon } from './Icon';
@@ -200,6 +203,11 @@ export function ItemCard({ item, onClose, actions }: { item: CalItem; onClose: (
           {e.visibility === 'private' && <span className="muted small"> · פרטי</span>}
           {e.transparency === 'transparent' && <span className="muted small"> · פנוי</span>}
         </Row>
+        {e.google && (
+          <Row icon="cloud">
+            <GoogleLine g={e.google} />
+          </Row>
+        )}
         {e.ownerName && <Row icon="my">אחראי: {e.ownerName}</Row>}
         {e.taskTotal > 0 && (
           <Row icon="tasks">
@@ -361,5 +369,38 @@ export function ItemCard({ item, onClose, actions }: { item: CalItem; onClose: (
         </div>
       )}
     </div>
+  );
+}
+
+/** where an event is in Google Calendar, and whether Google has it as it is here */
+function GoogleLine({ g }: { g: EventGoogle }) {
+  const [busy, setBusy] = useState(false);
+  const retry = async () => {
+    setBusy(true);
+    try {
+      await api.post('/api/google/calendar/sync');
+      emitLocalChange('events', 'google');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="ic-google">
+      <span>
+        ב-Google Calendar: <b>{g.calendarName || 'יומן Google'}</b>
+      </span>
+      {g.state === 'synced' && <span className="tiny ic-google-ok"> · מעודכן</span>}
+      {g.state === 'pending' && <span className="tiny muted"> · נכנס בעוד רגע</span>}
+      {(g.state === 'error' || g.state === 'off') && (
+        <span className="ic-google-err">
+          <span className="tiny">{g.error ?? 'Google לא קיבל את האירוע'}</span>
+          {g.state === 'error' && (
+            <button type="button" className="link-btn tiny" onClick={() => void retry()} disabled={busy}>
+              {busy ? 'מנסה...' : 'לנסות שוב'}
+            </button>
+          )}
+        </span>
+      )}
+    </span>
   );
 }

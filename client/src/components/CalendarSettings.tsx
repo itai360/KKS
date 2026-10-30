@@ -1,10 +1,16 @@
-// The calendar's own settings, as Google Calendar's (Settings): the reminder an event left as it is gives
-// me - kept on the server, for me alone - and how the calendar looks on this device: what is over drawn
-// paler, the weekend shown or not, and the events I said no to shown (struck through) or not.
+// The calendar's own settings, as Google Calendar's (Settings): writing events into Google Calendar (my
+// account, and for the commander the Google calendar every event of the course goes to), the reminder an
+// event left as it is gives me - kept on the server, for me alone - and how the calendar looks on this
+// device: what is over drawn paler, the weekend shown or not, and the events I said no to shown or not.
 
 import { useEffect, useState } from 'react';
+import type { GoogleCalendarStatus } from '@shared/types';
 import { api } from '../lib/api';
 import { setCalendarPrefs, useCalendarPrefs } from '../lib/calendarPrefs';
+import { connectGoogleCalendar, useGoogleCalendar } from '../lib/googleWrite';
+import { emitLocalChange } from '../lib/realtime';
+import { ask } from './Confirm';
+import { Icon } from './Icon';
 import { useToast } from './Toasts';
 import { Modal } from './ui';
 
@@ -62,6 +68,7 @@ export function CalendarSettings({ onClose }: { onClose: () => void }) {
         </button>
       }
     >
+      <GoogleSection />
       <section className="g-set" aria-labelledby="g-set-alerts">
         <h3 id="g-set-alerts">התראות</h3>
         <label className="g-set-row">
@@ -119,5 +126,105 @@ export function CalendarSettings({ onClose }: { onClose: () => void }) {
         </label>
       </section>
     </Modal>
+  );
+}
+
+/**
+ * Writing into Google Calendar: my account (connected by Google's own sign-in, or let go), the course's
+ * calendar in Google (the commander's choice - every event of the course's calendar from today on), and
+ * what still waits to be written.
+ */
+function GoogleSection() {
+  const toast = useToast();
+  const g = useGoogleCalendar();
+  const s = g.data;
+  const [busy, setBusy] = useState(false);
+  if (!s) return null;
+  const run = async (what: () => Promise<GoogleCalendarStatus | void>, done?: string) => {
+    setBusy(true);
+    try {
+      const next = await what();
+      if (next) g.setData(next);
+      emitLocalChange('events', 'google');
+      if (done) toast({ title: done, tone: 'green' });
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const connect = () => run(() => connectGoogleCalendar('/?settings=calendar'));
+  const disconnect = async () => {
+    if (!(await ask({ title: 'לנתק את Google Calendar?', body: 'אירועים שכבר נכתבו ל-Google יישארו שם. שינויים מעכשיו לא יגיעו אליהם עד שתתחבר שוב.', confirm: 'ניתוק', danger: true }))) return;
+    await run(() => api.del<GoogleCalendarStatus>('/api/google/calendar'), 'החשבון נותק מ-Google');
+  };
+  const setCourse = (calendarId: string | null) =>
+    run(() => api.put<GoogleCalendarStatus>('/api/google/calendar/course', { calendarId }), calendarId ? 'אירועי יומן הקורס ייכנסו ל-Google' : 'אירועי יומן הקורס לא ייכנסו עוד ל-Google');
+  const syncNow = () => run(async () => (await api.post<{ status: GoogleCalendarStatus }>('/api/google/calendar/sync')).status);
+
+  return (
+    <section className="g-set" aria-labelledby="g-set-google">
+      <h3 id="g-set-google">Google Calendar</h3>
+      {!s.available ? (
+        <p className="g-set-note">
+          כדי שאירועים ייכנסו גם ל-Google Calendar צריך להגדיר בשרת את חיבור Google (GOOGLE_CLIENT_ID ו-GOOGLE_CLIENT_SECRET). עד אז אפשר להוסיף את הלו"ז ליומן Google לקריאה בלבד, מ"יומנים נוספים".
+        </p>
+      ) : s.connected ? (
+        <div className="g-set-row">
+          <span className="g-set-text">
+            <b>
+              <Icon name="cloud" size={16} /> מחובר כ-{s.email || 'חשבון Google'}
+            </b>
+            <small>באירוע חדש בוחרים באיזה יומן Google הוא יהיה, וכל שינוי בו מתעדכן שם.</small>
+            {s.error && <small className="text-red">{s.error}</small>}
+          </span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void disconnect()} disabled={busy}>
+            ניתוק
+          </button>
+        </div>
+      ) : (
+        <div className="g-set-row">
+          <span className="g-set-text">
+            <b>{s.reconnect ? 'צריך להתחבר שוב ל-Google' : 'כתיבה לתוך Google Calendar'}</b>
+            <small>{s.reconnect ? 'ההרשאה בוטלה ב-Google. אחרי התחברות האירועים שחיכו ייכנסו.' : 'מתחברים פעם אחת, ואז כל אירוע שמוסיפים כאן נכנס גם ליומן Google שבוחרים - ומתעדכן שם כשמשנים או מוחקים אותו.'}</small>
+          </span>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => void connect()} disabled={busy}>
+            {s.reconnect ? 'התחברות מחדש' : 'חיבור'}
+          </button>
+        </div>
+      )}
+      {s.available && s.canSetCourse && (
+        <label className="g-set-row">
+          <span className="g-set-text">
+            <b>אירועי יומן הקורס ב-Google</b>
+            <small>
+              {s.course
+                ? `כל אירוע ביומן הקורס, מכל הסגל, נכנס גם ל"${s.course.name}"${s.course.mine ? '' : ` (דרך החשבון של ${s.course.ownerName})`}.`
+                : 'בוחרים יומן Google, וכל אירוע ביומן הקורס - מהיום והלאה, מכל אחד בסגל - ייכנס אליו ויתעדכן בו.'}
+            </small>
+          </span>
+          <select className="g-set-select" value={s.course?.calendarId ?? ''} disabled={busy || (!s.connected && !s.course)} onChange={(e) => void setCourse(e.target.value || null)}>
+            <option value="">{s.connected ? 'לא נכנסים ל-Google' : 'קודם מתחברים'}</option>
+            {s.course && !s.calendars.some((c) => c.id === s.course!.calendarId) && <option value={s.course.calendarId}>{s.course.name}</option>}
+            {s.calendars.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.summary}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {s.available && (s.pending > 0 || s.failed > 0) && (
+        <div className="g-set-row">
+          <span className="g-set-text">
+            <b>{s.pending > 0 ? `${s.pending} אירועים ממתינים להיכנס ל-Google` : `${s.failed} אירועים לא נכנסו ל-Google`}</b>
+            <small>{s.failed > 0 && s.pending > 0 ? `ועוד ${s.failed} שלא נכנסו - ננסה שוב.` : 'הם נכנסים לבד; אפשר גם עכשיו.'}</small>
+          </span>
+          <button type="button" className="btn btn-sm" onClick={() => void syncNow()} disabled={busy}>
+            {busy ? 'שולח...' : 'עכשיו'}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

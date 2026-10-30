@@ -9,7 +9,9 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { CAL_COLOR_LABELS, isCalColor, type CalColor } from '@shared/calendarLayers';
 import { addDays, isDateKey } from '@shared/dates';
 import { parseRRule } from '@shared/rrule';
-import type { EventCalendar, EventDetail, EventReminder, ScheduleEvent, Task } from '@shared/types';
+import type { EventCalendar, EventDetail, EventGoogle, EventReminder, ScheduleEvent, Task } from '@shared/types';
+import { CalendarPicker } from '../components/CalendarPicker';
+import { pickBody, pickColor, pickOf, rememberPick, useGoogleCalendar, type CalendarPick } from '../lib/googleWrite';
 import { ask } from '../components/Confirm';
 import { ColorMenu, GuestsEditor, RemindersEditor, RepeatSelect, ScopeDialog, ShiftTasks, type Scope } from '../components/EventDialogs';
 import { FindTime, type FindTimePerson } from '../components/FindTime';
@@ -36,6 +38,8 @@ export interface EventPrefill {
   color?: string | null;
   notes?: string;
   calendar?: EventCalendar;
+  /** the calendar chosen in the quick create, a Google calendar among them */
+  pick?: CalendarPick;
   guests?: { userId: number; optional?: boolean }[];
   recurrence?: string | null;
 }
@@ -59,10 +63,10 @@ export function EventEditorPage() {
       </div>
     );
   }
-  return <Editor key={editing ?? 'new'} event={detail.data?.event ?? null} />;
+  return <Editor key={editing ?? 'new'} event={detail.data?.event ?? null} google={detail.data?.google ?? null} />;
 }
 
-function Editor({ event }: { event: ScheduleEvent | null }) {
+function Editor({ event, google }: { event: ScheduleEvent | null; google: EventGoogle | null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -89,7 +93,11 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
   const [notes, setNotes] = useState(event?.notes ?? pre.notes ?? '');
   const initialColor = event?.color ?? pre.color;
   const [color, setColor] = useState<CalColor | null>(isCalColor(initialColor) && initialColor !== 'blue' ? initialColor : null);
-  const [calendar, setCalendar] = useState<EventCalendar>(event?.calendar ?? pre.calendar ?? (mayCourse(initialDate) ? 'course' : 'personal'));
+  // the calendar it goes in - the course's, one's own, or a Google calendar of one's account
+  const gcal = useGoogleCalendar().data;
+  const initialPick: CalendarPick = event ? pickOf(event, google) : (pre.pick ?? pre.calendar ?? (mayCourse(initialDate) ? 'course' : 'personal'));
+  const [pick, setPick] = useState<CalendarPick>(initialPick);
+  const calendar: EventCalendar = pickBody(pick, gcal, false).calendar;
   const [transparency, setTransparency] = useState(event?.transparency ?? 'opaque');
   const [visibility, setVisibility] = useState(event?.visibility ?? 'default');
   const [reminders, setReminders] = useState<EventReminder[]>(event?.reminders ?? DEFAULT_REMINDERS);
@@ -137,7 +145,7 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
       notes,
       ownerId: ownerValue ? Number(ownerValue) : null,
       color,
-      calendar,
+      ...pickBody(pick, gcal, false),
       transparency,
       visibility,
       // left as Google's default: kept as the default (it follows the default if that ever changes)
@@ -148,7 +156,7 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
       guestsCanSee: perms.see,
       recurrence,
     }),
-    [title, date, allDay, start, end, endDate, place, notes, ownerValue, color, calendar, transparency, visibility, reminders, guests, perms, recurrence, event?.reminders],
+    [title, date, allDay, start, end, endDate, place, notes, ownerValue, color, pick, gcal, transparency, visibility, reminders, guests, perms, recurrence, event?.reminders],
   );
 
   const original = useMemo(
@@ -176,7 +184,11 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
       },
     [event],
   );
-  const patch = original ? changedFields<typeof body>(original, body) : null;
+  const { googleCalendarId: _newGoogle, ...compared } = body;
+  void _newGoogle;
+  const changedPatch = original ? changedFields<typeof compared>(original, compared) : null;
+  // a Google calendar chosen anew: said with the change (the course's again: as the course's events go)
+  const patch = original ? { ...changedPatch, ...(pick !== initialPick ? { googleCalendarId: pickBody(pick, gcal, true).googleCalendarId } : {}) } : null;
   const dirty = event ? !!patch && Object.keys(patch).length > 0 : !!title.trim() || !!place || !!notes || guests.length > 0;
 
   const back = () => {
@@ -202,12 +214,15 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
         const res = await api.patch<EventDetail & { affectedTasks: Task[]; deltaMinutes: number }>(`/api/events/${event.id}`, { ...patch, ...(scope && scope !== 'one' ? { scope } : {}) });
         emitLocalChange('events');
         toast({ title: scope === 'following' || scope === 'all' ? 'האירועים נשמרו' : 'האירוע נשמר', tone: 'green' });
+        if (res.google && (res.google.state === 'error' || res.google.state === 'off')) toast({ title: 'השינוי לא נכנס ל-Google', body: res.google.error ?? '', tone: 'red' });
         if (res.affectedTasks.length) return setAffected({ tasks: res.affectedTasks, delta: res.deltaMinutes, id: event.id });
       } else {
         const res = await api.post<EventDetail>('/api/events', body);
         emitLocalChange('events');
+        rememberPick(pick);
         const rule = recurrence ? parseRRule(recurrence) : null;
-        toast({ title: rule ? 'האירוע החוזר נוצר' : 'האירוע נוצר', body: `${body.title}${res.event.recurrenceText ? ` · ${res.event.recurrenceText}` : ''}`, tone: 'green' });
+        toast({ title: rule ? 'האירוע החוזר נוצר' : 'האירוע נוצר', body: `${body.title}${res.event.recurrenceText ? ` · ${res.event.recurrenceText}` : ''}${res.google?.state === 'synced' ? ` · נוסף גם ל-Google (${res.google.calendarName})` : ''}`, tone: 'green' });
+        if (res.google && (res.google.state === 'error' || res.google.state === 'off')) toast({ title: 'האירוע נשמר, אבל לא נכנס ל-Google', body: res.google.error ?? '', tone: 'red' });
       }
       back();
     } catch (e) {
@@ -389,11 +404,14 @@ function Editor({ event }: { event: ScheduleEvent | null }) {
             </div>
             <div className="g-ed-row">
               <Icon name="calendar" size={20} />
-              <Select className="select g-ed-cal" value={calendar} onChange={(e) => setCalendar(e.target.value as EventCalendar)} aria-label="יומן">
-                <option value="course">יומן הקורס</option>
-                <option value="personal">היומן שלי ({user.displayName})</option>
-              </Select>
-              <ColorMenu value={color} onChange={setColor} calendarColor={calendar === 'course' ? 'blue' : 'teal'} />
+              <CalendarPicker
+                className="select g-ed-cal"
+                value={pick}
+                onChange={setPick}
+                status={gcal}
+                beforeConnect={async () => !dirty || (await ask({ title: 'לעבור לחיבור Google Calendar?', body: 'מה שנכתב כאן ולא נשמר לא יישמר. אחרי החיבור חוזרים לכאן.', confirm: 'מעבר ל-Google' }))}
+              />
+              <ColorMenu value={color} onChange={setColor} calendarColor={pickColor(pick, gcal)} />
               {color && <span className="tiny muted">{CAL_COLOR_LABELS[color]}</span>}
             </div>
             <div className="g-ed-row">

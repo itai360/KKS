@@ -4,15 +4,18 @@
 // Enter saves; "אפשרויות נוספות" opens the whole page with what was typed. Everything is saved through the
 // course's own API, so its rules (who may add to the schedule, who may give a task to whom) are the server's.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CalColor } from '@shared/calendarLayers';
 import { repeatPresets } from '@shared/rrule';
-import type { EventCalendar } from '@shared/types';
+import type { EventCalendar, EventDetail } from '@shared/types';
 import type { EventPrefill } from './Agenda';
 import { api } from '../lib/api';
 import { isoAt } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
+import { isGooglePick, lastPick, pickBody, pickColor, rememberPick, useGoogleCalendar, type CalendarPick } from '../lib/googleWrite';
+import { CalendarPicker } from './CalendarPicker';
+import { ask } from './Confirm';
 import { ColorMenu, RepeatSelect } from './EventDialogs';
 import { Icon } from './Icon';
 import { Popover, type Anchor } from './Popover';
@@ -27,6 +30,8 @@ export interface Draft extends EventPrefill {
   notes?: string;
   color?: string | null;
   calendar?: EventCalendar;
+  /** the calendar chosen, a Google calendar among them (carried to the whole page) */
+  pick?: CalendarPick;
   guests?: { userId: number; optional?: boolean }[];
   recurrence?: string | null;
 }
@@ -58,7 +63,20 @@ export function QuickCreate({
   const [location, setLocation] = useState(draft.location ?? '');
   const [notes, setNotes] = useState('');
   const free = canEvent(draft.date);
-  const [calendar, setCalendar] = useState<EventCalendar>(free ? 'course' : 'personal');
+  const gcal = useGoogleCalendar().data;
+  const [pick, setPick] = useState<CalendarPick>(draft.pick ?? (free ? 'course' : 'personal'));
+  // the Google calendar chosen last time, once the list of one's calendars is here (unless chosen already)
+  const touched = useRef(!!draft.pick);
+  useEffect(() => {
+    const last = lastPick();
+    if (touched.current || !gcal || !last || !isGooglePick(last)) return;
+    if (gcal.calendars.some((c) => `g:${c.id}` === last)) setPick(last);
+  }, [gcal]);
+  const choose = (p: CalendarPick) => {
+    touched.current = true;
+    setPick(p);
+  };
+  const calendar: EventCalendar = pickBody(pick, gcal, false).calendar;
   // the course's calendar, not one who may add to it that day: the event is theirs to run (the server allows that)
   const [owner, setOwner] = useState<string>(draft.ownerId ? String(draft.ownerId) : '');
   const [taskOwner, setTaskOwner] = useState<string>(String(user.id));
@@ -87,6 +105,7 @@ export function QuickCreate({
     ownerId: ownerValue ? Number(ownerValue) : null,
     color,
     calendar,
+    pick,
     guests: guests.map((userId) => ({ userId })),
     recurrence,
   });
@@ -106,13 +125,17 @@ export function QuickCreate({
         location,
         notes,
         ownerId: ownerValue ? Number(ownerValue) : null,
-        calendar,
+        ...pickBody(pick, gcal, false),
         guests: guests.map((userId) => ({ userId })),
         recurrence,
       };
-      const res = await api.post<{ event: { id: number; recurrenceText?: string | null } }>('/api/events', body);
+      const res = await api.post<EventDetail>('/api/events', body);
       emitLocalChange('events');
-      toast({ title: recurrence ? 'האירוע החוזר נוצר' : 'האירוע נוצר', body: `${body.title} · ${res.event.recurrenceText ?? longDay(draft.date)}`, tone: 'green' });
+      rememberPick(pick);
+      const g = res.google;
+      const inGoogle = !g ? '' : g.state === 'synced' ? ` · נוסף גם ל-Google (${g.calendarName})` : g.state === 'pending' ? ` · נכנס ל-Google (${g.calendarName}) בעוד רגע` : '';
+      toast({ title: recurrence ? 'האירוע החוזר נוצר' : 'האירוע נוצר', body: `${body.title} · ${res.event.recurrenceText ?? longDay(draft.date)}${inGoogle}`, tone: 'green' });
+      if (g && (g.state === 'error' || g.state === 'off')) toast({ title: 'האירוע נשמר, אבל לא נכנס ל-Google', body: g.error ?? '', tone: 'red' });
       onSaved('event', res.event.id);
     } catch (e) {
       setError((e as Error).message);
@@ -308,17 +331,14 @@ export function QuickCreate({
             {forcedOwner && <p className="tiny muted qc-note">אירוע שתוסיף ללו"ז הקורס ביום הזה יירשם עליך כאחראי.</p>}
             <div className="qc-row">
               <Icon name="calendar" size={20} />
-              <Select className="select qc-cal" value={calendar} onChange={(e) => setCalendar(e.target.value as EventCalendar)} aria-label="יומן">
-                <option value="course">יומן הקורס</option>
-                <option value="personal">היומן שלי</option>
-              </Select>
+              <CalendarPicker className="select qc-cal" value={pick} onChange={choose} status={gcal} beforeConnect={async () => !title.trim() || (await ask({ title: 'לעבור לחיבור Google Calendar?', body: 'האירוע שבכתיבה לא יישמר. אחרי החיבור חוזרים לכאן ובוחרים יומן.', confirm: 'מעבר ל-Google' }))} />
               <ColorMenu
                 value={color}
                 onChange={(c) => {
                   setColor(c);
                   set({ color: c });
                 }}
-                calendarColor={calendar === 'course' ? 'blue' : 'teal'}
+                calendarColor={pickColor(pick, gcal)}
               />
             </div>
           </>

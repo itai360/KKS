@@ -17,6 +17,7 @@ import { readLimited, safeFetch } from './netguard';
 import { db } from './db';
 import { getFile, putFile, removeFile } from './files';
 import { listEventsFor } from './schedule';
+import { writtenUids } from './gcalSync';
 import { queryTasks, type TaskRow } from './taskRepo';
 import { createWeek, inferWeekNumber, listWeeks, updateWeek } from './weeks';
 
@@ -617,7 +618,7 @@ function expand(source: SourceRow, root: ICAL.Component, from: string, to: strin
 
   const emit = (ev: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null) => {
     if (String(ev.component.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED') return;
-    const base = { sourceId: source.id, sourceName: source.name, title: ev.summary?.trim() || '(ללא כותרת)', location: ev.location?.trim() ?? '' };
+    const base = { sourceId: source.id, sourceName: source.name, uid: String(ev.uid ?? ''), title: ev.summary?.trim() || '(ללא כותרת)', location: ev.location?.trim() ?? '' };
     if (start.isDate) {
       const first = keyOf(start);
       const last = end && end.isDate ? addDays(keyOf(end), -1) : first; // the end date of an all-day event is not included
@@ -710,13 +711,17 @@ export function removeCalendarSource(id: number): void {
 }
 
 /** Events of the connected calendars between two dates (up to two months). */
-export async function externalEvents(from: string, to: string): Promise<ExternalEvent[]> {
+/** `viewerId`: the one reading - what this app wrote into these calendars, and they see here, shows once */
+export async function externalEvents(from: string, to: string, viewerId?: number): Promise<ExternalEvent[]> {
   if (diffDays(to, from) > 62) to = addDays(from, 62);
   const zone = tz();
   const sources = db().all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id');
   const loaded = await Promise.all(sources.map(async (s) => ({ s, c: await loadSource(s.url) })));
+  // what this app wrote into these calendars shows once - as the app's own event
+  const written = viewerId ? writtenUids(viewerId) : new Set<string>();
   return loaded
     .flatMap(({ s, c }) => (c.root ? expandCached(s, c.root, from, to, zone) : []))
+    .filter((e) => !e.uid || !written.has(e.uid))
     .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? ''));
 }
 

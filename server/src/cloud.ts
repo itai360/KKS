@@ -324,6 +324,9 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
       const headers = { ...req.headers };
       delete headers['content-length'];
       delete headers['transfer-encoding'];
+      // the app may ask for the newest data before answering "not found" (a 404 is run again on it): '0' -
+      // this copy was not just read from storage; '1' - it was (a return from Google's sign-in uses it)
+      headers['x-kks-fresh'] = recent ? '0' : '1';
       let out: Injected | null = null;
       for (let attempt = 0; attempt < 8; attempt++) {
         const before = changes();
@@ -333,6 +336,7 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
           if (recent && (out.statusCode === 401 || out.statusCode === 404)) {
             recent = false;
             await ensureFresh(0);
+            headers['x-kks-fresh'] = '1';
             continue;
           }
           break;
@@ -342,6 +346,7 @@ export async function handler(req: IncomingMessage, res: ServerResponse): Promis
         // someone saved first: wait a moment (spreads out simultaneous savers), then run the request again on their data
         await new Promise((r) => setTimeout(r, 20 + Math.random() * 60 * (attempt + 1)));
         await ensureFresh(0);
+        headers['x-kks-fresh'] = '1';
       }
       if (!out) return json(res, 409, { error: 'מישהו עדכן את אותם נתונים באותו רגע. נסו שוב.' });
       send(res, out.statusCode, out.headers, out.rawPayload);
