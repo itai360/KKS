@@ -649,10 +649,13 @@ export function Layout({ children }: { children: ReactNode }) {
     [],
   );
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  // a phone's menu opens on the screens of the tab one is in; "כל המסכים" goes on to every screen, and back
-  const [menuPanel, setMenuPanel] = useState<{ at: 'tab' | 'all'; back: boolean }>({ at: 'tab', back: false });
+  // a phone's menu: on the calendar (home) the calendar's own - its views and calendars - with "כל המסכים" going
+  // on to every screen, and back; on any other screen every screen at once
+  const fullMenu = tab !== 'home';
+  const [menuPanel, setMenuPanel] = useState<{ at: 'tab' | 'all'; back: boolean; forward?: boolean }>({ at: 'tab', back: false });
   useLayoutEffect(() => {
-    if (menuOpen) setMenuPanel({ at: 'tab', back: false });
+    if (menuOpen) setMenuPanel({ at: fullMenu ? 'all' : 'tab', back: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- as it opens
   }, [menuOpen]);
   useEffect(() => {
     setMenuOpen(false);
@@ -750,9 +753,9 @@ export function Layout({ children }: { children: ReactNode }) {
     if (!s.title || !links.length) return null;
     return railGroup(s.title, `rail-group-${i}`, links, s.items.reduce((n, it) => n + (it.count ?? 0), 0));
   });
-  // a phone's menu is the tab's own, as most apps have it: on the calendar its views, what it can do and its
-  // calendars (as Google Calendar's app); on the cadets, the weeks or the tasks, that tab's screens; on any
-  // other screen, control and the staff. "כל המסכים", at its end, goes on to every screen
+  // a phone's menu on the calendar is the calendar's own, as Google Calendar's app has it: its views, what it
+  // can do and its calendars, with "כל המסכים" at its end going on to every screen. Anywhere else the menu is
+  // every screen, by its groups
   const tabSections = sections.filter((s) => s.tab === tab && s.title);
   const calMenu = calBar && (
     <div className="gside-cal" role="group" aria-label="תצוגת היומן">
@@ -813,18 +816,21 @@ export function Layout({ children }: { children: ReactNode }) {
           ))
         )}
         <span className="gside-sep" aria-hidden="true" />
-        <button type="button" className="gside-view gside-all" onClick={() => setMenuPanel({ at: 'all', back: false })}>
+        <button type="button" className="gside-view gside-all" onClick={() => setMenuPanel({ at: 'all', back: false, forward: true })}>
           <Icon name="apps" />
           <span className="rail-label">כל המסכים</span>
           <Icon name="chevronLeft" size={16} className="gside-chev" />
         </button>
       </div>
     ) : (
-      <div key="all" className="gside-panel is-forward">
-        <button type="button" className="gside-back" onClick={() => setMenuPanel({ at: 'tab', back: true })}>
-          <Icon name="chevronRight" size={18} />
-          <span>{TAB_TITLES[tab]}</span>
-        </button>
+      <div key="all" className={`gside-panel${menuPanel.forward ? ' is-forward' : ''}`}>
+        {/* from the calendar's menu: back to it */}
+        {!fullMenu && (
+          <button type="button" className="gside-back" onClick={() => setMenuPanel({ at: 'tab', back: true })}>
+            <Icon name="chevronRight" size={18} />
+            <span>{TAB_TITLES[tab]}</span>
+          </button>
+        )}
         <div className="gside-head">
           <Icon name="apps" />
           <h2>כל המסכים</h2>
