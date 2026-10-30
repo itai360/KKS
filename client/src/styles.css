@@ -4565,10 +4565,14 @@ input::-webkit-date-and-time-value {
   .modal-backdrop {
     padding: 0;
     place-items: end stretch;
+    /* its one row is the whole of it: a sheet's height below is measured against what is in sight */
+    grid-template-rows: minmax(0, 1fr);
   }
   .modal {
     max-width: none;
-    max-height: 92vh;
+    /* never taller than the part of the screen in sight - a keyboard that shrinks the page leaves its head,
+       its title and its close button on the screen, clear of the clock */
+    max-height: min(92vh, calc(100% - env(safe-area-inset-top, 0px) - 6px));
     border-radius: 16px 16px 0 0;
     /* it rises from below the screen and leaves the same way (sheet-out) */
     animation: sheet-in 0.48s var(--spring);
@@ -8501,7 +8505,7 @@ body:has(.app.rail-collapsed) .modal-back {
   }
   /* the dialog rises from the bottom of the screen: the arrow stays clear above it */
   .modal-backdrop:has(.modal-back) .modal {
-    max-height: calc(100dvh - var(--top-h) - 6px);
+    max-height: min(calc(100dvh - var(--top-h) - 6px), calc(100% - env(safe-area-inset-top, 0px) - 6px));
   }
 }
 
@@ -8529,6 +8533,10 @@ html[data-kb] .modal-foot {
 }
 html[data-kb] .fab-dock {
   padding-bottom: 2px;
+}
+/* the top search's results end above the keyboard, not under it */
+html[data-kb] .topbar .search-pop {
+  max-height: calc(var(--vv-top, 0px) + var(--vv-h, 100dvh) - var(--top-h) - 16px);
 }
 
 /* ---------- previous courses (pages/CoursesPage.tsx) ---------- */

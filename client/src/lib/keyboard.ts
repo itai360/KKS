@@ -1,5 +1,6 @@
-// A phone's keyboard does not shrink the page (on an iPhone, and on Android unless asked to): it covers
-// the bottom of it, and the browser slides the whole screen up to show the field. While one is up, the
+// A phone's keyboard mostly does not shrink the page (on an iPhone, and on Android unless asked to): it
+// covers the bottom of it, and the browser slides the whole screen up to show the field - and where it does
+// shrink it (an app on an iPhone's home screen), a dialog taller than what is left still must not go past it. While one is up, the
 // part of the screen still in sight is handed to the stylesheet - its height and where it starts - so a
 // dialog sits in it, above the keyboard, and the field typed in is brought to the middle of the dialog.
 
@@ -48,11 +49,23 @@ export function watchKeyboard(): void {
   const root = document.documentElement;
   let up = false;
   let shownFor: Element | null = null;
+  // the screen's whole height, measured while no keyboard is up. On some phones (an app on an iPhone's home
+  // screen) the keyboard shrinks the page itself as well, so the page's own height cannot tell it is up:
+  // what is in sight, against the whole height, does
+  let whole = Math.max(window.innerHeight, vv.height);
+  let wide = window.innerWidth;
 
   const update = () => {
     const field = document.activeElement;
+    const typing = isTypingField(field);
+    // turned sideways or back: measured again
+    if (window.innerWidth !== wide) {
+      wide = window.innerWidth;
+      whole = Math.max(window.innerHeight, vv.height);
+    } else if (!typing) whole = Math.max(window.innerHeight, vv.height);
+    const covered = Math.max(window.innerHeight, whole) - vv.height;
     // pinching in shrinks what is in sight too - that is not a keyboard
-    const now = isTypingField(field) && vv.scale < 1.05 && window.innerHeight - vv.height > 120;
+    const now = typing && vv.scale < 1.05 && covered > 120;
     if (now) {
       root.style.setProperty('--vv-h', `${Math.round(vv.height)}px`);
       root.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`);
