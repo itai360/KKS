@@ -89,13 +89,18 @@ export function Modal({
       if (el.matches('input, textarea, select') && !el.matches('[data-transient], [type=hidden], [type=file]') && !initial.current.has(el)) initial.current.set(el, fieldValue(el));
     };
     ref.current?.addEventListener('focusin', touched);
-    // prefer an explicit autofocus target, then the first field - never the close button
+    // prefer an explicit autofocus target, then the first field - never the close button. On a phone only the
+    // one asked for: a field focused by itself raises the keyboard over a dialog that is mostly to read or
+    // choose from (the dialog itself takes the focus, for a screen reader)
     const body = ref.current?.querySelector('.modal-body');
+    const touch = typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches;
     const first =
       ref.current?.querySelector<HTMLElement>('[data-autofocus]') ??
-      body?.querySelector<HTMLElement>('input:not([type=hidden]):not([type=checkbox]), textarea, select') ??
-      body?.querySelector<HTMLElement>('button');
-    first?.focus();
+      (touch
+        ? null
+        : (body?.querySelector<HTMLElement>('input:not([type=hidden]):not([type=checkbox]), textarea, select') ?? body?.querySelector<HTMLElement>('button')));
+    if (first) first.focus();
+    else ref.current?.focus({ preventScroll: true });
     const unlock = lockScroll();
     const box = ref.current;
     // the keyboard stays in the dialog while it is the topmost one (its backdrop holds the arrow too)
@@ -217,7 +222,7 @@ export function Modal({
   // stay inside that box's layer, under the phone's bottom bar
   return createPortal(
     <div className="modal-backdrop" ref={backdrop} onMouseDown={(e) => e.target === e.currentTarget && void tryClose.current()}>
-      <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref}>
+      <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref} tabIndex={-1}>
         {closable && <div className="modal-grab" aria-hidden="true" />}
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>

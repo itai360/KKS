@@ -15139,3 +15139,8 @@ tr.is-finished.is-folding {
     color: #000;
   }
 }
+
+/* a dialog that takes the focus itself (a phone, nothing to type in first): no ring around the whole of it */
+.modal:focus {
+  outline: none;
+}
