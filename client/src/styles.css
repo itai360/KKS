@@ -4663,7 +4663,7 @@ input::-webkit-date-and-time-value {
     outline-offset: -2px;
   }
   .bottom-nav .active {
-    color: var(--tint);
+    color: var(--bar-on);
     /* a detail cut out of a filled symbol is drawn in the colour under it: the mark's */
     --bar-bg: var(--bar-mark);
   }
@@ -4711,16 +4711,16 @@ input::-webkit-date-and-time-value {
     stroke: var(--bar-bg);
     stroke-width: 4.4;
   }
-  /* the "+": a round button of the tint, turning into a close mark while its menu is open */
+  /* the "+": a round button (the tint by day, white at night), turning into a close mark while its menu is open */
   .bottom-nav .plus {
     width: 44px;
     height: 44px;
     border-radius: 50%;
     display: grid;
     place-items: center;
-    background: var(--tint-fill);
-    color: #fff;
-    box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--tint-fill) 70%, transparent);
+    background: var(--bar-plus);
+    color: var(--bar-plus-ink);
+    box-shadow: 0 6px 16px -6px var(--bar-plus-shadow);
     transition:
       transform 0.15s,
       width 0.42s var(--spring),
