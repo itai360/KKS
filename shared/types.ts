@@ -451,6 +451,9 @@ export interface CalendarSource {
   error: string | null;
   /** read for the first time, Google still sending it */
   loading: boolean;
+  /** the calendar's id in Google (its Google address holds it; not the secret part): to write events into it
+   *  once one's Google account is connected. null: not a Google calendar */
+  googleId: string | null;
 }
 
 /** the Google calendars the plan documents read (server/src/calendar.ts) */

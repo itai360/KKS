@@ -153,7 +153,7 @@ describe('Google calendars in the schedule', () => {
     const added = await c.cmd.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL.replace('https://', 'webcal://') });
     expect(added.status).toBe(200);
     // the secret address stays on the server - the commander's browser included
-    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', color: null, error: null, loading: false }]);
+    expect(added.body).toEqual([{ id: expect.any(Number), name: 'יומן סגל', calendarName: 'סגל', color: null, error: null, loading: false, googleId: 'abc@group.calendar.google.com' }]);
     expect(asked).toEqual([GOOGLE_URL]);
 
     const events = (await c.s1.get('/api/calendar/external?from=2026-09-28&to=2026-10-18')).body;
@@ -175,7 +175,7 @@ describe('Google calendars in the schedule', () => {
     expect(asked).toHaveLength(1); // fetched once, kept for a few minutes
 
     // staff see which calendars are shown, not their secret addresses
-    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', color: null, error: null, loading: false }]);
+    expect((await c.s1.get('/api/calendar/sources')).body).toEqual([{ id: added.body[0].id, name: 'יומן סגל', calendarName: 'סגל', color: null, error: null, loading: false, googleId: 'abc@group.calendar.google.com' }]);
     expect(JSON.stringify((await c.cmd.get('/api/calendar/sources')).body)).not.toContain('private-');
 
     expect((await c.cmd.del(`/api/calendar/sources/${added.body[0].id}`)).body).toEqual([]);
@@ -234,6 +234,21 @@ describe('Google calendars in the schedule', () => {
     expect((await c.cmd.patch(`/api/calendar/sources/${id}`, { color: 'neon' })).status).toBe(400);
     expect((await c.s1.patch(`/api/calendar/sources/${id}`, { color: 'basil' })).status).toBe(403);
     expect((await c.cmd.patch('/api/calendar/sources/9999', { color: 'basil' })).status).toBe(404);
+  });
+
+  it("says each connected Google calendar's id - never its secret part - so events can be written into it", async () => {
+    setCalendarFetcher(async () => GOOGLE_ICS);
+    await c.cmd.post('/api/calendar/sources', { name: 'יומן סגל', url: GOOGLE_URL });
+    setCalendarFetcher(async () => GOOGLE_ICS);
+    await c.cmd.post('/api/calendar/sources', { name: 'אחר', url: 'https://example.com/team.ics' });
+    const listed = (await c.s1.get('/api/calendar/sources')).body as { name: string; googleId: string | null }[];
+    const id = decodeURIComponent(/\/ical\/([^/]+)\//.exec(GOOGLE_URL)![1]);
+    expect(listed.map((x) => [x.name, x.googleId])).toEqual([
+      ['יומן סגל', id],
+      ['אחר', null],
+    ]);
+    const secret = /\/(private-[^/]+)\//.exec(GOOGLE_URL)?.[1];
+    if (secret) expect(JSON.stringify(listed)).not.toContain(secret);
   });
 
   it('a calendar connected without a name takes the one it has in Google', async () => {

@@ -247,6 +247,18 @@ function googleIcal(u: URL, depth: number): string | null {
   return `https://calendar.google.com/calendar/ical/${encodeURIComponent(id)}/public/basic.ics`;
 }
 
+/** the calendar's id in a Google calendar's iCal address ("…/ical/<id>/private-…/basic.ics"): never the secret part */
+export function googleIdOfUrl(url: string): string | null {
+  const m = /^https:\/\/calendar\.google\.com\/calendar\/ical\/([^/]+)\/(?:public|private-[^/]+)\/basic\.ics$/.exec(url);
+  if (!m) return null;
+  try {
+    const id = decodeURIComponent(m[1]);
+    return CALENDAR_ID.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 /** a Google calendar's iCal address: "public" or "private" (its secret one) */
 function googleKind(url: string): 'public' | 'private' | null {
   const m = /^https:\/\/calendar\.google\.com\/calendar\/ical\/[^/]+\/(public|private-[^/]+)\/basic\.ics$/.exec(url);
@@ -682,6 +694,7 @@ export function listCalendarSources(): CalendarSource[] {
       color: isGoogleColor(r.color) ? r.color : null,
       error: cache.get(r.url)?.error ?? null,
       loading: reading.has(r.url) && !cache.get(r.url)?.root,
+      googleId: googleIdOfUrl(r.url),
     }));
 }
 

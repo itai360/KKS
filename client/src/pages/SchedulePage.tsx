@@ -332,6 +332,21 @@ export function SchedulePage() {
     setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, as the page opens with it
   }, []);
+  // sent to the calendar's settings while already here (the calendar picker's "להגדרות יומן"): they open
+  const wantsSettings = params.get('settings') === 'calendar';
+  useEffect(() => {
+    if (!wantsSettings) return;
+    setSettingsOpen(true);
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        next.delete('settings');
+        return next;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- when the address asks for them
+  }, [wantsSettings]);
   // events still waiting to be written into Google go out while the calendar is open, a batch at a time
   const gcal = useGoogleCalendar();
   const waiting = gcal.data?.pending ?? 0;

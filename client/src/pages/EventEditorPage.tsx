@@ -409,7 +409,7 @@ function Editor({ event, google }: { event: ScheduleEvent | null; google: EventG
                 value={pick}
                 onChange={setPick}
                 status={gcal}
-                beforeConnect={async () => !dirty || (await ask({ title: 'לעבור לחיבור Google Calendar?', body: 'מה שנכתב כאן ולא נשמר לא יישמר. אחרי החיבור חוזרים לכאן.', confirm: 'מעבר ל-Google' }))}
+                unsaved={dirty}
               />
               <ColorMenu value={color} onChange={setColor} calendarColor={pickColor(pick, gcal)} />
               {color && <span className="tiny muted">{CAL_COLOR_LABELS[color]}</span>}

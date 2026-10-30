@@ -15,7 +15,6 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { isGooglePick, lastPick, pickBody, pickColor, rememberPick, useGoogleCalendar, type CalendarPick } from '../lib/googleWrite';
 import { CalendarPicker } from './CalendarPicker';
-import { ask } from './Confirm';
 import { ColorMenu, RepeatSelect } from './EventDialogs';
 import { Icon } from './Icon';
 import { Popover, type Anchor } from './Popover';
@@ -331,7 +330,7 @@ export function QuickCreate({
             {forcedOwner && <p className="tiny muted qc-note">אירוע שתוסיף ללו"ז הקורס ביום הזה יירשם עליך כאחראי.</p>}
             <div className="qc-row">
               <Icon name="calendar" size={20} />
-              <CalendarPicker className="select qc-cal" value={pick} onChange={choose} status={gcal} beforeConnect={async () => !title.trim() || (await ask({ title: 'לעבור לחיבור Google Calendar?', body: 'האירוע שבכתיבה לא יישמר. אחרי החיבור חוזרים לכאן ובוחרים יומן.', confirm: 'מעבר ל-Google' }))} />
+              <CalendarPicker className="select qc-cal" value={pick} onChange={choose} status={gcal} unsaved={!!title.trim()} />
               <ColorMenu
                 value={color}
                 onChange={(c) => {

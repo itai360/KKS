@@ -3461,6 +3461,16 @@
   line-height: 1.5;
   color: var(--ink-2);
 }
+.g-set-note p {
+  margin: 0;
+}
+.g-set-note ol {
+  margin: 6px 0 0;
+  padding-inline-start: 20px;
+}
+.g-set-note li + li {
+  margin-top: 4px;
+}
 /* a Google calendar's choice can be long: the select gives way on a narrow screen */
 .g-set .g-set-select {
   max-width: 48%;

@@ -166,9 +166,14 @@ function GoogleSection() {
     <section className="g-set" aria-labelledby="g-set-google">
       <h3 id="g-set-google">Google Calendar</h3>
       {!s.available ? (
-        <p className="g-set-note">
-          כדי שאירועים ייכנסו גם ל-Google Calendar צריך להגדיר בשרת את חיבור Google (GOOGLE_CLIENT_ID ו-GOOGLE_CLIENT_SECRET). עד אז אפשר להוסיף את הלו"ז ליומן Google לקריאה בלבד, מ"יומנים נוספים".
-        </p>
+        <div className="g-set-note">
+          <p>כדי להוסיף אירועים ליומני Google צריך להגדיר פעם אחת את החיבור ל-Google. עד אז היומנים שחוברו בכתובת שלהם ("יומנים נוספים") מוצגים כאן לקריאה בלבד.</p>
+          <ol>
+            <li>ב-Google Cloud Console, בפרויקט של האתר: להפעיל את Google Calendar API, ובמסך ההסכמה (OAuth consent screen) להוסיף את ההרשאות calendar.events ו-calendar.calendarlist.readonly.</li>
+            <li>ב-Vercel, בהגדרות הפרויקט: להגדיר את GOOGLE_CLIENT_ID ו-GOOGLE_CLIENT_SECRET (אותו לקוח של השמירה ב-Drive), ולפרוס מחדש.</li>
+            <li>כאן: "חיבור" - וכל אחד בסגל מחבר את החשבון שלו.</li>
+          </ol>
+        </div>
       ) : s.connected ? (
         <div className="g-set-row">
           <span className="g-set-text">
