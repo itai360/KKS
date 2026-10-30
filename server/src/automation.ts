@@ -15,7 +15,7 @@ import { involvedIds, queryTasks } from './taskRepo';
 import { applyTemplate } from './templates';
 import { weeklyDebriefTasks } from './weeklyDebriefTask';
 import { experienceFeedbackTasks } from './cadets';
-import { ENTRY_KEEP_DAYS } from './entries';
+import { ENTRY_KEEP_DAYS, ENTRY_UNSENT_KEEP_DAYS } from './entries';
 import { extendRecurrences, purgeOldTrash, sendEventReminders } from './schedule';
 
 export interface AutomationResult {
@@ -186,8 +186,12 @@ export function housekeeping(now: Date): number {
     removed += db().run('DELETE FROM login_lockouts WHERE until < ?', now.getTime()).changes;
     // reminders and briefs sent once: their marks outlive what they were about
     removed += db().run('DELETE FROM automation_marks WHERE at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
-    // a visitor's details, a week after the visit
-    removed += db().run('DELETE FROM entry_requests WHERE COALESCE(visit_end_date, visit_date) < ?', addDays(today, -ENTRY_KEEP_DAYS)).changes;
+    // a visitor's details: a week after they were sent to the base, a month after they were written if never sent
+    removed += db().run(
+      "DELETE FROM entry_requests WHERE (status = 'sent' AND sent_at < ?) OR (status <> 'sent' AND created_at < ?)",
+      ago(ENTRY_KEEP_DAYS),
+      ago(ENTRY_UNSENT_KEEP_DAYS),
+    ).changes;
     // reminders sent for events long over
     removed += db().run('DELETE FROM event_reminders_sent WHERE starts_at < ?', ago(READ_NOTIFICATIONS_DAYS)).changes;
   });

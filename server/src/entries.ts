@@ -1,25 +1,25 @@
 // Visitors' entry to the base (אישור כניסה): anyone on the staff asks for one, and the commander gets it at
 // once - in the app and on the phone - with the message ready in the base's format, sends it on and marks it
-// sent. Personal details: each request is seen only by its writer and the commander, and is gone a week
-// after the visit (housekeeping, automation.ts).
+// sent. No dates: who comes and why. Personal details: each request is seen only by its writer and the
+// commander, and is gone a week after it was sent to the base - or, never sent, a month after it was written
+// (housekeeping, automation.ts).
 
 import { z } from 'zod';
-import { diffDays, isDateKey, localDateKey } from '../../shared/dates';
-import { VISITOR_KINDS, visitDaysLong, type EntryFields } from '../../shared/entry';
+import { VISITOR_KINDS, type EntryFields } from '../../shared/entry';
 import type { EntryRequest } from '../../shared/types';
 import { commanderIds, type UserRow } from './auth';
-import { badRequest, clock, forbidden, notFound, nowIso, patchSchema, tz } from './core';
+import { badRequest, forbidden, notFound, nowIso, patchSchema } from './core';
 import { db } from './db';
 import { changed, finishNotifications, notify } from './journal';
 import { isCommander } from './taskRepo';
 
-/** a request's details are kept until this many days after the visit */
+/** a request's details are kept this many days after it was sent to the base */
 export const ENTRY_KEEP_DAYS = 7;
+/** ...and one never sent, this many days after it was written */
+export const ENTRY_UNSENT_KEEP_DAYS = 30;
 
 interface Row {
   id: number;
-  visit_date: string;
-  visit_end_date: string | null;
   full_name: string;
   phone: string;
   visitor_kind: EntryFields['visitorKind'];
@@ -48,8 +48,6 @@ FROM entry_requests e LEFT JOIN users cu ON cu.id = e.created_by LEFT JOIN users
 const canEdit = (actor: UserRow, r: Pick<Row, 'created_by' | 'status'>) => isCommander(actor) || (r.created_by === actor.id && r.status === 'pending');
 
 const fieldsOf = (r: Row): EntryFields => ({
-  visitDate: r.visit_date,
-  visitEndDate: r.visit_end_date ?? '',
   fullName: r.full_name,
   phone: r.phone,
   visitorKind: r.visitor_kind,
@@ -80,11 +78,11 @@ function toEntry(actor: UserRow, r: Row): EntryRequest {
   };
 }
 
-/** the commander's: all of them; anyone else's: their own. Those still to send first, by the visit's date */
+/** the commander's: all of them; anyone else's: their own. Those still to send first, the newest on top */
 export function listEntries(actor: UserRow): EntryRequest[] {
   const all = isCommander(actor);
   return db()
-    .all<Row>(`${BASE} ${all ? '' : 'WHERE e.created_by = ?'} ORDER BY e.status = 'sent', e.visit_date, e.id`, ...(all ? [] : [actor.id]))
+    .all<Row>(`${BASE} ${all ? '' : 'WHERE e.created_by = ?'} ORDER BY e.status = 'sent', e.id DESC`, ...(all ? [] : [actor.id]))
     .map((r) => toEntry(actor, r));
 }
 
@@ -97,9 +95,6 @@ function entryRow(id: number): Row {
 const text = (max: number) => z.string().trim().max(max);
 
 export const entrySchema = z.object({
-  visitDate: z.string().refine(isDateKey, 'תאריך לא תקין'),
-  /** the last day of a visit of several days; '' for one */
-  visitEndDate: z.union([z.literal(''), z.string().refine(isDateKey, 'תאריך הסיום לא תקין')]).optional().default(''),
   fullName: z.string().trim().min(2, 'חובה לכתוב את השם המלא').max(80),
   phone: z.string().trim().regex(/^[0-9+\-\s()]{9,20}$/, 'מספר הטלפון לא תקין'),
   visitorKind: z.enum(VISITOR_KINDS),
@@ -118,11 +113,8 @@ export const entrySchema = z.object({
 });
 const entryPatch = patchSchema(entrySchema);
 
-const today = () => localDateKey(clock.now(), tz());
-
 /** what one field says about another: a soldier's rank, a car's number and make */
 function check(e: EntryFields): void {
-  if (e.visitEndDate && diffDays(e.visitEndDate, e.visitDate) > 31) throw badRequest('ביקור ארוך מחודש - בקשה לכל חודש בנפרד');
   if (e.visitorKind === 'soldier' && !e.rank.trim()) throw badRequest('לחייל צריך דרגה');
   if (e.byCar && !e.carNumber.trim()) throw badRequest('מגיע ברכב - חסר מספר הרכב');
   if (e.byCar && !e.carKind.trim()) throw badRequest('מגיע ברכב - חסרים סוג וצבע הרכב');
@@ -131,7 +123,6 @@ function check(e: EntryFields): void {
 /** what is kept: a civilian has no rank, one on foot no car */
 const tidy = (e: EntryFields): EntryFields => ({
   ...e,
-  visitEndDate: e.visitEndDate && e.visitEndDate > e.visitDate ? e.visitEndDate : '',
   rank: e.visitorKind === 'soldier' ? e.rank : '',
   carMilitary: e.byCar && e.carMilitary,
   carNumber: e.byCar ? e.carNumber : '',
@@ -141,13 +132,11 @@ const tidy = (e: EntryFields): EntryFields => ({
 export function createEntry(actor: UserRow, raw: unknown): number {
   const e = tidy(entrySchema.parse(raw));
   check(e);
-  if (e.visitDate < today()) throw badRequest('תאריך הביקור כבר עבר');
   const id = db().tx(() => {
+    // the visit's day: a column of the table from when requests had one, left empty
     const id = db().run(
       `INSERT INTO entry_requests(visit_date, visit_end_date, full_name, phone, visitor_kind, rank, clearance, id_number, escort, by_car, car_military, car_number, car_kind, reason, unit, camp, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      e.visitDate,
-      e.visitEndDate || null,
+       VALUES ('', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       e.fullName,
       e.phone,
       e.visitorKind,
@@ -165,14 +154,14 @@ export function createEntry(actor: UserRow, raw: unknown): number {
       actor.id,
       nowIso(),
     ).id;
-    // to the commander at once - what the phone shows says who and when, not the visitor's numbers
+    // to the commander at once - what the phone shows says who and why, not the visitor's numbers
     notify(
       commanderIds(),
       {
         type: 'entry',
         category: 'action',
         title: `אישור כניסה: ${e.fullName}`,
-        body: `${visitDaysLong(e.visitDate, e.visitEndDate)} · ${e.reason} · ביקש/ה: ${actor.display_name}`,
+        body: `${e.reason} · ביקש/ה: ${actor.display_name}`,
         link: `/entries#entry-${id}`,
         ref: `entry:${id}`,
       },
@@ -191,12 +180,9 @@ export function updateEntry(actor: UserRow, id: number, raw: unknown): void {
   const given = Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)) as Partial<EntryFields>;
   const e = tidy({ ...fieldsOf(r), ...given });
   check(e);
-  if (e.visitDate !== r.visit_date && e.visitDate < today()) throw badRequest('תאריך הביקור כבר עבר');
   db().run(
-    `UPDATE entry_requests SET visit_date = ?, visit_end_date = ?, full_name = ?, phone = ?, visitor_kind = ?, rank = ?, clearance = ?, id_number = ?, escort = ?, by_car = ?,
+    `UPDATE entry_requests SET full_name = ?, phone = ?, visitor_kind = ?, rank = ?, clearance = ?, id_number = ?, escort = ?, by_car = ?,
        car_military = ?, car_number = ?, car_kind = ?, reason = ?, unit = ?, camp = ? WHERE id = ?`,
-    e.visitDate,
-    e.visitEndDate || null,
     e.fullName,
     e.phone,
     e.visitorKind,
@@ -226,7 +212,7 @@ export function markEntrySent(actor: UserRow, id: number, sent: boolean): void {
       db().run("UPDATE entry_requests SET status = 'sent', sent_at = ?, sent_by = ? WHERE id = ?", nowIso(), actor.id, id);
       notify(
         [r.created_by],
-        { type: 'entry_sent', category: 'info', title: `אישור הכניסה של ${r.full_name} נשלח לבסיס`, body: visitDaysLong(r.visit_date, r.visit_end_date ?? ''), link: '/entries', ref: `entry:${id}` },
+        { type: 'entry_sent', category: 'info', title: `אישור הכניסה של ${r.full_name} נשלח לבסיס`, body: r.reason, link: '/entries', ref: `entry:${id}` },
         actor.id,
       );
     } else {

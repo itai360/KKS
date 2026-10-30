@@ -11,12 +11,11 @@ import { emptyEntryFields, entryMessage, entryMissing, parseEntryMessages, VISIT
 import type { EntryRequest } from '@shared/types';
 import { api } from '../lib/api';
 import { copyText, readText } from '../lib/clipboard';
-import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { DateInput, ErrorBox, Field, Modal, Seg } from './ui';
+import { ErrorBox, Field, Modal, Seg } from './ui';
 
 interface Opening {
   editing?: EntryRequest;
@@ -45,13 +44,13 @@ export function pasteEntry(text?: string): void {
     open({ paste: text });
     return;
   }
-  void readText().then((t) => open({ paste: t && parseEntryMessages(t, todayKey()).entries.length ? t : true }));
+  void readText().then((t) => open({ paste: t && parseEntryMessages(t).entries.length ? t : true }));
 }
 
 /** the requests in a pasted text, read against the course's own place: the same camp and unit are not kept apart */
 export function readEntryPaste(text: string, place: EntryPlace): EntryFields[] {
   const same = (a: string, b: string) => a.replace(/\s+/g, ' ').trim() === b.replace(/\s+/g, ' ').trim();
-  return parseEntryMessages(text, todayKey()).entries.map(({ fields }) => ({
+  return parseEntryMessages(text).entries.map(({ fields }) => ({
     ...fields,
     camp: fields.camp && same(fields.camp, place.camp) ? '' : fields.camp,
     unit: fields.unit && same(fields.unit, place.unit) ? '' : fields.unit,
@@ -279,7 +278,7 @@ function EntryModal({ editing, paste, onClose }: { editing?: EntryRequest; paste
               dir="rtl"
               rows={6}
               value={pasteText}
-              placeholder={'*🔵פורמט אישור כניסה 🔵*\n*תאריך:* ...\n*שם מלא:* ...'}
+              placeholder={'*🔵פורמט אישור כניסה 🔵*\n*שם מלא:* ...\n*מס\' טלפון:* ...'}
               onChange={(e) => {
                 setPasteText(e.target.value);
                 take(e.target.value);
@@ -298,14 +297,6 @@ function EntryModal({ editing, paste, onClose }: { editing?: EntryRequest; paste
           </Field>
           <Field label="טלפון" required>
             <input className="input" dir="ltr" type="tel" inputMode="tel" value={f.phone} onChange={(e) => set('phone', e.target.value)} maxLength={20} autoComplete="off" />
-          </Field>
-        </div>
-        <div className="form-grid">
-          <Field label="תאריך הביקור" required>
-            <DateInput value={f.visitDate} onChange={(v) => set('visitDate', v)} min={editing ? undefined : todayKey()} aria-label="תאריך הביקור" />
-          </Field>
-          <Field label="עד" hint="ביקור של כמה ימים">
-            <DateInput value={f.visitEndDate} onChange={(v) => set('visitEndDate', v)} min={f.visitDate || todayKey()} aria-label="היום האחרון של הביקור" />
           </Field>
         </div>
         <div className="form-grid">
@@ -371,7 +362,7 @@ function EntryModal({ editing, paste, onClose }: { editing?: EntryRequest; paste
           </button>
         )}
         <p className="tiny muted entry-privacy">
-          <Icon name="lock" size={13} /> הפרטים גלויים רק לך ולמפקד הקורס, ונמחקים שבוע אחרי הביקור.
+          <Icon name="lock" size={13} /> הפרטים גלויים רק לך ולמפקד הקורס, ונמחקים שבוע אחרי שנשלחו לבסיס.
         </p>
         <ErrorBox error={error} />
       </form>

@@ -4,7 +4,7 @@
 // base's format pasted anywhere on the screen (Ctrl+V, or "הדבקת פורמט") opens the request filled from it.
 
 import { useEffect, useMemo, useState } from 'react';
-import { entryMessage, visitDaysLong, VISITOR_KIND_LABELS, type EntryPlace } from '@shared/entry';
+import { entryMessage, VISITOR_KIND_LABELS, type EntryPlace } from '@shared/entry';
 import type { EntryRequest } from '@shared/types';
 import { ask } from '../components/Confirm';
 import { DoneDrawer } from '../components/DoneDrawer';
@@ -147,9 +147,7 @@ function EntryCard({ e, place }: { e: EntryRequest; place: EntryPlace }) {
       <div className="entry-head">
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="strong entry-name">{e.fullName}</div>
-          <div className="small">
-            {visitDaysLong(e.visitDate, e.visitEndDate)} · {e.reason}
-          </div>
+          <div className="small">{e.reason}</div>
           <div className="tiny muted">
             {VISITOR_KIND_LABELS[e.visitorKind]}
             {e.rank ? ` · ${e.rank}` : ''} · {e.escort ? 'דרוש ליווי' : 'בלי ליווי'} · {e.byCar ? `רכוב, רכב ${e.carMilitary ? 'צבאי' : 'אזרחי'} ${e.carNumber}` : 'רגלי'}

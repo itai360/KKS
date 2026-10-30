@@ -530,7 +530,7 @@ function facts(item: SmartItem, people: { id: number; displayName: string }[]): 
       return [dayWords(f.date), item.kind === 'discipline' && f.formal ? 'הערת משמעת' : ''].filter(Boolean);
     case 'entry': {
       const e = f.entry ?? emptyEntry();
-      return [range(f.date, f.endDate), e.phone, e.idNumber && `${e.visitorKind === 'soldier' ? 'מ.א' : 'ת"ז'} ${e.idNumber}`, e.byCar ? (e.carMilitary ? 'ברכב צבאי' : 'ברכב') : '', e.reason].filter(Boolean);
+      return [e.phone, e.idNumber && `${e.visitorKind === 'soldier' ? 'מ.א' : 'ת"ז'} ${e.idNumber}`, e.byCar ? (e.carMilitary ? 'ברכב צבאי' : 'ברכב') : '', e.reason].filter(Boolean);
     }
     case 'exemption':
       return [f.until ? `עד ${dayWords(f.until)}` : 'עד להודעה חדשה', f.details].filter(Boolean);
@@ -770,10 +770,6 @@ function Fields({ item, cadets, people, offenses, set }: { item: SmartItem; cade
         <div className="sm-grid">
           <Field label="שם מלא" required>
             <Text value={e.fullName} onChange={(fullName) => setE({ fullName })} label="שם מלא" max={80} />
-          </Field>
-          {date('תאריך הביקור')}
-          <Field label="עד (ביקור של כמה ימים)">
-            <DateInput value={f.endDate ?? ''} onChange={(v) => set({ endDate: v || null })} min={f.date ?? undefined} aria-label="היום האחרון של הביקור" />
           </Field>
           <Field label="טלפון" required>
             <Text value={e.phone} onChange={(phone) => setE({ phone })} label="טלפון" max={20} />

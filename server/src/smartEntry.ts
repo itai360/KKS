@@ -95,7 +95,7 @@ const SYSTEM = `You file what the staff of an officers' course write in free Heb
 The kinds (where a thing belongs):
 - discipline: a cadet broke a rule or got a punishment (עונש, ריתוק, שעה/שעות ביציאה, סגירת שבת, נזיפה, שיחת אזהרה, הערת משמעת), or behaved against the rules (איחור, חוצפה, שינה בשיעור, עישון, לא הגיע, שכחה). offense: the key of the matching offense from the course's enforcement ladder (exactly as listed), or null when none fits. formal: true only when the text says a discipline note (הערת משמעת) is given. title: what happened in a few words. details: what was written about it (the punishment given too). date: the day it happened (default today).
 - procedure: the course's quick report of not keeping to procedures. procedure: weapon_left (הפקרת נשק - a weapon left unattended), weapon_back (נשק מאחורה - the weapon carried on the back), phone (a phone where it is not allowed; situation: where/when), dress (דיגום - out of order: dress lists only כומתה, שרוך, גומיות, תג שם), other (another procedure; other: what was not kept, up to 80 characters). Prefer procedure over discipline for these four.
-- entry: a visitor who needs approval to enter the base (אישור כניסה). entry: fullName, phone, visitorKind (soldier when a rank, a personal number or military service is mentioned; civilian otherwise), rank, clearance, idNumber, escort (ליווי), byCar, carMilitary (a military vehicle), carNumber, carKind (make and colour), reason. date: the day of the visit; endDate: its last day when it lasts several days ("30-31/10").
+- entry: a visitor who needs approval to enter the base (אישור כניסה). entry: fullName, phone, visitorKind (soldier when a rank, a personal number or military service is mentioned; civilian otherwise), rank, clearance, idNumber, escort (ליווי), byCar, carMilitary (a military vehicle), carNumber, carKind (make and colour), reason. An entry has no date - leave date and endDate empty.
 - exemption: a cadet excused from something (פטור). subject: from what, in a few words ("ריצות", "נעליים צבאיות"). until: the last day, or null. details: why.
 - note: something about a cadet worth keeping in the file that is not discipline: praise, progress, a personal matter, an observation - and where a cadet is on a day: at home or on leave, at a medical appointment or test, absent, arriving late (not a discipline matter). details: what was written (with the days). title: a few words ("בבית · היום", "תור לרופא · 30.10").
   A cadet sick (גימלים, ill, sent home sick) is an exemption, not a note: subject "גימלים", until the last day (today when only today), details what was written.
@@ -134,7 +134,7 @@ Examples (the people in them stand for whoever the course's lists name; find eac
 - "סגירה מקצועית לשבועי: תוכנית הניווט, אחראי רון" → weekly closure · staff רון · title "תוכנית הניווט".
 - "לשימור: התדריך לפני הניווט" → weekNote sustain · details "התדריך לפני הניווט".
 - "הודעה לכל הסגל: מחר מסדר ב-7:00" → announcement · title "מחר מסדר ב-7:00".
-- "אישור כניסה לאבי מזרחי מחר, ⟦1⟧, לצורך הרצאה" → entry · fullName "אבי מזרחי" · phone "⟦1⟧" · reason "הרצאה" · date tomorrow.`;
+- "אישור כניסה לאבי מזרחי מחר, ⟦1⟧, לצורך הרצאה" → entry · fullName "אבי מזרחי" · phone "⟦1⟧" · reason "הרצאה".`;
 
 const itemSchema = z.object({
   kind: z.enum(SMART_KINDS),
@@ -332,7 +332,7 @@ export async function analyzeSmart(actor: UserRow, raw: unknown): Promise<SmartA
   const ctx = smartContext(actor);
   // the base's entry format pasted as it came: read here, field by field - exact, and the visitor's details
   // never leave the server; only what is left of the text goes on to be read
-  const formats = entryFormats(text, today());
+  const formats = entryFormats(text);
   const restText = formats.items.length ? formats.rest : text;
   let items: SmartItem[] | null = null;
   let source: SmartAnalysis['source'] = 'local';
@@ -392,7 +392,7 @@ function fileOne(actor: UserRow, kind: SmartKind, f: SmartFields): Omit<SmartRes
     }
     case 'entry': {
       const e = { ...emptyEntry(), ...(f.entry ?? {}) };
-      createEntry(actor, { ...e, visitDate: f.date, visitEndDate: f.endDate && f.date && f.endDate > f.date ? f.endDate : '' });
+      createEntry(actor, e);
       return { message: `בקשת אישור כניסה ל${e.fullName} נשלחה למפקד הקורס`, link: '/entries' };
     }
     case 'exemption':

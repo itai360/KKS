@@ -50,7 +50,7 @@ async function plantSecrets() {
   // another person's absence note
   await ok(c.s1.post('/api/absences', { startDate: '2026-10-05', endDate: '2026-10-06', reason: 'sick', note: `${SECRET}10 בדיקה רפואית` }));
   // a visitor someone else asked to let into the base
-  await ok(c.s1.post('/api/entries', { visitDate: '2026-10-06', fullName: `${SECRET}13 מבקר`, phone: '0501234567', visitorKind: 'civilian', idNumber: '123456782', reason: 'הרצאה' }));
+  await ok(c.s1.post('/api/entries', { fullName: `${SECRET}13 מבקר`, phone: '0501234567', visitorKind: 'civilian', idNumber: '123456782', reason: 'הרצאה' }));
   return { cadet, task, weekId, team };
 }
 

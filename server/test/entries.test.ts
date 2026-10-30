@@ -1,6 +1,6 @@
 // Visitors' entry to the base (אישור כניסה): anyone on the staff asks, the commander hears at once and sends
-// it on in the base's format; the details are seen by the one who asked and the commander alone, and go a
-// week after the visit.
+// it on in the base's format - no dates; the details are seen by the one who asked and the commander alone,
+// and go a week after they were sent to the base (a month after they were written, if never sent).
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { entryMessage, entryMissing } from '../../shared/entry';
@@ -15,7 +15,6 @@ beforeEach(async () => {
 });
 
 const visitor = {
-  visitDate: '2026-10-06',
   fullName: 'דנה כהן',
   phone: '050-1234567',
   visitorKind: 'civilian',
@@ -30,7 +29,7 @@ describe('entry requests', () => {
     const r = await c.s1.post('/api/entries', visitor);
     expect(r.status).toBe(200);
     const id = r.body.id as number;
-    // the commander's bell: what the phone shows says who and when - not the visitor's numbers
+    // the commander's bell: what the phone shows says who and why - not the visitor's numbers
     const [n] = await bell(c.cmd);
     expect(n).toMatchObject({ type: 'entry', category: 'action', title: 'אישור כניסה: דנה כהן', link: `/entries#entry-${id}` });
     expect(n.body).not.toContain('123456782');
@@ -59,10 +58,9 @@ describe('entry requests', () => {
     expect((await bell(c.cmd)).map((x) => x.type)).toEqual(['entry']);
   });
 
-  it('ask for what the base needs: a soldier\'s rank, a car\'s number and make, a date still ahead', async () => {
+  it('ask for what the base needs: a soldier\'s rank, a car\'s number and make - and no date', async () => {
     expect((await c.s1.post('/api/entries', { ...visitor, visitorKind: 'soldier' })).body.error).toBe('לחייל צריך דרגה');
     expect((await c.s1.post('/api/entries', { ...visitor, byCar: true, carKind: 'לבנה' })).body.error).toBe('מגיע ברכב - חסר מספר הרכב');
-    expect((await c.s1.post('/api/entries', { ...visitor, visitDate: '2026-09-30' })).body.error).toBe('תאריך הביקור כבר עבר');
     expect((await c.s1.post('/api/entries', { ...visitor, idNumber: '12-34' })).status).toBe(400);
     // a civilian keeps no rank, one on foot no car
     const id = (await c.s1.post('/api/entries', { ...visitor, rank: 'סרן', carNumber: '12-345-67' })).body.id;
@@ -78,42 +76,41 @@ describe('entry requests', () => {
     expect((await bell(c.cmd)).map((n) => n.title)).toEqual(['אישור כניסה: יואב לוי']);
   });
 
-  it('are gone a week after the visit', async () => {
+  it('are gone a week after they were sent to the base, and a month after they were written if never sent', async () => {
     await c.s1.post('/api/entries', visitor);
-    housekeeping(new Date('2026-10-13T08:00:00Z'));
+    const sent = (await c.s1.post('/api/entries', { ...visitor, fullName: 'יואב לוי' })).body.id as number;
+    await c.cmd.post(`/api/entries/${sent}/sent`, {});
+    housekeeping(new Date('2026-10-07T08:00:00Z'));
+    expect((await list(c.cmd)).map((e) => e.fullName).sort()).toEqual(['דנה כהן', 'יואב לוי']);
+    housekeeping(new Date('2026-10-09T08:00:00Z'));
+    expect((await list(c.cmd)).map((e) => e.fullName)).toEqual(['דנה כהן']);
+    housekeeping(new Date('2026-10-30T08:00:00Z'));
     expect(await list(c.cmd)).toHaveLength(1);
-    housekeeping(new Date('2026-10-14T08:00:00Z'));
-    expect(await list(c.cmd)).toEqual([]);
+    // (a month on, the sign-ins have expired too: the table itself is read)
+    housekeeping(new Date('2026-11-01T08:00:00Z'));
     expect(db().get<{ n: number }>('SELECT count(*) AS n FROM entry_requests')!.n).toBe(0);
   });
 });
 
 describe('the base format\'s fields', () => {
-  it('keeps a visit of several days, a military car, and the unit and camp a pasted format gave', async () => {
-    const id = (await c.s1.post('/api/entries', { ...visitor, visitEndDate: '2026-10-07', byCar: true, carMilitary: true, carNumber: '123-456', carKind: 'סופה ירוקה', unit: 'יחידה אחרת', camp: 'מחנה אחר' })).body.id;
-    expect((await list(c.cmd)).find((e) => e.id === id)).toMatchObject({ visitDate: '2026-10-06', visitEndDate: '2026-10-07', carMilitary: true, unit: 'יחידה אחרת', camp: 'מחנה אחר' });
-    // the commander's notification says the days
-    expect((await bell(c.cmd))[0].body).toContain('6-7.10.2026');
-    // on foot, no car of any kind; a last day not after the first is none
-    await c.s1.patch(`/api/entries/${id}`, { byCar: false, visitEndDate: '2026-10-06' });
-    expect((await list(c.s1))[0]).toMatchObject({ byCar: false, carMilitary: false, carNumber: '', visitEndDate: '' });
-    // a month at most
-    expect((await c.s1.post('/api/entries', { ...visitor, visitEndDate: '2026-11-20' })).body.error).toBe('ביקור ארוך מחודש - בקשה לכל חודש בנפרד');
+  it('keeps a military car, and the unit and camp a pasted format gave; a date sent by an older page is left out', async () => {
+    const id = (await c.s1.post('/api/entries', { ...visitor, visitDate: '2026-09-30', byCar: true, carMilitary: true, carNumber: '123-456', carKind: 'סופה ירוקה', unit: 'יחידה אחרת', camp: 'מחנה אחר' })).body.id;
+    const kept = (await list(c.cmd)).find((e) => e.id === id)!;
+    expect(kept).toMatchObject({ carMilitary: true, unit: 'יחידה אחרת', camp: 'מחנה אחר' });
+    expect(kept).not.toHaveProperty('visitDate');
+    // the commander's notification says why and who asked
+    expect((await bell(c.cmd))[0].body).toBe('הרצאה לצוערים · ביקש/ה: מפק"צ 1');
+    // on foot, no car of any kind
+    await c.s1.patch(`/api/entries/${id}`, { byCar: false });
+    expect((await list(c.s1))[0]).toMatchObject({ byCar: false, carMilitary: false, carNumber: '' });
   });
 
-  it('a visit of several days is kept until a week after its last day', async () => {
-    await c.s1.post('/api/entries', { ...visitor, visitEndDate: '2026-10-09' });
-    housekeeping(new Date('2026-10-14T08:00:00Z'));
-    expect(await list(c.cmd)).toHaveLength(1);
-    housekeeping(new Date('2026-10-17T08:00:00Z'));
-    expect(await list(c.cmd)).toEqual([]);
-  });
-
-  it('the message is written from what is kept, as the base writes it', async () => {
-    await c.s1.post('/api/entries', { ...visitor, visitEndDate: '2026-10-07', unit: 'יחידה אחרת' });
+  it('the message is written from what is kept, as the base writes it - with no date', async () => {
+    await c.s1.post('/api/entries', { ...visitor, unit: 'יחידה אחרת' });
     const [e] = await list(c.cmd);
     const lines = entryMessage(e, { camp: 'מחנה הבדיקה', unit: 'יחידת הבדיקה' }).split('\n');
-    expect(lines.slice(0, 5)).toEqual(['*🔵פורמט אישור כניסה למחנה הבדיקה 🔵*', '', '*תאריך:* 6-7/10', '*יחידה אליה המבקר מגיע:* יחידה אחרת', '*שם מלא:* דנה כהן']);
+    expect(lines.slice(0, 5)).toEqual(['*🔵פורמט אישור כניסה למחנה הבדיקה 🔵*', '', '*יחידה אליה המבקר מגיע:* יחידה אחרת', '*שם מלא:* דנה כהן', "*מס' טלפון:* 050-1234567"]);
+    expect(lines.some((l) => l.includes('תאריך'))).toBe(false);
     expect(entryMissing({ ...e, fullName: '', byCar: true, carNumber: '', carKind: '' })).toEqual(['שם מלא', 'מספר רכב', 'סוג וצבע רכב']);
   });
 });
