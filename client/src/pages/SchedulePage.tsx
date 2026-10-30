@@ -668,6 +668,8 @@ export function SchedulePage() {
   const found = searchApi.data?.length ?? 0;
   const searchView = (
     <div className="cal-search">
+      {/* on a phone, pinned to the top of the screen: what the phone paints behind its clock */}
+      <div className="cal-search-top">
       <form
         className="cal-search-bar"
         role="search"
@@ -694,6 +696,7 @@ export function SchedulePage() {
           <Icon name="search" size={20} />
         </button>
       </form>
+      </div>
       <p className="cal-search-count" role="status">
         {!q ? 'מה לחפש? שם של אירוע, מקום או מילה מההערות' : !searchApi.data ? 'מחפש...' : found === 0 ? `לא נמצאו אירועים עבור "${q}"` : `${found === 1 ? 'אירוע אחד' : `${found} אירועים`} עבור "${q}"`}
       </p>

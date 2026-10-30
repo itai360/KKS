@@ -3745,6 +3745,46 @@
   html.cal-shell .topbar {
     display: none;
   }
+  /* the calendar's bar (and the search's, in its place) pinned to the top of the screen, solid: an iPhone
+     paints the strip behind its clock from a bar pinned there - sharp, one piece with it. A bar that only
+     sits at the top of the page is drawn under the clock through a soft blur, and looks smudged */
+  html.cal-shell {
+    --gph-bar-h: calc(env(safe-area-inset-top, 0px) + 58px);
+    --gph-search-h: calc(env(safe-area-inset-top, 0px) + 66px);
+  }
+  html.cal-shell .cal-page.is-phone:not(.is-searching) {
+    padding-top: var(--gph-bar-h);
+  }
+  html.cal-shell .cal-page.is-phone .gph-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    height: var(--gph-bar-h);
+    box-sizing: border-box;
+  }
+  html.cal-shell .cal-page.is-phone.is-searching {
+    padding-top: var(--gph-search-h);
+  }
+  html.cal-shell .cal-page.is-phone.is-searching .gph-body.gph-scroll {
+    padding-top: 0;
+  }
+  html.cal-shell .cal-page.is-phone .cal-search-top {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    height: var(--gph-search-h);
+    box-sizing: border-box;
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) max(14px, env(safe-area-inset-right, 0px)) 8px max(14px, env(safe-area-inset-left, 0px));
+    background: var(--g-sheet);
+  }
+  html.cal-shell .cal-page.is-phone .cal-search-top .cal-search-bar {
+    position: static;
+    margin: 0;
+  }
   html.cal-shell .cal-page.is-phone {
     height: 100vh;
     height: 100dvh;
@@ -3979,6 +4019,9 @@
 
   /* a small phone: the bar's parts a little smaller, so the month keeps its whole name */
   @media (max-width: 359px) {
+    html.cal-shell {
+      --gph-bar-h: calc(env(safe-area-inset-top, 0px) + 54px);
+    }
     .gph-bar {
       padding-inline: max(10px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
     }
