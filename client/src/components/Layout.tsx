@@ -37,7 +37,7 @@ import { trapFocus } from '../lib/focusTrap';
 import { lockScroll } from '../lib/scrollLock';
 import { switchCourse } from '../lib/courses';
 import { isTypingField, takesKeys } from '../lib/keyboard';
-import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
+import { onThemeChange, setThemePref, shownTheme, syncBrowserBar } from '../lib/theme';
 import { useMedia } from '../lib/media';
 import { usePullToRefresh } from '../lib/pullRefresh';
 
@@ -142,7 +142,29 @@ function ThemeButton() {
   );
 }
 
-export function useNavSections(): { title?: string; items: NavItem[] }[] {
+/** the phone bar's tabs: each screen belongs to one, and the side menu shows that tab's screens. "more" - the
+ *  screens no tab has (control, the staff and the tools) */
+export type NavTab = 'home' | 'cadets' | 'weeks' | 'tasks' | 'more';
+export interface NavSection {
+  title?: string;
+  tab: NavTab;
+  items: NavItem[];
+}
+/** the side menu's heading on a phone, for each tab */
+const TAB_TITLES: Record<NavTab, string> = { home: 'יומן', cadets: 'צוערים', weeks: 'שבועות ותכנון', tasks: 'משימות', more: 'בקרה וסגל' };
+const TAB_ICONS: Record<NavTab, string> = { home: 'calendar', cadets: 'cap', weeks: 'layers', tasks: 'tasks', more: 'pulse' };
+/** the phone bar's place of each tab (the "+" is the middle one); "more" marks none */
+const TAB_INDEX: Record<NavTab, number> = { home: 0, cadets: 1, weeks: 3, tasks: 4, more: -1 };
+
+/** the tab a screen belongs to: the calendar (and an event's page) is home; a screen inside one (a cadet's
+ *  page, a task's) belongs where its list does */
+export function tabOf(path: string, sections: NavSection[]): NavTab {
+  if (path === '/' || path.startsWith('/event/')) return 'home';
+  const s = sections.find((x) => x.items.some((it) => !it.end && (path === it.to || path.startsWith(`${it.to}/`))));
+  return s?.tab ?? 'more';
+}
+
+export function useNavSections(): NavSection[] {
   const { isCommander, can } = useSession();
   const requests = useApi<TaskRequest[]>(isCommander ? '/api/requests' : null, ['requests', 'tasks']);
   const approvals = useApi<Task[]>(isCommander ? '/api/tasks?status=pending_approval' : null, ['tasks']);
@@ -155,8 +177,9 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
   // the same modules for everyone, around the calendar: the tasks, planning the course, command and control,
   // the cadets, debriefs and learning, the staff and the tools
   const procedures = { to: '/procedures', label: 'אי עמידה בנהלים', icon: 'shield', keywords: 'נהלים הפקרת נשק נשק מאחורה טלפון דיגום כומתה שרוך גומיות תג שם משמעת' };
-  const cadets = {
+  const cadets: NavSection = {
     title: 'צוערים',
+    tab: 'cadets',
     items: [
       { to: '/cadets', label: 'צוערים', icon: 'cap', keywords: 'צוותים פטורים משמעת שיחות אישיות' },
       { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder', keywords: 'ציונים מבחנים ועדה' },
@@ -166,14 +189,15 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       procedures,
     ],
   };
-  const learning = { title: 'תחקירים ולמידה', items: [{ to: '/debriefs', label: 'תחקירים ולקחים', icon: 'lightbulb', keywords: 'תחקיר שבועי פעילות עצימה תחק"ש פלוגתי לקחים בנק לקחים' }] };
+  const learning: NavSection = { title: 'תחקירים ולמידה', tab: 'weeks', items: [{ to: '/debriefs', label: 'תחקירים ולקחים', icon: 'lightbulb', keywords: 'תחקיר שבועי פעילות עצימה תחק"ש פלוגתי לקחים בנק לקחים' }] };
   const threeWeek = { to: '/three-week', label: 'אישור תוכניות תלת שבועי', icon: 'threeWeeks', keywords: 'תלת שבועי תלת-שבועי שלושה שבועות ארבעה שבועות תוכנית' };
-  const home = { items: [{ to: '/', label: 'יומן הקורס', icon: 'calendar', end: true, keywords: 'לו"ז לוז בית אירועים יומן' }] };
+  const home: NavSection = { tab: 'home', items: [{ to: '/', label: 'יומן הקורס', icon: 'calendar', end: true, keywords: 'לו"ז לוז בית אירועים יומן' }] };
   if (isCommander) {
     return [
       home,
       {
         title: 'ניהול משימות',
+        tab: 'tasks',
         items: [
           { to: '/my', label: 'המשימות שלי', icon: 'my' },
           { to: '/tasks', label: 'כל המשימות', icon: 'tasks', keywords: 'לוח משימות קבוצות' },
@@ -185,6 +209,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       },
       {
         title: 'תכנון הקורס',
+        tab: 'weeks',
         items: [
           { to: '/weeks', label: 'שבועות הקורס', icon: 'layers', keywords: 'מוכנות שבוע פקודת שבוע' },
           { to: '/weekly', label: 'שבועי', icon: 'weekly' },
@@ -195,6 +220,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       },
       {
         title: 'פיקוד ובקרה',
+        tab: 'more',
         items: [
           { to: '/overview', label: 'תמונת מצב', icon: 'home', keywords: 'דף הבית לוח המפקד דורש טיפול' },
           { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
@@ -208,6 +234,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
       learning,
       {
         title: 'סגל וכלים',
+        tab: 'more',
         items: [
           { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס' },
           { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
@@ -224,6 +251,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
     home,
     {
       title: 'ניהול משימות',
+      tab: 'tasks',
       items: [
         { to: '/my', label: 'המשימות שלי', icon: 'my' },
         { to: '/tasks', label: 'משימות', icon: 'tasks', keywords: 'לוח משימות קבוצות' },
@@ -235,6 +263,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
     },
     {
       title: 'תכנון הקורס',
+      tab: 'weeks',
       items: [
         { to: '/weeks', label: 'שבועות הקורס', icon: 'layers', keywords: 'מוכנות שבוע פקודת שבוע' },
         { to: '/weekly', label: 'שבועי', icon: 'weekly' },
@@ -245,6 +274,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
     },
     {
       title: 'פיקוד ובקרה',
+      tab: 'more',
       items: [
         { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
         { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
@@ -257,6 +287,7 @@ export function useNavSections(): { title?: string; items: NavItem[] }[] {
     learning,
     {
       title: 'סגל וכלים',
+      tab: 'more',
       items: [
         { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
         { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
@@ -492,7 +523,12 @@ export function Layout({ children }: { children: ReactNode }) {
   const calShell = phone && onCalendar;
   useEffect(() => {
     document.documentElement.classList.toggle('cal-shell', calShell);
-    return () => document.documentElement.classList.remove('cal-shell');
+    // the phone's bar with the clock in the page's colour - the calendar's own white, or the paper
+    syncBrowserBar();
+    return () => {
+      document.documentElement.classList.remove('cal-shell');
+      syncBrowserBar();
+    };
   }, [calShell]);
   const deskBar = !phone && onCalendar ? calBar : null;
   const folded = !phone && (railPref ? railPref === 'collapsed' : mediumScreen);
@@ -590,18 +626,10 @@ export function Layout({ children }: { children: ReactNode }) {
     if (barSmall) setPlusOpen(false);
   }, [barSmall]);
   const path = location.pathname;
-  // the phone's bar, right to left: home, cadets, "+", weeks, tasks; on any other screen no tab is marked
-  // (everything else is in the menu under the course mark at the top)
-  const barIdx =
-    path === '/'
-      ? 0
-      : path.startsWith('/cadets')
-        ? 1
-        : path.startsWith('/weeks') || path.startsWith('/weekly')
-          ? 3
-          : path.startsWith('/tasks') || path === '/my'
-            ? 4
-            : -1;
+  // the phone's bar, right to left: home, cadets, "+", weeks, tasks - each marked on every screen of its own
+  // (a cadet's file, the sociometric, a task's page...); on the screens no tab has, none is marked
+  const tab = tabOf(path, sections);
+  const barIdx = TAB_INDEX[tab];
   // on a phone the course's name at the top opens the side menu - the computer's own, with the same groups
   // and screens - sliding in from the side over the page; a screen chosen, a tap beside it, a swipe back to
   // the edge or Escape close it
@@ -621,6 +649,11 @@ export function Layout({ children }: { children: ReactNode }) {
     [],
   );
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  // a phone's menu opens on the screens of the tab one is in; "כל המסכים" goes on to every screen, and back
+  const [menuPanel, setMenuPanel] = useState<{ at: 'tab' | 'all'; back: boolean }>({ at: 'tab', back: false });
+  useLayoutEffect(() => {
+    if (menuOpen) setMenuPanel({ at: 'tab', back: false });
+  }, [menuOpen]);
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname]);
@@ -711,6 +744,99 @@ export function Layout({ children }: { children: ReactNode }) {
   const calLinks = railLinks(sections.filter((s) => !s.title).flatMap((s) => s.items));
   const calLayers = onCalendar && !folded;
 
+  // every group of the menu, each opening and closing (a computer's menu; a phone's "כל המסכים")
+  const allGroups = sections.map((s, i) => {
+    const links = s.title ? railLinks(s.items) : [];
+    if (!s.title || !links.length) return null;
+    return railGroup(s.title, `rail-group-${i}`, links, s.items.reduce((n, it) => n + (it.count ?? 0), 0));
+  });
+  // a phone's menu is the tab's own, as most apps have it: on the calendar its views, what it can do and its
+  // calendars (as Google Calendar's app); on the cadets, the weeks or the tasks, that tab's screens; on any
+  // other screen, control and the staff. "כל המסכים", at its end, goes on to every screen
+  const tabSections = sections.filter((s) => s.tab === tab && s.title);
+  const calMenu = calBar && (
+    <div className="gside-cal" role="group" aria-label="תצוגת היומן">
+      {PHONE_VIEWS.map((v) => (
+        <button
+          key={v}
+          type="button"
+          className={`gside-view${calBar.view === v ? ' on' : ''}`}
+          aria-pressed={calBar.view === v}
+          onClick={() => {
+            closeMenu();
+            calBar.setView(v);
+          }}
+        >
+          <Icon name={VIEW_ICONS[v]} />
+          <span className="rail-label">{VIEW_LABELS[v]}</span>
+        </button>
+      ))}
+      {!!calBar.drawer?.length && <span className="gside-sep" aria-hidden="true" />}
+      {calBar.drawer?.map((m) => (
+        <button
+          key={m.label}
+          type="button"
+          className="gside-view"
+          onClick={() => {
+            closeMenu();
+            m.run();
+          }}
+        >
+          <Icon name={m.icon} />
+          <span className="rail-label">{m.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+  const phoneMenu =
+    menuPanel.at === 'tab' ? (
+      <div key="tab" className={`gside-panel${menuPanel.back ? ' is-back' : ''}`}>
+        <div className="gside-head">
+          <Icon name={TAB_ICONS[tab]} />
+          <h2>{TAB_TITLES[tab]}</h2>
+        </div>
+        {tab === 'home' ? (
+          <>
+            {calMenu}
+            {onCalendar && (
+              <div className="gside-layers">
+                <CalendarLayers />
+              </div>
+            )}
+          </>
+        ) : (
+          tabSections.map((s) => (
+            <nav key={s.title} className="gside-sec" aria-label={s.title}>
+              {tabSections.length > 1 && <div className="gside-sub">{s.title}</div>}
+              {railLinks(s.items)}
+            </nav>
+          ))
+        )}
+        <span className="gside-sep" aria-hidden="true" />
+        <button type="button" className="gside-view gside-all" onClick={() => setMenuPanel({ at: 'all', back: false })}>
+          <Icon name="apps" />
+          <span className="rail-label">כל המסכים</span>
+          <Icon name="chevronLeft" size={16} className="gside-chev" />
+        </button>
+      </div>
+    ) : (
+      <div key="all" className="gside-panel is-forward">
+        <button type="button" className="gside-back" onClick={() => setMenuPanel({ at: 'tab', back: true })}>
+          <Icon name="chevronRight" size={18} />
+          <span>{TAB_TITLES[tab]}</span>
+        </button>
+        <div className="gside-head">
+          <Icon name="apps" />
+          <h2>כל המסכים</h2>
+        </div>
+        {allGroups}
+        <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
+          <Icon name="settings" />
+          <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
+        </NavLink>
+      </div>
+    );
+
   return (
     <div className={`app${folded ? ' rail-collapsed' : ''}${drawer ? ' menu-open' : ''}${viewing ? ' viewing-past' : ''}${focusPage ? ' is-focus' : ''}`}>
       {/* keyboard and screen-reader users skip the menu */}
@@ -760,68 +886,35 @@ export function Layout({ children }: { children: ReactNode }) {
           </NavLink>
         </div>
         <div className="gside-body">
-          {/* a phone's calendar: its views first, then what it can do - as Google Calendar's app opens its menu */}
-          {phone && onCalendar && calBar && (
-            <div className="gside-cal" role="group" aria-label="תצוגת היומן">
-              {PHONE_VIEWS.map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  className={`gside-view${calBar.view === v ? ' on' : ''}`}
-                  aria-pressed={calBar.view === v}
-                  onClick={() => {
-                    closeMenu();
-                    calBar.setView(v);
-                  }}
-                >
-                  <Icon name={VIEW_ICONS[v]} />
-                  <span className="rail-label">{VIEW_LABELS[v]}</span>
-                </button>
-              ))}
-              {!!calBar.drawer?.length && <span className="gside-sep" aria-hidden="true" />}
-              {calBar.drawer?.map((m) => (
-                <button
-                  key={m.label}
-                  type="button"
-                  className="gside-view"
-                  onClick={() => {
-                    closeMenu();
-                    m.run();
-                  }}
-                >
-                  <Icon name={m.icon} />
-                  <span className="rail-label">{m.label}</span>
-                </button>
-              ))}
-            </div>
+          {phone ? (
+            phoneMenu
+          ) : (
+            <>
+              {!folded && (
+                <MiniMonth
+                  selected={calBar?.date ?? today}
+                  shown={calBar?.shown ?? []}
+                  today={today}
+                  onPick={(d) => (calBar ? calBar.goTo(d) : navigate(d === today ? '/' : `/?date=${d}`))}
+                />
+              )}
+              {allGroups}
+              {/* last, under "סגל וכלים": the calendar, and on it which calendars it shows */}
+              {(calLinks.length > 0 || calLayers) &&
+                railGroup(
+                  CAL_GROUP,
+                  'rail-group-cal',
+                  <>
+                    {calLinks}
+                    {calLayers && <CalendarLayers />}
+                  </>,
+                )}
+              <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
+                <Icon name="settings" />
+                <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
+              </NavLink>
+            </>
           )}
-          {!phone && !folded && (
-            <MiniMonth
-              selected={calBar?.date ?? today}
-              shown={calBar?.shown ?? []}
-              today={today}
-              onPick={(d) => (calBar ? calBar.goTo(d) : navigate(d === today ? '/' : `/?date=${d}`))}
-            />
-          )}
-          {sections.map((s, i) => {
-            const links = s.title ? railLinks(s.items) : [];
-            if (!s.title || !links.length) return null;
-            return railGroup(s.title, `rail-group-${i}`, links, s.items.reduce((n, it) => n + (it.count ?? 0), 0));
-          })}
-          {/* last, under "סגל וכלים": the calendar - a phone has it on its bar, so there only its calendars, on it */}
-          {(calLinks.length > 0 || calLayers) &&
-            railGroup(
-              CAL_GROUP,
-              'rail-group-cal',
-              <>
-                {calLinks}
-                {calLayers && <CalendarLayers />}
-              </>,
-            )}
-          <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
-            <Icon name="settings" />
-            <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
-          </NavLink>
         </div>
         {/* a phone: the person and leaving, at the foot of the menu (a computer has them in the top bar) */}
         {phone && (
@@ -833,6 +926,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 {isCommander ? 'מפקד הקורס' : user.title || 'איש סגל'}
               </div>
             </div>
+            <NavLink to="/settings" className={({ isActive }) => `icon-btn rail-foot-settings${isActive ? ' active' : ''}`} aria-label={isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'} title={isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}>
+              <Icon name="settings" />
+            </NavLink>
             <button className="icon-btn rail-logout" style={{ color: 'var(--rail-muted)' }} onClick={() => void logout()} aria-label="יציאה" title="יציאה">
               <Icon name="logout" />
             </button>

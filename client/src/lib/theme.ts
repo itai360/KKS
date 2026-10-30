@@ -35,7 +35,9 @@ export function syncBrowserBar(): void {
   }
   // the page has one for a light device and one for a dark one (index.html): a theme chosen here, whatever
   // the device is set to, is the colour of both
-  const paper = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
+  // the page's own colour as it is now - the calendar's on a phone is white, the other screens' the paper
+  const body = document.body ? getComputedStyle(document.body).backgroundColor : '';
+  const paper = body && body !== 'rgba(0, 0, 0, 0)' && body !== 'transparent' ? body : getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
   if (paper) for (const meta of metas) meta.content = paper;
 }
 

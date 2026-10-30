@@ -550,6 +550,18 @@
   padding-inline: 13px;
 }
 
+/* ---------------- a phone: the top bar one piece with the strip behind the clock ---------------- */
+
+/* solid, in the page's own colour (what the phone paints behind its clock): no frosted glass blurring what
+   passes under it, no band of another shade - its edge shows only once the page is scrolled under it */
+@media (max-width: 860px) {
+  .topbar {
+    background: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 /* ---------------- a phone: the same menu sliding in from its side, sized for a finger ---------------- */
 
 @media (max-width: 860px) {
@@ -3693,6 +3705,8 @@
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
+    /* the page in the calendar's own colour: the strip behind the clock is the bar's, one piece with it */
+    background: var(--g-sheet);
   }
   html.cal-shell .topbar {
     display: none;
@@ -4316,4 +4330,129 @@
   height: 1px;
   margin: 6px 16px;
   background: var(--line);
+}
+
+/* ---- a phone's menu is the tab's own: its name on top, its screens, and "כל המסכים" going on to every one ---- */
+.gside-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 12px;
+  animation: gside-in 0.32s var(--spring, cubic-bezier(0.2, 0.9, 0.3, 1)) both;
+}
+/* on to every screen: it comes in from the far side, as a page pushed on a phone (right to left: from the left) */
+.gside-panel.is-forward {
+  --from: -36px;
+}
+/* back to the tab's own: from the side it went to */
+.gside-panel.is-back {
+  --from: 36px;
+}
+@keyframes gside-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--from, 0px));
+  }
+}
+.gside-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px 10px;
+  color: var(--ink);
+}
+.gside-head svg {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  color: var(--tint-fill, var(--g-blue));
+}
+.gside-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.gside-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gside-sec + .gside-sec {
+  margin-top: 8px;
+}
+/* a tab with two kinds of screens: each kind named small above them */
+.gside-sub {
+  padding: 8px 16px 4px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.gside-all .rail-label {
+  flex: 1;
+}
+.gside-all .gside-chev {
+  color: var(--muted);
+}
+.gside-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  min-height: 40px;
+  padding: 0 10px 0 14px;
+  border: 0;
+  border-radius: 20px;
+  background: none;
+  color: var(--g-blue, var(--focus));
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gside-back:active {
+  background: var(--hover);
+}
+.gside-layers {
+  margin-top: 4px;
+}
+@media (max-width: 860px) {
+  /* a raised sheet over the page, as Google Calendar's menu: white, and in the dark a step lighter than the page */
+  .rail.gside,
+  .gside .gside-top,
+  .gside .rail-foot {
+    background: var(--g-sheet);
+  }
+  /* the menu's top names the course only - the tab's own name is the heading under it */
+  .gside .gside-top .brand-sub {
+    display: none;
+  }
+  /* the screen on show, marked as the calendar's chosen view is */
+  .gside-panel .rail-link.active {
+    background: var(--g-blue-soft);
+    color: var(--g-on-blue-soft);
+    font-weight: 600;
+  }
+  .gside-panel .rail-link.active svg {
+    color: var(--g-on-blue-soft);
+  }
+}
+.rail-foot .rail-foot-settings {
+  color: var(--rail-muted);
+}
+.rail-foot .rail-foot-settings.active {
+  color: var(--g-blue, var(--focus));
+}
+@media (prefers-reduced-motion: reduce) {
+  .gside-panel {
+    animation-name: gside-fade;
+  }
+  @keyframes gside-fade {
+    from {
+      opacity: 0;
+    }
+  }
 }

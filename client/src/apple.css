@@ -508,20 +508,26 @@ h4 {
   .rail-group-head {
     min-height: 38px;
   }
+  /* closed, it has no colour at all and is not there: an iPhone paints the strip behind its clock in the colour of
+     what covers the top of the page - an invisible dark layer made it a grey band cut off from the bar */
   .rail-scrim {
     display: block;
     position: fixed;
     inset: 0;
     z-index: 59;
-    background: rgba(0, 0, 0, 0.3);
+    background-color: transparent;
+    visibility: hidden;
     opacity: 0;
     pointer-events: none;
     -webkit-tap-highlight-color: transparent;
-    transition: opacity 0.3s ease;
+    transition: opacity 0.3s ease, background-color 0s linear 0.3s, visibility 0s linear 0.3s;
   }
   .app.menu-open .rail-scrim {
+    background-color: rgba(0, 0, 0, 0.3);
+    visibility: visible;
     opacity: 1;
     pointer-events: auto;
+    transition: opacity 0.3s ease;
   }
 }
 /* less motion: it fades in where it stands */
