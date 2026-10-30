@@ -4714,3 +4714,64 @@ html[data-kb] .peek-foot {
     transition: none;
   }
 }
+
+/* only chosen (a phone, before it is opened): an outlined box with no fill and its two handles, as Google
+   Calendar's app - a tap on it opens the new event */
+.gc-app .gc-event.is-ghost.is-draft.is-selecting {
+  background: color-mix(in srgb, var(--c, var(--g-blue)) 7%, transparent);
+  border: 2px solid var(--c, var(--g-blue));
+  border-radius: 8px;
+  box-shadow: none;
+  color: transparent;
+  animation: gc-select-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+.gc-app .gc-event.is-selecting > .gc-event-title,
+.gc-app .gc-event.is-selecting > .gc-event-meta {
+  visibility: hidden;
+}
+.gc-app .gc-event.is-ghost.is-selecting.is-dragged {
+  background: color-mix(in srgb, var(--c, var(--g-blue)) 12%, transparent);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  animation: none;
+}
+@keyframes gc-select-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+/* its handles: a dot in its colour with a soft ring around it */
+.gc-app .gc-event.is-selecting .gc-draft-handle {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background: var(--c, var(--g-blue));
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--c, var(--g-blue)) 26%, transparent);
+}
+.gc-app .gc-event.is-selecting .gc-draft-handle.is-start {
+  top: -9px;
+}
+.gc-app .gc-event.is-selecting .gc-draft-handle.is-end {
+  bottom: -9px;
+}
+/* the new event's start and end on the hours, in the accent colour, over the hour written there */
+.gc-app .gc-hours .gc-hour-mark {
+  position: absolute;
+  z-index: 1;
+  inset-inline-start: 11px;
+  transform: translateY(-50%);
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--g-sheet);
+  color: var(--g-blue);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-app .gc-event.is-ghost.is-draft.is-selecting {
+    animation: none;
+  }
+}

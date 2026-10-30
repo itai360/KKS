@@ -27,6 +27,9 @@ export interface Draft {
   /** what was typed so far, and the colour chosen: the ghost shows them as Google's does */
   title?: string;
   color?: string | null;
+  /** a phone: only chosen so far - an outlined box with its handles, as Google Calendar's app; a tap on it opens
+   *  the new event */
+  pending?: boolean;
 }
 
 export interface CalendarProps {
@@ -50,6 +53,8 @@ export interface CalendarProps {
   onMove: (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }) => void;
   /** the new event's block moved or stretched by the finger (a phone): its day and hours */
   onDraftMove?: (d: { date: string; start: string; end: string }) => void;
+  /** the chosen time (a pending draft) tapped: the new event opens there */
+  onDraftOpen?: () => void;
   onPickDay: (date: string) => void;
   /** a phone, as Google Calendar's app draws it: the day and the three days with the hours on the left
    *  (as the app keeps them in Hebrew too), big titles and its own way of laying events side by side; the
@@ -199,7 +204,7 @@ const range = (start: number, end: number) => `${fromMinutes(start)} - ${end >= 
 /** the rows above the hours show this many until opened up */
 const ALLDAY_ROWS = 3;
 
-function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onDraftMove, onPickDay, compact = false, dimPast = true, hideWeekend = false }: CalendarProps) {
+function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onDraftMove, onDraftOpen, onPickDay, compact = false, dimPast = true, hideWeekend = false }: CalendarProps) {
   // a phone: Google Calendar's app - its layout, its hours on the left, the day named beside the all-day rows
   const app = compact;
   const appDay = app && view === 'day';
@@ -409,7 +414,11 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
       (cancelled) => {
         pressing.current = false;
         setDrag(null);
-        if (!current) return;
+        // a tap on the chosen time, not a move: the new event opens there
+        if (!current) {
+          if (!cancelled && draft.pending) onDraftOpen?.();
+          return;
+        }
         suppressClick.current = true;
         window.setTimeout(() => void (suppressClick.current = false), 400);
         if (!cancelled) onDraftMove({ date: current.date, start: fromMinutes(current.start), end: fromMinutes(current.end) });
@@ -480,6 +489,10 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
   const nowMin = eventSpan(nowTime, null).start;
   const draftShown = draft && draft.start && days.includes(draft.date) ? eventSpan(draft.start, draft.end) : null;
 
+  // the new event's start and end, marked on the hours (a phone): where the finger has it, else where it is
+  const heldDraft = drag?.kind === 'create' ? drag : null;
+  const marks = !app ? null : heldDraft ? [heldDraft.start, heldDraft.end] : draftShown ? [draftShown.start, draftShown.end] : null;
+
   // a phone: the new event's block kept in sight above its sheet (and above the keyboard, when it comes up) -
   // the hours scroll to it as it is made, moved, or its hours changed in the sheet
   const draftKey = app && draftShown && !drag ? `${draft!.date} ${draftShown.start} ${draftShown.end}` : '';
@@ -492,7 +505,8 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
       const r = el.getBoundingClientRect();
       const b = box.getBoundingClientRect();
       const sheet = document.querySelector<HTMLElement>('.peek-sheet');
-      const bottom = Math.min(b.bottom, sheet ? sheet.getBoundingClientRect().top : b.bottom) - 16;
+      const bar = document.querySelector<HTMLElement>('.bottom-nav');
+      const bottom = Math.min(b.bottom, sheet ? sheet.getBoundingClientRect().top : b.bottom, !sheet && bar ? bar.getBoundingClientRect().top : b.bottom) - 16;
       const top = b.top + 8;
       let dy = r.bottom > bottom ? r.bottom - bottom : 0;
       // taller than the room left: its top in sight
@@ -581,6 +595,12 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                 {/* the app: "8:00"; a computer: "08:00" */}
                 {app ? i + 1 : String(i + 1).padStart(2, '0')}:00
               </span>
+            ))}
+            {/* the new event's start and end on the hours, as Google Calendar's app marks them - following the finger */}
+            {marks?.map((m, i) => (
+              <b key={i} className="gc-hour-mark" style={{ top: `calc(var(--hour) * ${hours(m)})` }}>
+                {Math.floor(m / 60)}:{String(m % 60).padStart(2, '0')}
+              </b>
             ))}
           </div>
           {days.map((d) => {
@@ -690,7 +710,9 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                   return (
                     <div
                       key="draft"
-                      className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}${app && onDraftMove ? ' is-draft' : ''}${held ? ' is-dragged' : ''}`}
+                      className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}${app && onDraftMove ? ' is-draft' : ''}${held ? ' is-dragged' : ''}${app && draft!.pending ? ' is-selecting' : ''}`}
+                      role={app && draft!.pending ? 'button' : undefined}
+                      aria-label={app && draft!.pending ? `אירוע חדש ${range(at.start, at.end)} - הקשה לפתיחה` : undefined}
                       style={{
                         top: `calc(var(--hour) * ${hours(at.start)})`,
                         height: `calc(var(--hour) * ${hours(Math.max(at.end - at.start, app ? APP_MIN_VISIBLE : MIN_VISIBLE))} - 2px)`,

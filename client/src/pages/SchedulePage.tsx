@@ -365,7 +365,21 @@ export function SchedulePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- on each change of how many wait
   }, [waiting]);
   const [card, setCard] = useState<{ item: CalItem; anchor: Anchor } | null>(null);
-  const [draft, setDraft] = useState<(Draft & { anchor: Anchor }) | null>(null);
+  // the new event being made; on a phone first only chosen (pending: an outlined box, as Google Calendar's app),
+  // its sheet opening when the box is tapped
+  const [draft, setDraft] = useState<(Draft & { anchor: Anchor; pending?: boolean }) | null>(null);
+  // a time only chosen goes when the days shown change (or the screen stops being a phone's), or on Escape
+  useEffect(() => {
+    setDraft((d) => (d?.pending ? null : d));
+  }, [view, date, phone]);
+  useEffect(() => {
+    if (!draft?.pending) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDraft(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [draft?.pending]);
   const [askDate, setAskDate] = useState(false);
   const [cancelling, setCancelling] = useState<{ event: ScheduleEvent; openTasks: number } | null>(null);
   const [affected, setAffected] = useState<{ tasks: Task[]; delta: number; id: number } | null>(null);
@@ -421,6 +435,11 @@ export function SchedulePage() {
   const createHere = (d = focus) => {
     if (viewing) return;
     setCard(null);
+    // a time already chosen (a phone): the new event opens there
+    if (draft?.pending) {
+      setDraft({ ...draft, pending: false });
+      return;
+    }
     const h = nextHour();
     setDraft({ date: d, start: h.start, end: h.end, anchor: middle() });
   };
@@ -764,7 +783,7 @@ export function SchedulePage() {
             ready={!loading}
             nowTime={nowTime}
             items={items}
-            draft={draft ? { date: draft.date, start: draft.allDay ? null : (draft.start ?? null), end: draft.end ?? null, title: draft.title, color: draft.color } : null}
+            draft={draft ? { date: draft.date, start: draft.allDay ? null : (draft.start ?? null), end: draft.end ?? null, title: draft.title, color: draft.color, pending: draft.pending } : null}
             allDayOpen={prefs.allDayOpen}
             onAllDayToggle={() => setCalendarPrefs((p) => ({ allDayOpen: !p.allDayOpen }))}
             canCreate={() => !viewing && !(phone && view === 'month')}
@@ -776,7 +795,8 @@ export function SchedulePage() {
               // a phone, its sheet open: another free time tapped moves the new event there, with what was typed
               // and as long as it was made
               setDraft((prev) => {
-                if (!prev || !phone) return place;
+                // a phone: first only chosen - the box, its handles and its hours; a tap on it opens it
+                if (!prev || !phone) return phone ? { ...place, pending: true } : place;
                 if (d.start && prev.start && prev.end && !prev.allDay) {
                   const from = toMinutes(d.start);
                   const len = Math.max(15, toMinutes(prev.end) - toMinutes(prev.start));
@@ -786,6 +806,7 @@ export function SchedulePage() {
               });
             }}
             onDraftMove={(d) => setDraft((prev) => (prev ? { ...prev, date: d.date, start: d.start, end: d.end, endDate: d.date } : prev))}
+            onDraftOpen={() => setDraft((prev) => (prev ? { ...prev, pending: false } : prev))}
             onMove={(e, to) => void move(e, to)}
             onPickDay={(d) => set({ date: d === today ? null : d, view: 'day', event: null }, true)}
             compact={phone}
@@ -861,7 +882,7 @@ export function SchedulePage() {
                 {/* the whole screen under the bar: the hours scroll inside it, the page itself does not */}
                 <div className={`gph-body${view === 'agenda' ? ' gph-scroll' : ''}`}>{calendar}</div>
                 {/* a new event, from the corner - as the app's button */}
-                {canAdd && !draft && (
+                {canAdd && !(draft && !draft.pending) && (
                   <button type="button" className="gph-fab" onClick={() => createHere()} aria-label="אירוע חדש" title="אירוע חדש">
                     <Icon name="plus" size={28} />
                   </button>
@@ -883,7 +904,7 @@ export function SchedulePage() {
         )}
         {card && <PopCard card={card} actions={actions} onClose={() => setCard(null)} />}
         {settingsOpen && <CalendarSettings onClose={() => setSettingsOpen(false)} />}
-        {draft && (
+        {draft && !draft.pending && (
           <QuickCreate
             anchor={draft.anchor}
             draft={draft}
