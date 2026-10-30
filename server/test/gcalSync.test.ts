@@ -3,7 +3,7 @@
 // and brought back - in the calendar chosen for it, the course's calendar in Google, a Google that refuses,
 // a permission taken back, and disconnecting. The names and addresses here are made up.
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../src/db';
 import { googleIdOf, setGcalFetch, writtenUids } from '../src/gcalSync';
 import { login, setup, type Ctx } from './helpers';
@@ -26,6 +26,8 @@ class FakeGoogle {
   calls: { method: string; url: string; body?: string }[] = [];
   refreshFails = false;
   writeFails = 0;
+  /** the project's Calendar API not turned on: Google says so for every call to it */
+  apiOff = false;
   revoked: string[] = [];
   cal(id: string) {
     if (!this.events.has(id)) this.events.set(id, new Map());
@@ -59,6 +61,7 @@ class FakeGoogle {
     const api = 'https://www.googleapis.com/calendar/v3';
     if (!url.startsWith(api)) return new Response('', { status: 404 });
     const path = url.slice(api.length);
+    if (this.apiOff) return Response.json({ error: { code: 403, message: 'Google Calendar API has not been used in project 123 before or it is disabled.', errors: [{ reason: 'accessNotConfigured' }] } }, { status: 403 });
     const who = String(new Headers(init?.headers).get('authorization')).split('.')[1];
     if (path.startsWith('/users/me/calendarList')) {
       if (who === 'staff') return Response.json({ items: [{ id: STAFF, summary: STAFF, backgroundColor: '#039be5', accessRole: 'owner', primary: true }] });
@@ -160,7 +163,7 @@ describe('connecting', () => {
     expect(u.searchParams.get('scope')).toContain('https://www.googleapis.com/auth/calendar.events');
     expect(u.searchParams.get('scope')).toContain('https://www.googleapis.com/auth/calendar.calendarlist.readonly');
     expect(u.searchParams.get('access_type')).toBe('offline');
-    expect(u.searchParams.get('prompt')).toBe('consent');
+    expect(u.searchParams.get('prompt')).toBe('consent select_account');
     expect(u.searchParams.get('code_challenge_method')).toBe('S256');
     const state = u.searchParams.get('state')!;
     // someone else coming back with it: refused, and it is used up
@@ -313,6 +316,21 @@ describe("the course's calendar in Google", () => {
 });
 
 describe('when Google cannot', () => {
+  it("connected, but the project's Calendar API is off: the status says so and how to turn it on", async () => {
+    turnOn();
+    await connect();
+    g.apiOff = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const status = (await c.cmd.get('/api/google/calendar')).body;
+    expect(status).toMatchObject({ connected: true, calendars: [] });
+    expect(status.error).toMatch(/Google Calendar API לא מופעל.*Enable/);
+    expect(warn.mock.calls.some(([m]) => String(m).includes('calendar list failed'))).toBe(true);
+    warn.mockRestore();
+    // turned on: the calendars are there
+    g.apiOff = false;
+    expect((await c.cmd.get('/api/google/calendar')).body.calendars.length).toBeGreaterThan(0);
+  });
+
   it('a refusal waits and is tried again; the event is saved in the app all the same', async () => {
     turnOn();
     await connect();

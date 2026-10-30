@@ -110,9 +110,10 @@ export function connectUrl(actor: UserRow, origin: string, back?: string): strin
     state,
     code_challenge: createHash('sha256').update(verifier).digest('base64url'),
     code_challenge_method: 'S256',
-    // a token that lasts, so later changes reach Google too; asked again each time so Google gives it
+    // a token that lasts, so later changes reach Google too: asked again each time so Google gives it, and
+    // the account chosen each time, so another one (one that may edit the calendars) can be
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: 'consent select_account',
     include_granted_scopes: 'true',
   });
   if (actor.email) q.set('login_hint', actor.email);
@@ -702,7 +703,7 @@ async function push(w: Work): Promise<void> {
 function failureText(e: unknown): string {
   if (e instanceof OffError) return e.message;
   const m = e instanceof Error ? e.message : String(e);
-  if (/accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(m)) return 'ה-Google Calendar API לא מופעל בפרויקט של Google';
+  if (/accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(m)) return 'ה-Google Calendar API לא מופעל בפרויקט של Google. מפעילים אותו ב-Google Cloud Console: APIs & Services ← Library ← Google Calendar API ← Enable';
   if (/ 403 /.test(m) && /rateLimit|quota/i.test(m)) return 'Google ביקש להאט - ננסה שוב בעוד כמה דקות';
   if (/ 403 /.test(m) || / 404 /.test(m)) return 'אין הרשאה לכתוב ביומן הזה ב-Google';
   if (/ 400 /.test(m)) return 'Google לא קיבל את האירוע';
@@ -796,6 +797,8 @@ export async function calendarStatus(actor: UserRow): Promise<GoogleCalendarStat
       calendars = await writableCalendars(actor.id);
     } catch (e) {
       error = e instanceof OffError ? e.message : failureText(e);
+      // what Google said (an error code and its words, never a token): the account is connected, its calendars not listed
+      if (!(e instanceof OffError)) console.warn('[google calendar] calendar list failed:', (e as Error).message);
     }
   }
   const counts = available
