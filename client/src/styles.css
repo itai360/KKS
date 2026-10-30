@@ -10285,12 +10285,42 @@ html {
   -webkit-tap-highlight-color: transparent;
   transition: transform 0.12s;
 }
+.top-brand-home {
+  color: inherit;
+  text-decoration: none;
+}
 .top-brand-home:active {
   transform: scale(0.94);
 }
-.top-brand-home:focus-visible {
+.top-brand-home:focus-visible,
+.top-menu:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--focus);
+}
+/* the side menu's button, before the course's mark - as the calendar's own bar has it */
+.top-menu {
+  display: grid;
+  flex-shrink: 0;
+  width: 40px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s;
+}
+.top-menu:active {
+  transform: scale(0.92);
+}
+/* the smallest phones: the search has room for its icon only, its word would show cut */
+@media (max-width: 359px) {
+  .topbar .search:not(:focus-within) input::placeholder {
+    color: transparent;
+  }
 }
 
 /* ---------------- every screen in one place (components/NavMenu.tsx): the "כל המסכים" page - a search, the

@@ -1,10 +1,12 @@
 // The phone bar's symbols: every tab an outline, the chosen one the same symbol filled. A detail cut out of a
-// filled symbol (the check on the board, the gap around its clip) is drawn in the colour under it (--bar-bg:
-// the solid mark under the chosen tab).
+// filled symbol (the check on the board, the gap around its clip, the calendar's days) is drawn in the colour
+// under it (--bar-bg: the solid mark under the chosen tab).
 
-export type TabIconName = 'home' | 'cadets' | 'weeks' | 'tasks';
+export type TabIconName = 'calendar' | 'cadets' | 'weeks' | 'tasks';
 
-const HOUSE = 'M4 10.3 12 3.5l8 6.8v9.2a1.5 1.5 0 0 1-1.5 1.5H15v-4.5a3 3 0 0 0-6 0V21H5.5A1.5 1.5 0 0 1 4 19.5z';
+const CAL_BODY = { x: 3.8, y: 5.2, width: 16.4, height: 15.6, rx: 2.4 };
+const CAL_RINGS = 'M8 3.2v3.6M16 3.2v3.6';
+const CAL_DAYS = 'M8 13.4h.01M12 13.4h.01M16 13.4h.01M8 17h.01M12 17h.01';
 const CAP_TOP = 'M12 5 2.4 9.8 12 14.6l9.6-4.8z';
 const CAP_TASSEL = 'M21.6 9.8v5.4';
 const STACK_TOP = 'M12 3.5 2.8 8.2 12 12.9l9.2-4.7z';
@@ -14,8 +16,23 @@ const CLIP = { x: 8.4, y: 2.9, width: 7.2, height: 3.8, rx: 1.1 };
 
 function shapes(name: TabIconName, filled: boolean) {
   switch (name) {
-    case 'home':
-      return <path className={filled ? 'ti-fill' : undefined} d={HOUSE} />;
+    case 'calendar':
+      return filled ? (
+        <>
+          <rect className="ti-fill" {...CAL_BODY} />
+          {/* the rings stand apart from the page by a thin gap; the days are cut out of it */}
+          <path className="ti-gap" d={CAL_RINGS} />
+          <path d={CAL_RINGS} />
+          <path className="ti-cut" d={CAL_DAYS} strokeWidth={2.4} />
+        </>
+      ) : (
+        <>
+          <rect {...CAL_BODY} />
+          <path d="M3.8 9.6h16.4" />
+          <path d={CAL_RINGS} />
+          <path d={CAL_DAYS} strokeWidth={2.4} />
+        </>
+      );
     case 'cadets':
       return filled ? (
         <>

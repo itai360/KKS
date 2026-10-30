@@ -417,7 +417,7 @@ export function Layout({ children }: { children: ReactNode }) {
     navigate({ pathname: location.pathname, search: search ? `?${search}` : '', hash: location.hash }, { replace: true });
     if (!viewing) open();
   }, [location.search, location.pathname, location.hash, navigate, newTask, viewing]);
-  // each screen entered counts toward the menu's "בשימוש גבוה" (frequent.ts) - not the home page, which the logo is
+  // each screen entered counts toward the menu's "בשימוש גבוה" (frequent.ts) - not the calendar, which the bar has
   const lastScreen = useRef<string | null>(null);
   useEffect(() => {
     const to = screenOf(location.pathname, [...sections.flatMap((s) => s.items), SETTINGS_ITEM]);
@@ -499,6 +499,8 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   const symbol = settings.courseSymbol || 'קק"ס';
+  // home, where the course's mark leads: the commander's overview; the staff have their own tasks
+  const homeScreen = isCommander ? { to: '/overview', label: 'תמונת מצב' } : { to: '/my', label: 'המשימות שלי' };
   // the calendar - the home page - puts its own controls in the top bar on a computer, and its layers in the side bar
   const calBar = useCalendarBar();
   const onCalendar = location.pathname === '/';
@@ -630,7 +632,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // (a cadet's file, the sociometric, a task's page...); on the screens no tab has, none is marked
   const tab = tabOf(path, sections);
   const barIdx = TAB_INDEX[tab];
-  // on a phone the course's name at the top opens the side menu - the computer's own, with the same groups
+  // on a phone the menu button at the top opens the side menu - the computer's own, with the same groups
   // and screens - sliding in from the side over the page; a screen chosen, a tap beside it, a swipe back to
   // the edge or Escape close it
   const [menuOpen, setMenuOpen] = useState(false);
@@ -883,11 +885,11 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <Icon name={phone ? 'x' : 'sidebar'} />
           </button>
-          <NavLink to="/" end className="gside-brand" title="יומן הקורס">
+          <NavLink to={homeScreen.to} end className="gside-brand" title={homeScreen.label}>
             <span className="brand-mark">{symbol.slice(0, 4)}</span>
             <span className="brand-text">
               <span className="brand-name">{courseCycle(settings.courseName)}</span>
-              <span className="brand-sub">יומן הקורס</span>
+              <span className="brand-sub">{homeScreen.label}</span>
             </span>
           </NavLink>
         </div>
@@ -947,19 +949,23 @@ export function Layout({ children }: { children: ReactNode }) {
         <header className={`topbar${barTitle && !deskBar ? ' is-titled' : ''}${deskBar ? ' is-calendar' : ''}`}>
           <BackButton />
           <div className={`top-brand${menuOpen ? ' is-open' : ''}`}>
-            {/* the course's mark opens the side menu, from this side of the screen */}
+            {/* the side menu, from this side of the screen - where the calendar's own bar has it */}
             <button
               ref={menuButton}
               type="button"
-              className="top-brand-home"
+              className="top-menu"
               onClick={() => setMenuOpen((o) => !o)}
               aria-controls="main-menu"
               aria-expanded={menuOpen}
               aria-label="תפריט"
               title="תפריט"
             >
-              <span className="brand-mark">{symbol.slice(0, 4)}</span>
+              <Icon name="menu" size={22} />
             </button>
+            {/* the course's mark: home - the commander's overview (תמונת מצב), the staff's own tasks */}
+            <NavLink to={homeScreen.to} end className="top-brand-home" aria-label={homeScreen.label} title={homeScreen.label}>
+              <span className="brand-mark">{symbol.slice(0, 4)}</span>
+            </NavLink>
             {/* scrolled past the screen's big title: its name comes in beside the mark, as an iPhone's large titles do */}
             <span className={`top-brand-title${barTitle ? ' is-on' : ''}`} aria-hidden="true">
               {barTitle}
@@ -1060,8 +1066,8 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         <span className="nav-ind" aria-hidden />
         <NavLink to="/" end className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
-          <TabIcon name="home" filled={barIdx === 0} />
-          <span className="nav-label">בית</span>
+          <TabIcon name="calendar" filled={barIdx === 0} />
+          <span className="nav-label">יומן</span>
         </NavLink>
         <NavLink to="/cadets" className={() => (barIdx === 1 ? 'active' : '')} aria-current={barIdx === 1 ? 'page' : undefined}>
           <TabIcon name="cadets" filled={barIdx === 1} />
