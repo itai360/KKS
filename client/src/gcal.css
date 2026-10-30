@@ -4568,3 +4568,149 @@
     }
   }
 }
+
+/* ---------------- a phone's new event, as Google Calendar's app: the block in hand, the sheet under it ---------------- */
+
+/* the new event's block takes the finger: held and moved it goes along, its handles stretch it */
+.gc-app .gc-event.is-ghost.is-draft {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  z-index: 6;
+  overflow: visible;
+}
+/* picked up: a little lifted, as a thing in hand */
+.gc-app .gc-event.is-ghost.is-dragged {
+  z-index: 7;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  cursor: grabbing;
+  transition: top 0.08s linear, height 0.08s linear;
+}
+/* the handles: a white dot ringed in the event's colour at its top and its bottom, the finger's place around it
+   wider than the dot */
+.gc-draft-handle {
+  position: absolute;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--c, var(--g-blue));
+  border-radius: 50%;
+  background: var(--g-sheet);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  touch-action: none;
+  cursor: ns-resize;
+}
+.gc-draft-handle::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+}
+.gc-draft-handle.is-start {
+  top: -8px;
+  inset-inline-end: 14px;
+}
+.gc-draft-handle.is-end {
+  bottom: -8px;
+  inset-inline-start: 14px;
+}
+
+/* the sheet under it: low over the page, no shade - the calendar above still answers the finger */
+.peek-sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  max-height: min(62dvh, 560px);
+  border-radius: 20px 20px 0 0;
+  background: var(--g-sheet);
+  color: var(--ink);
+  box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.18), 0 -1px 0 var(--g-line);
+  animation: peek-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.peek-sheet.is-pulled {
+  transition: none;
+}
+@keyframes peek-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+/* the keyboard up: the sheet sits on it, in what is still in sight */
+html[data-kb] .peek-sheet {
+  bottom: auto;
+  top: calc(var(--vv-top, 0px) + var(--vv-h, 100dvh));
+  translate: 0 -100%;
+  max-height: calc(var(--vv-h, 100dvh) - 96px);
+  animation: none;
+}
+.peek-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 14px 16px 2px;
+  touch-action: none;
+  cursor: grab;
+}
+.peek-grab {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  border-radius: 3px;
+  background: var(--g-line);
+}
+.peek-title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.peek-close {
+  color: var(--ink-2);
+}
+.peek-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px 6px;
+}
+.peek-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--g-line);
+}
+html[data-kb] .peek-foot {
+  padding-bottom: 8px;
+}
+/* the card's own head and buttons: the sheet has them */
+.peek-sheet .qc-top,
+.peek-sheet .qc-foot {
+  display: none;
+}
+.peek-sheet .qc {
+  padding: 0;
+}
+.peek-sheet .qc-title {
+  margin-top: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .peek-sheet {
+    animation: none;
+    transition: none;
+  }
+  .gc-app .gc-event.is-ghost.is-dragged {
+    transition: none;
+  }
+}

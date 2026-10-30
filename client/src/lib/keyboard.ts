@@ -32,12 +32,13 @@ export function takesKeys(el: EventTarget | null): boolean {
 const DOCK = 84;
 
 function bringIntoSight(el: HTMLElement) {
-  const box = el.closest<HTMLElement>('.modal-body');
+  const box = el.closest<HTMLElement>('.modal-body, .peek-body');
   // on a page the browser brings the field into sight itself
   if (!box) return;
   const r = el.getBoundingClientRect();
   const b = box.getBoundingClientRect();
-  const room = b.height - DOCK;
+  // a peek sheet's buttons are below its body, not over it
+  const room = b.height - (box.classList.contains('peek-body') ? 0 : DOCK);
   if (r.top >= b.top + 8 && r.bottom <= b.top + room) return;
   const top = box.scrollTop + (r.top - b.top) - Math.max(8, (room - r.height) / 2);
   box.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });

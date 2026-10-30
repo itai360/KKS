@@ -48,6 +48,8 @@ export interface CalendarProps {
   onOpen: (item: CalItem, el: HTMLElement) => void;
   onCreate: (d: { date: string; start: string | null; end: string | null }, at: Anchor) => void;
   onMove: (e: ScheduleEvent, to: { date: string; startTime: string; endTime: string | null }) => void;
+  /** the new event's block moved or stretched by the finger (a phone): its day and hours */
+  onDraftMove?: (d: { date: string; start: string; end: string }) => void;
   onPickDay: (date: string) => void;
   /** a phone, as Google Calendar's app draws it: the day and the three days with the hours on the left
    *  (as the app keeps them in Hebrew too), big titles and its own way of laying events side by side; the
@@ -160,7 +162,7 @@ function Chip({ item, lane, hourly, past, onOpen, draggable, onDragStart, onDrag
 
 // ---------------- day, a few days and the week ----------------
 
-type Drag = { kind: 'move' | 'resize'; id: number; date: string; start: number; end: number } | { kind: 'create'; date: string; start: number; end: number; touch?: boolean };
+type Drag = { kind: 'move' | 'resize'; id: number; date: string; start: number; end: number } | { kind: 'create'; date: string; start: number; end: number; touch?: boolean; draft?: boolean; home?: string; dx?: number };
 
 /** how long a finger stays on free time before it becomes a new event there (Google Calendar's app: about this) */
 const PRESS_MS = 380;
@@ -197,7 +199,7 @@ const range = (start: number, end: number) => `${fromMinutes(start)} - ${end >= 
 /** the rows above the hours show this many until opened up */
 const ALLDAY_ROWS = 3;
 
-function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onPickDay, compact = false, dimPast = true, hideWeekend = false }: CalendarProps) {
+function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onDraftMove, onPickDay, compact = false, dimPast = true, hideWeekend = false }: CalendarProps) {
   // a phone: Google Calendar's app - its layout, its hours on the left, the day named beside the all-day rows
   const app = compact;
   const appDay = app && view === 'day';
@@ -360,6 +362,61 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
     );
   };
 
+  /**
+   * The new event's block, as Google Calendar's app has it while its sheet is open: held and moved, it goes
+   * where the finger takes it (another day too, when several are shown); its top or bottom handle stretches
+   * it. A quarter of an hour at a time, each with a tick; let go, the sheet's hours are the block's.
+   */
+  const startDraftDrag = (down: ReactPointerEvent<HTMLElement>, kind: 'move' | 'start' | 'end') => {
+    down.stopPropagation();
+    if (!draft?.start || !onDraftMove || (down.pointerType === 'mouse' && down.button !== 0)) return;
+    const span = eventSpan(draft.start, draft.end);
+    const len = Math.max(15, span.end - span.start);
+    const home = columnAt(down.clientX);
+    const grabAt = minutesAt(home, down.clientY);
+    const homeLeft = home.getBoundingClientRect().left;
+    const x0 = down.clientX;
+    const y0 = down.clientY;
+    // the hours and the day hold still under the finger; the block keeps the finger to the end, and stays the
+    // same block (in its own day's column, shifted over to another day) - one taken away under a finger loses it
+    pressing.current = down.pointerType === 'touch';
+    const block = (down.currentTarget as HTMLElement).closest<HTMLElement>('.gc-event') ?? down.currentTarget;
+    try {
+      block.setPointerCapture(down.pointerId);
+    } catch {
+      /* the window still hears it */
+    }
+    let current: Extract<Drag, { kind: 'create' }> | null = null;
+    track(
+      down,
+      (m) => {
+        if (!current && Math.hypot(m.clientX - x0, m.clientY - y0) < 4) return;
+        const col = kind === 'move' ? columnAt(m.clientX) : home;
+        const at = minutesAt(col, m.clientY);
+        let start = span.start;
+        let end = span.start + len;
+        if (kind === 'move') {
+          start = Math.max(0, Math.min(DAY_MINUTES - len, snap(span.start + (at - grabAt), 15)));
+          end = start + len;
+        } else if (kind === 'start') start = Math.max(0, Math.min(end - 15, snap(at, 15)));
+        else end = Math.max(start + 15, Math.min(DAY_MINUTES, snap(at, 15)));
+        const next = { kind: 'create' as const, date: col.dataset.date!, start, end, draft: true, home: draft.date, dx: col.getBoundingClientRect().left - homeLeft };
+        if (current && next.date === current.date && next.start === current.start && next.end === current.end) return;
+        if (current) haptic('tick');
+        current = next;
+        setDrag(current);
+      },
+      (cancelled) => {
+        pressing.current = false;
+        setDrag(null);
+        if (!current) return;
+        suppressClick.current = true;
+        window.setTimeout(() => void (suppressClick.current = false), 400);
+        if (!cancelled) onDraftMove({ date: current.date, start: fromMinutes(current.start), end: fromMinutes(current.end) });
+      },
+    );
+  };
+
   const startCreate = (down: ReactPointerEvent<HTMLDivElement>, day: string) => {
     suppressClick.current = false;
     if (down.pointerType === 'touch' && down.isPrimary && down.target === down.currentTarget && !bulk?.active && canCreate(day)) return pressCreate(down, day);
@@ -422,6 +479,41 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
 
   const nowMin = eventSpan(nowTime, null).start;
   const draftShown = draft && draft.start && days.includes(draft.date) ? eventSpan(draft.start, draft.end) : null;
+
+  // a phone: the new event's block kept in sight above its sheet (and above the keyboard, when it comes up) -
+  // the hours scroll to it as it is made, moved, or its hours changed in the sheet
+  const draftKey = app && draftShown && !drag ? `${draft!.date} ${draftShown.start} ${draftShown.end}` : '';
+  useEffect(() => {
+    if (!draftKey) return;
+    const reveal = () => {
+      const box = scrollRef.current;
+      const el = box?.querySelector<HTMLElement>('.gc-event.is-draft');
+      if (!box || !el) return;
+      const r = el.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      const sheet = document.querySelector<HTMLElement>('.peek-sheet');
+      const bottom = Math.min(b.bottom, sheet ? sheet.getBoundingClientRect().top : b.bottom) - 16;
+      const top = b.top + 8;
+      let dy = r.bottom > bottom ? r.bottom - bottom : 0;
+      // taller than the room left: its top in sight
+      if (r.top - dy < top) dy = r.top - top;
+      if (Math.abs(dy) > 2) box.scrollBy({ top: dy, behavior: 'smooth' });
+    };
+    // once the sheet has come up
+    const t = window.setTimeout(reveal, 320);
+    const vv = window.visualViewport;
+    let kb = 0;
+    const onResize = () => {
+      window.clearTimeout(kb);
+      kb = window.setTimeout(reveal, 160);
+    };
+    vv?.addEventListener('resize', onResize);
+    return () => {
+      window.clearTimeout(t);
+      window.clearTimeout(kb);
+      vv?.removeEventListener('resize', onResize);
+    };
+  }, [draftKey]);
 
   return (
     <div className={`gc gc-${view}${app ? ' gc-app' : ''}${scrolled ? ' is-scrolled' : ''}`} style={{ '--days': days.length } as CSSProperties}>
@@ -581,18 +673,42 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                     </button>
                   );
                 })}
-                {drag?.kind === 'create' && drag.date === d && (
-                  <div className={`gc-event is-ghost${drag.touch ? ' is-pressed' : ''}`} style={{ top: `calc(var(--hour) * ${hours(drag.start)})`, height: `calc(var(--hour) * ${hours(drag.end - drag.start)} - 2px)` }}>
+                {drag?.kind === 'create' && !drag.draft && drag.date === d && (
+                  <div
+                    className={`gc-event is-ghost${drag.touch ? ' is-pressed' : ''}`}
+                    style={{ top: `calc(var(--hour) * ${hours(drag.start)})`, height: `calc(var(--hour) * ${hours(drag.end - drag.start)} - 2px)` }}
+                  >
                     <span className="gc-event-title">(ללא כותרת)</span>
                     <span className="gc-event-meta">{range(drag.start, drag.end)}</span>
                   </div>
                 )}
-                {draftShown && draft!.date === d && !drag && (
-                  <div className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}`} style={{ top: `calc(var(--hour) * ${hours(draftShown.start)})`, height: `calc(var(--hour) * ${hours(Math.max(draftShown.end - draftShown.start, app ? APP_MIN_VISIBLE : MIN_VISIBLE))} - 2px)` }}>
-                    <span className="gc-event-title">{draftTitle}</span>
-                    <span className="gc-event-meta">{range(draftShown.start, draftShown.end)}</span>
-                  </div>
-                )}
+                {draftShown && (() => {
+                  // the new event's block: while the finger has it, where the finger takes it - the same block
+                  const held = drag?.kind === 'create' && drag.draft ? drag : null;
+                  if ((held ? held.home : draft!.date) !== d || (drag && !held)) return null;
+                  const at = held ?? draftShown;
+                  return (
+                    <div
+                      key="draft"
+                      className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}${app && onDraftMove ? ' is-draft' : ''}${held ? ' is-dragged' : ''}`}
+                      style={{
+                        top: `calc(var(--hour) * ${hours(at.start)})`,
+                        height: `calc(var(--hour) * ${hours(Math.max(at.end - at.start, app ? APP_MIN_VISIBLE : MIN_VISIBLE))} - 2px)`,
+                        ...(held?.dx ? { transform: `translateX(${held.dx}px)` } : {}),
+                      }}
+                      onPointerDown={app && onDraftMove ? (ev) => startDraftDrag(ev, 'move') : undefined}
+                    >
+                      <span className="gc-event-title">{draftTitle}</span>
+                      <span className="gc-event-meta">{range(at.start, at.end)}</span>
+                      {app && onDraftMove && (
+                        <>
+                          <span className="gc-draft-handle is-start" onPointerDown={(ev) => startDraftDrag(ev, 'start')} aria-hidden="true" />
+                          <span className="gc-draft-handle is-end" onPointerDown={(ev) => startDraftDrag(ev, 'end')} aria-hidden="true" />
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
                 {d === today && <div className="gc-now" style={{ top: `calc(var(--hour) * ${hours(nowMin)})` }} aria-hidden="true" />}
               </div>
             );

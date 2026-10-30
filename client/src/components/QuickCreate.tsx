@@ -10,11 +10,14 @@ import { repeatPresets } from '@shared/rrule';
 import type { EventCalendar, EventDetail } from '@shared/types';
 import type { EventPrefill } from './Agenda';
 import { api } from '../lib/api';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { isoAt } from '../lib/format';
+import { useMedia } from '../lib/media';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { isGooglePick, lastPick, pickBody, pickColor, rememberPick, useGoogleCalendar, type CalendarPick } from '../lib/googleWrite';
 import { CalendarPicker } from './CalendarPicker';
+import { ask } from './Confirm';
 import { ColorMenu, RepeatSelect } from './EventDialogs';
 import { Icon } from './Icon';
 import { Popover, type Anchor } from './Popover';
@@ -157,6 +160,13 @@ export function QuickCreate({
     }
   };
   const save = () => void (tab === 'event' ? saveEvent() : saveTask());
+  // a phone's sheet leaves the calendar to the finger, so nothing outside closes it by chance: closing it
+  // (its X, a pull down, Escape) asks first when something was typed
+  const phone = useMedia(BOTTOM_BAR_MEDIA);
+  const closeAsk = async () => {
+    if ((title.trim() || location.trim() || notes.trim()) && !(await ask({ title: tab === 'event' ? 'לבטל את האירוע?' : 'לבטל את המשימה?', body: 'מה שהוקלד כאן יימחק.', confirm: 'ביטול', cancel: 'המשך עריכה', danger: true }))) return;
+    onClose();
+  };
 
   const footer = (
     <>
@@ -176,7 +186,16 @@ export function QuickCreate({
     : `${longDay(draft.date)} · ${start}${tab === 'event' && end ? ` – ${end}` : ''}`;
 
   return (
-    <Popover anchor={anchor} label={tab === 'event' ? 'אירוע חדש' : 'משימה חדשה'} onClose={onClose} width={448} className="quick-create g-qc" sheetFooter={footer}>
+    <Popover
+      anchor={anchor}
+      label={tab === 'event' ? 'אירוע חדש' : 'משימה חדשה'}
+      onClose={phone ? () => void closeAsk() : onClose}
+      width={448}
+      className="quick-create g-qc"
+      sheetFooter={footer}
+      peek
+      onExpand={tab === 'event' ? () => onMore(current()) : undefined}
+    >
       <form
         className="qc"
         onSubmit={(e) => {

@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { MONTH_NAMES, monthWeeks, stepDate, viewDays, viewTitle } from '@shared/calendarGrid';
+import { DAY_MINUTES, fromMinutes, MONTH_NAMES, monthWeeks, stepDate, toMinutes, viewDays, viewTitle } from '@shared/calendarGrid';
 import {
   dedupe,
   externalColor,
@@ -772,8 +772,20 @@ export function SchedulePage() {
             onOpen={openItem}
             onCreate={(d, at) => {
               setCard(null);
-              setDraft({ date: d.date, start: d.start ?? undefined, end: d.end, allDay: d.start === null, endDate: d.date, anchor: at });
+              const place = { date: d.date, start: d.start ?? undefined, end: d.end, allDay: d.start === null, endDate: d.date, anchor: at };
+              // a phone, its sheet open: another free time tapped moves the new event there, with what was typed
+              // and as long as it was made
+              setDraft((prev) => {
+                if (!prev || !phone) return place;
+                if (d.start && prev.start && prev.end && !prev.allDay) {
+                  const from = toMinutes(d.start);
+                  const len = Math.max(15, toMinutes(prev.end) - toMinutes(prev.start));
+                  return { ...prev, ...place, end: fromMinutes(Math.min(DAY_MINUTES, from + len)) };
+                }
+                return { ...prev, ...place };
+              });
             }}
+            onDraftMove={(d) => setDraft((prev) => (prev ? { ...prev, date: d.date, start: d.start, end: d.end, endDate: d.date } : prev))}
             onMove={(e, to) => void move(e, to)}
             onPickDay={(d) => set({ date: d === today ? null : d, view: 'day', event: null }, true)}
             compact={phone}
@@ -849,7 +861,7 @@ export function SchedulePage() {
                 {/* the whole screen under the bar: the hours scroll inside it, the page itself does not */}
                 <div className={`gph-body${view === 'agenda' ? ' gph-scroll' : ''}`}>{calendar}</div>
                 {/* a new event, from the corner - as the app's button */}
-                {canAdd && (
+                {canAdd && !draft && (
                   <button type="button" className="gph-fab" onClick={() => createHere()} aria-label="אירוע חדש" title="אירוע חדש">
                     <Icon name="plus" size={28} />
                   </button>
