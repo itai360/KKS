@@ -4,7 +4,7 @@
 // to where it was. The old one leaves on one side and the new one comes in from the other, with the
 // finger's speed. Up and down stays the page's (and the hours') scroll.
 
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { haptic } from '../lib/haptics';
 import { animateSpring, project, rubberband, velocityOf, type SpringRun } from '../lib/spring';
 
@@ -28,8 +28,13 @@ export function usePeriodSwipe(
   step.current = onStep;
   const canRef = useRef(can);
   canRef.current = can;
+  // the page itself, as it is now: it can come later than the screen (after the first load, a search closed)
+  // or be another one - the finger follows whichever is there
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (area.current !== el) setEl(area.current);
+  });
   useEffect(() => {
-    const el = area.current;
     if (!el || !enabled) return;
     let x = 0;
     let run: SpringRun | null = null;
@@ -138,5 +143,5 @@ export function usePeriodSwipe(
       el.removeEventListener('touchend', end);
       el.removeEventListener('touchcancel', end);
     };
-  }, [area, enabled, skipScrollers]);
+  }, [el, enabled, skipScrollers]);
 }
