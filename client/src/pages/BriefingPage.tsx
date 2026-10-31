@@ -1,5 +1,6 @@
 // Section 50 - morning briefing: one screen to go over the day with the staff.
 
+import { PageBack } from '../components/BackButton';
 import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { shortDate } from '@shared/dates';
@@ -32,6 +33,7 @@ export function BriefingPage() {
 
   return (
     <div className="briefing" ref={ref}>
+      <PageBack />
       <div className="brief-head">
         <div>
           <div className="label-caps">

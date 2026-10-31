@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { Icon } from './Icon';
+import { PageBack } from './BackButton';
 import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
 import { useSheetGesture } from './sheetGesture';
@@ -103,7 +104,7 @@ export function Modal({
     else ref.current?.focus({ preventScroll: true });
     const unlock = lockScroll();
     const box = ref.current;
-    // the keyboard stays in the dialog while it is the topmost one (its backdrop holds the arrow too)
+    // the keyboard stays in the dialog while it is the topmost one
     const layer = box?.closest<HTMLElement>('.modal-backdrop');
     const untrap = layer
       ? trapFocus(layer, () => {
@@ -119,32 +120,6 @@ export function Modal({
       prev?.focus?.();
     };
     // once per opening: re-running on every parent render would steal focus mid-typing
-  }, []);
-  // the floating back arrow right where the top bar's own arrow is - one arrow, in one place - whatever
-  // the bar's padding on this screen size. With no arrow in the bar (the home screen) there is none here
-  // either - its place holds the course's mark - and the dialog closes with its X
-  const backRef = useRef<HTMLButtonElement>(null);
-  useLayoutEffect(() => {
-    const el = backRef.current;
-    if (!el) return;
-    let frame = 0;
-    const place = () => {
-      const bar = document.querySelector<HTMLElement>('.topbar .back-top')?.getBoundingClientRect();
-      el.hidden = !bar || !bar.width;
-      if (!el.hidden) el.style.inset = `${bar!.top}px auto auto ${bar!.left}px`;
-    };
-    const later = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(place);
-    };
-    place();
-    // once the page under it is locked in place (its scroll bar gone), and whenever the window changes
-    later();
-    addEventListener('resize', later);
-    return () => {
-      cancelAnimationFrame(frame);
-      removeEventListener('resize', later);
-    };
   }, []);
   // its edges show only where content runs under them: the title's once the body is scrolled, the
   // buttons' while more of it is below - not hard lines drawn whether or not anything is there
@@ -237,12 +212,6 @@ export function Modal({
         </div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-      {/* a screen opened over a screen has the floating back arrow too: it closes this one */}
-      {closable && !narrow && (
-        <button type="button" ref={backRef} className="modal-back no-print" onClick={() => void tryClose.current()} aria-label="חזרה" title="חזרה">
-          <Icon name="chevronRight" size={24} />
-        </button>
-      )}
     </div>,
     document.body,
   );
@@ -414,6 +383,7 @@ export function PageHead({
   return (
     <div className="page-head">
       <div className="titles">
+        <PageBack />
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         {tags ? (
           <div className="page-title-row">

@@ -12,6 +12,7 @@ import { dayOrder, isTimed, itemDays, loadByDay, type CalItem } from '@shared/ca
 import { WEEKDAY_NAMES } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { ScheduleEvent, Week } from '@shared/types';
+import { fmtTime } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { useBulk } from './Bulk';
 import { Icon } from './Icon';
@@ -203,6 +204,8 @@ const hours = (min: number) => min / 60;
 const range = (start: number, end: number) => `${fromMinutes(start)} - ${end >= DAY_MINUTES ? '24:00' : fromMinutes(end)}`;
 /** the rows above the hours show this many until opened up */
 const ALLDAY_ROWS = 3;
+/** away from the app this long, the hours go back to now on return */
+const AWAY_MS = 5 * 60_000;
 
 function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onDraftMove, onDraftOpen, onPickDay, compact = false, dimPast = true, hideWeekend = false }: CalendarProps) {
   // a phone: Google Calendar's app - its layout, its hours on the left, the day named beside the all-day rows
@@ -229,20 +232,55 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
   const rows = allDayOpen ? allRows : Math.min(allRows, ALLDAY_ROWS);
   const canOpen = allRows > ALLDAY_ROWS;
 
-  // open on the morning (or the first event, if earlier) - once per day or week shown, not on every refresh.
-  // The phone app opens today at the hour it is now, a little of what came before above it
+  // where the hours open - once per day or week shown, not on every refresh: with today among the days, the
+  // present moment in the middle of what is in sight (not under the phone's bar); another day, its morning (or
+  // its first event, if earlier)
   const firstStart = Math.min(8 * 60, ...timed.map((i) => eventSpan(i.start!, i.end).start));
-  const openAt = app && days.includes(today) ? Math.max(0, eventSpan(nowTime, null).start - 75) : firstStart - 45;
+  const showsToday = days.includes(today);
   const scrollKey = `${view}:${days[0]}`;
   const scrolledFor = useRef('');
-  useEffect(() => {
+  const openHours = (smooth: boolean) => {
     const el = scrollRef.current;
-    if (!el || !ready || scrolledFor.current === scrollKey) return;
+    const body = el?.querySelector<HTMLElement>('.gc-col');
+    if (!el || !body) return;
+    const perMinute = body.offsetHeight / DAY_MINUTES;
+    let top = perMinute * (firstStart - 45);
+    if (showsToday) {
+      const now = eventSpan(fmtTime(new Date().toISOString()), null).start;
+      const box = el.getBoundingClientRect();
+      // the phone's bar floats over the hours' foot (a computer has none: hidden, it measures nothing)
+      const bar = document.querySelector<HTMLElement>('.bottom-nav')?.getBoundingClientRect();
+      const covered = bar && bar.height ? Math.max(0, box.bottom - bar.top) : 0;
+      top = perMinute * now - (el.clientHeight - covered) / 2;
+    }
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollTo({ top: Math.max(0, top), behavior: smooth && !reduce ? 'smooth' : 'auto' });
+  };
+  useEffect(() => {
+    if (!scrollRef.current || !ready || scrolledFor.current === scrollKey) return;
     scrolledFor.current = scrollKey;
-    const body = el.querySelector<HTMLElement>('.gc-col');
-    if (body) el.scrollTop = Math.max(0, (body.offsetHeight / DAY_MINUTES) * openAt);
+    openHours(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- where it opens, once for the days shown
   }, [scrollKey, ready]);
+  // back in the app after a while away (a phone's app is resumed, not opened again): today goes back to now
+  const openHoursRef = useRef(openHours);
+  openHoursRef.current = openHours;
+  const showsTodayRef = useRef(showsToday);
+  showsTodayRef.current = showsToday;
+  useEffect(() => {
+    let away = 0;
+    const onVisibility = () => {
+      if (document.hidden) {
+        away = Date.now();
+        return;
+      }
+      const long = away && Date.now() - away > AWAY_MS;
+      away = 0;
+      if (long && showsTodayRef.current && !document.querySelector('.peek-sheet, .modal, .pop')) openHoursRef.current(true);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   const columns = () => [...(scrollRef.current?.querySelectorAll<HTMLElement>('.gc-col') ?? [])];
   /** the day column under x (the nearest one when outside) */

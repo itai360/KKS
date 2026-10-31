@@ -1233,29 +1233,6 @@ input[type='radio'] {
   accent-color: var(--tint);
 }
 
-/* back: the system's chevron in the tint - no circle, no frame */
-.back-top,
-.modal-back {
-  border: none;
-  background: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: none;
-  color: var(--tint);
-}
-@media (hover: hover) {
-  .back-top:hover,
-  .modal-back:hover {
-    background: var(--fill);
-  }
-}
-.back-top svg,
-.modal-back svg {
-  width: 24px;
-  height: 24px;
-  stroke-width: 2.4;
-}
-
 /* the computer's "+": a round button in the tint */
 .top-plus {
   background: var(--tint-fill);

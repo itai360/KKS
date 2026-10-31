@@ -17,7 +17,7 @@ import { addToWeekly } from './WeeklyAdd';
 import { addProcedure } from './ProcedureReport';
 import { openSmartEntry } from './SmartEntry';
 import { ScreenBoundary } from './ScreenBoundary';
-import { BackButton } from './BackButton';
+import { BackContext, parentPath, useEdgeBack, type Back } from './BackButton';
 import { CommandPalette } from './CommandPalette';
 import { TopSearch } from './TopSearch';
 import { CalendarLayers } from './SideBar';
@@ -142,7 +142,7 @@ function ThemeButton() {
   );
 }
 
-/** the phone bar's tabs: each screen belongs to one, and the side menu shows that tab's screens. "more" - the
+/** the phone bar's tabs: each screen belongs to one, its tab marked while it is on show. "more" - the
  *  screens no tab has (control, the staff and the tools) */
 export type NavTab = 'home' | 'cadets' | 'weeks' | 'tasks' | 'more';
 export interface NavSection {
@@ -150,9 +150,6 @@ export interface NavSection {
   tab: NavTab;
   items: NavItem[];
 }
-/** the side menu's heading on a phone, for each tab */
-const TAB_TITLES: Record<NavTab, string> = { home: 'יומן', cadets: 'צוערים', weeks: 'שבועות ותכנון', tasks: 'משימות', more: 'בקרה וסגל' };
-const TAB_ICONS: Record<NavTab, string> = { home: 'calendar', cadets: 'cap', weeks: 'layers', tasks: 'tasks', more: 'pulse' };
 /** the phone bar's place of each tab (the "+" is the middle one); "more" marks none */
 const TAB_INDEX: Record<NavTab, number> = { home: 0, cadets: 1, weeks: 3, tasks: 4, more: -1 };
 
@@ -162,6 +159,24 @@ export function tabOf(path: string, sections: NavSection[]): NavTab {
   if (path === '/' || path.startsWith('/event/')) return 'home';
   const s = sections.find((x) => x.items.some((it) => !it.end && (path === it.to || path.startsWith(`${it.to}/`))));
   return s?.tab ?? 'more';
+}
+
+/** the screens of this tab's history, by their place in it - kept for the tab's life (a reload included) */
+const TRAIL_KEY = 'kks-back-trail';
+function readTrail(): string[] {
+  try {
+    const t = JSON.parse(sessionStorage.getItem(TRAIL_KEY) ?? '[]');
+    return Array.isArray(t) ? t : [];
+  } catch {
+    return [];
+  }
+}
+function saveTrail(t: string[]): void {
+  try {
+    sessionStorage.setItem(TRAIL_KEY, JSON.stringify(t));
+  } catch {
+    // private browsing: back still works, only without the name of where it goes
+  }
 }
 
 export function useNavSections(): NavSection[] {
@@ -417,6 +432,30 @@ export function Layout({ children }: { children: ReactNode }) {
     navigate({ pathname: location.pathname, search: search ? `?${search}` : '', hash: location.hash }, { replace: true });
     if (!viewing) open();
   }, [location.search, location.pathname, location.hash, navigate, newTask, viewing]);
+  // back: the screen before this one in the app's own history (react-router numbers it), or - opened from a
+  // link, with nothing before it - the screen above; named for that screen. The calendar is where it ends
+  const historyIdx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+  const trail = useRef<string[] | null>(null);
+  if (!trail.current) trail.current = readTrail();
+  useEffect(() => {
+    const t = trail.current!;
+    t[historyIdx] = location.pathname;
+    t.length = historyIdx + 1;
+    saveTrail(t);
+  }, [location.key, location.pathname, historyIdx]);
+  const back = useMemo<Back | null>(() => {
+    if (location.pathname === '/') return null;
+    const target = historyIdx > 0 ? (trail.current![historyIdx - 1] ?? null) : parentPath(location.pathname);
+    const screens = [...sections.flatMap((s) => s.items), SETTINGS_ITEM];
+    const to = target === null ? null : screenOf(target, screens);
+    const label = to ? (screens.find((it) => it.to === to)?.label ?? null) : null;
+    return {
+      label,
+      // going up takes this screen's place, so the next "back" goes on up rather than down to it again
+      go: () => (historyIdx > 0 ? navigate(-1) : navigate(parentPath(location.pathname), { replace: true })),
+    };
+  }, [location.pathname, historyIdx, sections, navigate]);
+
   // each screen entered counts toward the menu's "בשימוש גבוה" (frequent.ts) - not the calendar, which the bar has
   const lastScreen = useRef<string | null>(null);
   useEffect(() => {
@@ -651,14 +690,6 @@ export function Layout({ children }: { children: ReactNode }) {
     [],
   );
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  // a phone's menu: on the calendar (home) the calendar's own - its views and calendars - with "כל המסכים" going
-  // on to every screen, and back; on any other screen every screen at once
-  const fullMenu = tab !== 'home';
-  const [menuPanel, setMenuPanel] = useState<{ at: 'tab' | 'all'; back: boolean; forward?: boolean }>({ at: 'tab', back: false });
-  useLayoutEffect(() => {
-    if (menuOpen) setMenuPanel({ at: fullMenu ? 'all' : 'tab', back: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- as it opens
-  }, [menuOpen]);
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname]);
@@ -666,6 +697,9 @@ export function Layout({ children }: { children: ReactNode }) {
     if (!phone) setMenuOpen(false);
   }, [phone]);
   useDrawerSwipe(railRef, scrimRef, drawer, closeMenu);
+  // a phone has no back arrow - one swipes back (the iPhone's app on the home screen: from a side edge)
+  const goBack = useCallback(() => back?.go(), [back]);
+  useEdgeBack(phone && !!back && !menuOpen, goBack);
   useEffect(() => {
     const rail = railRef.current;
     if (!drawer || !rail) return;
@@ -698,16 +732,23 @@ export function Layout({ children }: { children: ReactNode }) {
     };
   }, [drawer]);
 
-  // the menu's groups (תכנון הקורס, צוערים, בקרה, כלים) open and close; each remembers how it was left,
-  // and the group of the screen on show opens by itself (the calendar's: its last group, "יומן")
-  const [groups, setGroups] = useState<Record<string, boolean>>(readGroups);
+  // the menu's groups (תכנון הקורס, צוערים, בקרה, כלים) open and close, and the group of the screen on show opens
+  // by itself (the calendar's: its last group, "יומן"). A computer's side bar remembers how each was left; a
+  // phone's menu opens every time with only the group of the screen on show open
+  const [groups, setGroups] = useState<Record<string, boolean>>(() => (phone ? {} : readGroups()));
   const hereSection = sections.find((s) => s.items.some((it) => (it.end ? path === it.to : path === it.to || path.startsWith(`${it.to}/`))));
   const here = hereSection ? (hereSection.title ?? CAL_GROUP) : undefined;
+  const keepGroups = (g: Record<string, boolean>) => (phone ? g : saveGroups(g));
   useEffect(() => {
-    if (here) setGroups((g) => (g[here] ? g : saveGroups({ ...g, [here]: true })));
+    if (here) setGroups((g) => (g[here] ? g : keepGroups({ ...g, [here]: true })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on the screen's group changing
   }, [here]);
+  useLayoutEffect(() => {
+    if (drawer) setGroups(here ? { [here]: true } : {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- as it opens
+  }, [drawer]);
   const groupOpen = (title: string) => groups[title] ?? false;
-  const toggleGroup = (title: string) => setGroups((g) => saveGroups({ ...g, [title]: !g[title] }));
+  const toggleGroup = (title: string) => setGroups((g) => keepGroups({ ...g, [title]: !g[title] }));
   // with the phone's bar below, home is its first tab - not in the menu too
   const railLinks = (items: NavItem[]) =>
     items
@@ -755,10 +796,8 @@ export function Layout({ children }: { children: ReactNode }) {
     if (!s.title || !links.length) return null;
     return railGroup(s.title, `rail-group-${i}`, links, s.items.reduce((n, it) => n + (it.count ?? 0), 0));
   });
-  // a phone's menu on the calendar is the calendar's own, as Google Calendar's app has it: its views, what it
-  // can do and its calendars, with "כל המסכים" at its end going on to every screen. Anywhere else the menu is
-  // every screen, by its groups
-  const tabSections = sections.filter((s) => s.tab === tab && s.title);
+  // a phone's menu: every screen, by its groups - and on the calendar first the calendar's own, as Google
+  // Calendar's app has it: its views, what it can do and its calendars
   const calMenu = calBar && (
     <div className="gside-cal" role="group" aria-label="תצוגת היומן">
       {PHONE_VIEWS.map((v) => (
@@ -793,57 +832,30 @@ export function Layout({ children }: { children: ReactNode }) {
       ))}
     </div>
   );
-  const phoneMenu =
-    menuPanel.at === 'tab' ? (
-      <div key="tab" className={`gside-panel${menuPanel.back ? ' is-back' : ''}`}>
-        <div className="gside-head">
-          <Icon name={TAB_ICONS[tab]} />
-          <h2>{TAB_TITLES[tab]}</h2>
-        </div>
-        {tab === 'home' ? (
-          <>
-            {calMenu}
-            {onCalendar && (
-              <div className="gside-layers">
-                <CalendarLayers />
-              </div>
-            )}
-          </>
-        ) : (
-          tabSections.map((s) => (
-            <nav key={s.title} className="gside-sec" aria-label={s.title}>
-              {tabSections.length > 1 && <div className="gside-sub">{s.title}</div>}
-              {railLinks(s.items)}
-            </nav>
-          ))
-        )}
-        <span className="gside-sep" aria-hidden="true" />
-        <button type="button" className="gside-view gside-all" onClick={() => setMenuPanel({ at: 'all', back: false, forward: true })}>
-          <Icon name="apps" />
-          <span className="rail-label">כל המסכים</span>
-          <Icon name="chevronLeft" size={16} className="gside-chev" />
-        </button>
-      </div>
-    ) : (
-      <div key="all" className={`gside-panel${menuPanel.forward ? ' is-forward' : ''}`}>
-        {/* from the calendar's menu: back to it */}
-        {!fullMenu && (
-          <button type="button" className="gside-back" onClick={() => setMenuPanel({ at: 'tab', back: true })}>
-            <Icon name="chevronRight" size={18} />
-            <span>{TAB_TITLES[tab]}</span>
-          </button>
-        )}
-        <div className="gside-head">
-          <Icon name="apps" />
-          <h2>כל המסכים</h2>
-        </div>
-        {allGroups}
-        <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
-          <Icon name="settings" />
-          <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
-        </NavLink>
-      </div>
-    );
+  const phoneMenu = (
+    <div className="gside-panel">
+      {tab === 'home' && (
+        <>
+          <div className="gside-head">
+            <Icon name="calendar" />
+            <h2>{CAL_GROUP}</h2>
+          </div>
+          {calMenu}
+          {onCalendar && (
+            <div className="gside-layers">
+              <CalendarLayers />
+            </div>
+          )}
+          <span className="gside-sep" aria-hidden="true" />
+        </>
+      )}
+      {allGroups}
+      <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
+        <Icon name="settings" />
+        <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
+      </NavLink>
+    </div>
+  );
 
   return (
     <div className={`app${folded ? ' rail-collapsed' : ''}${drawer ? ' menu-open' : ''}${viewing ? ' viewing-past' : ''}${focusPage ? ' is-focus' : ''}`}>
@@ -947,7 +959,6 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="main" inert={drawer || undefined}>
         {/* titled: the screen's title shows beside the mark, and on a phone the search folds to its icon */}
         <header className={`topbar${barTitle && !deskBar ? ' is-titled' : ''}${deskBar ? ' is-calendar' : ''}`}>
-          <BackButton />
           <div className={`top-brand${menuOpen ? ' is-open' : ''}`}>
             {/* the side menu, from this side of the screen - where the calendar's own bar has it */}
             <button
@@ -1050,7 +1061,9 @@ export function Layout({ children }: { children: ReactNode }) {
           <Icon name="arrowUp" size={18} />
         </div>
         <main id="main" tabIndex={-1} ref={mainRef}>
-          <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
+          <BackContext.Provider value={phone ? null : back}>
+            <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
+          </BackContext.Provider>
           <ShortcutsHelp />
           <CommandPalette pages={palettePages} />
         </main>

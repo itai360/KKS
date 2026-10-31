@@ -1,6 +1,7 @@
 // Section 9 (task page), 20 (activity log), 41-46 (receiving, updating, blocking,
 // completing), 59-60 (dependencies, subtasks), 64 (all-staff progress).
 
+import { PageBack } from '../components/BackButton';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { domainLabel, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
@@ -78,6 +79,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
   return (
     <div className="page">
       <div className="row mb-12">
+        <PageBack />
         {detail.parent && (
           <Link to={`/tasks/${detail.parent.id}`} className="small muted">
             משימת משנה של: <b>{detail.parent.title}</b>

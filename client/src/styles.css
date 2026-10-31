@@ -8435,49 +8435,6 @@ li > .points-view {
   }
 }
 
-/* ---------- back, at the start of the top bar (components/BackButton.tsx) ---------- */
-
-.back-top,
-.modal-back {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid var(--line-2);
-  background: var(--card);
-  /* a small frosted layer floating over what is under it */
-  background: color-mix(in srgb, var(--card) 74%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(1.6);
-  backdrop-filter: blur(16px) saturate(1.6);
-  color: var(--ink);
-  box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.45);
-  cursor: pointer;
-  transition: transform 0.12s, background 0.12s;
-}
-
-@media (hover: hover) {
-.back-top:hover,
-.modal-back:hover {
-  background: var(--gray-bg);
-}
-}
-
-.back-top:active,
-.modal-back:active {
-  transform: scale(0.94);
-}
-
-/* a dialog covers the top bar: its own arrow sits right where the bar's is - one arrow - and closes it
-   (Modal in ui.tsx puts it exactly on the bar's arrow; this is its place before that, and on the home
-   screen, which has no arrow in the bar) */
-.modal-back {
-  position: fixed;
-  z-index: 2;
-  top: calc((var(--top-h) - 40px) / 2);
-  inset-inline-start: calc(var(--rail-w) + 24px);
-}
 
 body:has(.app.rail-collapsed) .modal-back {
   inset-inline-start: calc(68px + 24px);
@@ -10538,12 +10495,6 @@ html {
 /* ---------------- materials for those who ask for less (system settings) ---------------- */
 /* less transparency: the frosted bars are solid */
 @media (prefers-reduced-transparency: reduce) {
-  .back-top,
-  .modal-back {
-    background: var(--card);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
   .topbar {
     background: var(--paper);
     -webkit-backdrop-filter: none;
@@ -15173,4 +15124,92 @@ tr.is-finished.is-folding {
 /* a dialog that takes the focus itself (a phone, nothing to type in first): no ring around the whole of it */
 .modal:focus {
   outline: none;
+}
+
+/* ---------------- back (components/BackButton.tsx) ---------------- */
+/* a computer: at the top of the screen, above its title - named for where it goes, as an iPhone's back is */
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  margin: -8px 0 6px;
+  margin-inline-start: -8px;
+  padding: 5px 12px 5px 8px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--tint);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, transform 0.12s;
+}
+.page-back span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-back svg {
+  flex: none;
+  stroke-width: 2.4;
+}
+@media (hover: hover) {
+  .page-back:hover {
+    background: var(--fill);
+  }
+}
+.page-back:active {
+  transform: scale(0.97);
+}
+.page-back:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+/* in a document's toolbar: one of its buttons, on its line */
+.doc-toolbar .page-back {
+  margin: 0;
+  margin-inline-end: 4px;
+}
+/* the task page: before what the task is part of */
+.row > .page-back {
+  margin-block: -4px;
+}
+.briefing > .page-back {
+  margin-bottom: 10px;
+}
+
+/* the iPhone's app on the home screen: a round arrow comes in from the edge with the finger */
+.edge-back {
+  position: fixed;
+  z-index: 200;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--material-strong);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  backdrop-filter: blur(16px) saturate(1.6);
+  color: var(--muted);
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  transition: scale 0.18s var(--spring-bounce), color 0.15s, background 0.15s;
+}
+.edge-back.from-left {
+  left: -44px;
+  transform: translateX(calc(var(--pull, 0px) * 0.8)) scaleX(-1);
+}
+.edge-back.from-right {
+  right: -44px;
+  transform: translateX(calc(var(--pull, 0px) * -0.8));
+}
+.edge-back.is-armed {
+  scale: 1.12;
+  color: #fff;
+  background: var(--tint-fill);
 }

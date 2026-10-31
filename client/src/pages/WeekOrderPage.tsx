@@ -4,6 +4,7 @@
 // On screen it is also a way in: turned week by week, today and the activity on now marked,
 // each line opening what it stands for.
 
+import { PageBack } from '../components/BackButton';
 import { useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ABSENCE_REASON_LABELS, STATUS_LABELS, WEEK_STATUS_LABELS } from '@shared/constants';
@@ -60,6 +61,7 @@ export function WeekOrderPage() {
   return (
     <div className="page doc-page" ref={page}>
       <div className="doc-toolbar no-print">
+        <PageBack />
         <DocPager prev={prev} next={next} noun="פקודות השבוע" position={at >= 0 ? `${at + 1} מתוך ${weeks.length}` : undefined} />
         <span className="grow" />
         <Link className="btn btn-ghost" to={`/weeks/${w.id}`}>

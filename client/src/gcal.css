@@ -2272,8 +2272,7 @@
 .app.is-focus > .rail,
 .app.is-focus .topbar,
 .app.is-focus .bottom-nav,
-.app.is-focus .rail-scrim,
-.app.is-focus .back-top {
+.app.is-focus .rail-scrim {
   display: none !important;
 }
 .g-editor {

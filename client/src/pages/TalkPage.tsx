@@ -2,6 +2,7 @@
 // the way a commander keeps it in a folder. On screen the cadet's talks turn like pages (by name,
 // the arrows, a swipe on a phone), with the way back to the file and the follow-up task at hand.
 
+import { PageBack } from '../components/BackButton';
 import { useRef } from 'react';
 import { Link, useParams } from 'react-router';
 import { TALK_TYPES } from '@shared/constants';
@@ -58,6 +59,7 @@ export function TalkPage() {
   return (
     <div className="page doc-page" ref={page}>
       <div className="doc-toolbar no-print">
+        <PageBack />
         <DocPager prev={prev} next={next} noun="השיחות של הצוער" position={talks.length > 1 ? `שיחה ${at + 1} מתוך ${talks.length}` : undefined} />
         <span className="grow" />
         <Link className="btn btn-ghost" to={`/cadets/${c.id}`}>
