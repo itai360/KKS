@@ -8,7 +8,7 @@
 // may see.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DAY_MINUTES, fromMinutes, MONTH_NAMES, monthWeeks, stepDate, toMinutes, viewDays, viewTitle } from '@shared/calendarGrid';
 import {
   dedupe,
@@ -188,6 +188,7 @@ const GCAL_RESULTS: Record<string, [string, string]> = {
 
 export function SchedulePage() {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const phone = useMedia(BOTTOM_BAR_MEDIA);
   const today = todayKey();
   const date = params.get('date') ?? today;
@@ -214,12 +215,13 @@ export function SchedulePage() {
     setParams(next, { replace: !push });
   };
 
-  // the day: back where it was left in this tab - moving through other screens and back keeps it
+  // the day: back where it was left in this tab - moving through other screens and back keeps it. The phone
+  // bar's calendar tab is the way to today instead (Layout: state.today)
   const restored = useRef(false);
   useEffect(() => {
     if (restored.current) return;
     restored.current = true;
-    if (params.get('date')) return;
+    if (params.get('date') || (location.state as { today?: boolean } | null)?.today) return;
     try {
       const d = sessionStorage.getItem(DATE_KEY);
       if (d && isDateKey(d) && d !== today) set({ date: d });

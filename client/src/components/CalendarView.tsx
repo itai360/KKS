@@ -12,6 +12,7 @@ import { dayOrder, isTimed, itemDays, loadByDay, type CalItem } from '@shared/ca
 import { WEEKDAY_NAMES } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
 import type { ScheduleEvent, Week } from '@shared/types';
+import { onCalendarNow } from '../lib/calendarBar';
 import { fmtTime } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { useBulk } from './Bulk';
@@ -262,7 +263,8 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
     openHours(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- where it opens, once for the days shown
   }, [scrollKey, ready]);
-  // back in the app after a while away (a phone's app is resumed, not opened again): today goes back to now
+  // back in the app after a while away (a phone's app is resumed, not opened again), or the bar's calendar tab
+  // tapped while it is on show: today goes back to now
   const openHoursRef = useRef(openHours);
   openHoursRef.current = openHours;
   const showsTodayRef = useRef(showsToday);
@@ -279,7 +281,11 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
       if (long && showsTodayRef.current && !document.querySelector('.peek-sheet, .modal, .pop')) openHoursRef.current(true);
     };
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    const offNow = onCalendarNow(() => showsTodayRef.current && openHoursRef.current(true));
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      offNow();
+    };
   }, []);
 
   const columns = () => [...(scrollRef.current?.querySelectorAll<HTMLElement>('.gc-col') ?? [])];

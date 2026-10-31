@@ -74,3 +74,11 @@ export function useCalendarBar(): CalendarBar | null {
     () => current,
   );
 }
+
+/** the phone bar's calendar tab tapped: the calendar shows today, at this hour (CalendarView scrolls to it) */
+const NOW_EVENT = 'kks:calendar-now';
+export const showCalendarNow = (): void => void window.dispatchEvent(new Event(NOW_EVENT));
+export function onCalendarNow(fn: () => void): () => void {
+  window.addEventListener(NOW_EVENT, fn);
+  return () => window.removeEventListener(NOW_EVENT, fn);
+}

@@ -23,7 +23,7 @@ import { TopSearch } from './TopSearch';
 import { CalendarLayers } from './SideBar';
 import { MiniMonth } from './MiniMonth';
 import { CalendarControls, HelpButton, UserMenu, ViewSwitcher } from './TopBarParts';
-import { PHONE_VIEWS, useCalendarBar, VIEW_ICONS, VIEW_LABELS } from '../lib/calendarBar';
+import { PHONE_VIEWS, showCalendarNow, useCalendarBar, VIEW_ICONS, VIEW_LABELS } from '../lib/calendarBar';
 import { setMainMenuHost } from '../lib/mainMenu';
 import { todayKey } from '../lib/format';
 import { ShortcutsHelp } from './Shortcuts';
@@ -1078,7 +1078,15 @@ export function Layout({ children }: { children: ReactNode }) {
         inert={drawer || undefined}
       >
         <span className="nav-ind" aria-hidden />
-        <NavLink to="/" end className={() => (barIdx === 0 ? 'active' : '')} aria-current={barIdx === 0 ? 'page' : undefined}>
+        {/* the calendar: always today's day, at this hour - not the day it was left on */}
+        <NavLink
+          to={{ pathname: '/', search: '?view=day' }}
+          state={{ today: true }}
+          end
+          className={() => (barIdx === 0 ? 'active' : '')}
+          aria-current={barIdx === 0 ? 'page' : undefined}
+          onClick={() => requestAnimationFrame(showCalendarNow)}
+        >
           <TabIcon name="calendar" filled={barIdx === 0} />
           <span className="nav-label">יומן</span>
         </NavLink>
