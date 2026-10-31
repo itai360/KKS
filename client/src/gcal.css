@@ -4774,3 +4774,29 @@ html[data-kb] .peek-foot {
     animation: none;
   }
 }
+
+/* ---------------- the days before and after, beside the one in sight (SchedulePage) ----------------
+   Out of sight - the clip hides them - until the finger brings one in: the next day waits on the left (a
+   right-to-left page turns that way), the day before on the right, each showing the same hours */
+.period-swipe {
+  position: relative;
+}
+.period-side {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  background: var(--g-sheet);
+}
+.period-side.is-next {
+  transform: translateX(-100%);
+}
+.period-side.is-prev {
+  transform: translateX(100%);
+}
+.period-side > .gc,
+.period-side > .gc-month {
+  flex: 1;
+  min-height: 0;
+}

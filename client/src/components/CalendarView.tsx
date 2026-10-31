@@ -66,6 +66,8 @@ export interface CalendarProps {
   dimPast?: boolean;
   /** Google's "show weekends" turned off: the week and the month without Friday and Saturday */
   hideWeekend?: boolean;
+  /** turned to these days by the finger: the hours stay where they were, as the page beside showed them */
+  holdHours?: boolean;
 }
 
 /** Friday and Saturday - the weekend here */
@@ -208,7 +210,7 @@ const ALLDAY_ROWS = 3;
 /** away from the app this long, the hours go back to now on return */
 const AWAY_MS = 5 * 60_000;
 
-function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onDraftMove, onDraftOpen, onPickDay, compact = false, dimPast = true, hideWeekend = false }: CalendarProps) {
+function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen, onAllDayToggle, canCreate, canMove, onOpen, onCreate, onMove, onDraftMove, onDraftOpen, onPickDay, compact = false, dimPast = true, hideWeekend = false, holdHours = false }: CalendarProps) {
   // a phone: Google Calendar's app - its layout, its hours on the left, the day named beside the all-day rows
   const app = compact;
   const appDay = app && view === 'day';
@@ -259,8 +261,19 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
   };
   useEffect(() => {
     if (!scrollRef.current || !ready || scrolledFor.current === scrollKey) return;
+    const first = !scrolledFor.current;
     scrolledFor.current = scrollKey;
-    openHours(false);
+    if (holdHours && !first) return;
+    // the hours not held to the screen's height yet (the screen still settling): a few frames later
+    let tries = 0;
+    let frame = 0;
+    const open = () => {
+      const el = scrollRef.current;
+      if (el && el.scrollHeight <= el.clientHeight + 1 && ++tries < 12) frame = requestAnimationFrame(open);
+      else openHours(false);
+    };
+    open();
+    return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- where it opens, once for the days shown
   }, [scrollKey, ready]);
   // back in the app after a while away (a phone's app is resumed, not opened again), or the bar's calendar tab

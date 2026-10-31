@@ -562,7 +562,8 @@ export function Layout({ children }: { children: ReactNode }) {
   // a phone's calendar is Google Calendar's app: its own bar on top (no site bar), the whole screen, and
   // the page itself never scrolls - only what is inside it (the hours, the list)
   const calShell = phone && onCalendar;
-  useEffect(() => {
+  // before the calendar's own effects (its hours open where they should only once the screen holds them)
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('cal-shell', calShell);
     // the phone's bar with the clock in the page's colour - the calendar's own white, or the paper
     syncBrowserBar();

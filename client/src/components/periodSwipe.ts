@@ -2,7 +2,9 @@
 // let go, where the swipe is heading (not where it stopped) decides - the next one (the page goes
 // right, the next comes in from the left, as a right-to-left page reads) or the one before, or back
 // to where it was. The old one leaves on one side and the new one comes in from the other, with the
-// finger's speed. Up and down stays the page's (and the hours') scroll.
+// finger's speed - or, where the pages before and after are drawn beside it (`sides`: the calendar), the
+// one beside comes in with the finger all the way, with nothing empty between them. Up and down stays the
+// page's (and the hours') scroll.
 
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { haptic } from '../lib/haptics';
@@ -15,6 +17,7 @@ export function usePeriodSwipe(
     onStep,
     can,
     skipScrollers,
+    sides = false,
   }: {
     enabled: boolean;
     onStep: (dir: 1 | -1) => void;
@@ -22,6 +25,10 @@ export function usePeriodSwipe(
     can?: (dir: 1 | -1) => boolean;
     /** a swipe that starts on something scrolling sideways (a wide table) scrolls it, not the page */
     skipScrollers?: boolean;
+    /** the pages before and after are drawn beside this one, out of sight (the area marks which page it
+     *  shows in data-page): it moves with no fading, and once turned it stands back in place as the new
+     *  page is there */
+    sides?: boolean;
   },
 ): void {
   const step = useRef(onStep);
@@ -45,8 +52,8 @@ export function usePeriodSwipe(
     const paint = (v: number) => {
       x = v;
       el.style.transform = v ? `translate3d(${v}px, 0, 0)` : '';
-      // a page further from its place fades a little, as it goes
-      el.style.opacity = v ? String(1 - Math.min(0.45, Math.abs(v) / (width() * 1.8))) : '';
+      // a page further from its place fades a little, as it goes (not with the next one beside it)
+      el.style.opacity = v && !sides ? String(1 - Math.min(0.45, Math.abs(v) / (width() * 1.8))) : '';
       el.style.transition = v ? 'none' : '';
     };
     const springTo = (to: number, velocity: number, done?: () => void, response = 0.3) => {
@@ -121,6 +128,24 @@ export function usePeriodSwipe(
       const side = Math.sign(heading);
       const blocked = !!canRef.current && !canRef.current(side > 0 ? 1 : -1);
       if (Math.abs(heading) < line() || reversing || blocked) return springTo(0, v);
+      // the next one beside it: in all the way, and the area back in place once it shows that page
+      if (sides) {
+        springTo(side * width(), v, () => {
+          // in the very change that draws the new page (before the screen shows it): no frame of the page
+          // beside already turned on, while the area is still off its place
+          const was = el.dataset.page;
+          const settled = () => {
+            watch.disconnect();
+            window.clearTimeout(guard);
+            paint(0);
+          };
+          const watch = new MutationObserver(() => el.dataset.page !== was && settled());
+          watch.observe(el, { attributes: true, attributeFilter: ['data-page'] });
+          const guard = window.setTimeout(settled, 800);
+          step.current(side > 0 ? 1 : -1);
+        }, 0.24);
+        return;
+      }
       // out on its side, then the next one in from the other
       springTo(side * width(), v, () => {
         step.current(side > 0 ? 1 : -1);
@@ -143,5 +168,5 @@ export function usePeriodSwipe(
       el.removeEventListener('touchend', end);
       el.removeEventListener('touchcancel', end);
     };
-  }, [el, enabled, skipScrollers]);
+  }, [el, enabled, skipScrollers, sides]);
 }

@@ -67,6 +67,10 @@ import { Link } from 'react-router';
 import { takesKeys } from '../lib/keyboard';
 
 const ALL_VIEWS: CalView[] = ['agenda', 'day', 'three', 'four', 'week', 'month', 'year'];
+/** the pages beside the calendar (drawn to be seen, not used) */
+const noop = () => {};
+const never = () => false;
+
 /** the view last chosen - a computer's and a phone's apart (a phone opens on the day, as Google's app) */
 const VIEW_KEY = 'kks.scheduleView';
 const PHONE_VIEW_KEY = 'kks.scheduleView.phone';
@@ -256,7 +260,10 @@ export function SchedulePage() {
   const miniShown = phone && pickerOpen && view !== 'month';
 
   const shown = view === 'agenda' ? [] : viewDays(view, date);
-  const needed = view === 'agenda' ? [startOfWeek(date), addDays(startOfWeek(agendaTo), 6)] : [shown[0], shown[shown.length - 1], ...(phone ? viewDays('week', date) : [])];
+  // a phone turns the days by the finger with the ones before and after drawn beside: theirs are read too
+  const sides = phone && view !== 'agenda' && view !== 'year';
+  const besides = sides ? [viewDays(view, stepDate(view, date, -1))[0], viewDays(view, stepDate(view, date, 1)).at(-1)!] : [];
+  const needed = view === 'agenda' ? [startOfWeek(date), addDays(startOfWeek(agendaTo), 6)] : [shown[0], shown[shown.length - 1], ...besides, ...(phone ? viewDays('week', date) : [])];
   if (miniShown) needed.push(miniMonth);
   const { from, to } = fetchRange(needed);
 
@@ -455,7 +462,33 @@ export function SchedulePage() {
 
   const swipeArea = useRef<HTMLDivElement>(null);
   const grid = view !== 'agenda' && view !== 'year';
-  usePeriodSwipe(swipeArea, { enabled: phone && grid, onStep: step });
+  // turned by the finger: the hours stay where they were - the page beside showed them so (CalendarView)
+  const swiped = useRef(false);
+  usePeriodSwipe(swipeArea, {
+    enabled: phone && grid,
+    sides: true,
+    onStep: (dir) => {
+      swiped.current = true;
+      step(dir);
+    },
+  });
+  useEffect(() => {
+    swiped.current = false;
+  });
+  // the pages beside show the same hours as the one in sight, all the time
+  useEffect(() => {
+    const area = swipeArea.current;
+    const main = area?.querySelector<HTMLElement>(':scope > .gc .gc-scroll');
+    if (!area || !main) return;
+    const copy = () => area.querySelectorAll<HTMLElement>('.period-side .gc-scroll').forEach((s) => void (s.scrollTop = main.scrollTop));
+    copy();
+    main.addEventListener('scroll', copy, { passive: true });
+    area.addEventListener('touchstart', copy, { passive: true });
+    return () => {
+      main.removeEventListener('scroll', copy);
+      area.removeEventListener('touchstart', copy);
+    };
+  });
 
   // t: today, j/k: next/previous, d/w/m/x/a/y or 1-6: the views, c: a new event, g: a day to go to
   // (n stays "new task", everywhere - Layout, NewTask)
@@ -777,8 +810,9 @@ export function SchedulePage() {
     ) : (
       // on a phone the day or the three days turn with the finger, like a page
       <div className="period-clip">
-        <div className="period-swipe" ref={swipeArea}>
+        <div className="period-swipe" ref={swipeArea} data-page={`${view}:${date}`}>
           <CalendarView
+            holdHours={swiped.current}
             view={view as GridView}
             date={date}
             today={today}
@@ -815,6 +849,33 @@ export function SchedulePage() {
             dimPast={prefs.dimPast}
             hideWeekend={!prefs.showWeekend}
           />
+          {/* the days after (on the left: a right-to-left page) and before, out of sight - the finger brings
+              one in with nothing empty between them */}
+          {sides &&
+            ([1, -1] as const).map((dir) => (
+              <div key={dir} className={`period-side ${dir > 0 ? 'is-next' : 'is-prev'}`} inert aria-hidden="true">
+                <CalendarView
+                  view={view as GridView}
+                  date={stepDate(view as GridView, date, dir)}
+                  today={today}
+                  ready={!loading}
+                  nowTime={nowTime}
+                  items={items}
+                  draft={null}
+                  allDayOpen={prefs.allDayOpen}
+                  onAllDayToggle={noop}
+                  canCreate={never}
+                  canMove={never}
+                  onOpen={noop}
+                  onCreate={noop}
+                  onMove={noop}
+                  onPickDay={noop}
+                  compact
+                  dimPast={prefs.dimPast}
+                  hideWeekend={!prefs.showWeekend}
+                />
+              </div>
+            ))}
         </div>
       </div>
     );
