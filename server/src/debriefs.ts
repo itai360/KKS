@@ -185,6 +185,19 @@ function debriefRow(id: number): DebriefRow {
   return d;
 }
 
+/**
+ * A company debrief this user may fill now, to read the company's own document into it - and the cadets
+ * holding a broad role then, whom a topic can be put on by their role.
+ */
+export function companyDebriefToFill(actor: UserRow, id: number): { broad: BroadHolder[]; size: number } {
+  const d = debriefRow(id);
+  if (!canEditDebrief(actor, d)) throw forbidden();
+  if (d.kind !== 'company') throw badRequest('ייבוא מקובץ הוא לתחק"ש פלוגתי');
+  if (d.status !== 'draft') throw badRequest('התחקיר כבר סוכם. כדי לייבא אליו - קודם להחזיר אותו לטיוטה.');
+  // how much it holds already, against the most a debrief keeps
+  return { broad: broadStaff(d), size: d.answers.length };
+}
+
 export function listDebriefs(actor: UserRow, f: { weekId?: number; eventId?: number } = {}): Debrief[] {
   const where: string[] = [];
   const params: number[] = [];
@@ -339,7 +352,12 @@ function checkReady(d: DebriefRow, answers: DebriefAnswers): void {
     .filter((s) => s.questions.some((q) => q.required && !answered(q, answers)))
     .map((s) => s.title);
   if (missing.length) throw badRequest(`כדי לסכם חסר: ${missing.join(', ')}`);
-  if (needsAPoint(d.kind, answers)) throw badRequest(`כדי לסכם צריך לפחות נושא אחד - ${formFor(d.kind).map((s) => s.title).join(', ')}`);
+  if (needsAPoint(d.kind, answers)) {
+    // the sections that hold topics (a form of topics), or all of them
+    const form = formFor(d.kind);
+    const ofTopics = form.filter((s) => s.questions.some((q) => q.type === 'proposals'));
+    throw badRequest(`כדי לסכם צריך לפחות נושא אחד - ${(ofTopics.length ? ofTopics : form).map((s) => s.title).join(', ')}`);
+  }
   const lessons = db().all<{ horizon: LessonHorizon | null; owner_id: number | null; due_date: string | null; task_id: number | null }>(
     "SELECT horizon, owner_id, due_date, task_id FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson'",
     d.id,

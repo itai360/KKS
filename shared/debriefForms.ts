@@ -80,6 +80,10 @@ export interface ProposalAnswer {
   topic: string;
   proposal: string;
   owner?: ProposalOwner | null;
+  /** who it is on as a document wrote it, when that is no one in the course's lists - kept until someone is chosen */
+  ownerText?: string;
+  /** what has been done about it since (תיעוד התקדמות) */
+  progress?: string;
 }
 
 function ownerOf(v: unknown): ProposalOwner | null {
@@ -88,20 +92,71 @@ function ownerOf(v: unknown): ProposalOwner | null {
   return { kind: o.kind, id: o.id as number, name: typeof o.name === 'string' ? o.name.slice(0, 120) : '' };
 }
 
+const textOf = (v: unknown): string => (typeof v === 'string' ? v : '');
+
 /** a proposals answer as rows - also one written before proposals existed, as topics alone */
 export function proposalRows(v: unknown): ProposalAnswer[] {
   if (!Array.isArray(v)) return [];
-  return v.map((x) =>
-    typeof x === 'string'
-      ? { topic: x, proposal: '', owner: null }
-      : { topic: typeof x?.topic === 'string' ? x.topic : '', proposal: typeof x?.proposal === 'string' ? x.proposal : '', owner: ownerOf(x?.owner) },
-  );
+  return v.map((x) => {
+    if (typeof x === 'string') return { topic: x, proposal: '', owner: null };
+    const row: ProposalAnswer = { topic: textOf(x?.topic), proposal: textOf(x?.proposal), owner: ownerOf(x?.owner) };
+    // the name as written goes once someone is chosen
+    const ownerText = textOf(x?.ownerText).slice(0, 300);
+    if (ownerText.trim() && !row.owner) row.ownerText = ownerText;
+    const progress = textOf(x?.progress);
+    if (progress.trim()) row.progress = progress;
+    return row;
+  });
 }
 
 /** the answers as kept: each topic's owner in its known shape */
 export function tidyAnswers(kind: DebriefKind, a: DebriefAnswers): DebriefAnswers {
   const out = { ...a };
   for (const s of formFor(kind)) for (const q of s.questions) if (q.type === 'proposals' && q.id in out) out[q.id] = proposalRows(out[q.id]);
+  return out;
+}
+
+/** what a company debrief's own document fills: read on the server, added to the form by the screen */
+export interface DebriefImport {
+  answers: {
+    company?: ProposalAnswer[];
+    staffGeneral?: ProposalAnswer[];
+    mood?: string[];
+    unsolved?: string[];
+    staffPoints?: string;
+    more?: string;
+  };
+  /** who the topics are on: found by name in the course, or kept as written */
+  owners: { named: number; asWritten: number };
+}
+
+const sameText = (a: string, b: string) => a.replace(/\s+/g, ' ').trim() === b.replace(/\s+/g, ' ').trim();
+
+/**
+ * A document's answers added to the form's - what changes, by question: rows and lines not in it already
+ * after its own, a text after the text there. Nothing in the form is taken out, and the same document twice
+ * adds nothing the second time.
+ */
+export function withImported(current: DebriefAnswers, read: DebriefImport['answers']): DebriefAnswers {
+  const out: DebriefAnswers = {};
+  for (const key of ['company', 'staffGeneral'] as const) {
+    const have = proposalRows(current[key]);
+    const fresh = (read[key] ?? []).filter((r) => !have.some((h) => sameText(h.topic, r.topic) && sameText(h.proposal, r.proposal)));
+    if (fresh.length) out[key] = [...have, ...fresh];
+  }
+  for (const key of ['mood', 'unsolved'] as const) {
+    const cur = current[key];
+    const have = Array.isArray(cur) ? cur.filter((x): x is string => typeof x === 'string') : [];
+    const fresh = (read[key] ?? []).filter((t) => !have.some((h) => sameText(h, t)));
+    if (fresh.length) out[key] = [...have, ...fresh];
+  }
+  for (const key of ['staffPoints', 'more'] as const) {
+    const text = read[key]?.trim();
+    const cur = current[key];
+    const have = typeof cur === 'string' ? cur : '';
+    if (!text || have.replace(/\s+/g, ' ').includes(text.replace(/\s+/g, ' '))) continue;
+    out[key] = have.trim() ? `${have.trimEnd()}\n\n${text}` : text;
+  }
   return out;
 }
 
@@ -239,16 +294,32 @@ export const COMPANY_FORM: DebriefSection[] = [
     title: 'מול הפלוגה',
     questions: [{ id: 'company', label: 'נושאים מול הפלוגה', type: 'proposals', owners: 'company' }],
   },
+  {
+    id: 'wrap',
+    title: 'סיכום התחק"ש',
+    hint: 'מה עוד עלה: התחושות בזמן התחקיר, מה נשאר בלי פתרון, ומה הסגל אמר לפלוגה.',
+    questions: [
+      { id: 'mood', label: 'הלך רוח - תחושות בזמן התחק"ש', type: 'list' },
+      { id: 'unsolved', label: 'מסרים / פערים שלא מצאנו להם פתרון', type: 'list' },
+      { id: 'staffPoints', label: 'נקודות של הסגל', hint: 'מה הסגל אמר לפלוגה', type: 'text' },
+      { id: 'more', label: 'נקודות נוספות', type: 'text' },
+    ],
+  },
 ];
 
 export function formFor(kind: DebriefKind): DebriefSection[] {
   return kind === 'weekly' ? WEEKLY_FORM : kind === 'event' ? EVENT_FORM : kind === 'company' ? COMPANY_FORM : [];
 }
 
-/** a form of points only (no question must be answered): summing up needs one point at least */
+/**
+ * A form of points only (no question must be answered): summing up needs one point at least - a topic, in a
+ * form of topics (the company debrief's summing up lines alone are not one).
+ */
 export function needsAPoint(kind: DebriefKind, a: DebriefAnswers): boolean {
   const form = formFor(kind);
-  return form.length > 0 && !form.some((s) => s.questions.some((q) => q.required)) && !form.some((s) => s.questions.some((q) => answered(q, a)));
+  const questions = form.flatMap((s) => s.questions);
+  const topics = questions.filter((q) => q.type === 'proposals');
+  return form.length > 0 && !questions.some((q) => q.required) && !(topics.length ? topics : questions).some((q) => answered(q, a));
 }
 
 /** the two horizons of a lesson: this cycle (a task now) or the next cycle (kept in the lessons bank) */

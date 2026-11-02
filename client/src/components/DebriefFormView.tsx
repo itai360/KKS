@@ -3,7 +3,7 @@
 // and a date, and one button that sums it up - this cycle's lessons become tasks, the next
 // cycle's are kept in the lessons bank for the same week or event.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type TextareaHTMLAttributes } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ROLE_LABELS, STATUS_LABELS } from '@shared/constants';
 import { addDays, shortDate } from '@shared/dates';
@@ -43,6 +43,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { sortHe } from '@shared/sort';
 import { WordButton } from './DocNav';
+import { DebriefImportDialog } from './DebriefImport';
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -176,6 +177,8 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
   const { isCommander } = useSession();
   const [busy, setBusy] = useState(false);
   const owners = useOwnerPools(data, editable);
+  // the company's own summary document, read into the form
+  const [importing, setImporting] = useState(false);
 
   const lessons = data.items.filter((i) => i.kind === 'lesson');
   const ofHorizon = (h: LessonHorizon) => lessons.filter((l) => (l.horizon ?? 'now') === h);
@@ -302,6 +305,12 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
               <span className="hide-mobile">הדפסה</span>
             </button>
             <WordButton title={d.title} target=".dform-page" />
+            {d.kind === 'company' && editable && (
+              // on a phone it is a row of "עוד", with its name
+              <button className="btn" onClick={() => setImporting(true)}>
+                <Icon name="upload" /> ייבוא מקובץ
+              </button>
+            )}
             {d.canEdit && (
               <>
                 <button className="btn" onClick={onEdit}>
@@ -374,6 +383,17 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
                 )}
               </div>
             )}
+            {d.kind === 'company' && editable && !questions.some((q) => answered(q, all)) && (
+              <div className="small dform-import-hint">
+                <Icon name="file" size={15} />
+                <span>
+                  סיכום התחק"ש כבר כתוב בקובץ Word?{' '}
+                  <button type="button" className="link-btn" onClick={() => setImporting(true)}>
+                    ייבוא מהקובץ
+                  </button>
+                </span>
+              </div>
+            )}
             {(d.participants || d.summary) && (
               <div className="small">
                 {d.participants && <div className="muted">משתתפים: {d.participants}</div>}
@@ -425,6 +445,8 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
           ))}
         </nav>
       </div>
+
+      {importing && <DebriefImportDialog debriefId={d.id} answers={all} set={set} flush={flush} onClose={() => setImporting(false)} />}
 
       {editable && (
         <div className="fab-dock page-fab no-print">
@@ -610,9 +632,9 @@ function ListInput({ value, editable, onChange, onDone, label }: { value: string
     );
   }
   const rows = [...value, ''];
-  const focusRow = (i: number) => box.current?.querySelectorAll<HTMLInputElement>('input')[i]?.focus();
-  const onKey = (e: KeyboardEvent<HTMLInputElement>, i: number) => {
-    if (e.key === 'Enter') {
+  const focusRow = (i: number) => box.current?.querySelectorAll<HTMLTextAreaElement>('textarea')[i]?.focus();
+  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>, i: number) => {
+    if (enterOnly(e)) {
       e.preventDefault();
       if (rows[i].trim()) focusRow(i + 1);
     } else if (e.key === 'Backspace' && !rows[i] && i > 0) {
@@ -628,8 +650,9 @@ function ListInput({ value, editable, onChange, onDone, label }: { value: string
           <span className="dq-bullet" aria-hidden="true">
             {i + 1}
           </span>
-          <input
-            className="input"
+          {/* a long line wraps (a line of a document is often longer than the box) */}
+          <GrowText
+            className="input dq-grow"
             value={v}
             aria-label={`${label} ${i + 1}`}
             enterKeyHint="next"
@@ -717,26 +740,56 @@ function OwnerPick({ pool, value, onChange, label }: { pool: OwnerPool; value: P
   );
 }
 
-/** topics raised, each with what is proposed for it and who it is on (the company debrief) */
+/**
+ * A box of text that grows with its lines - a topic read from a document keeps every line of it. The browser
+ * sizes it by itself where it can (field-sizing); elsewhere its height follows its text.
+ */
+function GrowText(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || (typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content'))) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [props.value]);
+  return <textarea ref={ref} rows={1} {...props} />;
+}
+
+/** Enter moves on (Shift+Enter is a new line in the text) */
+const enterOnly = (e: KeyboardEvent<HTMLTextAreaElement>) => e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing;
+
+/**
+ * Topics raised, each with what is proposed for it and who it is on (the company debrief) - and what has been
+ * done about it since, when told (a document's progress column, or added here).
+ */
 function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { value: ProposalAnswer[]; editable: boolean; onChange: (v: ProposalAnswer[]) => void; onDone: () => void; label: string; pool?: OwnerPool }) {
   const box = useRef<HTMLDivElement>(null);
+  // the rows whose progress field was opened here
+  const [progressOpen, setProgressOpen] = useState<Set<number>>(() => new Set());
+  const hasText = (v: string | undefined) => !!v?.trim();
   if (!editable) {
-    const items = value.filter((r) => r.topic.trim() || r.proposal.trim());
+    const items = value.filter((r) => hasText(r.topic) || hasText(r.proposal) || hasText(r.progress) || hasText(r.ownerText));
     return items.length ? (
       <ol className="dq-proposals-read">
         {items.map((r, i) => (
           <li key={i}>
-            <div>{r.topic || '-'}</div>
-            {r.proposal.trim() && (
-              <div className="small dq-proposal-read">
+            <div className="prewrap">{r.topic || '-'}</div>
+            {hasText(r.proposal) && (
+              <div className="small dq-proposal-read prewrap">
                 <span className="strong">הצעה: </span>
                 {r.proposal}
               </div>
             )}
-            {r.owner && (
+            {(r.owner || hasText(r.ownerText)) && (
               <div className="small dq-proposal-read">
                 <span className="strong">באחריות: </span>
-                <OwnerName owner={r.owner} />
+                {r.owner ? <OwnerName owner={r.owner} /> : r.ownerText}
+              </div>
+            )}
+            {hasText(r.progress) && (
+              <div className="small dq-proposal-read prewrap">
+                <span className="strong">התקדמות: </span>
+                {r.progress}
               </div>
             )}
           </li>
@@ -747,14 +800,14 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
     );
   }
   const rows: ProposalAnswer[] = [...value, { topic: '', proposal: '', owner: null }];
-  const focus = (i: number, part: 'topic' | 'proposal') =>
-    requestAnimationFrame(() => box.current?.querySelector<HTMLInputElement>(`[data-row="${i}"][data-part="${part}"]`)?.focus());
+  const focus = (i: number, part: 'topic' | 'proposal' | 'progress') =>
+    requestAnimationFrame(() => box.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-part="${part}"]`)?.focus());
   const set = (i: number, patch: Partial<ProposalAnswer>) => {
     const next = [...value];
     next[i] = { ...rows[i], ...patch };
     onChange(next);
   };
-  const empty = (r: ProposalAnswer) => !r.topic.trim() && !r.proposal.trim();
+  const empty = (r: ProposalAnswer) => !hasText(r.topic) && !hasText(r.proposal) && !hasText(r.progress) && !hasText(r.ownerText) && !r.owner;
   const tidy = () => {
     if (value.some(empty)) onChange(value.filter((r) => !empty(r)));
     onDone();
@@ -767,8 +820,8 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
             {i + 1}
           </span>
           <div className="dq-proposal-fields">
-            <input
-              className="input"
+            <GrowText
+              className="input dq-grow"
               value={r.topic}
               data-row={i}
               data-part="topic"
@@ -777,7 +830,7 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
               placeholder={i === value.length ? (i ? 'נושא נוסף...' : 'נושא - כתבו ולחצו Enter') : undefined}
               onChange={(e) => set(i, { topic: e.target.value })}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (enterOnly(e)) {
                   e.preventDefault();
                   // the topic written: on to its proposal
                   if (r.topic.trim()) focus(i, 'proposal');
@@ -792,8 +845,8 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
             {i < value.length && (
               <label className="dq-proposal">
                 <span className="dq-proposal-tag">הצעה</span>
-                <input
-                  className="input"
+                <GrowText
+                  className="input dq-grow"
                   value={r.proposal}
                   data-row={i}
                   data-part="proposal"
@@ -802,7 +855,7 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
                   placeholder="מה מציעים?"
                   onChange={(e) => set(i, { proposal: e.target.value })}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    if (enterOnly(e)) {
                       e.preventDefault();
                       focus(i + 1, 'topic');
                     }
@@ -816,8 +869,37 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
                 <span className="dq-proposal-tag" aria-hidden="true">
                   באחריות
                 </span>
-                <OwnerPick pool={pool} value={r.owner} label={`${label} - באחריות מי, נושא ${i + 1}`} onChange={(o) => (set(i, { owner: o }), onDone())} />
+                <OwnerPick pool={pool} value={r.owner} label={`${label} - באחריות מי, נושא ${i + 1}`} onChange={(o) => (set(i, { owner: o, ...(o ? { ownerText: undefined } : {}) }), onDone())} />
+                {!hasText(r.progress) && !progressOpen.has(i) && (
+                  <button
+                    type="button"
+                    className="link-btn tiny dq-progress-add"
+                    onClick={() => {
+                      setProgressOpen((s) => new Set(s).add(i));
+                      focus(i, 'progress');
+                    }}
+                  >
+                    + התקדמות
+                  </button>
+                )}
+                {/* who it is on as the document wrote it, until someone is chosen */}
+                {!r.owner && hasText(r.ownerText) && <span className="dq-owner-text tiny muted">בקובץ: {r.ownerText}</span>}
               </div>
+            )}
+            {i < value.length && (hasText(r.progress) || progressOpen.has(i)) && (
+              <label className="dq-proposal">
+                <span className="dq-proposal-tag">התקדמות</span>
+                <GrowText
+                  className="input dq-grow"
+                  value={r.progress ?? ''}
+                  data-row={i}
+                  data-part="progress"
+                  aria-label={`${label} - תיעוד התקדמות לנושא ${i + 1}`}
+                  placeholder="מה נעשה מאז?"
+                  onChange={(e) => set(i, { progress: e.target.value })}
+                  onBlur={tidy}
+                />
+              </label>
             )}
           </div>
           {i < value.length && (

@@ -5994,6 +5994,16 @@ button.stat:disabled {
   gap: 6px;
   align-items: center;
 }
+/* a line that wraps: its number and its x stay by its first line */
+.dq-list-row:has(> .dq-grow) {
+  align-items: start;
+}
+.dq-list-row:has(> .dq-grow) > .dq-bullet {
+  padding-top: 11px;
+}
+.dq-list-row:has(> .dq-grow) > .icon-btn {
+  margin-top: 4px;
+}
 
 .dq-list-row .icon-btn {
   width: 32px;
@@ -6061,6 +6071,58 @@ button.stat:disabled {
   padding-inline-start: 10px;
   border-inline-start: 2px solid var(--line-2);
   color: var(--ink-2);
+}
+/* a topic, its proposal and its progress grow with their lines: a cell of a document keeps every line */
+.input.dq-grow {
+  display: block;
+  height: auto;
+  min-height: 40px;
+  padding: 9px 11px;
+  line-height: 1.45;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+}
+.dq-proposal {
+  flex-wrap: wrap;
+}
+.dq-proposal:has(> .dq-grow) {
+  align-items: flex-start;
+}
+.dq-proposal:has(> .dq-grow) > .dq-proposal-tag {
+  padding-top: 11px;
+}
+.dq-progress-add {
+  flex: none;
+  white-space: nowrap;
+}
+/* who a topic is on as the document wrote it, under the list to choose from */
+.dq-owner-text {
+  flex-basis: 100%;
+  padding-inline-start: calc(4em + 8px);
+  overflow-wrap: anywhere;
+}
+/* the company debrief: its summary document can be brought in */
+.dform-import-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-bg);
+}
+.dform-import-hint > svg {
+  flex: none;
+  color: var(--tint);
+}
+.dimport-intro {
+  margin: 0;
+}
+.dimport-file {
+  align-self: flex-start;
+}
+.dimport-or {
+  text-align: center;
 }
 
 .dq-list-read {

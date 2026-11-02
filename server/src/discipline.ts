@@ -374,23 +374,29 @@ export function googleDocUrls(raw: string): string[] {
   }
   const id = /\/d\/([a-zA-Z0-9_-]{10,})/.exec(u.pathname)?.[1] ?? u.searchParams.get('id');
   if (u.protocol !== 'https:' || !['docs.google.com', 'drive.google.com'].includes(u.hostname) || !id) throw badRequest('צריך קישור למסמך ב-Google Docs');
+  // a Word file opened in Google Docs has a Docs address too, and no Docs export: its file is in Drive
   return u.pathname.startsWith('/document/')
-    ? [`https://docs.google.com/document/d/${id}/export?format=html`]
+    ? [`https://docs.google.com/document/d/${id}/export?format=html`, `https://drive.google.com/uc?export=download&id=${id}`]
     : [`https://drive.google.com/uc?export=download&id=${id}`, `https://docs.google.com/document/d/${id}/export?format=html`];
 }
 
 const NOT_SHARED =
   'לא ניתן לקרוא את המסמך מהקישור - הוא לא משותף. אפשר לשתף אותו ("שיתוף" ← "כל מי שיש לו את הקישור"), או בלי לשתף: להעתיק את כל המסמך ולהדביק כאן, או להוריד אותו כקובץ Word ולהעלות.';
 
-export async function guideFromLink(raw: string, maxBytes: number): Promise<{ offenses: DisciplineOffense[]; letters: DisciplineLetter[] }> {
+/** A shared document by its link, as a file: a Word file, or the HTML of a Google Docs export. */
+export async function fetchDocument(raw: string, maxBytes: number): Promise<Buffer> {
   for (const url of googleDocUrls(raw)) {
     const res = await googleFetch(url).catch(() => null);
     if (!res?.ok || /accounts\.google\.com|ServiceLogin/.test(res.url)) continue;
     const buf = await readLimited(res, maxBytes, () => badRequest('המסמך גדול מדי'));
     if (/accounts\.google\.com\/(v3\/)?signin|ServiceLogin/.test(buf.subarray(0, 20_000).toString('utf8'))) continue;
-    return guideFromFile(buf);
+    return buf;
   }
   throw badRequest(NOT_SHARED);
+}
+
+export async function guideFromLink(raw: string, maxBytes: number): Promise<{ offenses: DisciplineOffense[]; letters: DisciplineLetter[] }> {
+  return guideFromFile(await fetchDocument(raw, maxBytes));
 }
 
 // ---------------- kept in the database ----------------
