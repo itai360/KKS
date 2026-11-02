@@ -225,23 +225,58 @@ export function useSubtaskFold(tasks: Task[] | undefined): { tops: Task[]; fold:
   return { tops, fold };
 }
 
-/** a task's parts, under it: the task itself to open, then each part */
-function SubtaskList({ task, showOwner }: { task: Task; showOwner: boolean }) {
+/** a task's parts, under it: how far along they are and the task itself to open, then each part, short */
+function SubtaskList({ task }: { task: Task; showOwner: boolean }) {
   const navigate = useNavigate();
   const fold = useContext(SubtaskContext);
   const parts = fold?.of.get(task.id) ?? [];
   const open = !!fold?.open.has(task.id);
+  const total = Math.max(task.subtaskTotal, parts.length);
+  const done = task.subtaskDone;
   return (
     <div className={`subtask-fold${open ? ' open' : ''}`} inert={!open || undefined}>
       <div className="subtask-fold-inner">
-        <button type="button" className="subtask-open" onClick={() => navigate(`/tasks/${task.id}`)}>
-          <Icon name="chevronLeft" size={15} />
-          פתיחת המשימה
-        </button>
-        {parts.map((t) => (
-          <TaskRow key={t.id} task={t} showOwner={showOwner} />
-        ))}
+        <div className="subtask-panel">
+          <div className="subtask-head">
+            <span className="subtask-bar" aria-hidden="true">
+              <span style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} />
+            </span>
+            <span className="subtask-sum">
+              {done}/{total} הושלמו
+            </span>
+            <button type="button" className="subtask-open" onClick={() => navigate(`/tasks/${task.id}`)}>
+              פתיחת המשימה
+              <Icon name="chevronLeft" size={14} />
+            </button>
+          </div>
+          <ul className="subtask-items">
+            {parts.map((t) => (
+              <li key={t.id}>
+                <SubtaskItem task={t} />
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
+    </div>
+  );
+}
+
+/** one part of a task, short: its check, title, who and when, and its state */
+function SubtaskItem({ task }: { task: Task }) {
+  const navigate = useNavigate();
+  const tick = useTaskTick(task);
+  return (
+    <div className={`subtask-item${tick.done ? ' done' : ''}`} {...openable(() => navigate(`/tasks/${task.id}`))} onPointerEnter={() => prefetchTask(task.id)}>
+      <TaskCheck task={task} tick={tick} small />
+      <span className="subtask-text">
+        <span className="subtask-title">{task.title}</span>
+        <span className="subtask-meta">
+          {task.ownerName} · <DeadlineText task={task} />
+        </span>
+      </span>
+      <RowStatus status={tick.done ? 'done' : task.status} />
+      <Icon name="chevronLeft" size={16} className="subtask-go" />
     </div>
   );
 }

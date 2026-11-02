@@ -15214,7 +15214,9 @@ tr.is-finished.is-folding {
   background: var(--tint-fill);
 }
 
-/* ---------------- a task's parts, folded under it (TaskRow.tsx: SubtaskContext) ---------------- */
+/* ---------------- a task's parts, folded under it (TaskRow.tsx: SubtaskContext) ----------------
+   A panel joined to its task's row: how far along, the task itself to open, then each part as a short row
+   with a hairline between - one piece with the list, not cards of their own */
 .subtask-count {
   display: inline-flex;
   align-items: center;
@@ -15231,7 +15233,8 @@ tr.is-finished.is-folding {
 .subtask-fold {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s var(--spring);
+  background: var(--card);
+  transition: grid-template-rows 0.32s var(--spring);
 }
 .subtask-fold.open {
   grid-template-rows: 1fr;
@@ -15239,42 +15242,162 @@ tr.is-finished.is-folding {
 .subtask-fold-inner {
   overflow: hidden;
   min-height: 0;
-  margin-inline-start: 22px;
-  padding-inline-start: 12px;
-  border-inline-start: 2px solid var(--line-2);
 }
-.subtask-fold.open .subtask-fold-inner {
-  padding-block: 4px 8px;
+.subtask-panel {
+  margin: 0 14px 12px;
+  margin-inline-start: 48px;
+  border-radius: 12px;
+  background: var(--paper-2, var(--fill));
+  border: 1px solid var(--line);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.32s var(--spring);
+}
+.subtask-fold.open .subtask-panel {
+  opacity: 1;
+  transform: none;
+}
+.subtask-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.subtask-bar {
+  flex: 0 0 56px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--fill-2);
+  overflow: hidden;
+}
+.subtask-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 0.4s var(--spring);
+}
+.subtask-sum {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .subtask-open {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  margin-inline-start: -10px;
+  gap: 2px;
+  flex: none;
+  padding: 4px 8px;
+  margin-inline-end: -6px;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: none;
   color: var(--tint);
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
+.subtask-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.subtask-items > li + li {
+  border-top: 1px solid var(--line);
+}
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s;
+}
+.subtask-item:active {
+  background: var(--fill);
+}
 @media (hover: hover) {
+  .subtask-item:hover,
   .subtask-open:hover {
     background: var(--fill);
   }
 }
+.subtask-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.subtask-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.subtask-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subtask-item.done .subtask-title {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--done-line);
+}
+.subtask-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subtask-meta .task-meta,
+.subtask-meta > span {
+  font-size: inherit;
+}
+.subtask-go {
+  flex: none;
+  color: var(--faint);
+}
 .tasks-table tr.subtask-tr .tasks-table-title {
   padding-inline-start: 34px;
+  position: relative;
+}
+.tasks-table tr.subtask-tr .tasks-table-title::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 18px;
+  top: 0;
+  bottom: 0;
+  border-inline-start: 2px solid var(--line-2);
+}
+.tasks-table tr.subtask-tr {
+  background: var(--paper-2, var(--fill));
 }
 .tasks-table tr.subtask-open-row td {
-  padding-block: 2px;
+  padding-block: 4px;
   padding-inline-start: 30px;
+  background: var(--paper-2, var(--fill));
+}
+@media (max-width: 860px) {
+  .subtask-panel {
+    margin-inline: 12px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .subtask-fold,
+  .subtask-panel,
   .subtask-chev {
     transition: none;
   }
@@ -15304,4 +15427,11 @@ tr.is-finished.is-folding {
 }
 .accept-bar.is-waiting > svg {
   color: var(--muted);
+}
+/* the last task in a list, its parts folded away under it: still the group's rounded foot */
+.list > :has(+ .subtask-fold:last-child:not(.open)),
+.list > :has(+ .subtask-fold:last-child:not(.open)) .task-row,
+.list > .subtask-fold:last-child {
+  border-end-start-radius: var(--radius-sm);
+  border-end-end-radius: var(--radius-sm);
 }
