@@ -163,23 +163,26 @@ async function readBetween(from: string, to: string, withCalendars = true): Prom
     }
   }
   const calendar = read.reads.flatMap((r) => r.events.map(fromCalendar).filter((e): e is RawEvent => !!e));
-  return { events: withPins(readEvents([...course, ...calendar])), reads: read.reads, from: read.from };
+  return { events: withMarks(readEvents([...course, ...calendar])), reads: read.reads, from: read.from };
 }
 
 async function eventsBetween(from: string, to: string, withCalendars = true): Promise<PlanEvent[]> {
   return (await readBetween(from, to, withCalendars)).events;
 }
 
-// ---------------- added by hand to the key schedule ----------------
-// An activity the rules do not take for a main block (a lesson, a meeting, a visit not named so) that is
-// important here: added from the schedule, it is a key event in the plans like the rest - the three-week
-// plan and the week's own. Kept by its key (its day, hour and title): moved or renamed, it is not one any more.
+// ---------------- the key schedule by hand ----------------
+// What the rules take for the main blocks is a start: an activity they did not take (a lesson, a meeting, a
+// visit not named so) added from the schedule is a key event in the plans like the rest - the three-week
+// plan and the week's own - and a main block taken out is not one any more. Each kept by its key (its day,
+// hour and title): moved or renamed, it is a new activity, to the rules again.
 
+/** added by hand, and taken out by hand: a key in one of them at most */
 const PINS_KEY = 'plan_key_pins';
-const MAX_PINS = 400;
+const DROPS_KEY = 'plan_key_drops';
+const MAX_MARKS = 400;
 
-function keyPins(): string[] {
-  const raw = db().get<{ value: string }>('SELECT value FROM meta WHERE key = ?', PINS_KEY)?.value;
+function keyList(name: string): string[] {
+  const raw = db().get<{ value: string }>('SELECT value FROM meta WHERE key = ?', name)?.value;
   try {
     const v = raw ? (JSON.parse(raw) as unknown) : [];
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
@@ -188,33 +191,40 @@ function keyPins(): string[] {
   }
 }
 
-const saveKeyPins = (pins: string[]) =>
-  db().run('INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', PINS_KEY, JSON.stringify(pins.slice(-MAX_PINS)));
+const saveKeyList = (name: string, list: string[]) =>
+  db().run('INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', name, JSON.stringify(list.slice(-MAX_MARKS)));
 
-/** the activities added by hand marked so */
-function withPins(list: PlanEvent[]): PlanEvent[] {
-  const pins = new Set(keyPins());
-  if (pins.size) for (const e of list) if (pins.has(e.key)) e.pinned = true;
+/** marked: one added that the rules did not take ("pinned"), one taken out ("dropped") */
+function withMarks(list: PlanEvent[]): PlanEvent[] {
+  const pins = new Set(keyList(PINS_KEY));
+  const drops = new Set(keyList(DROPS_KEY));
+  if (pins.size || drops.size)
+    for (const e of list) {
+      if (pins.has(e.key)) {
+        // a main block taken out and put back is a main block again, with no mark
+        if (e.weight < KEY_WEIGHT) e.pinned = true;
+      } else if (drops.has(e.key)) e.dropped = true;
+    }
   return list;
 }
 
-const pinsSchema = z.object({ keys: z.array(z.string().trim().min(3).max(300)).min(1).max(60) });
-const unpinSchema = z.object({ key: z.string().trim().min(3).max(300) });
+const addSchema = z.object({ keys: z.array(z.string().trim().min(3).max(300)).min(1).max(60) });
+const removeSchema = z.object({ key: z.string().trim().min(3).max(300) });
 
-/** activities of the schedule added to the key schedule */
-export function pinKeyEvents(raw: unknown): void {
-  const { keys } = pinsSchema.parse(raw);
-  const pins = keyPins();
-  saveKeyPins([...pins, ...keys.filter((k, i) => !pins.includes(k) && keys.indexOf(k) === i)]);
+/** activities of the schedule into the key schedule - one taken out before, back in */
+export function addKeyEvents(raw: unknown): void {
+  const keys = [...new Set(addSchema.parse(raw).keys)];
+  const pins = keyList(PINS_KEY);
+  saveKeyList(PINS_KEY, [...pins.filter((k) => !keys.includes(k)), ...keys]);
+  saveKeyList(DROPS_KEY, keyList(DROPS_KEY).filter((k) => !keys.includes(k)));
   changed('plans');
 }
 
-/** one added by hand taken out of the key schedule again */
-export function unpinKeyEvent(raw: unknown): void {
-  const { key } = unpinSchema.parse(raw);
-  const pins = keyPins();
-  if (!pins.includes(key)) throw notFound('האירוע לא נוסף ללו"ז המפתח');
-  saveKeyPins(pins.filter((k) => k !== key));
+/** one out of the key schedule: added by hand, or a main block of the rules */
+export function removeKeyEvent(raw: unknown): void {
+  const { key } = removeSchema.parse(raw);
+  saveKeyList(PINS_KEY, keyList(PINS_KEY).filter((k) => k !== key));
+  saveKeyList(DROPS_KEY, [...keyList(DROPS_KEY).filter((k) => k !== key), key]);
   changed('plans');
 }
 
@@ -226,7 +236,7 @@ export async function threeWeekCandidates(startWeekId: number): Promise<PlanEven
   return (await eventsBetween(start.startDate, last.endDate)).filter((e) => !isKey(e));
 }
 
-const isKey = (e: PlanEvent) => e.weight >= KEY_WEIGHT || !!e.pinned;
+const isKey = (e: PlanEvent) => !!e.pinned || (!e.dropped && e.weight >= KEY_WEIGHT);
 const inWeek = (e: PlanEvent, w: { startDate: string; endDate: string }) => e.date >= w.startDate && e.date <= w.endDate;
 
 // ---------------- wording ----------------
@@ -768,7 +778,7 @@ export async function threeWeekPlan(startWeekId: number | null): Promise<ThreeWe
     requests: windowRequests(key, risks, cadets, written),
     visit: bestVisit(key),
     // where the activities came from: each Google calendar by its name, how many of the main blocks it held
-    calendars: reads.map((r) => ({ name: r.name, count: withPins(readEvents(r.events.map(fromCalendar).filter((e): e is RawEvent => !!e))).filter(isKey).length, error: r.error, loading: r.loading })),
+    calendars: reads.map((r) => ({ name: r.name, count: withMarks(readEvents(r.events.map(fromCalendar).filter((e): e is RawEvent => !!e))).filter(isKey).length, error: r.error, loading: r.loading })),
     calendarsFrom,
     status: row?.status ?? 'draft',
     approval: row?.status === 'approved' && row.approved_on ? { by: row.approved_by, on: row.approved_on, notes: row.approval_notes } : null,

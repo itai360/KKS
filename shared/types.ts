@@ -1505,6 +1505,8 @@ export interface PlanEvent {
   source: 'course' | 'calendar';
   /** added by hand to the key schedule (not one of the main blocks by itself) */
   pinned?: boolean;
+  /** one of the main blocks by itself, taken out of the key schedule by hand */
+  dropped?: boolean;
 }
 
 export interface PlanHorizonWeek {

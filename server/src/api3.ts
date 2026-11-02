@@ -101,7 +101,7 @@ import { analyzeSmart, applySmart, checkSmart, smartStatus } from './smartEntry'
 import { SUGGEST_MAX_CHARS } from '../../shared/traitSuggest';
 import { TALK_TYPES } from '../../shared/constants';
 import { isDateKey, localDateKey } from '../../shared/dates';
-import { approvePlan, approveThreeWeek, pinKeyEvents, planDocument, plansOverview, savePlan, saveThreeWeek, threeWeekCandidates, threeWeekPlan, unpinKeyEvent } from './plans';
+import { addKeyEvents, approvePlan, approveThreeWeek, planDocument, plansOverview, removeKeyEvent, savePlan, saveThreeWeek, threeWeekCandidates, threeWeekPlan } from './plans';
 
 const id = (v: unknown): number => {
   const n = Number(v);
@@ -629,14 +629,14 @@ export function v3Router(): Router {
     saveThreeWeek(me(req), id(req.params.weekId), req.body);
     res.json(await threeWeekPlan(id(req.params.weekId)));
   });
-  // the key schedule: what else of the schedule can be added to it, added by hand, and taken out again
+  // the key schedule by hand: what else of the schedule can be added to it, added, and any of it taken out
   r.get('/three-week/:weekId/candidates', requireAbility('plans'), async (req, res) => res.json(await threeWeekCandidates(id(req.params.weekId))));
   r.post('/plan-key-events', requireAbility('plans'), (req, res) => {
-    pinKeyEvents(req.body);
+    addKeyEvents(req.body);
     res.json({ ok: true });
   });
   r.post('/plan-key-events/remove', requireAbility('plans'), (req, res) => {
-    unpinKeyEvent(req.body);
+    removeKeyEvent(req.body);
     res.json({ ok: true });
   });
   r.post('/three-week/:weekId/approve', requireCommander, async (req, res) => {

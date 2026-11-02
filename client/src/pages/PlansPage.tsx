@@ -7,6 +7,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { shortDate } from '@shared/dates';
 import type { PlanDocument, PlanSectionKey, PlansOverview, PlanStatus } from '@shared/types';
 import { DocPager, ShareButton, useDocNav, type DocLink, WordButton } from '../components/DocNav';
+import { FoldTitle, useFolds, wholeForWord } from '../components/DocFold';
 import { ApproveDialog, dateRange as range, EditButton, EditDialog, KIND_LABELS, PLAN_STATUS as STATUS, Prep, StatusSteps, whenOf as when, Wording } from '../components/PlanParts';
 import { Icon } from '../components/Icon';
 import { SectionRail, type RailItem } from '../components/SectionRail';
@@ -195,6 +196,8 @@ export function PlanPage() {
   const { data: doc, error, status, loading, setData } = useApi<PlanDocument>(`/api/plans/${id}`, TOPICS);
   const [editing, setEditing] = useState<PlanSectionKey | 'bluf' | null>(null);
   const [approving, setApproving] = useState(false);
+  // the parts closed to their headings on this device
+  const folds = useFolds();
   // the approval just recorded: its line at the foot of the document comes in, stamped
   const [justApproved, setJustApproved] = useState(false);
   useEffect(() => {
@@ -249,11 +252,11 @@ export function PlanPage() {
     const s = doc.sections[k];
     const List = ordered ? 'ol' : 'ul';
     return (
-      <section id={`plan-${k}`}>
+      <section id={`plan-${k}`} className={folds.cls(`plan-${k}`)}>
         <div className="plan-h2">
-          <h2>
+          <FoldTitle folds={folds} id={`plan-${k}`}>
             {n}. {SECTION_TITLES[k]}
-          </h2>
+          </FoldTitle>
           <Wording edited={s.edited} />
           {canEdit && <EditButton label={SECTION_TITLES[k]} onClick={() => setEditing(k)} />}
         </div>
@@ -323,13 +326,13 @@ export function PlanPage() {
           </button>
         )}
         <ShareButton title={`אישור תוכנית - ${w.name}`} />
-        <WordButton title={`אישור תוכנית - ${w.name}`} />
+        <WordButton title={`אישור תוכנית - ${w.name}`} {...wholeForWord} />
         <button className="btn btn-primary" onClick={() => window.print()}>
           <Icon name="print" /> הדפסה / PDF
         </button>
       </div>
 
-      <SectionRail label="חלקי המסמך" items={parts} />
+      <SectionRail label="חלקי המסמך" items={parts} onGo={folds.open} />
       <article className="doc plan-doc" aria-label={`אישור תוכנית - ${w.name}`}>
         <header className="doc-head">
           <div className="doc-kicker">{settings.courseName}</div>
@@ -374,22 +377,22 @@ export function PlanPage() {
           </div>
         )}
 
-        <section id="plan-bluf">
+        <section id="plan-bluf" className={folds.cls('plan-bluf')}>
           <div className="plan-h2">
-            <h2>1. השורה התחתונה</h2>
+            <FoldTitle folds={folds} id="plan-bluf">1. השורה התחתונה</FoldTitle>
             <Wording edited={doc.bluf.edited} />
             {canEdit && <EditButton label="השורה התחתונה" onClick={() => setEditing('bluf')} />}
           </div>
           <p className="plan-bluf">{doc.bluf.text}</p>
         </section>
 
-        <section id="plan-horizon">
-          <h2>2. מבט על ארבעה שבועות</h2>
+        <section id="plan-horizon" className={folds.cls('plan-horizon')}>
+          <FoldTitle folds={folds} id="plan-horizon">2. מבט על ארבעה שבועות</FoldTitle>
           <Horizon doc={doc} />
         </section>
 
-        <section id="plan-events">
-          <h2>3. אירועי המפתח השבוע</h2>
+        <section id="plan-events" className={folds.cls('plan-events')}>
+          <FoldTitle folds={folds} id="plan-events">3. אירועי המפתח השבוע</FoldTitle>
           {keyEvents.length ? (
             <table className="doc-table plan-events">
               <thead>
@@ -437,8 +440,8 @@ export function PlanPage() {
         {section('achievements', 5)}
         {section('emphases', 6, false)}
 
-        <section id="plan-risks">
-          <h2>7. סיכונים ומענה</h2>
+        <section id="plan-risks" className={folds.cls('plan-risks')}>
+          <FoldTitle folds={folds} id="plan-risks">7. סיכונים ומענה</FoldTitle>
           {doc.risks.length ? (
             <table className="doc-table plan-risks">
               <thead>
@@ -463,8 +466,8 @@ export function PlanPage() {
           )}
         </section>
 
-        <section id="plan-picture">
-          <h2>8. תמונת מצב</h2>
+        <section id="plan-picture" className={folds.cls('plan-picture')}>
+          <FoldTitle folds={folds} id="plan-picture">8. תמונת מצב</FoldTitle>
           <div className="plan-kpis">
             <div>
               <b>{doc.cadets.active}</b>
@@ -507,9 +510,9 @@ export function PlanPage() {
         </section>
 
         {doc.lessons.length > 0 && (
-          <section id="plan-lessons">
+          <section id="plan-lessons" className={folds.cls('plan-lessons')}>
             {/* a week of the staff's preparation after the closing week: every lesson kept for the next cycle */}
-            <h2>{w.staffPrep ? '9. כל הלקחים שנשמרו למחזור הבא' : '9. לקחים מהמחזור הקודם לשבוע הזה'}</h2>
+            <FoldTitle folds={folds} id="plan-lessons">{w.staffPrep ? '9. כל הלקחים שנשמרו למחזור הבא' : '9. לקחים מהמחזור הקודם לשבוע הזה'}</FoldTitle>
             <ul className="doc-list">
               {doc.lessons.map((l) => (
                 <li key={l.id}>

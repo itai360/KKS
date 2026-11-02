@@ -6627,6 +6627,64 @@ button.fab-missing {
   margin-inline-start: auto;
 }
 
+/* ---------------- a plan document's parts open and close by their headings (components/DocFold.tsx) ---------------- */
+.fold-h {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fold-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+/* open it points down; closed it points along the line (right to left) */
+.fold-btn svg {
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.fold-btn[aria-expanded='false'] svg {
+  transform: rotate(90deg);
+}
+@media (hover: hover) {
+  .fold-h:hover .fold-btn {
+    color: var(--ink);
+    background: var(--fill);
+  }
+}
+.fold-btn:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fold-btn svg {
+    transition: none;
+  }
+}
+/* closed: the heading alone - on a screen; printed, and in the Word file (.is-whole), the whole part */
+@media screen {
+  .doc:not(.is-whole) section.is-folded > :not(:first-child) {
+    display: none;
+  }
+  .doc:not(.is-whole) section.is-folded {
+    padding-bottom: 14px;
+  }
+  .doc:not(.is-whole) section.is-folded > :first-child {
+    margin-bottom: 0;
+  }
+}
+
 .plan-bluf {
   margin: 0;
   padding: 12px 14px;
@@ -15481,10 +15539,9 @@ html:has(.subtask-fold) {
   margin-inline: 3px 1px;
   color: var(--tint);
 }
-/* the way out sits at the end of the activity's first line, not on a line of its own in a narrow day */
+/* any key event is taken out by the x at the end of its first line (not on a line of its own in a narrow day) */
 #tw-days li:has(> .tw-unpin) {
   position: relative;
-  padding-inline-end: 18px;
 }
 .tw-unpin {
   position: absolute;
@@ -15501,13 +15558,82 @@ html:has(.subtask-fold) {
   color: var(--muted);
   vertical-align: middle;
   cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.12s, background 0.12s;
+  opacity: 0.5;
+  transition: opacity 0.12s, background-color 0.12s, color 0.12s;
+}
+/* a finger: always there, with a room of its own at the end of the line */
+@media (hover: none), (pointer: coarse) {
+  #tw-days li:has(> .tw-unpin) {
+    padding-inline-end: 18px;
+  }
+}
+/* a mouse: it comes in over the end of the line pointed at, a small disc of its own (the text keeps its width) */
+@media (hover: hover) and (pointer: fine) {
+  .tw-unpin {
+    top: 0;
+    inset-inline-end: -7px;
+    width: 18px;
+    height: 18px;
+    opacity: 0;
+    background: var(--card);
+    box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+  #tw-days li:hover > .tw-unpin {
+    opacity: 1;
+  }
 }
 .tw-unpin:hover,
 .tw-unpin:focus-visible {
   opacity: 1;
-  background: var(--fill);
+  color: var(--red);
+  background: var(--red-bg);
+}
+/* a day tapped opens what else its schedule holds: it answers a mouse over it and the press of a finger */
+.tw-day.is-pickable {
+  position: relative;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.12s;
+}
+@media (hover: hover) {
+  .tw-day.is-pickable:hover {
+    background: var(--tint-bg);
+  }
+}
+.tw-day.is-pickable:active {
+  background: var(--tint-bg);
+}
+/* the day's + is a keyboard's way to it (a mouse and a finger tap the day itself): out of sight until focused */
+.tw-day-add {
+  position: absolute;
+  top: 3px;
+  inset-inline-end: 3px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--tint);
+  color: var(--card);
+  cursor: pointer;
+}
+.tw-day-add:not(:focus-visible) {
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+/* the day tapped, named above its activities - and the way to the whole period */
+.ka-only {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 15px;
 }
 .ka-intro {
   margin: 0 0 10px;

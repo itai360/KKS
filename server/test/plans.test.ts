@@ -175,13 +175,39 @@ describe('the three-week plan', () => {
     expect((await c.cmd.post('/api/plan-key-events/remove', { key: lesson!.key })).status).toBe(200);
     d = await tw();
     expect(d.weeks[0].key.map((e) => e.title)).not.toContain('שיעור: עקרונות התקפה');
-    expect((await c.cmd.post('/api/plan-key-events/remove', { key: lesson!.key })).status).toBe(404);
+    expect((await candidates()).map((e) => e.key)).toContain(lesson!.key);
     expect((await c.cmd.post('/api/plan-key-events', { keys: [] })).status).toBe(400);
+    expect((await c.cmd.post('/api/plan-key-events/remove', {})).status).toBe(400);
     // by the staff where the commander lets them prepare the plans - not otherwise
     expect((await c.s1.post('/api/plan-key-events', { keys: [lesson!.key] })).status).toBe(200);
     await staffMay(c, { plans: false });
     expect((await c.s1.post('/api/plan-key-events', { keys: [lesson!.key] })).status).toBe(403);
     expect((await c.s1.get(`/api/three-week/${weekIds[0]}/candidates`)).status).toBe(403);
+  });
+
+  it('takes a main block of the rules out of the key schedule by hand - and puts it back', async () => {
+    const candidates = async () => (await c.cmd.get(`/api/three-week/${weekIds[0]}/candidates`)).body as PlanEvent[];
+    const night = (await tw()).weeks[0].key.find((e) => e.title === 'ניווט לילה');
+    expect(night).toBeTruthy();
+    expect((await c.cmd.post('/api/plan-key-events/remove', { key: night!.key })).status).toBe(200);
+    let d = await tw();
+    expect(d.weeks[0].key.map((e) => e.title)).not.toContain('ניווט לילה');
+    expect(d.milestones.map((e) => e.title)).not.toContain('ניווט לילה');
+    // nor in the week's own plan
+    expect((await doc(0)).horizon[0].events.map((e) => e.title)).not.toContain('ניווט לילה');
+    // offered to add again, marked as taken out
+    expect((await candidates()).find((e) => e.key === night!.key)).toMatchObject({ dropped: true });
+    // back: a main block again, not marked as added by hand
+    expect((await c.cmd.post('/api/plan-key-events', { keys: [night!.key] })).status).toBe(200);
+    d = await tw();
+    const back = d.weeks[0].key.find((e) => e.title === 'ניווט לילה');
+    expect(back).toBeTruthy();
+    expect(back?.pinned).toBeFalsy();
+    expect(back?.dropped).toBeFalsy();
+    expect((await candidates()).map((e) => e.key)).not.toContain(night!.key);
+    // and out once more
+    expect((await c.cmd.post('/api/plan-key-events/remove', { key: night!.key })).status).toBe(200);
+    expect((await tw()).weeks[0].key.map((e) => e.title)).not.toContain('ניווט לילה');
   });
 
   it('shows the week now and the three after it: day by day, the milestones, readiness, the risks with their week', async () => {

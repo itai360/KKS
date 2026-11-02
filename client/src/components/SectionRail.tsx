@@ -31,7 +31,19 @@ function currentOf(ids: string[]): string | null {
   return cur;
 }
 
-export function SectionRail({ items, label, wide }: { items: RailItem[]; label: string; /** with every part's name, where the screen is wide enough */ wide?: boolean }) {
+export function SectionRail({
+  items,
+  label,
+  wide,
+  onGo,
+}: {
+  items: RailItem[];
+  label: string;
+  /** with every part's name, where the screen is wide enough */
+  wide?: boolean;
+  /** a part tapped, before going there (a part closed to its heading opens) */
+  onGo?: (id: string) => void;
+}) {
   // the dock is sticky under the bar: once it sits there (the parts above it scrolled away), the strip shows
   const dock = useRef<HTMLDivElement>(null);
   const rail = useRef<HTMLElement>(null);
@@ -74,6 +86,7 @@ export function SectionRail({ items, label, wide }: { items: RailItem[]; label: 
   }, [cur]);
 
   const jump = (id: string) => {
+    onGo?.(id);
     steer.current = { id, until: performance.now() + 900 };
     setCur(id);
     document.getElementById(id)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });

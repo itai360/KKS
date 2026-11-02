@@ -4,12 +4,13 @@
 // staff, the cadets and what is asked of the commander above - and to record their approval. The arrows
 // (and a swipe on a phone) move it a week back or on.
 
-import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import { ABSENCE_REASON_LABELS } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName } from '@shared/dates';
 import type { PlanEvent, ThreeWeekPlan, ThreeWeekWeek, Week } from '@shared/types';
 import { DocPager, ShareButton, useDocNav, type DocLink, WordButton } from '../components/DocNav';
+import { FoldTitle, useFolds, wholeForWord } from '../components/DocFold';
 import { PlanCalendars, useReloadWhileLoading } from '../components/GoogleCalendar';
 import { Icon } from '../components/Icon';
 import { ApproveDialog, dateRange, EditButton, EditDialog, KIND_LABELS, PLAN_STATUS, Prep, StatusSteps, whenOf, Wording } from '../components/PlanParts';
@@ -107,14 +108,16 @@ function WeekCard({ part, today }: { part: ThreeWeekWeek; today: string }) {
   );
 }
 
-/** a main block on a day: its hour, name and kind - a later day of one over several days says it goes on */
-function Activity({ e, day, onUnpin }: { e: PlanEvent; day: string; onUnpin?: (e: PlanEvent) => void }) {
+/**
+ * A key event on a day: its hour, name and kind - a later day of one over several days says it goes on. One
+ * added by hand is marked so, and any of them is taken out from here.
+ */
+function Activity({ e, day, onRemove }: { e: PlanEvent; day: string; onRemove?: (e: PlanEvent) => void }) {
   const goesOn = day !== e.date;
   return (
     <>
       {e.startTime && !goesOn && <span className="mono tiny tw-time">{e.startTime}</span>}
       <span className="tw-act">{e.title}</span>
-      {/* added by hand to the key schedule: marked so, and taken out from here */}
       {e.pinned && !goesOn && (
         <span className="tw-pin no-print" title='נוסף ידנית ללו"ז המפתח'>
           <Icon name="tack" size={12} />
@@ -123,8 +126,8 @@ function Activity({ e, day, onUnpin }: { e: PlanEvent; day: string; onUnpin?: (e
       {goesOn ? <span className="tiny muted"> (המשך)</span> : <span className={`plan-kind k-${e.kind}`}>{KIND_LABELS[e.kind]}</span>}
       {e.night && !goesOn && <span className="plan-kind k-night">לילה</span>}
       {e.location && !goesOn && <span className="tiny muted tw-where"> · {e.location}</span>}
-      {e.pinned && !goesOn && onUnpin && (
-        <button type="button" className="tw-unpin no-print" onClick={() => onUnpin(e)} aria-label={`הוצאת "${e.title}" מלו"ז המפתח`} title='הוצאה מלו"ז המפתח'>
+      {!goesOn && onRemove && (
+        <button type="button" className="tw-unpin no-print" onClick={() => onRemove(e)} aria-label={`הוצאת "${e.title}" מלו"ז המפתח`} title='הוצאה מלו"ז המפתח'>
           <Icon name="x" size={12} />
         </button>
       )}
@@ -132,19 +135,38 @@ function Activity({ e, day, onUnpin }: { e: PlanEvent; day: string; onUnpin?: (e
   );
 }
 
+/** some days of the period: one tapped in the key schedule, or the empty days a phone folds into one line */
+interface Days {
+  from: string;
+  to: string;
+}
+
+/** "ראשון 15.11", or "שישי-שבת 20.11-21.11" */
+const daysLabel = ({ from, to }: Days) => (from === to ? `${weekdayName(from)} ${shortDate(from)}` : `${weekdayName(from)}-${weekdayName(to)} ${dateRange(from, to)}`);
+
+/** a long list is searched; a day's few are seen at a glance */
+const SEARCH_FROM = 9;
+
 /**
- * More of the schedule into the key schedule: the period's activities the rules did not take for main
- * blocks (lessons, meetings), day by day - the ones ticked become key events here and in their week's plan.
+ * More of the schedule into the key schedule: the activities the rules did not take for main blocks
+ * (lessons, meetings) - of the day tapped, or of the whole period, day by day. The ones ticked become key
+ * events here and in their week's plan.
  */
-function KeyAdd({ weekId, onClose }: { weekId: number; onClose: () => void }) {
+function KeyAdd({ weekId, days: asked, onClose }: { weekId: number; days: Days | null; onClose: () => void }) {
   const toast = useToast();
   const { data, error, loading } = useApi<PlanEvent[]>(`/api/three-week/${weekId}/candidates`, ['plans', 'events']);
+  // the days tapped - and from them, the whole period
+  const [only, setOnly] = useState(asked);
   const [q, setQ] = useState('');
   const [chosen, setChosen] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const words = q.trim();
-  const shown = (data ?? []).filter((e) => !words || `${e.title} ${e.location}`.includes(words));
-  const days = [...new Set(shown.map((e) => e.date))].sort().map((d) => ({ d, events: shown.filter((e) => e.date === d) }));
+  const pool = (data ?? []).filter((e) => !only || (e.date <= only.to && e.endDate >= only.from));
+  const shown = pool.filter((e) => !words || `${e.title} ${e.location}`.includes(words));
+  // one that began before the days tapped goes on in them: listed on the first
+  const dayOf = (e: PlanEvent) => (only && e.date < only.from ? only.from : e.date);
+  const days = [...new Set(shown.map(dayOf))].sort().map((d) => ({ d, events: shown.filter((e) => dayOf(e) === d) }));
+  const oneDay = !!only && only.from === only.to;
   const toggle = (k: string) =>
     setChosen((c) => {
       const n = new Set(c);
@@ -180,30 +202,56 @@ function KeyAdd({ weekId, onClose }: { weekId: number; onClose: () => void }) {
         </>
       }
     >
-      <p className="small muted ka-intro">אירועים מהלו"ז של התקופה שלא נכנסו ללו"ז המפתח מעצמם - שיעורים, פגישות ועוד. מה שתסמנו ייכנס לתלת שבועי ולתוכנית של השבוע שלו.</p>
-      <input className="input ka-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי שם או מקום" aria-label="חיפוש אירוע" />
+      {only && (
+        <div className="ka-only">
+          <b>{daysLabel(only)}</b>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOnly(null)}>
+            כל התקופה
+          </button>
+        </div>
+      )}
+      <p className="small muted ka-intro">
+        {only
+          ? `מה שיש בלו"ז ${oneDay ? 'ביום הזה' : 'בימים האלה'} ולא נכנס ללו"ז המפתח מעצמו - שיעורים, פגישות ועוד. מה שתסמנו ייכנס לתלת שבועי ולתוכנית של השבוע.`
+          : 'אירועים מהלו"ז של התקופה שלא נכנסו ללו"ז המפתח מעצמם - שיעורים, פגישות ועוד. מה שתסמנו ייכנס לתלת שבועי ולתוכנית של השבוע שלו.'}
+      </p>
+      {(!only || pool.length >= SEARCH_FROM) && (
+        <input className="input ka-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי שם או מקום" aria-label="חיפוש אירוע" />
+      )}
       {error && <p className="small text-red">{error}</p>}
       {loading && !data ? (
         <Loading rows={4} />
       ) : !days.length ? (
-        <p className="small muted ka-empty">{words ? 'לא נמצא אירוע כזה בתקופה.' : 'כל האירועים של התקופה כבר בלו"ז המפתח.'}</p>
+        <p className="small muted ka-empty">
+          {words ? 'לא נמצא אירוע כזה.' : only ? `אין ${oneDay ? 'ביום הזה' : 'בימים האלה'} אירועים נוספים בלו"ז.` : 'כל האירועים של התקופה כבר בלו"ז המפתח.'}
+        </p>
       ) : (
         <div className="ka-days">
           {days.map(({ d, events }) => (
             <div key={d} className="ka-day">
-              <div className="ka-date">
-                <b>{weekdayName(d)}</b> <span className="mono">{shortDate(d)}</span>
-              </div>
+              {/* the day tapped is named above; the period's days, and folded ones, each by its own */}
+              {!oneDay && (
+                <div className="ka-date">
+                  <b>{weekdayName(d)}</b> <span className="mono">{shortDate(d)}</span>
+                </div>
+              )}
               {events.map((e) => (
                 <label key={e.key} className={`ka-row${chosen.has(e.key) ? ' on' : ''}`}>
                   <input type="checkbox" checked={chosen.has(e.key)} onChange={() => toggle(e.key)} />
-                  <span className="ka-time mono">{e.startTime ?? 'כל היום'}</span>
+                  <span className="ka-time mono">{e.date < d ? 'המשך' : (e.startTime ?? 'כל היום')}</span>
                   <span className="ka-title">
                     {e.title}
-                    {e.endDate !== e.date && <span className="muted"> · עד {shortDate(e.endDate)}</span>}
+                    {e.date < d ? (
+                      <span className="muted">
+                        {' '}
+                        · מ-{shortDate(e.date)} עד {shortDate(e.endDate)}
+                      </span>
+                    ) : (
+                      e.endDate !== e.date && <span className="muted"> · עד {shortDate(e.endDate)}</span>
+                    )}
                     {e.location && <span className="muted"> · {e.location}</span>}
                   </span>
-                  {e.source === 'calendar' && <span className="ka-src">Google</span>}
+                  {e.dropped ? <span className="ka-src">הוצא ידנית</span> : e.source === 'calendar' && <span className="ka-src">Google</span>}
                 </label>
               ))}
             </div>
@@ -217,8 +265,25 @@ function KeyAdd({ weekId, onClose }: { weekId: number; onClose: () => void }) {
 /** a day shows this many activities, then says how many more */
 const DAY_LINES = 6;
 
-/** one week, day by day: the main blocks of each day (one that began the week before goes on in it) */
-function WeekDays({ part, next, all, today, onUnpin }: { part: ThreeWeekWeek; next: Week | undefined; all: PlanEvent[]; today: string; onUnpin?: (e: PlanEvent) => void }) {
+/**
+ * One week, day by day: the main blocks of each day (one that began the week before goes on in it). A day
+ * tapped opens what else its schedule holds, to add to the key schedule (its + is a keyboard's way there).
+ */
+function WeekDays({
+  part,
+  next,
+  all,
+  today,
+  onRemove,
+  onDay,
+}: {
+  part: ThreeWeekWeek;
+  next: Week | undefined;
+  all: PlanEvent[];
+  today: string;
+  onRemove?: (e: PlanEvent) => void;
+  onDay?: (days: Days) => void;
+}) {
   const { week: w } = part;
   const days = daysOf(w, next).map((d) => ({ d, key: all.filter((e) => e.date <= d && e.endDate >= d) }));
   const empty = (i: number) => !!days[i] && !days[i].key.length && days[i].d !== today;
@@ -228,6 +293,18 @@ function WeekDays({ part, next, all, today, onUnpin }: { part: ThreeWeekWeek; ne
     while (empty(j + 1)) j++;
     return j;
   };
+  // a tap on the day itself - not on a button in it, nor the end of selecting its text
+  const pick = (at: Days) => (ev: MouseEvent<HTMLDivElement>) => {
+    if (!onDay || (ev.target as Element).closest('button, a') || getSelection()?.toString()) return;
+    onDay(at);
+  };
+  const plus = (at: Days) =>
+    onDay && (
+      <button type="button" className="tw-day-add no-print" onClick={() => onDay(at)} aria-label={`הוספה ללו"ז המפתח מהלו"ז של ${daysLabel(at)}`} title='הוספה מהלו"ז של היום'>
+        <Icon name="plus" size={14} />
+      </button>
+    );
+  const pickable = onDay ? ' is-pickable' : '';
   return (
     <div className="tw-block">
       <h3>
@@ -240,30 +317,35 @@ function WeekDays({ part, next, all, today, onUnpin }: { part: ThreeWeekWeek; ne
           const run = starts ? days[runEnd(i)].d : null;
           return (
             <Fragment key={d}>
+              {/* only a phone shows it (the days in it are hidden there): tapped, what those days hold */}
               {run && (
-                <div className="tw-day tw-run is-empty" aria-hidden="true">
+                <div className={`tw-day tw-run is-empty${pickable}`} onClick={pick({ from: d, to: run })}>
                   <div className="tw-day-head">
                     <b>
                       {weekdayName(d)}-{weekdayName(run)}
-                    </b>{' '}
+                    </b>
+                    {plus({ from: d, to: run })}
                     <span className="mono">{dateRange(d, run)}</span>
                   </div>
                   <div className="tiny muted">-</div>
                 </div>
               )}
               <div
-                className={`tw-day${d === today ? ' is-today' : ''}${key.length ? '' : ' is-empty'}${d > w.endDate ? ' is-off' : ''}${inRun ? ' in-run' : ''}`}
+                className={`tw-day${d === today ? ' is-today' : ''}${key.length ? '' : ' is-empty'}${d > w.endDate ? ' is-off' : ''}${inRun ? ' in-run' : ''}${pickable}`}
                 aria-current={d === today ? 'date' : undefined}
-                title={d > w.endDate ? 'אחרי סוף השבוע בקורס' : undefined}
+                title={[d > w.endDate && 'אחרי סוף השבוע בקורס', onDay && 'לחיצה - הוספה ללו"ז המפתח מהלו"ז של היום'].filter(Boolean).join(' · ') || undefined}
+                onClick={pick({ from: d, to: d })}
               >
                 <div className="tw-day-head">
-                  <b>{weekdayName(d)}</b> <span className="mono">{shortDate(d)}</span>
+                  <b>{weekdayName(d)}</b>
+                  {plus({ from: d, to: d })}
+                  <span className="mono">{shortDate(d)}</span>
                 </div>
                 {key.length > 0 && (
                   <ul>
                     {key.slice(0, DAY_LINES).map((e) => (
                       <li key={e.key}>
-                        <Activity e={e} day={d} onUnpin={onUnpin} />
+                        <Activity e={e} day={d} onRemove={onRemove} />
                       </li>
                     ))}
                   </ul>
@@ -289,9 +371,12 @@ export function ThreeWeekPage() {
   const [editing, setEditing] = useState(false);
   const [approving, setApproving] = useState(false);
   const [calendars, setCalendars] = useState(false);
-  // the key schedule by hand: more of the schedule added, one added taken out (with a way back)
-  const [addingKey, setAddingKey] = useState(false);
-  const unpin = async (e: PlanEvent) => {
+  // the parts closed to their headings on this device
+  const folds = useFolds();
+  // the key schedule by hand: more of the schedule added (of a day tapped, or of the whole period), and any
+  // of it taken out (with a way back)
+  const [adding, setAdding] = useState<{ days: Days | null } | null>(null);
+  const remove = async (e: PlanEvent) => {
     try {
       await api.post('/api/plan-key-events/remove', { key: e.key });
       emitLocalChange('plans');
@@ -427,7 +512,7 @@ export function ThreeWeekPage() {
           </button>
         )}
         <ShareButton title={`${NAME} - ${label}`} />
-        <WordButton title={`${NAME} - ${label}`} />
+        <WordButton title={`${NAME} - ${label}`} {...wholeForWord} />
         <button className="btn btn-primary" onClick={() => window.print()}>
           <Icon name="print" /> הדפסה / PDF
         </button>
@@ -461,7 +546,7 @@ export function ThreeWeekPage() {
         )}
       </div>
 
-      <SectionRail label="חלקי המסמך" items={parts} />
+      <SectionRail label="חלקי המסמך" items={parts} onGo={folds.open} />
       <article className="doc plan-doc tw-doc" aria-label={`${NAME} - ${label}`}>
         <header className="doc-head">
           <div className="doc-kicker">{settings.courseName}</div>
@@ -514,19 +599,19 @@ export function ThreeWeekPage() {
           </div>
         )}
 
-        <section id="tw-bluf">
+        <section id="tw-bluf" className={folds.cls('tw-bluf')}>
           <div className="plan-h2">
-            <h2>{n('tw-bluf')}. השורה התחתונה</h2>
+            <FoldTitle folds={folds} id="tw-bluf">{n('tw-bluf')}. השורה התחתונה</FoldTitle>
             <Wording edited={doc.bluf.edited} />
             {canEdit && <EditButton label="השורה התחתונה" onClick={() => setEditing(true)} />}
           </div>
           <p className="plan-bluf">{doc.bluf.text}</p>
         </section>
 
-        <section id="tw-glance">
-          <h2>
+        <section id="tw-glance" className={folds.cls('tw-glance')}>
+          <FoldTitle folds={folds} id="tw-glance">
             {n('tw-glance')}. {span === 4 ? 'ארבעת השבועות' : 'השבועות'} במבט אחד
-          </h2>
+          </FoldTitle>
           <div className="plan-horizon">
             {doc.weeks.map((p) => (
               <WeekCard key={p.week.id} part={p} today={today} />
@@ -539,24 +624,24 @@ export function ThreeWeekPage() {
           </div>
         </section>
 
-        <section id="tw-days">
+        <section id="tw-days" className={folds.cls('tw-days')}>
           <div className="tw-days-head">
-            <h2>{n('tw-days')}. לו"ז מפתח - יום אחר יום</h2>
+            <FoldTitle folds={folds} id="tw-days">{n('tw-days')}. לו"ז מפתח - יום אחר יום</FoldTitle>
             {/* more of the schedule, by hand: what the rules did not take but matters here */}
-            <button type="button" className="btn btn-sm no-print" onClick={() => setAddingKey(true)}>
+            <button type="button" className="btn btn-sm no-print" onClick={() => setAdding({ days: null })}>
               <Icon name="plus" size={14} /> הוספת אירוע מהלו"ז
             </button>
           </div>
           {doc.weeks.map((p, i) => (
-            <WeekDays key={p.week.id} part={p} next={doc.weeks[i + 1]?.week} all={allKey} today={today} onUnpin={(e) => void unpin(e)} />
+            <WeekDays key={p.week.id} part={p} next={doc.weeks[i + 1]?.week} all={allKey} today={today} onRemove={(e) => void remove(e)} onDay={(days) => setAdding({ days })} />
           ))}
           <p className="tiny muted no-print">
-            הלבנות העיקריות, מהלו"ז של הקורס ומיומן התוכנית: מבחנים, טקסים, תרגילים, ניווטים, מטווחים, ביקורים ובלוקים של כמה ימים. שיעורים, שגרה ופעילויות קטנות לא נכנסים מעצמם - אירוע חשוב מהם מוסיפים ב"הוספת אירוע מהלו"ז" (מסומן <Icon name="tack" size={11} />). <Link to="/schedule">ללו"ז המלא</Link>
+            הלבנות העיקריות, מהלו"ז של הקורס ומיומן התוכנית: מבחנים, טקסים, תרגילים, ניווטים, מטווחים, ביקורים ובלוקים של כמה ימים. שיעורים, שגרה ופעילויות קטנות לא נכנסים מעצמם - אירוע חשוב מהם מוסיפים בלחיצה על היום, או ב"הוספת אירוע מהלו"ז" (מסומן <Icon name="tack" size={11} />), ואירוע שלא צריך מוציאים ב-×. <Link to="/schedule">ללו"ז המלא</Link>
           </p>
         </section>
 
-        <section id="tw-milestones">
-          <h2>{n('tw-milestones')}. אבני דרך ומוכנות</h2>
+        <section id="tw-milestones" className={folds.cls('tw-milestones')}>
+          <FoldTitle folds={folds} id="tw-milestones">{n('tw-milestones')}. אבני דרך ומוכנות</FoldTitle>
           {doc.milestones.length ? (
             <table className="doc-table plan-events tw-milestones">
               <thead>
@@ -611,8 +696,8 @@ export function ThreeWeekPage() {
           </ul>
         </section>
 
-        <section id="tw-goals">
-          <h2>{n('tw-goals')}. מטרות לפי שבוע</h2>
+        <section id="tw-goals" className={folds.cls('tw-goals')}>
+          <FoldTitle folds={folds} id="tw-goals">{n('tw-goals')}. מטרות לפי שבוע</FoldTitle>
           {doc.weeks.map((p) => (
             <div key={p.week.id} className="tw-goals">
               <div className="plan-h2">
@@ -633,8 +718,8 @@ export function ThreeWeekPage() {
           ))}
         </section>
 
-        <section id="tw-risks">
-          <h2>{n('tw-risks')}. סיכונים ומענה</h2>
+        <section id="tw-risks" className={folds.cls('tw-risks')}>
+          <FoldTitle folds={folds} id="tw-risks">{n('tw-risks')}. סיכונים ומענה</FoldTitle>
           {doc.risks.length ? (
             <table className="doc-table plan-risks">
               <thead>
@@ -660,8 +745,8 @@ export function ThreeWeekPage() {
           )}
         </section>
 
-        <section id="tw-staff">
-          <h2>{n('tw-staff')}. סגל וכוח אדם</h2>
+        <section id="tw-staff" className={folds.cls('tw-staff')}>
+          <FoldTitle folds={folds} id="tw-staff">{n('tw-staff')}. סגל וכוח אדם</FoldTitle>
           <h3>מפק"צי השבועות</h3>
           <ul className="doc-list">
             {doc.weeks.map((p) => (
@@ -692,8 +777,8 @@ export function ThreeWeekPage() {
           )}
         </section>
 
-        <section id="tw-cadets">
-          <h2>{n('tw-cadets')}. תמונת מצב צוערים</h2>
+        <section id="tw-cadets" className={folds.cls('tw-cadets')}>
+          <FoldTitle folds={folds} id="tw-cadets">{n('tw-cadets')}. תמונת מצב צוערים</FoldTitle>
           <div className="plan-kpis">
             <div>
               <b>{doc.cadets.active}</b>
@@ -723,8 +808,8 @@ export function ThreeWeekPage() {
         </section>
 
         {lessons.length > 0 && (
-          <section id="tw-lessons">
-            <h2>{n('tw-lessons')}. לקחים מהמחזור הקודם</h2>
+          <section id="tw-lessons" className={folds.cls('tw-lessons')}>
+            <FoldTitle folds={folds} id="tw-lessons">{n('tw-lessons')}. לקחים מהמחזור הקודם</FoldTitle>
             {lessons.map((p) => (
               <div key={p.week.id}>
                 <h3>
@@ -745,8 +830,8 @@ export function ThreeWeekPage() {
           </section>
         )}
 
-        <section id="tw-requests">
-          <h2>{n('tw-requests')}. בקשות מהמפקד הממונה</h2>
+        <section id="tw-requests" className={folds.cls('tw-requests')}>
+          <FoldTitle folds={folds} id="tw-requests">{n('tw-requests')}. בקשות מהמפקד הממונה</FoldTitle>
           {doc.requests.length ? (
             <ol className="doc-list">
               {doc.requests.map((r, i) => (
@@ -816,7 +901,7 @@ export function ThreeWeekPage() {
           onClose={() => setEditing(false)}
         />
       )}
-      {addingKey && doc && <KeyAdd weekId={doc.startWeekId} onClose={() => setAddingKey(false)} />}
+      {adding && doc && <KeyAdd weekId={doc.startWeekId} days={adding.days} onClose={() => setAdding(null)} />}
       {calendars && (
         <Modal
           title="יומן התוכנית"
