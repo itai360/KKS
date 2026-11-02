@@ -10,7 +10,7 @@ import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
 import { Decided, useDecision } from '../components/Decision';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
-import { UserPicker, useNewTask } from '../components/NewTask';
+import { subtaskOf, UserPicker, useNewTask } from '../components/NewTask';
 import { TaskActions, useTaskMutation, type EditField } from '../components/TaskActions';
 import { OpenTaskList } from '../components/TaskRow';
 import { Bar, ErrorBox, PageError, Loading, Modal } from '../components/ui';
@@ -451,8 +451,7 @@ function Details({ task: t, onEdit, canChange, attach }: { task: Task; onEdit: (
 }
 
 /** a task's subtasks, to break it into parts */
-const addSubtask = (newTask: ReturnType<typeof useNewTask>, t: Task) =>
-  newTask({ parentId: t.id, weekId: t.weekId, trackId: t.trackId, ownerIds: [t.ownerId], domain: t.domain, deadline: t.deadline, heading: `משימת משנה: ${t.title}` });
+const addSubtask = (newTask: ReturnType<typeof useNewTask>, t: Task) => newTask(subtaskOf(t));
 
 /**
  * What a task can still be given - parts, an order with another task - in one row, instead of an empty

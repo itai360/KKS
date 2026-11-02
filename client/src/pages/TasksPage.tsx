@@ -308,7 +308,7 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
   const tick = useTaskTick(t, folded);
   const tag = useGroupTag(t, !folded);
   const flash = useLiveFlash(`${t.status}|${t.deadline}|${t.ownerId}|${t.title}|${t.priority}|${t.overdue}`);
-  const menu = useTaskMenu(t, tick, bulk?.active || folded);
+  const menu = useTaskMenu(t, tick, bulk?.active || folded, fold ? () => fold.show(t.id) : undefined);
   return (
     <tr
       className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${leaving ? ' is-finished' : ''}${leaving === 'fold' ? ' is-folding' : ''}${partsOpen ? ' parts-open' : ''}`}
@@ -320,16 +320,19 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
     >
       <td className="tone-cell" />
       <td className="tasks-table-title">
-        <div className="strong row gap-6" style={{ textDecoration: tick.done ? 'line-through' : undefined }}>
+        {/* the check beside the title, and under the title - in its own column - how many parts it has */}
+        <div className="tt-cell">
           {bulk?.active ? <BulkCheck id={t.id} /> : <TaskCheck task={t} tick={tick} small />}
-          <span>{t.title}</span>
+          <span className="strong" style={{ textDecoration: tick.done ? 'line-through' : undefined }}>
+            {t.title}
+          </span>
+          {t.subtaskTotal > 0 && (
+            <span className={`tt-sub nums${parts ? ' subtask-count' : ''}`}>
+              {t.subtaskDone}/{t.subtaskTotal} משימות משנה
+              {parts > 0 && <Icon name="chevronDown" size={13} className="subtask-chev" />}
+            </span>
+          )}
         </div>
-        {t.subtaskTotal > 0 && (
-          <div className={`tiny muted mono${parts ? ' subtask-count' : ''}`}>
-            {t.subtaskDone}/{t.subtaskTotal} משימות משנה
-            {parts > 0 && <Icon name="chevronDown" size={13} className="subtask-chev" />}
-          </div>
-        )}
       </td>
       <td className="nowrap">{folded ? <GroupDone t={t} /> : t.ownerName}</td>
       <td className="nowrap">

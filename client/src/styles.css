@@ -15386,7 +15386,8 @@ tr.is-finished.is-folding {
 .tasks-table .subtask-panel {
   max-width: 680px;
   margin: 4px 8px 12px;
-  margin-inline-start: 34px;
+  /* under the task's title: the cell's padding, the check and the gap beside it (.tt-cell) */
+  margin-inline-start: 38px;
 }
 @media (max-width: 860px) {
   .subtask-panel {
@@ -15437,4 +15438,27 @@ tr.is-finished.is-folding {
    screen as they open never moves the rows sideways */
 html:has(.subtask-fold) {
   scrollbar-gutter: stable;
+}
+
+/* ---------------- a task's title in the table: its check beside it, and under the title - in the title's own
+   column, not under the check - how many parts it has ---------------- */
+.tt-cell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 1px;
+}
+.tt-cell > .tt-sub {
+  grid-column: 2;
+  justify-self: start;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tt-cell > .tt-sub.subtask-count {
+  color: var(--tint);
+}
+/* numbers that line up, in the text's own font */
+.nums {
+  font-variant-numeric: tabular-nums;
 }

@@ -189,6 +189,8 @@ export interface SubtaskFold {
   of: Map<number, Task[]>;
   open: Set<number>;
   toggle: (id: number) => void;
+  /** opened, whatever it was (a subtask just added to it) */
+  show: (id: number) => void;
 }
 export const SubtaskContext = createContext<SubtaskFold | null>(null);
 
@@ -219,6 +221,7 @@ export function useSubtaskFold(tasks: Task[] | undefined): { tops: Task[]; fold:
           else n.add(id);
           return n;
         }),
+      show: (id) => setOpen((o) => (o.has(id) ? o : new Set(o).add(id))),
     }),
     [of, open],
   );
@@ -315,9 +318,9 @@ export function TaskRow({
   // and toward its trailing side deleted - where the list deletes
   const canSwipeDone = tick.canCheck && !done && !tick.busy;
   // held (a phone) or right-clicked (a computer): what is done with it most, without opening it
-  const menu = useTaskMenu(task, tick, bulk?.active);
   // with its parts folded under it: a tap opens them (the task itself opens from there)
   const fold = useContext(SubtaskContext);
+  const menu = useTaskMenu(task, tick, bulk?.active, fold ? () => fold.show(task.id) : undefined);
   const parts = fold?.of.get(task.id)?.length ?? 0;
   const partsOpen = parts > 0 && !!fold?.open.has(task.id);
   const onTap = () => (parts ? fold!.toggle(task.id) : navigate(`/tasks/${task.id}`));
@@ -346,7 +349,7 @@ export function TaskRow({
           {task.weekName && task.weekId !== around.weekId && task.weekName !== around.heading && <span>{task.weekName}</span>}
           {task.trackName && task.trackName !== task.domain && task.trackId !== around.trackId && <span>ציר {task.trackName}</span>}
           {task.subtaskTotal > 0 && (
-            <span className={`mono${parts ? ' subtask-count' : ''}`}>
+            <span className={`nums${parts ? ' subtask-count' : ''}`}>
               {task.subtaskDone}/{task.subtaskTotal} משנה
               {parts > 0 && <Icon name="chevronDown" size={13} className="subtask-chev" />}
             </span>

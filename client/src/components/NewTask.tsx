@@ -36,6 +36,17 @@ export interface NewTaskInitial {
 const Ctx = createContext<(initial?: NewTaskInitial, onCreated?: (ids: number[]) => void) => void>(() => undefined);
 export const useNewTask = () => useContext(Ctx);
 
+/** a new part of a task (a subtask): under it, in its week, track and area, its owner's, by its deadline */
+export const subtaskOf = (t: { id: number; title: string; weekId: number | null; trackId: number | null; ownerId: number; domain: string; deadline: string }): NewTaskInitial => ({
+  parentId: t.id,
+  weekId: t.weekId,
+  trackId: t.trackId,
+  ownerIds: [t.ownerId],
+  domain: t.domain,
+  deadline: t.deadline,
+  heading: `משימת משנה: ${t.title}`,
+});
+
 export function NewTaskProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ initial: NewTaskInitial; onCreated?: (ids: number[]) => void } | null>(null);
   const open = useCallback((initial: NewTaskInitial = {}, onCreated?: (ids: number[]) => void) => setState({ initial, onCreated }), []);
