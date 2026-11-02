@@ -226,7 +226,7 @@ export function useSubtaskFold(tasks: Task[] | undefined): { tops: Task[]; fold:
 }
 
 /** a task's parts, under it: how far along they are and the task itself to open, then each part, short */
-function SubtaskList({ task }: { task: Task; showOwner: boolean }) {
+export function SubtaskList({ task }: { task: Task; showOwner?: boolean }) {
   const navigate = useNavigate();
   const fold = useContext(SubtaskContext);
   const parts = fold?.of.get(task.id) ?? [];

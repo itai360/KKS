@@ -15370,25 +15370,23 @@ tr.is-finished.is-folding {
   flex: none;
   color: var(--faint);
 }
-.tasks-table tr.subtask-tr .tasks-table-title {
-  padding-inline-start: 34px;
-  position: relative;
+/* in the table: one row across it, the panel under the task's title - with no size of its own to the
+   table (width 0, as wide as the cell), so no column changes and nothing moves as it opens */
+.tasks-table tr.subtask-fold-row > td {
+  padding: 0;
+  border-bottom: none;
 }
-.tasks-table tr.subtask-tr .tasks-table-title::before {
-  content: '';
-  position: absolute;
-  inset-inline-start: 18px;
-  top: 0;
-  bottom: 0;
-  border-inline-start: 2px solid var(--line-2);
+.tasks-table tr.subtask-fold-row.is-open > td {
+  border-bottom: 1px solid var(--line);
 }
-.tasks-table tr.subtask-tr {
-  background: var(--paper-2, var(--fill));
+.tasks-table tr.subtask-fold-row > td > .subtask-fold {
+  width: 0;
+  min-width: 100%;
 }
-.tasks-table tr.subtask-open-row td {
-  padding-block: 4px;
-  padding-inline-start: 30px;
-  background: var(--paper-2, var(--fill));
+.tasks-table .subtask-panel {
+  max-width: 680px;
+  margin: 4px 8px 12px;
+  margin-inline-start: 34px;
 }
 @media (max-width: 860px) {
   .subtask-panel {
@@ -15434,4 +15432,9 @@ tr.is-finished.is-folding {
 .list > .subtask-fold:last-child {
   border-end-start-radius: var(--radius-sm);
   border-end-end-radius: var(--radius-sm);
+}
+/* a list whose tasks open their parts: the page's scroll bar keeps its place, so the page growing past the
+   screen as they open never moves the rows sideways */
+html:has(.subtask-fold) {
+  scrollbar-gutter: stable;
 }

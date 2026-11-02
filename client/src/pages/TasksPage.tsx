@@ -9,7 +9,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
 import { unlessHeld, useTaskMenu } from '../components/TaskMenu';
-import { canQuickUpdate, doneNow, GroupTag, prefetchTask, ProgressBadge, SubtaskContext, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useSubtaskFold, useTaskTick } from '../components/TaskRow';
+import { canQuickUpdate, doneNow, GroupTag, prefetchTask, ProgressBadge, SubtaskContext, SubtaskList, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useSubtaskFold, useTaskTick } from '../components/TaskRow';
 import { finishedJustNow, leaveClass, noteFinished, useLeaving, type LeavePhase } from '../lib/leaving';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
@@ -278,35 +278,31 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
   );
 }
 
-/** a task's row, and its parts under it while opened */
+/**
+ * A task's row, and under it its parts while opened: one row across the table holding the same short panel
+ * as the list - drawn so it never widens a column, so nothing in the table moves as it opens
+ */
 function TaskTableRows({ t, folded, leaving }: { t: Task; folded: boolean; leaving?: LeavePhase }) {
-  const navigate = useNavigate();
   const fold = useContext(SubtaskContext);
-  const parts = fold?.of.get(t.id) ?? [];
-  if (!parts.length || !fold?.open.has(t.id)) return <TaskTableRow t={t} folded={folded} leaving={leaving} />;
+  const has = (fold?.of.get(t.id)?.length ?? 0) > 0;
   return (
     <>
       <TaskTableRow t={t} folded={folded} leaving={leaving} />
-      <tr className="subtask-open-row">
-        <td className="tone-cell" />
-        <td colSpan={9}>
-          <button type="button" className="subtask-open" onClick={() => navigate(`/tasks/${t.id}`)}>
-            <Icon name="chevronLeft" size={15} />
-            פתיחת המשימה
-          </button>
-        </td>
-      </tr>
-      {parts.map((p) => (
-        <TaskTableRow key={p.id} t={p} folded={false} sub />
-      ))}
+      {has && (
+        <tr className={`subtask-fold-row${fold?.open.has(t.id) ? ' is-open' : ''}`}>
+          <td colSpan={10}>
+            <SubtaskList task={t} />
+          </td>
+        </tr>
+      )}
     </>
   );
 }
 
-function TaskTableRow({ t, folded, leaving, sub }: { t: Task; folded: boolean; leaving?: LeavePhase; sub?: boolean }) {
+function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leaving?: LeavePhase }) {
   const navigate = useNavigate();
   const fold = useContext(SubtaskContext);
-  const parts = sub ? 0 : (fold?.of.get(t.id)?.length ?? 0);
+  const parts = fold?.of.get(t.id)?.length ?? 0;
   const partsOpen = parts > 0 && !!fold?.open.has(t.id);
   const bulk = useBulk();
   const tick = useTaskTick(t, folded);
@@ -315,7 +311,7 @@ function TaskTableRow({ t, folded, leaving, sub }: { t: Task; folded: boolean; l
   const menu = useTaskMenu(t, tick, bulk?.active || folded);
   return (
     <tr
-      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${leaving ? ' is-finished' : ''}${leaving === 'fold' ? ' is-folding' : ''}${sub ? ' subtask-tr' : ''}${partsOpen ? ' parts-open' : ''}`}
+      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${leaving ? ' is-finished' : ''}${leaving === 'fold' ? ' is-folding' : ''}${partsOpen ? ' parts-open' : ''}`}
       {...openable(bulkClick(bulk, t.id, unlessHeld(menu, () => (parts ? fold!.toggle(t.id) : navigate(`/tasks/${t.id}`)))), { role: false })}
       aria-expanded={parts ? partsOpen : undefined}
       {...menu.bind}
