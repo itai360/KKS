@@ -66,10 +66,18 @@ function staffStatus(u: UserRow, tasks: Task[], c: ReturnType<typeof ctx>): Staf
   };
 }
 
+/**
+ * The overview. The commander's is the whole course; anyone else's is their own: their tasks, what waits
+ * for them to decide (closing a task they gave, a request), and of the course only the weeks they lead.
+ */
 export function dashboard(actor: UserRow): DashboardData {
   const c = ctx();
   const s = getSettings();
-  const all = visibleTasks(actor);
+  const whole = isCommander(actor);
+  const visible = visibleTasks(actor);
+  const all = whole ? visible : visible.filter((t) => involves(t, actor.id));
+  // the weeks of the course in one's overview: all of them, or the ones one leads
+  const ours = (leadId: number | null) => whole || leadId === actor.id;
   const open = all.filter((t) => isOpenStatus(t.status));
   const in7 = c.nowMs + 7 * DAY;
 
@@ -128,7 +136,9 @@ export function dashboard(actor: UserRow): DashboardData {
       subtitle: t.overdueResponse ? `האחראי דיווח: ${OVERDUE_RESPONSE_LABELS[t.overdueResponse]}` : 'עבר הדד-ליין',
     });
   }
-  for (const t of open.filter((t) => t.status === 'pending_approval').sort(byDeadline)) {
+  // waiting for one to approve: also tasks one gave others (not in one's own tasks)
+  const approvable = whole ? open : visible.filter((t) => isOpenStatus(t.status));
+  for (const t of approvable.filter((t) => t.status === 'pending_approval').sort(byDeadline)) {
     const row = getTaskRow(t.id);
     if (row && canApprove(actor, row)) push(t, { kind: 'approval', tone: 'blue', subtitle: `${t.ownerName} ביקש לסגור את המשימה` });
   }
@@ -158,7 +168,7 @@ export function dashboard(actor: UserRow): DashboardData {
   const weeks = listWeeks();
   for (const w of weeks) {
     const until = diffDays(w.startDate, c.today);
-    if (w.status === 'closed' || until < 0 || until > 14) continue;
+    if (w.status === 'closed' || until < 0 || until > 14 || !ours(w.leadId)) continue;
     if (w.totalTasks > 0 && w.readiness >= s.readinessWarnThreshold) continue;
     attention.push({
       kind: 'readiness',
@@ -171,7 +181,7 @@ export function dashboard(actor: UserRow): DashboardData {
   }
 
   // the learning loop: a week that ended without its weekly debrief, lessons an earlier cycle kept for a week ahead
-  for (const w of weeksWithoutDebrief(c.today)) {
+  for (const w of weeksWithoutDebrief(c.today).filter((w) => ours(w.leadId))) {
     attention.push({
       kind: 'debrief',
       tone: 'yellow',
@@ -182,7 +192,7 @@ export function dashboard(actor: UserRow): DashboardData {
       link: `/debriefs?new=weekly&week=${w.weekId}`,
     });
   }
-  for (const w of pendingPriorLessons(c.today)) {
+  for (const w of pendingPriorLessons(c.today).filter((w) => ours(w.leadId))) {
     const n = w.pending === 1 ? 'לקח אחד' : `${w.pending} לקחים`;
     attention.push({
       kind: 'lessons',
@@ -197,7 +207,7 @@ export function dashboard(actor: UserRow): DashboardData {
   }
 
   // someone away in the next two weeks with open tasks due while they are away
-  for (const a of absencesAtRisk()) {
+  for (const a of whole ? absencesAtRisk() : []) {
     const range = a.startDate === a.endDate ? shortDate(a.startDate) : `${shortDate(a.startDate)}-${shortDate(a.endDate)}`;
     attention.push({
       kind: 'away',
@@ -209,7 +219,9 @@ export function dashboard(actor: UserRow): DashboardData {
   }
 
   const away = awayOn(c.today);
-  const staff = staffRows().map((u) => ({ ...staffStatus(u, all, c), away: away.get(u.id) ?? null }));
+  const staff = staffRows()
+    .filter((u) => whole || u.id === actor.id)
+    .map((u) => ({ ...staffStatus(u, all, c), away: away.get(u.id) ?? null }));
   for (const st of staff) {
     const load = open.filter((t) => t.ownerId === st.userId && !t.recurringRuleId && ms(t.deadline) < in7).length;
     if (load > s.overloadThreshold) {

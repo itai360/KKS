@@ -129,9 +129,12 @@ describe('nothing private leaks to another staff member', () => {
   });
 
   it('commander-only screens and actions answer 403 to staff', async () => {
-    for (const url of ['/api/dashboard', '/api/team', '/api/courses', '/api/admin/snapshots', '/api/admin/backup', '/api/weeks/calendar']) {
+    for (const url of ['/api/team', '/api/courses', '/api/admin/snapshots', '/api/admin/backup', '/api/weeks/calendar']) {
       expect((await c.s3.get(url)).status, url).toBe(403);
     }
+    // the overview: one's own, not the course's
+    const own = (await c.s3.get('/api/dashboard')).body;
+    expect(own.staff.map((x: { userId: number }) => x.userId)).toEqual([c.ids.s3]);
     expect((await c.s3.patch('/api/settings', { courseName: 'x' })).status).toBe(403);
     expect((await c.s3.post('/api/users', { username: 'evil', password: 'secret123', displayName: 'x', role: 'commander' })).status).toBe(403);
     expect((await c.s3.patch(`/api/users/${c.ids.s3}`, { role: 'commander' })).status).toBe(403);

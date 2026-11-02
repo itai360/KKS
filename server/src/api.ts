@@ -1084,7 +1084,8 @@ export function apiRouter(): Router {
 
   // ---------------- views & reports ----------------
 
-  r.get('/dashboard', requireCommander, (req, res) => res.json(dashboard(me(req))));
+  // the commander's overview is the course's; anyone else's is their own (reports.ts)
+  r.get('/dashboard', (req, res) => res.json(dashboard(me(req))));
   r.get('/my', (req, res) => res.json(myTasks(me(req))));
   r.get('/team', requireCommander, (req, res) => res.json(team(me(req))));
   r.get('/team/:id', (req, res) => res.json(staffPage(me(req), id(req.params.id))));

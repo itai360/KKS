@@ -292,7 +292,8 @@ describe('dashboard and reports', () => {
     expect(d.attention.find((a: { taskId: number }) => a.taskId === stale).subtitle).toBe('לא עודכן במשך 4 ימים');
     expect(d.attention.find((a: { taskId: number }) => a.taskId === quiet)).toBeUndefined();
     expect(d.staff.find((s: { userId: number }) => s.userId === c.ids.s2)).toMatchObject({ open: 2, overdue: 1 });
-    expect((await c.s1.get('/api/dashboard')).status).toBe(403);
+    // a staff member's overview is their own
+    expect((await c.s1.get('/api/dashboard')).body.staff.map((s: { userId: number }) => s.userId)).toEqual([c.ids.s1]);
   });
 
   it('copies of an all-staff task appear once in the attention list', async () => {

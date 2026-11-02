@@ -291,6 +291,7 @@ export function useNavSections(): NavSection[] {
       title: 'פיקוד ובקרה',
       tab: 'more',
       items: [
+        { to: '/overview', label: 'תמונת מצב', icon: 'home', keywords: 'דף הבית דורש טיפול' },
         { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
         { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
         { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
@@ -539,7 +540,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const symbol = settings.courseSymbol || 'קק"ס';
   // home, where the course's mark leads: the commander's overview; the staff have their own tasks
-  const homeScreen = isCommander ? { to: '/overview', label: 'תמונת מצב' } : { to: '/my', label: 'המשימות שלי' };
+  const homeScreen = { to: '/overview', label: 'תמונת מצב' };
   // the calendar - the home page - puts its own controls in the top bar on a computer, and its layers in the side bar
   const calBar = useCalendarBar();
   const onCalendar = location.pathname === '/';

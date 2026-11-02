@@ -111,9 +111,9 @@ function AuthedRoutes() {
             }
           >
             <Routes>
-              {/* the calendar is home; the commander's overview has its own address */}
+              {/* the calendar is the first tab; the overview (the course's for the commander, one's own for the staff) is home */}
               <Route path="/" element={<SchedulePage />} />
-              <Route path="/overview" element={isCommander ? <DashboardPage /> : <Navigate to="/my" replace />} />
+              <Route path="/overview" element={<DashboardPage />} />
               <Route path="/my" element={<MyTasksPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/tasks/:id" element={<TaskPage />} />

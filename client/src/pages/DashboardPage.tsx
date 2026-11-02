@@ -39,7 +39,9 @@ const KIND_LABEL: Record<AttentionKind, string> = {
 };
 
 export function DashboardPage() {
-  const { user } = useSession();
+  // the commander's overview is the whole course; anyone else's is their own (the server's too)
+  const { user, isCommander: whole } = useSession();
+  const mine = whole ? '' : `&owner=${user.id}`;
   const { data, error, loading, reload } = useApi<DashboardData>('/api/dashboard', ['tasks', 'weeks', 'events', 'requests', 'cadets']);
   const navigate = useNavigate();
   const newTask = useNewTask();
@@ -52,7 +54,7 @@ export function DashboardPage() {
         eyebrow={fmtLongDate(todayKey())}
         title={`${greeting()}, ${greetName(user.displayName)}`}
         docTitle="דף הבית"
-        sub="תמונת המצב של הקורס, והדברים שצריכים אותך היום."
+        sub={whole ? 'תמונת המצב של הקורס, והדברים שצריכים אותך היום.' : 'תמונת המצב שלך, והדברים שצריכים אותך היום.'}
         actions={
           <>
             <button className="btn" onClick={() => navigate('/briefing')}>
@@ -79,10 +81,10 @@ export function DashboardPage() {
           <SetupNudge />
           <PendingAnnouncements />
           <div className="stats dashboard-stats" aria-label="סיכום המשימות">
-            <Stat n={data.stats.today} icon="sun" label="לביצוע היום" hint="משימות לסיום היום" to="/tasks?scope=today" />
-            <Stat n={data.stats.overdue} icon="clock" label="באיחור" hint="עבר המועד, נדרש טיפול" alert={data.stats.overdue > 0} to="/tasks?scope=overdue" />
-            <Stat n={data.stats.week} icon="calendar" label="לביצוע השבוע" hint="ב-7 הימים הקרובים" to="/tasks?scope=week" />
-            <Stat n={data.stats.doneThisWeek} icon="check" label="הושלמו השבוע" hint="נסגרו מתחילת השבוע" to="/tasks?scope=done" />
+            <Stat n={data.stats.today} icon="sun" label="לביצוע היום" hint="משימות לסיום היום" to={`/tasks?scope=today${mine}`} />
+            <Stat n={data.stats.overdue} icon="clock" label="באיחור" hint="עבר המועד, נדרש טיפול" alert={data.stats.overdue > 0} to={`/tasks?scope=overdue${mine}`} />
+            <Stat n={data.stats.week} icon="calendar" label="לביצוע השבוע" hint="ב-7 הימים הקרובים" to={`/tasks?scope=week${mine}`} />
+            <Stat n={data.stats.doneThisWeek} icon="check" label="הושלמו השבוע" hint="נסגרו מתחילת השבוע" to={`/tasks?scope=done${mine}`} />
           </div>
 
           <details className="dashboard-command-details">
@@ -123,14 +125,17 @@ export function DashboardPage() {
           <div className="dashboard-workspace">
             <TodayEvents data={data} />
             <Attention items={data.attention} />
-            <WeekCard data={data} />
+            {whole && <WeekCard data={data} />}
           </div>
-          <div className="dashboard-support">
-            <WeeklyCard />
-            <DisciplineCard />
-            <StaffHealth data={data} />
-            <TracksCard />
-          </div>
+          {/* the course as a whole: the commander's */}
+          {whole && (
+            <div className="dashboard-support">
+              <WeeklyCard />
+              <DisciplineCard />
+              <StaffHealth data={data} />
+              <TracksCard />
+            </div>
+          )}
           <TwoStepNudge />
         </div>
       ) : null}
