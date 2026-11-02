@@ -793,7 +793,19 @@ export async function listPlanCalendars(wait = PAGE_WAIT_MS): Promise<PlanCalend
       return { index, name: r.name || c.name || 'יומן Google', error: c.error, loading: !!c.loading };
     }),
   );
-  return { calendars, fromServer: storedPlanRows() === null && serverPlanRows().length > 0 };
+  const chosen = new Set(chosenPlanRows().map((r) => r.url));
+  const connected = db()
+    .all<SourceRow>('SELECT id, name, url FROM calendar_sources ORDER BY id')
+    .filter((s) => !chosen.has(s.url))
+    .map((s) => ({ id: s.id, name: cache.get(s.url)?.name || s.name || 'יומן Google' }));
+  return { calendars, fromServer: storedPlanRows() === null && serverPlanRows().length > 0, connected };
+}
+
+/** A calendar already connected to the schedule, chosen for the plans too: its address copied here, never sent out. */
+export async function addPlanCalendarFromSource(sourceId: number): Promise<void> {
+  const s = db().get<SourceRow>('SELECT id, name, url FROM calendar_sources WHERE id = ?', sourceId);
+  if (!s) throw notFound('היומן לא נמצא');
+  await addPlanCalendar(cache.get(s.url)?.name || s.name, s.url);
 }
 
 /** Checks the address right away, so a wrong one is reported while choosing it. */

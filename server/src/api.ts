@@ -45,6 +45,7 @@ import { setCourseCookie, viewingName } from './courses';
 import {
   addCalendarSource,
   addPlanCalendar,
+  addPlanCalendarFromSource,
   applyCalendarWeeks,
   calendarFeed,
   externalEvents,
@@ -1065,8 +1066,13 @@ export function apiRouter(): Router {
   // the calendar the plan documents read (calendar.ts): the commander's
   r.get('/plan-calendars', requireCommander, async (_req, res) => res.json(await listPlanCalendars()));
   r.post('/plan-calendars', requireCommander, async (req, res) => {
-    const { name, url } = z.object({ name: z.string().trim().max(60).default(''), url: z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000) }).parse(req.body);
-    await addPlanCalendar(name, url);
+    // one of the schedule's connected calendars (by its id - its address stays here), or a new address
+    const from = z.object({ sourceId: z.number().int().positive() }).safeParse(req.body);
+    if (from.success) await addPlanCalendarFromSource(from.data.sourceId);
+    else {
+      const { name, url } = z.object({ name: z.string().trim().max(60).default(''), url: z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000) }).parse(req.body);
+      await addPlanCalendar(name, url);
+    }
     changed('plans');
     res.json(await listPlanCalendars(0));
   });

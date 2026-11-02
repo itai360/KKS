@@ -466,6 +466,9 @@ export interface PlanCalendars {
   calendars: { index: number; name: string; error: string | null; loading: boolean }[];
   /** not chosen in the app yet: the one the server was set up with */
   fromServer: boolean;
+  /** the calendars connected to the schedule not chosen for the plans yet - by name; each added in one tap,
+   *  its address staying on the server */
+  connected?: { id: number; name: string }[];
 }
 
 /** A course week found in a Google calendar, and what importing it would do. */

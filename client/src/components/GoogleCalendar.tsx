@@ -245,6 +245,21 @@ export function PlanCalendars() {
       setBusy(false);
     }
   };
+  // one of the calendars connected to the schedule, in one tap (its address stays on the server)
+  const addConnected = async (id: number, label: string) => {
+    setError(null);
+    setBusy(true);
+    try {
+      const next = await api.post<PlanCalendarList>('/api/plan-calendars', { sourceId: id });
+      list.setData(next);
+      emitLocalChange('plans');
+      toast({ title: next.calendars.some((c) => c.loading) ? `"${label}" נוסף - Google עוד שולח אותו, והלבנות יופיעו בעוד רגע` : `"${label}" נוסף לאישור התוכניות`, tone: 'green' });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const remove = async (index: number, label: string) => {
     if (!(await ask({ title: `להפסיק למשוך את "${label}" לאישור התוכניות?`, body: 'אירועי המפתח שלו לא ייכנסו עוד לתוכניות. אפשר לבחור אותו שוב בכל עת.', confirm: 'הפסקה', danger: true }))) return;
     try {
@@ -279,7 +294,25 @@ export function PlanCalendars() {
           </button>
         </div>
       ))}
+      {/* the calendars already connected to the schedule: added in one tap */}
+      {!!list.data?.connected?.length && (
+        <div className="col gap-6">
+          <div className="small strong">מהיומנים שמחוברים ללו"ז</div>
+          {list.data.connected.map((c) => (
+            <div key={c.id} className="row gap-6 plan-connected">
+              <Icon name="calendar" />
+              <span className="grow" style={{ minWidth: 0 }}>
+                {c.name}
+              </span>
+              <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void addConnected(c.id, c.name)}>
+                <Icon name="plus" size={14} /> הוספה לתוכנית
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="info-box col gap-6">
+        <div className="small strong">או יומן אחר, לפי הכתובת שלו</div>
         <Field label="שם היומן" hint="אפשר להשאיר ריק - השם יילקח מהיומן ב-Google.">
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="השם שלו ב-Google" maxLength={60} />
         </Field>

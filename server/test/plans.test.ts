@@ -238,16 +238,34 @@ describe('the three-week plan', () => {
       // the week's own document reads it too
       expect((await doc(1)).horizon[0].events.map((e) => e.title)).toEqual(['תרגיל הגנה בשטח', 'גיבוש פלוגתי']);
 
-      // the commander's to see and change
+      // the commander's to see and change; the schedule's connected calendars offered by name
+      const srcId = (await c.cmd.get('/api/calendar/sources')).body[0].id as number;
+      const connected = [{ id: srcId, name: 'יומן אחר' }];
       expect((await c.s1.get('/api/plan-calendars')).status).toBe(403);
-      expect((await c.cmd.get('/api/plan-calendars')).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null, loading: false }], fromServer: true });
+      expect((await c.cmd.get('/api/plan-calendars')).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null, loading: false }], fromServer: true, connected });
       expect((await c.cmd.post('/api/plan-calendars', { url: company })).status).toBe(400); // already chosen
       // none chosen: back to the schedule's calendars
-      expect((await c.cmd.del('/api/plan-calendars/0')).body).toEqual({ calendars: [], fromServer: false });
+      expect((await c.cmd.del('/api/plan-calendars/0')).body).toEqual({ calendars: [], fromServer: false, connected });
       expect((await tw()).calendarsFrom).toBe('schedule');
       // chosen in the app, with no name: the one it has in Google
-      expect((await c.cmd.post('/api/plan-calendars', { name: '', url: company })).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null, loading: false }], fromServer: false });
+      expect((await c.cmd.post('/api/plan-calendars', { name: '', url: company })).body).toEqual({ calendars: [{ index: 0, name: 'יומן הפלוגה', error: null, loading: false }], fromServer: false, connected });
       expect((await tw()).calendars).toEqual([{ name: 'יומן הפלוגה', count: 2, error: null, loading: false }]);
+
+      // a calendar connected to the schedule added in one tap: by its id, its address never sent out
+      expect((await c.s1.post('/api/plan-calendars', { sourceId: srcId })).status).toBe(403);
+      const both = await c.cmd.post('/api/plan-calendars', { sourceId: srcId });
+      expect(both.status).toBe(200);
+      expect(both.body.calendars.map((x: { name: string }) => x.name)).toEqual(['יומן הפלוגה', 'יומן אחר']);
+      expect(both.body.connected).toEqual([]);
+      expect(JSON.stringify(both.body)).not.toContain('private-');
+      expect(JSON.stringify((await c.cmd.get('/api/plan-calendars')).body)).not.toContain('private-');
+      // the plans read both
+      d = await tw();
+      expect(d.calendars.map((x) => x.name)).toEqual(['יומן הפלוגה', 'יומן אחר']);
+      expect(titles(d)).toEqual(expect.arrayContaining(['תרגיל הגנה בשטח', 'גיבוש פלוגתי', 'תרגיל מהיומן האחר']));
+      // once is enough
+      expect((await c.cmd.post('/api/plan-calendars', { sourceId: srcId })).status).toBe(400);
+      expect((await c.cmd.post('/api/plan-calendars', { sourceId: 99999 })).status).toBe(404);
     } finally {
       delete process.env.PLAN_CALENDAR_URL;
       setCalendarFetcher(async () => '');
