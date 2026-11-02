@@ -42,6 +42,8 @@ export interface User {
   twoFactor?: boolean;
   /** on how many devices phone notifications are on (the commander's list of users) */
   pushDevices?: number;
+  /** gives tasks to the staff without their taking them on first (the commander sets it) */
+  assignsFreely?: boolean;
 }
 
 /** signing in: a session, or - with two-step sign-in - a ticket for the code step */
@@ -121,6 +123,8 @@ export interface Task {
   experienceId: number | null;
   debriefId: number | null;
   debriefTitle: string | null;
+  /** given by another staff member: waits for its owner to take it on (or hand it back) */
+  awaitingAccept: boolean;
   requiresApproval: boolean;
   visibility: Visibility;
   blockReason: string | null;

@@ -62,7 +62,7 @@ describe('creating tasks', () => {
     expect((await c.s1.post('/api/tasks', { title: 'שלי', ownerIds: [c.ids.s1], deadline: at('2026-10-05') })).status).toBe(200);
     const other = await c.s1.post('/api/tasks', { title: 'לאחר', ownerIds: [c.ids.s2], deadline: at('2026-10-05') });
     expect(other.status).toBe(200);
-    expect(notificationsOf(c.ids.s2)[0].title).toContain('נוספה לך משימה חדשה');
+    expect(notificationsOf(c.ids.s2)[0].title).toContain('מבקש/ת להטיל עליך משימה');
     expect((await c.s1.post('/api/tasks', { title: 'למפקד', ownerIds: [c.ids.cmd], deadline: at('2026-10-05') })).status).toBe(403);
     // a task they opened moves to another staff member, not up to the commander
     const mine = (await c.s1.post('/api/tasks', { title: 'שלי להעביר', ownerIds: [c.ids.s1], deadline: at('2026-10-05') })).body.ids[0];

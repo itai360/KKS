@@ -272,6 +272,7 @@ export function TaskRow({
   const ownerShown = showOwner && !folded;
   const tag = useGroupTag(task, ownerShown);
   const around = useContext(AroundContext);
+  const { user: me } = useSession();
   const area = task.domain ? domainLabel(task.domain, task.domainNote) : '';
   const { done, open } = tick;
   const flash = useLiveFlash(`${task.status}|${task.deadline}|${task.ownerId}|${task.title}|${task.priority}|${task.overdue}`);
@@ -315,6 +316,7 @@ export function TaskRow({
               {parts > 0 && <Icon name="chevronDown" size={13} className="subtask-chev" />}
             </span>
           )}
+          {task.awaitingAccept && <span className="text-orange strong">ממתינה לאישור{task.ownerId !== me.id ? ` של ${task.ownerName}` : 'ך'}</span>}
           {task.status === 'waiting' && task.blockReason && <span>חסם: {task.blockReason}</span>}
           {task.stale && open && <span className="text-orange">לא עודכן</span>}
           {task.openDependencies > 0 && open && <span>תלויה ב-{task.openDependencies}</span>}

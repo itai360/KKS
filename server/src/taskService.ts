@@ -114,6 +114,16 @@ function requireActiveUser(id: number): UserRow {
   return u;
 }
 
+/**
+ * A staff member giving a task to another staff member: the other takes it on first (or hands it back).
+ * Not the commander's tasks, not those of a staff member the commander lets give freely, not one's own,
+ * not the system's.
+ */
+export function needsAccept(actor: UserRow, owner: number, system = false): boolean {
+  if (system || isCommander(actor) || actor.assigns_freely || owner === actor.id) return false;
+  return getUserRow(owner)?.role === 'staff';
+}
+
 function reminderFlags(deadline: string) {
   const left = Date.parse(deadline) - clock.now().getTime();
   return {
@@ -187,8 +197,8 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
       const id = db().run(
         `INSERT INTO tasks(title, description, owner_id, created_by, deadline, priority, status, domain, domain_note, week_id, track_id, event_id,
            parent_id, group_id, recurring_rule_id, cadet_id, experience_id, debrief_id, requires_approval, visibility,
-           reminded_24h, reminded_2h, overdue_notified, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           reminded_24h, reminded_2h, overdue_notified, created_at, updated_at, last_activity_at, awaiting_accept)
+         VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         input.title,
         input.description,
         unit.owner,
@@ -214,8 +224,10 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
         at,
         at,
         at,
+        needsAccept(actor, unit.owner, opts.system) ? 1 : 0,
       ).id;
       ids.push(id);
+      const asked = needsAccept(actor, unit.owner, opts.system);
       for (const p of unit.participants) db().run('INSERT INTO task_participants(task_id, user_id) VALUES (?, ?)', id, p);
       for (const d of deps) db().run('INSERT OR IGNORE INTO task_dependencies(task_id, depends_on_id) VALUES (?, ?)', id, d);
       for (const l of input.links) {
@@ -238,14 +250,22 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
       });
       if (!opts.silent) {
         notify(
-          [unit.owner, ...unit.participants.filter((p) => !attached.includes(p))],
-          {
-            type: 'task_assigned',
-            category: 'action',
-            title: `נוספה לך משימה חדשה: "${input.title}"`,
-            body: `מאת ${actor.display_name} · דד-ליין ${fmt(input.deadline)}`,
-            taskId: id,
-          },
+          asked ? [unit.owner] : [unit.owner, ...unit.participants.filter((p) => !attached.includes(p))],
+          asked
+            ? {
+                type: 'task_assigned',
+                category: 'action',
+                title: `${actor.display_name} מבקש/ת להטיל עליך משימה: "${input.title}"`,
+                body: `דד-ליין ${fmt(input.deadline)} · לקבל או להחזיר - במשימה`,
+                taskId: id,
+              }
+            : {
+                type: 'task_assigned',
+                category: 'action',
+                title: `נוספה לך משימה חדשה: "${input.title}"`,
+                body: `מאת ${actor.display_name} · דד-ליין ${fmt(input.deadline)}`,
+                taskId: id,
+              },
           actor.id,
         );
         // the attached follow it: told so, not handed it
@@ -407,6 +427,9 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
     if (patch.ownerId !== undefined && patch.ownerId !== t.owner_id) {
       const newOwner = requireActiveUser(patch.ownerId);
       set('owner_id', patch.ownerId);
+      // handed to another staff member by a staff member: theirs once they take it on
+      const asked = !bypass && needsAccept(actor, patch.ownerId);
+      set('awaiting_accept', asked ? 1 : 0);
       db().run('DELETE FROM task_participants WHERE task_id = ? AND user_id = ?', id, patch.ownerId);
       // Section 63: keep previous owner, new owner, who and when.
       logs.push({
@@ -416,7 +439,9 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
       });
       notify(
         [newOwner.id],
-        { type: 'task_assigned', category: 'action', title: `הועברה אליך משימה: "${t.title}"`, body: `דד-ליין ${fmt(patch.deadline ?? t.deadline)}`, taskId: id },
+        asked
+          ? { type: 'task_assigned', category: 'action', title: `${actor.display_name} מבקש/ת להעביר אליך משימה: "${t.title}"`, body: `דד-ליין ${fmt(patch.deadline ?? t.deadline)} · לקבל או להחזיר - במשימה`, taskId: id }
+          : { type: 'task_assigned', category: 'action', title: `הועברה אליך משימה: "${t.title}"`, body: `דד-ליין ${fmt(patch.deadline ?? t.deadline)}`, taskId: id },
         actor.id,
       );
       notify([t.owner_id], { type: 'owner_changed', category: 'info', title: `המשימה "${t.title}" הועברה ל${newOwner.display_name}`, taskId: id }, actor.id);
@@ -705,6 +730,34 @@ export function transition(actor: UserRow, id: number, raw: TransitionInput): vo
 }
 
 // ---------------- updates, overdue response ----------------
+
+/**
+ * The owner of a task another staff member gave them: takes it on, or hands it back - to whoever gave it,
+ * whose it is then. Whoever gave it is told either way.
+ */
+export function answerTask(actor: UserRow, id: number, accept: boolean): void {
+  const t = getTaskRow(id);
+  if (!t || !canView(actor, t)) throw notFound('המשימה לא נמצאה');
+  if (!t.awaiting_accept) throw badRequest('המשימה כבר לא ממתינה לאישור');
+  if (t.owner_id !== actor.id) throw forbidden('רק מי שהמשימה הוטלה עליו מאשר אותה');
+  db().tx(() => {
+    if (accept) {
+      db().run('UPDATE tasks SET awaiting_accept = 0, updated_at = ?, last_activity_at = ? WHERE id = ?', nowIso(), nowIso(), id);
+      logActivity({ taskId: id, weekId: t.week_id, userId: actor.id, action: 'accepted', text: `${actor.display_name} קיבל/ה את המשימה` });
+      notify([t.created_by], { type: 'request_decided', category: 'info', title: `${actor.display_name} קיבל/ה את המשימה "${t.title}"`, taskId: id }, actor.id);
+    } else {
+      db().run('UPDATE tasks SET awaiting_accept = 0, owner_id = ?, updated_at = ?, last_activity_at = ? WHERE id = ?', t.created_by, nowIso(), nowIso(), id);
+      db().run('DELETE FROM task_participants WHERE task_id = ? AND user_id = ?', id, t.created_by);
+      logActivity({ taskId: id, weekId: t.week_id, userId: actor.id, action: 'owner', text: `${actor.display_name} החזיר/ה את המשימה ל${t.created_by_name}` });
+      notify(
+        [t.created_by],
+        { type: 'owner_changed', category: 'action', title: `${actor.display_name} החזיר/ה את המשימה "${t.title}"`, body: 'היא שלך שוב - אפשר להעביר אותה למישהו אחר', taskId: id },
+        actor.id,
+      );
+    }
+  });
+  changed('tasks', 'weeks');
+}
 
 export function addUpdate(actor: UserRow, id: number, body: string, kind: 'comment' | 'instruction' = 'comment'): void {
   const t = mustTaskRow(id);

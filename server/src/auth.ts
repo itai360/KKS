@@ -18,6 +18,8 @@ export interface UserRow {
   created_at: string;
   must_change_password: number;
   totp_secret: string | null;
+  /** gives tasks to the staff without their taking them on first (the commander sets it) */
+  assigns_freely?: number;
 }
 
 declare global {
@@ -41,6 +43,7 @@ export function toUser(r: UserRow): User {
     active: !!r.active,
     phone: r.phone,
     email: r.email ?? '',
+    assignsFreely: !!r.assigns_freely,
   };
 }
 

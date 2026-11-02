@@ -30,6 +30,7 @@ export interface TaskRow {
   experience_id: number | null;
   debrief_id: number | null;
   requires_approval: number;
+  awaiting_accept: number;
   visibility: Visibility;
   block_reason: string | null;
   block_waiting_for: string | null;
@@ -143,6 +144,7 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     debriefId: r.debrief_id,
     debriefTitle: r.debrief_title,
     requiresApproval: !!r.requires_approval,
+    awaitingAccept: !!r.awaiting_accept,
     visibility: r.visibility,
     blockReason: r.block_reason,
     blockWaitingFor: r.block_waiting_for,

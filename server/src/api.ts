@@ -91,6 +91,7 @@ import { canEdit, canView, getTaskRow, isCommander, mustTaskRow, visibleTasks } 
 import {
   isoDateTime,
   addDependency,
+  answerTask,
   addUpdate,
   attachToTask,
   createRequest,
@@ -434,7 +435,7 @@ export function apiRouter(): Router {
     const uid = id(req.params.id);
     const cur = getUserRow(uid);
     if (!cur) throw notFound('המשתמש לא נמצא');
-    const p = patchSchema(userSchema).extend({ active: z.boolean().optional(), resetTwoFactor: z.literal(true).optional() }).parse(req.body);
+    const p = patchSchema(userSchema).extend({ active: z.boolean().optional(), resetTwoFactor: z.literal(true).optional(), assignsFreely: z.boolean().optional() }).parse(req.body);
     if (p.resetTwoFactor && uid === me(req).id) throw badRequest('את האימות הדו-שלבי שלך מבטלים בהגדרות, עם קוד מהאפליקציה');
     const willBeCommander = (p.role ?? cur.role) === 'commander' && (p.active ?? !!cur.active);
     if (cur.role === 'commander' && cur.active && !willBeCommander) {
@@ -459,6 +460,7 @@ export function apiRouter(): Router {
       p.active === undefined ? cur.active : p.active ? 1 : 0,
       uid,
     );
+    if (p.assignsFreely !== undefined) db().run('UPDATE users SET assigns_freely = ? WHERE id = ?', p.assignsFreely ? 1 : 0, uid);
     if (p.password) {
       db().run('UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?', hashPassword(p.password), uid === me(req).id ? 0 : 1, uid);
       db().run('DELETE FROM sessions WHERE user_id = ? ', uid);
@@ -625,6 +627,15 @@ export function apiRouter(): Router {
   });
 
   // attaching people beside the owner ("צרפו אותי", "+ צירוף") and taking them off
+  // a task another staff member gave me: taken on, or handed back
+  r.post('/tasks/:id/accept', (req, res) => {
+    answerTask(me(req), id(req.params.id), true);
+    res.json({ ok: true });
+  });
+  r.post('/tasks/:id/decline', (req, res) => {
+    answerTask(me(req), id(req.params.id), false);
+    res.json({ ok: true });
+  });
   r.post('/tasks/:id/attach', (req, res) => {
     attachToTask(me(req), id(req.params.id), req.body ?? {});
     res.json(taskDetail(me(req), id(req.params.id)));

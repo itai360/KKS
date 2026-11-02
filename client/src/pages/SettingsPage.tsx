@@ -430,11 +430,12 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [active, setActive] = useState(user?.active ?? true);
+  const [assignsFreely, setAssignsFreely] = useState(user?.assignsFreely ?? false);
   const [error, setError] = useState<string | null>(null);
   const save = async () => {
     setError(null);
     try {
-      if (user) await api.patch(`/api/users/${user.id}`, { displayName, title, username, role, phone, email, active, ...(password ? { password } : {}) });
+      if (user) await api.patch(`/api/users/${user.id}`, { displayName, title, username, role, phone, email, active, assignsFreely, ...(password ? { password } : {}) });
       else await api.post('/api/users', { displayName, title, username, password, role, phone, email });
       toast({ title: user ? 'המשתמש עודכן' : 'המשתמש נוסף', body: user ? undefined : `שם משתמש: ${username}`, tone: 'green' });
       emitLocalChange('users');
@@ -484,6 +485,12 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
           <label className="check span-2">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
             משתמש פעיל (משתמש לא פעיל לא יכול להיכנס ולא מופיע בבחירת אחראי)
+          </label>
+        )}
+        {user && role === 'staff' && (
+          <label className="check span-2">
+            <input type="checkbox" checked={assignsFreely} onChange={(e) => setAssignsFreely(e.target.checked)} />
+            נותן/ת משימות לסגל בלי אישור (משימה של איש סגל לאיש סגל אחר מחכה שהשני יקבל אותה; מי שמסומן כאן - לא)
           </label>
         )}
         {user?.twoFactor && user.id !== self.id && (

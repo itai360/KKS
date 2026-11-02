@@ -21,6 +21,7 @@ import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
 import { taskGoogleUrl } from '../lib/googleCalendar';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
+import { useToast } from '../components/Toasts';
 import { useDraft } from '../lib/draft';
 import { useApi, useTick } from '../lib/useApi';
 import { safeUrl } from '../lib/safeUrl';
@@ -45,6 +46,49 @@ export function TaskPage() {
     );
   if (!data) return null;
   return <TaskView detail={data} onChange={setData} onDeleted={() => navigate('/tasks', { replace: true })} />;
+}
+
+/** given by another staff member: its owner takes it on or hands it back; anyone else sees it waits */
+function AwaitingAccept({ task: t, onChange }: { task: Task; onChange: (d: TaskDetail) => void }) {
+  const { user } = useSession();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const answer = async (accept: boolean) => {
+    setBusy(true);
+    try {
+      await api.post(`/api/tasks/${t.id}/${accept ? 'accept' : 'decline'}`);
+      haptic(accept ? 'success' : 'tick');
+      toast({ title: accept ? 'קיבלת את המשימה' : `המשימה חזרה ל${t.createdByName}`, tone: accept ? 'green' : undefined });
+      onChange(await api.get<TaskDetail>(`/api/tasks/${t.id}`));
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (t.ownerId !== user.id)
+    return (
+      <div className="accept-bar is-waiting" role="status">
+        <Icon name="clock" size={18} />
+        <span className="grow">ממתינה לאישור של {t.ownerName}</span>
+      </div>
+    );
+  return (
+    <div className="accept-bar" role="group" aria-label="משימה שממתינה לאישורך">
+      <Icon name="inbox" size={18} />
+      <span className="grow">
+        <b>{t.createdByName}</b> מבקש/ת להטיל עליך את המשימה הזו.
+      </span>
+      <span className="row gap-6">
+        <button type="button" className="btn" disabled={busy} onClick={() => void answer(false)}>
+          החזרה
+        </button>
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void answer(true)}>
+          <Icon name="check" /> קבלת המשימה
+        </button>
+      </span>
+    </div>
+  );
 }
 
 function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChange: (d: TaskDetail) => void; onDeleted: () => void }) {
@@ -132,6 +176,7 @@ function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChang
             </div>
           </div>
         </div>
+        {t.awaitingAccept && <AwaitingAccept task={t} onChange={onChange} />}
         {t.status === 'waiting' && (
           <div className="update mt-16" style={{ background: 'var(--purple-bg)', borderColor: 'rgba(116,72,184,.3)' }}>
             <div className="strong" style={{ color: 'var(--purple)' }}>

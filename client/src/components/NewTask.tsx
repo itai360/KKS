@@ -280,6 +280,8 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
   // a task in an area named like a track (שטח, ניווטים...) goes in that track unless another is chosen
   const autoTrack = domain ? tracks.find((t) => t.name === domain) : undefined;
   const hasMany = !allStaff && ownerIds.length > 1;
+  // staff given a task by a staff member take it on first (not from the commander, nor from one exempted)
+  const askNames = isCommander || user.assignsFreely || allStaff ? [] : ownerIds.filter((id) => id !== user.id).map((id) => users.find((u) => u.id === id)).filter((u) => u?.role === 'staff').map((u) => u!.displayName);
   // who can be attached here: the commander (for a staff member), or the commander himself (for a task he gives
   // others) - on a single task, not one copied to each person
   const attachTargets = allStaff || (hasMany && mode === 'copies') || !ownerIds.length
@@ -318,8 +320,8 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
         links: link.trim() ? [{ url: link.trim() }] : [],
       });
       toast({
-        title: res.ids.length > 1 ? `נפתחו ${res.ids.length} משימות` : 'המשימה נפתחה',
-        body: `${title.trim()} · ${fmtDeadline(deadlineIso)}`,
+        title: askNames.length ? `נשלחה לאישור של ${askNames.join(', ')}` : res.ids.length > 1 ? `נפתחו ${res.ids.length} משימות` : 'המשימה נפתחה',
+        body: askNames.length ? `${title.trim()} · תעבור אחרי האישור` : `${title.trim()} · ${fmtDeadline(deadlineIso)}`,
         tone: 'green',
       });
       emitLocalChange('tasks');
@@ -406,6 +408,11 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
 
         <Field label="אחראי" required hint={!forAnyone ? 'אפשר לבחור את עצמך או כל איש סגל אחר; משימה למפקד הקורס - רק בשבוע שבאחריותך' : undefined}>
           <UserPicker value={ownerIds} onChange={setOwnerIds} allowAll={forAnyone} all={allStaff} onAll={setAllStaff} date={date || undefined} />
+          {askNames.length > 0 && (
+            <span className="hint">
+              המשימה תעבור רק אחרי אישור של {askNames.join(', ')}
+            </span>
+          )}
         </Field>
         {hasMany && (
           <Seg

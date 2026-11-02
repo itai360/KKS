@@ -15279,3 +15279,29 @@ tr.is-finished.is-folding {
     transition: none;
   }
 }
+
+/* ---------------- a task given by another staff member, waiting to be taken on (TaskPage) ---------------- */
+.accept-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--orange-bg);
+  color: var(--ink);
+}
+.accept-bar > svg {
+  color: var(--orange);
+  flex: none;
+}
+.accept-bar .grow {
+  min-width: 180px;
+}
+.accept-bar.is-waiting {
+  background: var(--fill);
+}
+.accept-bar.is-waiting > svg {
+  color: var(--muted);
+}
