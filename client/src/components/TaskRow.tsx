@@ -181,6 +181,71 @@ export function ProgressBadge({ task }: { task: Task }) {
   );
 }
 
+/**
+ * A list where a task's parts (its subtasks) are not rows of their own: under their task, opened by a tap on
+ * it - the task itself opens from inside ("פתיחת המשימה"). `of` - the parts of each task in the list.
+ */
+export interface SubtaskFold {
+  of: Map<number, Task[]>;
+  open: Set<number>;
+  toggle: (id: number) => void;
+}
+export const SubtaskContext = createContext<SubtaskFold | null>(null);
+
+/** the parts of the tasks in `tasks` folded under them: the tasks to list, and how they fold */
+export function useSubtaskFold(tasks: Task[] | undefined): { tops: Task[]; fold: SubtaskFold } {
+  const [open, setOpen] = useState<Set<number>>(() => new Set());
+  const { tops, of } = useMemo(() => {
+    const list = tasks ?? [];
+    const ids = new Set(list.map((t) => t.id));
+    const of = new Map<number, Task[]>();
+    const tops: Task[] = [];
+    for (const t of list) {
+      // a part whose task is not in this list (filtered out) stays a row of its own
+      if (t.parentId && ids.has(t.parentId)) of.set(t.parentId, [...(of.get(t.parentId) ?? []), t]);
+      else tops.push(t);
+    }
+    for (const parts of of.values()) parts.sort((a, b) => a.deadline.localeCompare(b.deadline));
+    return { tops, of };
+  }, [tasks]);
+  const fold = useMemo<SubtaskFold>(
+    () => ({
+      of,
+      open,
+      toggle: (id) =>
+        setOpen((o) => {
+          const n = new Set(o);
+          if (n.has(id)) n.delete(id);
+          else n.add(id);
+          return n;
+        }),
+    }),
+    [of, open],
+  );
+  return { tops, fold };
+}
+
+/** a task's parts, under it: the task itself to open, then each part */
+function SubtaskList({ task, showOwner }: { task: Task; showOwner: boolean }) {
+  const navigate = useNavigate();
+  const fold = useContext(SubtaskContext);
+  const parts = fold?.of.get(task.id) ?? [];
+  const open = !!fold?.open.has(task.id);
+  return (
+    <div className={`subtask-fold${open ? ' open' : ''}`} inert={!open || undefined}>
+      <div className="subtask-fold-inner">
+        <button type="button" className="subtask-open" onClick={() => navigate(`/tasks/${task.id}`)}>
+          <Icon name="chevronLeft" size={15} />
+          פתיחת המשימה
+        </button>
+        {parts.map((t) => (
+          <TaskRow key={t.id} task={t} showOwner={showOwner} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function TaskRow({
   task,
   showOwner = true,
@@ -215,12 +280,19 @@ export function TaskRow({
   const canSwipeDone = tick.canCheck && !done && !tick.busy;
   // held (a phone) or right-clicked (a computer): what is done with it most, without opening it
   const menu = useTaskMenu(task, tick, bulk?.active);
+  // with its parts folded under it: a tap opens them (the task itself opens from there)
+  const fold = useContext(SubtaskContext);
+  const parts = fold?.of.get(task.id)?.length ?? 0;
+  const partsOpen = parts > 0 && !!fold?.open.has(task.id);
+  const onTap = () => (parts ? fold!.toggle(task.id) : navigate(`/tasks/${task.id}`));
 
   return (
+    <>
     <SwipeRow itemId={task.id} label={task.title} leaving={leaving} done={canSwipeDone && !leaving ? { label: task.requiresApproval ? 'לאישור' : 'בוצע', run: () => void tick.complete() } : null}>
     <div
-      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${arrived ? ' is-arrived' : ''}`}
-      {...openable(bulkClick(bulk, task.id, unlessHeld(menu, () => navigate(`/tasks/${task.id}`))))}
+      className={`task-row t-${done ? 'green' : task.tone}${done ? ' done' : ''}${bulk?.selected.has(task.id) ? ' selected' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${arrived ? ' is-arrived' : ''}${parts ? ' has-parts' : ''}${partsOpen ? ' parts-open' : ''}`}
+      {...openable(bulkClick(bulk, task.id, unlessHeld(menu, onTap)))}
+      aria-expanded={parts ? partsOpen : undefined}
       {...menu.bind}
       onPointerEnter={() => prefetchTask(task.id)}
       onFocus={() => prefetchTask(task.id)}
@@ -238,8 +310,9 @@ export function TaskRow({
           {task.weekName && task.weekId !== around.weekId && task.weekName !== around.heading && <span>{task.weekName}</span>}
           {task.trackName && task.trackName !== task.domain && task.trackId !== around.trackId && <span>ציר {task.trackName}</span>}
           {task.subtaskTotal > 0 && (
-            <span className="mono">
+            <span className={`mono${parts ? ' subtask-count' : ''}`}>
               {task.subtaskDone}/{task.subtaskTotal} משנה
+              {parts > 0 && <Icon name="chevronDown" size={13} className="subtask-chev" />}
             </span>
           )}
           {task.status === 'waiting' && task.blockReason && <span>חסם: {task.blockReason}</span>}
@@ -256,6 +329,8 @@ export function TaskRow({
     </div>
     {menu.menu}
     </SwipeRow>
+    {parts > 0 && <SubtaskList task={task} showOwner={showOwner} />}
+    </>
   );
 }
 

@@ -15213,3 +15213,69 @@ tr.is-finished.is-folding {
   color: #fff;
   background: var(--tint-fill);
 }
+
+/* ---------------- a task's parts, folded under it (TaskRow.tsx: SubtaskContext) ---------------- */
+.subtask-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--tint);
+  font-weight: 600;
+}
+.subtask-chev {
+  transition: transform 0.25s var(--spring);
+}
+.parts-open .subtask-chev {
+  transform: rotate(180deg);
+}
+.subtask-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s var(--spring);
+}
+.subtask-fold.open {
+  grid-template-rows: 1fr;
+}
+.subtask-fold-inner {
+  overflow: hidden;
+  min-height: 0;
+  margin-inline-start: 22px;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--line-2);
+}
+.subtask-fold.open .subtask-fold-inner {
+  padding-block: 4px 8px;
+}
+.subtask-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  margin-inline-start: -10px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--tint);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .subtask-open:hover {
+    background: var(--fill);
+  }
+}
+.tasks-table tr.subtask-tr .tasks-table-title {
+  padding-inline-start: 34px;
+}
+.tasks-table tr.subtask-open-row td {
+  padding-block: 2px;
+  padding-inline-start: 30px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .subtask-fold,
+  .subtask-chev {
+    transition: none;
+  }
+}

@@ -1,6 +1,6 @@
 // Section 6 - the course task repository, as a table, list or board, with filters.
 
-import { useMemo, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PRIORITIES, PRIORITY_LABELS, STATUSES, STATUS_LABELS, type TaskStatus } from '@shared/constants';
 import type { Task } from '@shared/types';
@@ -9,7 +9,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
 import { unlessHeld, useTaskMenu } from '../components/TaskMenu';
-import { canQuickUpdate, doneNow, GroupTag, prefetchTask, ProgressBadge, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useTaskTick } from '../components/TaskRow';
+import { canQuickUpdate, doneNow, GroupTag, prefetchTask, ProgressBadge, SubtaskContext, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useSubtaskFold, useTaskTick } from '../components/TaskRow';
 import { finishedJustNow, leaveClass, noteFinished, useLeaving, type LeavePhase } from '../lib/leaving';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
@@ -89,7 +89,9 @@ export function TasksPage() {
   const { data, error, loading } = useApi<Task[]>(url);
   // a task given to a group is one row, under the group's name - unless the list is one person's
   const collapse = !f.owner;
-  const rows = useMemo(() => foldTasks(data ?? [], user.id, collapse), [data, collapse, user.id]);
+  // a task's parts are not rows of their own: under it, opened by a tap on it
+  const { tops, fold } = useSubtaskFold(data);
+  const rows = useMemo(() => foldTasks(tops, user.id, collapse), [tops, collapse, user.id]);
   const changeView = (v: View) => {
     setView(v);
     writePref('kks.tasksView', v);
@@ -211,12 +213,10 @@ export function TasksPage() {
         <Loading rows={6} />
       ) : !data?.length ? (
         <Empty icon="filter" title="אין משימות" text="אין משימות שתואמות את הסינון." />
-      ) : view === 'list' ? (
-        <TaskList tasks={data} collapse={collapse} />
-      ) : view === 'table' ? (
-        <TaskTable rows={rows} />
       ) : (
-        <Board rows={rows} />
+        <SubtaskContext.Provider value={fold}>
+          {view === 'list' ? <TaskList tasks={tops} collapse={collapse} /> : view === 'table' ? <TaskTable rows={rows} /> : <Board rows={rows} />}
+        </SubtaskContext.Provider>
       )}
     </div>
     </TaskBulkScope>
@@ -269,7 +269,7 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
         </thead>
         <tbody>
           {shown.map((r) => (
-            <TaskTableRow key={r.task.id} t={r.task} folded={r.folded} leaving={leaving.phaseOf(r.task.id)} />
+            <TaskTableRows key={r.task.id} t={r.task} folded={r.folded} leaving={leaving.phaseOf(r.task.id)} />
           ))}
         </tbody>
       </table>
@@ -278,8 +278,36 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
   );
 }
 
-function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leaving?: LeavePhase }) {
+/** a task's row, and its parts under it while opened */
+function TaskTableRows({ t, folded, leaving }: { t: Task; folded: boolean; leaving?: LeavePhase }) {
   const navigate = useNavigate();
+  const fold = useContext(SubtaskContext);
+  const parts = fold?.of.get(t.id) ?? [];
+  if (!parts.length || !fold?.open.has(t.id)) return <TaskTableRow t={t} folded={folded} leaving={leaving} />;
+  return (
+    <>
+      <TaskTableRow t={t} folded={folded} leaving={leaving} />
+      <tr className="subtask-open-row">
+        <td className="tone-cell" />
+        <td colSpan={9}>
+          <button type="button" className="subtask-open" onClick={() => navigate(`/tasks/${t.id}`)}>
+            <Icon name="chevronLeft" size={15} />
+            פתיחת המשימה
+          </button>
+        </td>
+      </tr>
+      {parts.map((p) => (
+        <TaskTableRow key={p.id} t={p} folded={false} sub />
+      ))}
+    </>
+  );
+}
+
+function TaskTableRow({ t, folded, leaving, sub }: { t: Task; folded: boolean; leaving?: LeavePhase; sub?: boolean }) {
+  const navigate = useNavigate();
+  const fold = useContext(SubtaskContext);
+  const parts = sub ? 0 : (fold?.of.get(t.id)?.length ?? 0);
+  const partsOpen = parts > 0 && !!fold?.open.has(t.id);
   const bulk = useBulk();
   const tick = useTaskTick(t, folded);
   const tag = useGroupTag(t, !folded);
@@ -287,8 +315,9 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
   const menu = useTaskMenu(t, tick, bulk?.active || folded);
   return (
     <tr
-      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${leaving ? ' is-finished' : ''}${leaving === 'fold' ? ' is-folding' : ''}`}
-      {...openable(bulkClick(bulk, t.id, unlessHeld(menu, () => navigate(`/tasks/${t.id}`))), { role: false })}
+      className={`click t-${tick.done ? 'green' : t.tone}${bulk?.selected.has(t.id) ? ' selected' : ''}${tick.done ? ' is-done' : ''}${flash ? ' flash' : ''}${menu.lifted ? ' is-lifted' : ''}${leaving ? ' is-finished' : ''}${leaving === 'fold' ? ' is-folding' : ''}${sub ? ' subtask-tr' : ''}${partsOpen ? ' parts-open' : ''}`}
+      {...openable(bulkClick(bulk, t.id, unlessHeld(menu, () => (parts ? fold!.toggle(t.id) : navigate(`/tasks/${t.id}`)))), { role: false })}
+      aria-expanded={parts ? partsOpen : undefined}
       {...menu.bind}
       onPointerEnter={() => prefetchTask(t.id)}
       onFocus={() => prefetchTask(t.id)}
@@ -300,8 +329,9 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
           <span>{t.title}</span>
         </div>
         {t.subtaskTotal > 0 && (
-          <div className="tiny muted mono">
+          <div className={`tiny muted mono${parts ? ' subtask-count' : ''}`}>
             {t.subtaskDone}/{t.subtaskTotal} משימות משנה
+            {parts > 0 && <Icon name="chevronDown" size={13} className="subtask-chev" />}
           </div>
         )}
       </td>
