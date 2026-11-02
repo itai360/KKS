@@ -108,16 +108,109 @@ function WeekCard({ part, today }: { part: ThreeWeekWeek; today: string }) {
 }
 
 /** a main block on a day: its hour, name and kind - a later day of one over several days says it goes on */
-function Activity({ e, day }: { e: PlanEvent; day: string }) {
+function Activity({ e, day, onUnpin }: { e: PlanEvent; day: string; onUnpin?: (e: PlanEvent) => void }) {
   const goesOn = day !== e.date;
   return (
     <>
       {e.startTime && !goesOn && <span className="mono tiny tw-time">{e.startTime}</span>}
       <span className="tw-act">{e.title}</span>
+      {/* added by hand to the key schedule: marked so, and taken out from here */}
+      {e.pinned && !goesOn && (
+        <span className="tw-pin no-print" title='נוסף ידנית ללו"ז המפתח'>
+          <Icon name="tack" size={12} />
+        </span>
+      )}
       {goesOn ? <span className="tiny muted"> (המשך)</span> : <span className={`plan-kind k-${e.kind}`}>{KIND_LABELS[e.kind]}</span>}
       {e.night && !goesOn && <span className="plan-kind k-night">לילה</span>}
       {e.location && !goesOn && <span className="tiny muted tw-where"> · {e.location}</span>}
+      {e.pinned && !goesOn && onUnpin && (
+        <button type="button" className="tw-unpin no-print" onClick={() => onUnpin(e)} aria-label={`הוצאת "${e.title}" מלו"ז המפתח`} title='הוצאה מלו"ז המפתח'>
+          <Icon name="x" size={12} />
+        </button>
+      )}
     </>
+  );
+}
+
+/**
+ * More of the schedule into the key schedule: the period's activities the rules did not take for main
+ * blocks (lessons, meetings), day by day - the ones ticked become key events here and in their week's plan.
+ */
+function KeyAdd({ weekId, onClose }: { weekId: number; onClose: () => void }) {
+  const toast = useToast();
+  const { data, error, loading } = useApi<PlanEvent[]>(`/api/three-week/${weekId}/candidates`, ['plans', 'events']);
+  const [q, setQ] = useState('');
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set());
+  const [busy, setBusy] = useState(false);
+  const words = q.trim();
+  const shown = (data ?? []).filter((e) => !words || `${e.title} ${e.location}`.includes(words));
+  const days = [...new Set(shown.map((e) => e.date))].sort().map((d) => ({ d, events: shown.filter((e) => e.date === d) }));
+  const toggle = (k: string) =>
+    setChosen((c) => {
+      const n = new Set(c);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.post('/api/plan-key-events', { keys: [...chosen] });
+      emitLocalChange('plans');
+      haptic('success');
+      toast({ title: chosen.size === 1 ? 'האירוע נוסף ללו"ז המפתח' : `${chosen.size} אירועים נוספו ללו"ז המפתח`, tone: 'green' });
+      onClose();
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title='הוספה ללו"ז המפתח'
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn btn-primary" disabled={!chosen.size || busy} onClick={() => void save()}>
+            <Icon name="plus" /> {chosen.size ? `הוספה (${chosen.size})` : 'הוספה'}
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <p className="small muted ka-intro">אירועים מהלו"ז של התקופה שלא נכנסו ללו"ז המפתח מעצמם - שיעורים, פגישות ועוד. מה שתסמנו ייכנס לתלת שבועי ולתוכנית של השבוע שלו.</p>
+      <input className="input ka-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי שם או מקום" aria-label="חיפוש אירוע" />
+      {error && <p className="small text-red">{error}</p>}
+      {loading && !data ? (
+        <Loading rows={4} />
+      ) : !days.length ? (
+        <p className="small muted ka-empty">{words ? 'לא נמצא אירוע כזה בתקופה.' : 'כל האירועים של התקופה כבר בלו"ז המפתח.'}</p>
+      ) : (
+        <div className="ka-days">
+          {days.map(({ d, events }) => (
+            <div key={d} className="ka-day">
+              <div className="ka-date">
+                <b>{weekdayName(d)}</b> <span className="mono">{shortDate(d)}</span>
+              </div>
+              {events.map((e) => (
+                <label key={e.key} className={`ka-row${chosen.has(e.key) ? ' on' : ''}`}>
+                  <input type="checkbox" checked={chosen.has(e.key)} onChange={() => toggle(e.key)} />
+                  <span className="ka-time mono">{e.startTime ?? 'כל היום'}</span>
+                  <span className="ka-title">
+                    {e.title}
+                    {e.endDate !== e.date && <span className="muted"> · עד {shortDate(e.endDate)}</span>}
+                    {e.location && <span className="muted"> · {e.location}</span>}
+                  </span>
+                  {e.source === 'calendar' && <span className="ka-src">Google</span>}
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -125,7 +218,7 @@ function Activity({ e, day }: { e: PlanEvent; day: string }) {
 const DAY_LINES = 6;
 
 /** one week, day by day: the main blocks of each day (one that began the week before goes on in it) */
-function WeekDays({ part, next, all, today }: { part: ThreeWeekWeek; next: Week | undefined; all: PlanEvent[]; today: string }) {
+function WeekDays({ part, next, all, today, onUnpin }: { part: ThreeWeekWeek; next: Week | undefined; all: PlanEvent[]; today: string; onUnpin?: (e: PlanEvent) => void }) {
   const { week: w } = part;
   const days = daysOf(w, next).map((d) => ({ d, key: all.filter((e) => e.date <= d && e.endDate >= d) }));
   const empty = (i: number) => !!days[i] && !days[i].key.length && days[i].d !== today;
@@ -170,7 +263,7 @@ function WeekDays({ part, next, all, today }: { part: ThreeWeekWeek; next: Week 
                   <ul>
                     {key.slice(0, DAY_LINES).map((e) => (
                       <li key={e.key}>
-                        <Activity e={e} day={d} />
+                        <Activity e={e} day={d} onUnpin={onUnpin} />
                       </li>
                     ))}
                   </ul>
@@ -196,6 +289,27 @@ export function ThreeWeekPage() {
   const [editing, setEditing] = useState(false);
   const [approving, setApproving] = useState(false);
   const [calendars, setCalendars] = useState(false);
+  // the key schedule by hand: more of the schedule added, one added taken out (with a way back)
+  const [addingKey, setAddingKey] = useState(false);
+  const unpin = async (e: PlanEvent) => {
+    try {
+      await api.post('/api/plan-key-events/remove', { key: e.key });
+      emitLocalChange('plans');
+      toast({
+        title: `"${e.title}" הוצא מלו"ז המפתח`,
+        action: {
+          label: 'ביטול',
+          run: () =>
+            void api
+              .post('/api/plan-key-events', { keys: [e.key] })
+              .then(() => emitLocalChange('plans'))
+              .catch((err: Error) => toast({ title: err.message, tone: 'red' })),
+        },
+      });
+    } catch (err) {
+      toast({ title: (err as Error).message, tone: 'red' });
+    }
+  };
   // the approval just recorded: its line at the foot of the document comes in, stamped
   const [justApproved, setJustApproved] = useState(false);
   useEffect(() => {
@@ -426,12 +540,18 @@ export function ThreeWeekPage() {
         </section>
 
         <section id="tw-days">
-          <h2>{n('tw-days')}. לו"ז מפתח - יום אחר יום</h2>
+          <div className="tw-days-head">
+            <h2>{n('tw-days')}. לו"ז מפתח - יום אחר יום</h2>
+            {/* more of the schedule, by hand: what the rules did not take but matters here */}
+            <button type="button" className="btn btn-sm no-print" onClick={() => setAddingKey(true)}>
+              <Icon name="plus" size={14} /> הוספת אירוע מהלו"ז
+            </button>
+          </div>
           {doc.weeks.map((p, i) => (
-            <WeekDays key={p.week.id} part={p} next={doc.weeks[i + 1]?.week} all={allKey} today={today} />
+            <WeekDays key={p.week.id} part={p} next={doc.weeks[i + 1]?.week} all={allKey} today={today} onUnpin={(e) => void unpin(e)} />
           ))}
           <p className="tiny muted no-print">
-            הלבנות העיקריות בלבד, מהלו"ז של הקורס ומיומן התוכנית: מבחנים, טקסים, תרגילים, ניווטים, מטווחים, ביקורים ובלוקים של כמה ימים. שיעורים, שגרה ופעילויות קטנות לא מוצגים. <Link to="/schedule">ללו"ז המלא</Link>
+            הלבנות העיקריות, מהלו"ז של הקורס ומיומן התוכנית: מבחנים, טקסים, תרגילים, ניווטים, מטווחים, ביקורים ובלוקים של כמה ימים. שיעורים, שגרה ופעילויות קטנות לא נכנסים מעצמם - אירוע חשוב מהם מוסיפים ב"הוספת אירוע מהלו"ז" (מסומן <Icon name="tack" size={11} />). <Link to="/schedule">ללו"ז המלא</Link>
           </p>
         </section>
 
@@ -696,6 +816,7 @@ export function ThreeWeekPage() {
           onClose={() => setEditing(false)}
         />
       )}
+      {addingKey && doc && <KeyAdd weekId={doc.startWeekId} onClose={() => setAddingKey(false)} />}
       {calendars && (
         <Modal
           title="יומן התוכנית"

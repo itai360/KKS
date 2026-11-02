@@ -80,6 +80,8 @@ const paths: Record<string, string> = {
   history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 3',
   print: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z',
   pin: 'M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  // a thumbtack: something pinned by hand (a place has "pin")
+  tack: 'M8.5 3h7M10 3v5.5L7 13h10l-3-4.5V3M12 13v8',
   dependency: 'M6 3v12M18 9v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 9h6a6 6 0 0 1 6 6',
   copy: 'M9 9.5A1.5 1.5 0 0 1 10.5 8h8A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 9 18.5zM5 16h-.5A1.5 1.5 0 0 1 3 14.5v-9A1.5 1.5 0 0 1 4.5 4h8A1.5 1.5 0 0 1 14 5.5V6',
   cloud: 'M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.9 9a4.75 4.75 0 0 1-.4 9.5zM9.5 13.5l2 2 3.5-3.5',

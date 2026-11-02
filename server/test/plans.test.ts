@@ -2,7 +2,7 @@
 // rewritten by the commander, approved by the commander above - and what changed since.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { PlanDocument, PlansOverview, ThreeWeekPlan } from '../../shared/types';
+import type { PlanDocument, PlanEvent, PlansOverview, ThreeWeekPlan } from '../../shared/types';
 import { classify, joinHe, readEvents } from '../src/plans';
 import { calendarReadsSettled, forgetCalendarCopies, setCalendarFetcher, setCalendarWaits } from '../src/calendar';
 import { db } from '../src/db';
@@ -156,6 +156,32 @@ describe('the three-week plan', () => {
     expect((await c.s1.get('/api/three-week')).status).toBe(403);
     expect((await c.s1.get(`/api/three-week/${weekIds[0]}`)).status).toBe(403);
     expect((await c.s1.patch(`/api/three-week/${weekIds[0]}`, { bluf: 'x' })).status).toBe(403);
+  });
+
+  it('takes activities of the schedule into the key schedule by hand - and out again', async () => {
+    const candidates = async () => (await c.cmd.get(`/api/three-week/${weekIds[0]}/candidates`)).body as PlanEvent[];
+    const lesson = (await candidates()).find((e) => e.title === 'שיעור: עקרונות התקפה');
+    expect(lesson).toBeTruthy();
+    // what is a key event already is not offered
+    expect((await candidates()).map((e) => e.title)).not.toContain('ניווט לילה');
+    expect((await c.cmd.post('/api/plan-key-events', { keys: [lesson!.key] })).status).toBe(200);
+    let d = await tw();
+    expect(d.weeks[0].key.find((e) => e.title === 'שיעור: עקרונות התקפה')).toMatchObject({ pinned: true });
+    expect(d.weeks[0].key.find((e) => e.title === 'ניווט לילה')?.pinned).toBeFalsy();
+    expect((await candidates()).map((e) => e.key)).not.toContain(lesson!.key);
+    // the week's own plan counts it too
+    expect((await doc(0)).horizon[0].events.map((e) => e.title)).toContain('שיעור: עקרונות התקפה');
+    // out again
+    expect((await c.cmd.post('/api/plan-key-events/remove', { key: lesson!.key })).status).toBe(200);
+    d = await tw();
+    expect(d.weeks[0].key.map((e) => e.title)).not.toContain('שיעור: עקרונות התקפה');
+    expect((await c.cmd.post('/api/plan-key-events/remove', { key: lesson!.key })).status).toBe(404);
+    expect((await c.cmd.post('/api/plan-key-events', { keys: [] })).status).toBe(400);
+    // by the staff where the commander lets them prepare the plans - not otherwise
+    expect((await c.s1.post('/api/plan-key-events', { keys: [lesson!.key] })).status).toBe(200);
+    await staffMay(c, { plans: false });
+    expect((await c.s1.post('/api/plan-key-events', { keys: [lesson!.key] })).status).toBe(403);
+    expect((await c.s1.get(`/api/three-week/${weekIds[0]}/candidates`)).status).toBe(403);
   });
 
   it('shows the week now and the three after it: day by day, the milestones, readiness, the risks with their week', async () => {

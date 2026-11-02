@@ -1503,6 +1503,8 @@ export interface PlanEvent {
   /** the preparation tasks of a course event; null for an event from a connected calendar */
   prep: { done: number; total: number } | null;
   source: 'course' | 'calendar';
+  /** added by hand to the key schedule (not one of the main blocks by itself) */
+  pinned?: boolean;
 }
 
 export interface PlanHorizonWeek {

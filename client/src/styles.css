@@ -15462,3 +15462,116 @@ html:has(.subtask-fold) {
 .nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------- the key schedule by hand (ThreeWeekPage: KeyAdd) ---------------- */
+.tw-days-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tw-days-head h2 {
+  margin: 0;
+}
+/* added by hand: a small pin beside it, and a way to take it out (not printed) */
+.tw-pin {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-inline: 3px 1px;
+  color: var(--tint);
+}
+/* the way out sits at the end of the activity's first line, not on a line of its own in a narrow day */
+#tw-days li:has(> .tw-unpin) {
+  position: relative;
+  padding-inline-end: 18px;
+}
+.tw-unpin {
+  position: absolute;
+  top: -1px;
+  inset-inline-end: -3px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  vertical-align: middle;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.12s, background 0.12s;
+}
+.tw-unpin:hover,
+.tw-unpin:focus-visible {
+  opacity: 1;
+  background: var(--fill);
+}
+.ka-intro {
+  margin: 0 0 10px;
+}
+.ka-search {
+  margin-bottom: 10px;
+}
+.ka-days {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ka-date {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 2px;
+  background: var(--card);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.ka-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s;
+}
+.ka-row + .ka-row {
+  border-top: 1px solid var(--line);
+}
+@media (hover: hover) {
+  .ka-row:hover {
+    background: var(--fill);
+  }
+}
+.ka-row.on {
+  background: var(--tint-bg);
+}
+.ka-row input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.ka-time {
+  flex: none;
+  min-width: 52px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ka-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+}
+.ka-src {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ka-empty {
+  margin: 12px 0;
+}
