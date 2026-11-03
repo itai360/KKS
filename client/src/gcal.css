@@ -528,6 +528,35 @@
 .gside .rail-settings {
   margin-top: 10px;
 }
+/* the calendar leads the menu: its row says what day it is, and on the calendar its tools come under it */
+.gside .rail-cal-date {
+  margin-inline-start: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.gside .rail-cal-link.active .rail-cal-date {
+  color: var(--tint);
+}
+.rail-cal-tools {
+  padding-top: 10px;
+}
+.rail-cal.is-here {
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+/* the screens used most: a caption, then their rows, before the groups */
+.rail-frequent {
+  margin-top: 4px;
+}
+.gside .rail-section {
+  padding: 12px 14px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
 .gside .rail-group {
   margin-top: 2px;
 }
@@ -584,6 +613,10 @@
   }
   .gside .rail-group-head {
     font-size: 15px;
+  }
+  .gside .rail-section {
+    padding: 14px 16px 6px;
+    font-size: 13px;
   }
   .gside :is(.rail-link, .rail-group-head) > svg:first-child {
     width: 20px;

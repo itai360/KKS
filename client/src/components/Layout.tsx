@@ -30,8 +30,9 @@ import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
 import { SETTINGS_ITEM } from './NavMenu';
 import { NotificationsPanel } from './Notifications';
-import { noteScreen, screenOf } from '../lib/frequent';
-import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
+import { frequentScreens, noteScreen, screenOf } from '../lib/frequent';
+import { BOTTOM_BAR_MEDIA, BOTTOM_BAR_SCREENS } from '../lib/bottomBar';
+import { shortDate, weekdayName } from '@shared/dates';
 import { useDrawerSwipe } from '../lib/drawerSwipe';
 import { trapFocus } from '../lib/focusTrap';
 import { lockScroll } from '../lib/scrollLock';
@@ -177,6 +178,19 @@ function saveTrail(t: string[]): void {
   } catch {
     // private browsing: back still works, only without the name of where it goes
   }
+}
+
+/** the calendar's mark with today's day in it, as a calendar app's icon has */
+function DayIcon({ day }: { day: number }) {
+  return (
+    <svg className="day-icon" viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3.5" y="4.6" width="17" height="16.2" rx="2.6" />
+      <path d="M3.5 9h17M8 2.9v3.4M16 2.9v3.4" />
+      <text x="12" y="18.3" textAnchor="middle" fontSize={day > 9 ? 8.4 : 9} fontWeight={700} fill="currentColor" stroke="none">
+        {day}
+      </text>
+    </svg>
+  );
 }
 
 export function useNavSections(): NavSection[] {
@@ -787,10 +801,58 @@ export function Layout({ children }: { children: ReactNode }) {
       </nav>
     );
   };
-  // the calendar's group: the course's calendar (on a computer - a phone has it as its bar's first tab), and on
-  // the calendar, which calendars it shows ("היומנים שלי", "יומנים נוספים")
-  const calLinks = railLinks(sections.filter((s) => !s.title).flatMap((s) => s.items));
-  const calLayers = onCalendar && !folded;
+  // "בשימוש תדיר": the four screens this person opens most (frequent.ts counts each screen entered) - not the
+  // calendar, which leads the menu, and on a phone not its bar's tabs. Before there is a habit: each group's
+  // first screen. Read as the page loads, and on a phone as its menu opens: the links do not move under the pointer
+  const menuItems: NavItem[] = [...sections.flatMap((s) => s.items), SETTINGS_ITEM];
+  const offeredKey = menuItems
+    .filter((it) => it.to !== '/' && !(phone && BOTTOM_BAR_SCREENS.includes(it.to)))
+    .map((it) => it.to)
+    .join(',');
+  const firstsKey = sections
+    .flatMap((s) => (s.title ? s.items.filter((it) => offeredKey.split(',').includes(it.to)).slice(0, 1) : []))
+    .map((it) => it.to)
+    .join(',');
+  const frequentTo = useMemo(
+    () => frequentScreens(user.id, offeredKey.split(',').filter(Boolean), firstsKey.split(',').filter(Boolean), 4),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read again as a phone's menu opens
+    [user.id, offeredKey, firstsKey, drawer],
+  );
+  const frequentItems = frequentTo.map((to) => menuItems.find((it) => it.to === to)).filter((it): it is NavItem => !!it);
+  const frequentNav = frequentItems.length > 0 && (
+    <nav className="rail-frequent" aria-labelledby="rail-frequent-title">
+      <div className="rail-section" id="rail-frequent-title">
+        בשימוש תדיר
+      </div>
+      {railLinks(frequentItems)}
+    </nav>
+  );
+  // the calendar first: the course's home, its row saying what day it is. On it, and only there, its own tools
+  // come under it - the month, to go to a day, then which calendars it shows - in one place, as Google
+  // Calendar's side bar and Outlook's calendar pane have them (elsewhere they only pushed the menu down)
+  const calSection = (
+    <div className={`rail-cal${onCalendar ? ' is-here' : ''}`}>
+      <NavLink to="/" end className={({ isActive }) => `rail-link rail-cal-link${isActive ? ' active' : ''}`} title={`יומן הקורס · ${weekdayName(today)} ${shortDate(today)}`}>
+        <DayIcon day={Number(today.slice(8, 10))} />
+        <span className="rail-label">יומן</span>
+        <span className="rail-label rail-cal-date">
+          {weekdayName(today)} {shortDate(today)}
+        </span>
+      </NavLink>
+      {railLinks(sections.filter((s) => !s.title).flatMap((s) => s.items.filter((it) => it.to !== '/')))}
+      {onCalendar && !folded && (
+        <div className="rail-cal-tools">
+          <MiniMonth
+            selected={calBar?.date ?? today}
+            shown={calBar?.shown ?? []}
+            today={today}
+            onPick={(d) => (calBar ? calBar.goTo(d) : navigate(d === today ? '/' : `/?date=${d}`))}
+          />
+          <CalendarLayers />
+        </div>
+      )}
+    </div>
+  );
 
   // every group of the menu, each opening and closing (a computer's menu; a phone's "כל המסכים")
   const allGroups = sections.map((s, i) => {
@@ -851,6 +913,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <span className="gside-sep" aria-hidden="true" />
         </>
       )}
+      {frequentNav}
       {allGroups}
       <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
         <Icon name="settings" />
@@ -912,25 +975,9 @@ export function Layout({ children }: { children: ReactNode }) {
             phoneMenu
           ) : (
             <>
-              {!folded && (
-                <MiniMonth
-                  selected={calBar?.date ?? today}
-                  shown={calBar?.shown ?? []}
-                  today={today}
-                  onPick={(d) => (calBar ? calBar.goTo(d) : navigate(d === today ? '/' : `/?date=${d}`))}
-                />
-              )}
+              {calSection}
+              {frequentNav}
               {allGroups}
-              {/* last, under "סגל וכלים": the calendar, and on it which calendars it shows */}
-              {(calLinks.length > 0 || calLayers) &&
-                railGroup(
-                  CAL_GROUP,
-                  'rail-group-cal',
-                  <>
-                    {calLinks}
-                    {calLayers && <CalendarLayers />}
-                  </>,
-                )}
               <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
                 <Icon name="settings" />
                 <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
