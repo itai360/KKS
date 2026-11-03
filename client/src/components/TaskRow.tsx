@@ -9,7 +9,7 @@ import { namesOf } from '@shared/staffGroups';
 import { collapseGroups, expandUnits, foldTasks, groupView, isGrouped, peopleOf } from '../lib/taskGroups';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
-import { prefetch } from '../lib/useApi';
+import { prefetch, useApi } from '../lib/useApi';
 import { DeadlineText, PriorityBadge, RowStatus } from './Badges';
 import { BulkCheck, bulkClick, BulkScope, SwipeRow, useBulk } from './Bulk';
 import { DoneDrawer } from './DoneDrawer';
@@ -187,6 +187,8 @@ export function ProgressBadge({ task }: { task: Task }) {
  */
 export interface SubtaskFold {
   of: Map<number, Task[]>;
+  /** a task with parts: some in this list, or any at all (the list's filters may leave them all out) */
+  has: (t: Task) => boolean;
   open: Set<number>;
   toggle: (id: number) => void;
   /** opened, whatever it was (a subtask just added to it) */
@@ -213,6 +215,7 @@ export function useSubtaskFold(tasks: Task[] | undefined): { tops: Task[]; fold:
   const fold = useMemo<SubtaskFold>(
     () => ({
       of,
+      has: (t) => t.subtaskTotal > 0 || (of.get(t.id)?.length ?? 0) > 0,
       open,
       toggle: (id) =>
         setOpen((o) => {
@@ -228,14 +231,29 @@ export function useSubtaskFold(tasks: Task[] | undefined): { tops: Task[]; fold:
   return { tops, fold };
 }
 
-/** a task's parts, under it: how far along they are and the task itself to open, then each part, short */
+export const prefetchSubtasks = (id: number) => prefetch(`/api/tasks/${id}/subtasks`);
+
+/**
+ * A task's parts, under it: how far along they are and the task itself to open, then each part, short. All
+ * its parts one may see - the list around it is filtered (mine, open, a search) and would show only some:
+ * those in the list at once, all of them once the server answers (kept while it closes).
+ */
 export function SubtaskList({ task }: { task: Task; showOwner?: boolean }) {
   const navigate = useNavigate();
   const fold = useContext(SubtaskContext);
-  const parts = fold?.of.get(task.id) ?? [];
+  const inList = fold?.of.get(task.id) ?? [];
   const open = !!fold?.open.has(task.id);
+  const [wanted, setWanted] = useState(open);
+  useEffect(() => {
+    if (open) setWanted(true);
+  }, [open]);
+  const { data } = useApi<Task[]>(wanted ? `/api/tasks/${task.id}/subtasks` : null, ['tasks']);
+  // as counted: a cancelled part is not one
+  const parts = data ? data.filter((t) => t.status !== 'cancelled').sort((a, b) => a.deadline.localeCompare(b.deadline)) : inList;
   const total = Math.max(task.subtaskTotal, parts.length);
   const done = task.subtaskDone;
+  // counted, and not to be seen by this user (someone else's private part)
+  const unseen = data ? Math.max(0, task.subtaskTotal - parts.length) : 0;
   return (
     <div className={`subtask-fold${open ? ' open' : ''}`} inert={!open || undefined}>
       <div className="subtask-fold-inner">
@@ -259,6 +277,8 @@ export function SubtaskList({ task }: { task: Task; showOwner?: boolean }) {
               </li>
             ))}
           </ul>
+          {!data && !parts.length && wanted && <div className="subtask-note">טוען את משימות המשנה...</div>}
+          {unseen > 0 && <div className="subtask-note">{unseen === 1 ? 'ועוד משימת משנה אחת שאינה גלויה לך' : `ועוד ${unseen} משימות משנה שאינן גלויות לך`}</div>}
         </div>
       </div>
     </div>
@@ -321,9 +341,14 @@ export function TaskRow({
   // with its parts folded under it: a tap opens them (the task itself opens from there)
   const fold = useContext(SubtaskContext);
   const menu = useTaskMenu(task, tick, bulk?.active, fold ? () => fold.show(task.id) : undefined);
-  const parts = fold?.of.get(task.id)?.length ?? 0;
-  const partsOpen = parts > 0 && !!fold?.open.has(task.id);
+  const parts = !!fold?.has(task);
+  const partsOpen = parts && !!fold?.open.has(task.id);
   const onTap = () => (parts ? fold!.toggle(task.id) : navigate(`/tasks/${task.id}`));
+  // pointed at or focused: the task, and its parts, are on their way before a tap
+  const prefetch = () => {
+    prefetchTask(task.id);
+    if (parts) prefetchSubtasks(task.id);
+  };
 
   return (
     <>
@@ -333,8 +358,8 @@ export function TaskRow({
       {...openable(bulkClick(bulk, task.id, unlessHeld(menu, onTap)))}
       aria-expanded={parts ? partsOpen : undefined}
       {...menu.bind}
-      onPointerEnter={() => prefetchTask(task.id)}
-      onFocus={() => prefetchTask(task.id)}
+      onPointerEnter={prefetch}
+      onFocus={prefetch}
     >
       {bulk?.active ? <BulkCheck id={task.id} /> : <TaskCheck task={task} tick={tick} />}
       <div className="task-main">
@@ -351,7 +376,7 @@ export function TaskRow({
           {task.subtaskTotal > 0 && (
             <span className={`nums${parts ? ' subtask-count' : ''}`}>
               {task.subtaskDone}/{task.subtaskTotal} משנה
-              {parts > 0 && <Icon name="chevronDown" size={13} className="subtask-chev" />}
+              {parts && <Icon name="chevronDown" size={13} className="subtask-chev" />}
             </span>
           )}
           {task.awaitingAccept && <span className="text-orange strong">ממתינה לאישור{task.ownerId !== me.id ? ` של ${task.ownerName}` : 'ך'}</span>}
@@ -369,7 +394,7 @@ export function TaskRow({
     </div>
     {menu.menu}
     </SwipeRow>
-    {parts > 0 && <SubtaskList task={task} showOwner={showOwner} />}
+    {parts && <SubtaskList task={task} showOwner={showOwner} />}
     </>
   );
 }

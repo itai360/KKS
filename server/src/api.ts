@@ -104,6 +104,7 @@ import {
   listRequests,
   removeDependency,
   respondOverdue,
+  subtasksOf,
   taskDetail,
   transition,
   updateTask,
@@ -613,6 +614,8 @@ export function apiRouter(): Router {
   });
 
   r.get('/tasks/:id', (req, res) => res.json(taskDetail(me(req), id(req.params.id))));
+  // all of a task's subtasks one may see (the tasks list, where they fold under it, is filtered)
+  r.get('/tasks/:id/subtasks', (req, res) => res.json(subtasksOf(me(req), id(req.params.id))));
 
   // allCopies: a task given to several people is edited for all of them (its creator or the commander)
   r.patch('/tasks/:id', (req, res) => {

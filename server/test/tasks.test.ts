@@ -240,6 +240,29 @@ describe('subtasks and dependencies (sections 59-60)', () => {
     expect((await c.cmd.patch(`/api/tasks/${parent}`, { parentId: a })).status).toBe(400);
   });
 
+  it("lists all of a task's subtasks one may see, whatever a filtered list of tasks shows", async () => {
+    const parent = await newTask(c.cmd, { title: 'הכנת תרגיל', ownerIds: [c.ids.s1] });
+    const mine = await newTask(c.cmd, { title: 'תיאום שטח', ownerIds: [c.ids.s1], parentId: parent });
+    const theirs = await newTask(c.cmd, { title: 'הזמנת אוטובוסים', ownerIds: [c.ids.s2], parentId: parent });
+    const done = await newTask(c.cmd, { title: 'אישור תוכנית', ownerIds: [c.ids.s1], parentId: parent });
+    await c.s1.post(`/api/tasks/${done}/transition`, { action: 'complete' });
+    const secret = (await c.cmd.post('/api/tasks', { title: 'שיחה אישית', ownerIds: [c.ids.s3], parentId: parent, visibility: 'private', deadline: at('2026-10-08') })).body.ids[0] as number;
+    // one's own open tasks hold only some of them
+    const list = ((await c.s1.get('/api/tasks?owner=me&scope=open')).body as { id: number }[]).map((t) => t.id);
+    expect(list).toContain(mine);
+    expect(list).not.toContain(theirs);
+    expect(list).not.toContain(done);
+    // its subtasks: all one may see - not someone else's private one
+    const ids = async (who: Ctx['s1']) => ((await who.get(`/api/tasks/${parent}/subtasks`)).body as { id: number }[]).map((t) => t.id).sort((a, b) => a - b);
+    expect(await ids(c.s1)).toEqual([mine, theirs, done].sort((a, b) => a - b));
+    expect(await ids(c.cmd)).toEqual([mine, theirs, done, secret].sort((a, b) => a - b));
+    // the count counts them all
+    expect((await c.s1.get(`/api/tasks/${parent}`)).body.task).toMatchObject({ subtaskTotal: 4, subtaskDone: 1 });
+    // a task one may not see: not its subtasks either
+    const hidden = (await c.cmd.post('/api/tasks', { title: 'פרטי', ownerIds: [c.ids.s3], visibility: 'private', deadline: at('2026-10-08') })).body.ids[0] as number;
+    expect((await c.s1.get(`/api/tasks/${hidden}/subtasks`)).status).toBe(404);
+  });
+
   it('prevents dependency cycles and notifies when a dependency completes', async () => {
     const build = await newTask(c.cmd, { title: 'בניית לו"ז', ownerIds: [c.ids.s1] });
     const distribute = await newTask(c.cmd, { title: 'הפצת לו"ז לסגל', ownerIds: [c.ids.s2], dependsOn: [build] });

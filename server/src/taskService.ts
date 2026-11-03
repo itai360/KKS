@@ -16,7 +16,7 @@ import {
   VISIBILITY_LABELS,
 } from '../../shared/constants';
 import { formatDateTime, HOUR, localDateKey } from '../../shared/dates';
-import type { GroupProgress, TaskDetail, TaskRequest } from '../../shared/types';
+import type { GroupProgress, Task, TaskDetail, TaskRequest } from '../../shared/types';
 import { commanderIds, getUserRow, staffIds, type UserRow } from './auth';
 import { badRequest, clock, forbidden, notFound, nowIso, tz } from './core';
 import { db } from './db';
@@ -1070,6 +1070,21 @@ function weeklyDebriefOfTask(taskId: number): { weekId: number; weekName: string
   return r ? { weekId: r.week_id, weekName: r.name, debriefId: r.debrief_id } : null;
 }
 
+const visibleSubtasks = (actor: UserRow, id: number): Task[] =>
+  queryTasks('t.parent_id = ?', id)
+    .filter((r) => canView(actor, r))
+    .map((r) => toTask(r));
+
+/**
+ * A task's subtasks the user may see - all of them, whatever a list of tasks shows (the tasks list folds a
+ * task's subtasks under it, and its filters - mine, open - would leave some out).
+ */
+export function subtasksOf(actor: UserRow, id: number): Task[] {
+  const t = mustTaskRow(id);
+  if (!canView(actor, t)) throw notFound('המשימה לא נמצאה');
+  return visibleSubtasks(actor, id);
+}
+
 export function taskDetail(actor: UserRow, id: number): TaskDetail {
   const t = mustTaskRow(id);
   if (!canView(actor, t)) throw notFound('המשימה לא נמצאה');
@@ -1082,9 +1097,7 @@ export function taskDetail(actor: UserRow, id: number): TaskDetail {
     .map((u) => ({ id: u.id, taskId: u.task_id, userId: u.user_id, userName: u.user_name, kind: u.kind, body: u.body, createdAt: u.created_at }));
   const attachments = listAttachments('a.task_id = ?', id);
   const activity = listActivity('a.task_id = ?', [id], 200).reverse();
-  const subtasks = queryTasks('t.parent_id = ?', id)
-    .filter((r) => canView(actor, r))
-    .map((r) => toTask(r));
+  const subtasks = visibleSubtasks(actor, id);
   const parentRow = t.parent_id ? getTaskRow(t.parent_id) : undefined;
   const pick = (r: TaskRow) => ({ id: r.id, title: r.title, status: r.status, ownerName: r.owner_name, deadline: r.deadline });
   const dependsOn = queryTasks('t.id IN (SELECT depends_on_id FROM task_dependencies WHERE task_id = ?)', id).map(pick);

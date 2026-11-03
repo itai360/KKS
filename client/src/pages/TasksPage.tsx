@@ -9,7 +9,7 @@ import { Icon } from '../components/Icon';
 import { useNewTask } from '../components/NewTask';
 import { BulkCheck, bulkClick, BulkToggle, useBulk } from '../components/Bulk';
 import { unlessHeld, useTaskMenu } from '../components/TaskMenu';
-import { canQuickUpdate, doneNow, GroupTag, prefetchTask, ProgressBadge, SubtaskContext, SubtaskList, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useSubtaskFold, useTaskTick } from '../components/TaskRow';
+import { canQuickUpdate, doneNow, GroupTag, prefetchSubtasks, prefetchTask, ProgressBadge, SubtaskContext, SubtaskList, TaskBulkScope, TaskCheck, TaskList, useGroupTag, useLiveFlash, useSubtaskFold, useTaskTick } from '../components/TaskRow';
 import { finishedJustNow, leaveClass, noteFinished, useLeaving, type LeavePhase } from '../lib/leaving';
 import { useToast } from '../components/Toasts';
 import { Empty, ErrorBox, Loading, openable, PageHead, Seg, Select } from '../components/ui';
@@ -284,7 +284,7 @@ function TaskTable({ rows }: { rows: TaskView[] }) {
  */
 function TaskTableRows({ t, folded, leaving }: { t: Task; folded: boolean; leaving?: LeavePhase }) {
   const fold = useContext(SubtaskContext);
-  const has = (fold?.of.get(t.id)?.length ?? 0) > 0;
+  const has = !!fold?.has(t);
   return (
     <>
       <TaskTableRow t={t} folded={folded} leaving={leaving} />
@@ -302,8 +302,8 @@ function TaskTableRows({ t, folded, leaving }: { t: Task; folded: boolean; leavi
 function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leaving?: LeavePhase }) {
   const navigate = useNavigate();
   const fold = useContext(SubtaskContext);
-  const parts = fold?.of.get(t.id)?.length ?? 0;
-  const partsOpen = parts > 0 && !!fold?.open.has(t.id);
+  const parts = !!fold?.has(t);
+  const partsOpen = parts && !!fold?.open.has(t.id);
   const bulk = useBulk();
   const tick = useTaskTick(t, folded);
   const tag = useGroupTag(t, !folded);
@@ -315,8 +315,8 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
       {...openable(bulkClick(bulk, t.id, unlessHeld(menu, () => (parts ? fold!.toggle(t.id) : navigate(`/tasks/${t.id}`)))), { role: false })}
       aria-expanded={parts ? partsOpen : undefined}
       {...menu.bind}
-      onPointerEnter={() => prefetchTask(t.id)}
-      onFocus={() => prefetchTask(t.id)}
+      onPointerEnter={() => (prefetchTask(t.id), parts && prefetchSubtasks(t.id))}
+      onFocus={() => (prefetchTask(t.id), parts && prefetchSubtasks(t.id))}
     >
       <td className="tone-cell" />
       <td className="tasks-table-title">
@@ -329,7 +329,7 @@ function TaskTableRow({ t, folded, leaving }: { t: Task; folded: boolean; leavin
           {t.subtaskTotal > 0 && (
             <span className={`tt-sub nums${parts ? ' subtask-count' : ''}`}>
               {t.subtaskDone}/{t.subtaskTotal} משימות משנה
-              {parts > 0 && <Icon name="chevronDown" size={13} className="subtask-chev" />}
+              {parts && <Icon name="chevronDown" size={13} className="subtask-chev" />}
             </span>
           )}
         </div>
