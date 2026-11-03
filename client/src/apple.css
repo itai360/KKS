@@ -1053,35 +1053,68 @@ a.badge {
   background: var(--card);
 }
 
-/* the "+" menu: an action sheet of the system - one material group, a hairline between its actions */
+/* the "+" menu: its actions rise out of the "+" one after another - bubbles, each of the system's material,
+   the nearest first (--i, from the menu) with a soft overshoot - and sink back into it the other way round,
+   the farthest first. Transitions, not keyframes: a tap while they rise turns them back from where they are */
+:root {
+  --spring-bubble: linear(0, 0.0305, 0.1079, 0.2141, 0.3346, 0.4582, 0.5769, 0.6853, 0.7802, 0.86, 0.9245, 0.9746, 1.0115, 1.0369, 1.0528, 1.061, 1.0633, 1.0613, 1.0563, 1.0495, 1.0419, 1.0341, 1.0266, 1.0197, 1.0138, 1.0087, 1.0047, 1.0015, 0.9992, 0.9976, 0.9966, 0.9961, 0.996, 0.9961, 0.9964, 0.9969, 1);
+}
 .plus-scrim {
   background: rgba(0, 0, 0, 0.25);
 }
 .plus-menu {
-  gap: 0;
-  border-radius: 16px;
-  overflow: hidden;
+  gap: 8px;
+  animation: none;
+}
+.plus-menu button,
+.plus-menu button + button {
+  border-radius: 22px;
   background: var(--material-strong);
   -webkit-backdrop-filter: blur(30px) saturate(1.8);
   backdrop-filter: blur(30px) saturate(1.8);
-  box-shadow: var(--shadow-lg);
-  animation: apple-pop 0.32s var(--spring) both;
-  transform-origin: 50% 100%;
-}
-.plus-menu button {
-  border-radius: 0;
-  background: transparent;
   color: var(--ink);
-  box-shadow: none;
-  padding: 12px 16px;
+  box-shadow: var(--shadow-lg), inset 0 0 0 0.5px var(--line);
+  padding: 11px 16px 11px 14px;
+}
+.plus-menu button,
+.plus-menu.is-leaving button,
+.plus-menu.at-top button,
+.plus-menu.at-top.is-leaving button {
   animation: none;
 }
-.plus-menu button + button {
-  box-shadow: inset 0 0.5px 0 var(--line-2);
+.plus-menu button {
+  transform-origin: 50% 100%;
+  transition: transform 0.6s var(--spring-bubble), opacity 0.2s ease;
+  transition-delay: calc(var(--i, 0) * 40ms);
 }
+@starting-style {
+  .plus-menu button {
+    opacity: 0;
+    transform: translateY(28px) scale(0.45);
+  }
+}
+.plus-menu.is-leaving button {
+  opacity: 0;
+  transform: translateY(20px) scale(0.55);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 1, 1), opacity 0.16s ease;
+  transition-delay: calc((var(--n, 1) - 1 - var(--i, 0)) * 18ms);
+}
+/* under the top bar's "+": from it, downward */
+.plus-menu.at-top button {
+  transform-origin: 0 0;
+}
+@starting-style {
+  .plus-menu.at-top button {
+    transform: translateY(-22px) scale(0.45);
+  }
+}
+.plus-menu.at-top.is-leaving button {
+  transform: translateY(-16px) scale(0.55);
+}
+/* pressed: at once, without moving (the bubble's own motion is the transform) */
 .plus-menu button:active {
   transform: none;
-  background: var(--hover-2);
+  background-image: linear-gradient(var(--hover-2), var(--hover-2));
 }
 .plus-menu-icon {
   background: var(--tint-bg);
@@ -1089,12 +1122,6 @@ a.badge {
 }
 .plus-menu-sub {
   color: var(--muted);
-}
-@keyframes apple-pop {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) scale(0.92);
-  }
 }
 
 /* messages: the system's banner - dark material, rounded, no coloured edge */
@@ -1411,6 +1438,23 @@ input[type='radio'] {
 @media (prefers-reduced-motion: reduce) {
   .plus-menu {
     animation: plus-fade 0.18s ease;
+  }
+  .plus-menu button,
+  .plus-menu.is-leaving button {
+    transition: opacity 0.16s ease;
+    transition-delay: 0s;
+  }
+  .plus-menu.is-leaving button,
+  .plus-menu.at-top.is-leaving button {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  @starting-style {
+    .plus-menu button,
+    .plus-menu.at-top button {
+      transform: none;
+    }
   }
   .btn:active:not(:disabled) {
     transform: none;

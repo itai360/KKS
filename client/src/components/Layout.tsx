@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
 import type { EntryRequest, Task, TaskRequest } from '@shared/types';
 import { pendingRequests, reportIssue } from '../lib/api';
@@ -675,7 +675,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [plusOpen, setPlusOpen] = useState(false);
   // where the "+" menu opened from: the phone bar's, or the top bar's on a computer
   const [plusAt, setPlusAt] = useState<'bar' | 'top'>('bar');
-  const plus = usePresence(plusOpen, 200);
+  // closing: kept while the bubbles sink back into the "+", the farthest first
+  const plus = usePresence(plusOpen, 300);
   useEffect(() => {
     setPlusOpen(false);
   }, [location.pathname]);
@@ -1275,6 +1276,17 @@ function PlusMenu({
       document.removeEventListener('pointerdown', onDown);
     };
   }, [onClose, anchorId]);
+  const items = [
+    { key: 'smart', icon: 'sparkle', title: 'הזנה חכמה', sub: 'כותבים במילים שלכם - עונש, אישור כניסה, פטור, משימה - והאפליקציה מזינה למקום הנכון', run: onSmart },
+    { key: 'task', icon: 'tasks', title: 'משימה', sub: 'משימה חדשה עם אחראי ודד-ליין', run: onTask },
+    ...(onEvent ? [{ key: 'event', icon: 'calendar', title: 'אירוע בלו"ז', sub: 'פעילות חדשה עם שעות, מיקום ואחראי', run: onEvent }] : []),
+    { key: 'weekly', icon: 'weekly', title: 'שבועי', sub: 'נושא, סגירה מקצועית או הערה לשבועי הקרוב', run: onWeekly },
+    { key: 'debrief', icon: 'lightbulb', title: 'לתחקיר השבוע', sub: 'לשימור, לשיפור או לקח - לתחקיר השבועי של השבוע הזה', run: onDebrief },
+    { key: 'procedure', icon: 'shield', title: 'אי עמידה בנהלים', sub: 'הפקרת נשק, נשק מאחורה, טלפון, דיגום - נרשם בתיק הצוער', run: onProcedure },
+  ];
+  // each action rises out of the "+" as a bubble of its own, the nearest first (styles: --i): above the
+  // phone bar's "+" - the lowest; under the top bar's - the highest. They sink back the other way round
+  const near = (i: number) => (at === 'top' ? i : items.length - 1 - i);
   return (
     <>
       {at === 'bar' && <div className={`plus-scrim${leaving ? ' is-leaving' : ''}`} aria-hidden="true" />}
@@ -1288,62 +1300,24 @@ function PlusMenu({
         inert={leaving || undefined}
         style={at === 'top' ? (spot ? { top: spot.top, left: spot.left } : { visibility: 'hidden' }) : undefined}
       >
-        <button type="button" role="menuitem" className="plus-menu-smart" onClick={onSmart}>
-          <span className="plus-menu-icon">
-            <Icon name="sparkle" />
-          </span>
-          <span className="grow">
-            <span className="plus-menu-title">הזנה חכמה</span>
-            <span className="plus-menu-sub">כותבים במילים שלכם - עונש, אישור כניסה, פטור, משימה - והאפליקציה מזינה למקום הנכון</span>
-          </span>
-        </button>
-        <button type="button" role="menuitem" onClick={onTask}>
-          <span className="plus-menu-icon">
-            <Icon name="tasks" />
-          </span>
-          <span className="grow">
-            <span className="plus-menu-title">משימה</span>
-            <span className="plus-menu-sub">משימה חדשה עם אחראי ודד-ליין</span>
-          </span>
-        </button>
-        {onEvent && (
-          <button type="button" role="menuitem" onClick={onEvent}>
+        {items.map((it, i) => (
+          <button
+            key={it.key}
+            type="button"
+            role="menuitem"
+            className={it.key === 'smart' ? 'plus-menu-smart' : undefined}
+            onClick={it.run}
+            style={{ '--i': near(i), '--n': items.length } as CSSProperties}
+          >
             <span className="plus-menu-icon">
-              <Icon name="calendar" />
+              <Icon name={it.icon} />
             </span>
             <span className="grow">
-              <span className="plus-menu-title">אירוע בלו"ז</span>
-              <span className="plus-menu-sub">פעילות חדשה עם שעות, מיקום ואחראי</span>
+              <span className="plus-menu-title">{it.title}</span>
+              <span className="plus-menu-sub">{it.sub}</span>
             </span>
           </button>
-        )}
-        <button type="button" role="menuitem" onClick={onWeekly}>
-          <span className="plus-menu-icon">
-            <Icon name="weekly" />
-          </span>
-          <span className="grow">
-            <span className="plus-menu-title">שבועי</span>
-            <span className="plus-menu-sub">נושא, סגירה מקצועית או הערה לשבועי הקרוב</span>
-          </span>
-        </button>
-        <button type="button" role="menuitem" onClick={onDebrief}>
-          <span className="plus-menu-icon">
-            <Icon name="lightbulb" />
-          </span>
-          <span className="grow">
-            <span className="plus-menu-title">לתחקיר השבוע</span>
-            <span className="plus-menu-sub">לשימור, לשיפור או לקח - לתחקיר השבועי של השבוע הזה</span>
-          </span>
-        </button>
-        <button type="button" role="menuitem" onClick={onProcedure}>
-          <span className="plus-menu-icon">
-            <Icon name="shield" />
-          </span>
-          <span className="grow">
-            <span className="plus-menu-title">אי עמידה בנהלים</span>
-            <span className="plus-menu-sub">הפקרת נשק, נשק מאחורה, טלפון, דיגום - נרשם בתיק הצוער</span>
-          </span>
-        </button>
+        ))}
       </div>
     </>
   );
