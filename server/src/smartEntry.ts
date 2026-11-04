@@ -336,6 +336,7 @@ export async function analyzeSmart(actor: UserRow, raw: unknown): Promise<SmartA
   const restText = formats.items.length ? formats.rest : text;
   let items: SmartItem[] | null = null;
   let source: SmartAnalysis['source'] = 'local';
+  let aiIssue: string | undefined;
   if (aiOn() && restText.trim()) {
     try {
       const ai = await askClaude(restText, ctx, actor);
@@ -345,11 +346,27 @@ export async function analyzeSmart(actor: UserRow, raw: unknown): Promise<SmartA
       }
     } catch (e) {
       console.error('[smart-entry] Claude did not read it, the built-in reading instead:', (e as Error)?.message);
+      aiIssue = aiIssueOf(e);
     }
   }
   items ??= restText.trim() ? analyzeLocal(restText, ctx) : [];
   items = [...formats.items, ...items];
-  return { source, aiAvailable: aiOn(), items: items.slice(0, SMART_MAX_ITEMS).map((it) => enrich(actor, it)) };
+  return { source, aiAvailable: aiOn(), ...(aiIssue ? { aiIssue } : {}), items: items.slice(0, SMART_MAX_ITEMS).map((it) => enrich(actor, it)) };
+}
+
+/** why Claude did not answer, as the staff can act on it (nothing of the key itself) */
+export function aiIssueOf(e: unknown): string {
+  const status = typeof (e as { status?: unknown })?.status === 'number' ? (e as { status: number }).status : 0;
+  const msg = String((e as Error)?.message ?? '');
+  if (status === 401) return 'המפתח של Claude בהגדרות השרת לא תקין - צריך להחליף אותו ב-ANTHROPIC_API_KEY';
+  if (status === 403) return 'למפתח של Claude אין הרשאה לשימוש הזה';
+  if (/credit balance|billing/i.test(msg)) return 'נגמר הקרדיט בחשבון Claude - צריך להוסיף קרדיט בחשבון שממנו נוצר המפתח';
+  if (status === 404) return 'המודל שהוגדר ב-KKS_AI_MODEL לא נמצא';
+  if (status === 429) return 'יותר מדי בקשות ל-Claude כרגע - נסו שוב בעוד דקה';
+  if (status === 529 || status >= 500) return 'Claude עמוס כרגע - נסו שוב בעוד כמה דקות';
+  if (/timed? ?out|timeout/i.test(msg)) return 'Claude לא ענה בזמן - אפשר לנסות שוב, או לחלק טקסט ארוך';
+  if (msg === 'refused') return 'Claude סירב לקרוא את הטקסט הזה';
+  return 'Claude לא ענה הפעם';
 }
 
 // ---------------- filing ----------------

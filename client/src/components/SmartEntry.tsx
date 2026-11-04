@@ -104,6 +104,7 @@ function SmartEntryDialog({ initial, onClose }: { initial: string; onClose: () =
   /** the items the writer left out */
   const [off, setOff] = useState<Set<string>>(new Set());
   const [source, setSource] = useState<SmartAnalysis['source']>('local');
+  const [aiIssue, setAiIssue] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<SmartResult[]>([]);
@@ -122,6 +123,7 @@ function SmartEntryDialog({ initial, onClose }: { initial: string; onClose: () =
       const a = await api.post<SmartAnalysis>('/api/smart/analyze', { text: t });
       setItems(a.items);
       setSource(a.source);
+      setAiIssue(a.aiIssue ?? null);
       setOff(new Set());
       setPhase('review');
       if (!a.items.length) setError('לא מצאתי בטקסט משהו להזין - נסו לכתוב מי, מה ומתי');
@@ -378,7 +380,7 @@ function SmartEntryDialog({ initial, onClose }: { initial: string; onClose: () =
             </div>
             {source !== 'ai' && items.length > 0 && (
               <p className="sm-check-note">
-                {ai ? 'Claude לא ענה הפעם, אז הטקסט נקרא בניתוח הבסיסי. ' : ''}כדאי לעבור על כל פריט: אם משהו לא במקום הנכון, אפשר להחליף לו מקום או להשלים פרטים לפני ההזנה.
+                {ai ? `${aiIssue ?? 'Claude לא ענה הפעם'}, אז הטקסט נקרא בניתוח הבסיסי. ` : ''}כדאי לעבור על כל פריט: אם משהו לא במקום הנכון, אפשר להחליף לו מקום או להשלים פרטים לפני ההזנה.
               </p>
             )}
             <ul className="sm-cards">

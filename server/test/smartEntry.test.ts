@@ -8,7 +8,7 @@ import type { SmartAnalysis, SmartItem, SmartResult } from '../../shared/smartEn
 import { getUserRow } from '../src/auth';
 import { db } from '../src/db';
 import { demoStep, saveGuide } from '../src/discipline';
-import { maskNumbers } from '../src/smartEntry';
+import { aiIssueOf, maskNumbers } from '../src/smartEntry';
 import { setTalkAiFetch } from '../src/talkAi';
 import { setup, staffMay, type Ctx } from './helpers';
 
@@ -260,5 +260,15 @@ describe('the numbers that stay here', () => {
     const { masked, values } = maskNumbers('מחר ב-10:00, 3.11, טלפון 050-1234567, ת"ז 123456789, רכב 12-345-67, 4 צוערים');
     expect(masked).toBe('מחר ב-10:00, 3.11, טלפון ⟦1⟧, ת"ז ⟦2⟧, רכב ⟦3⟧, 4 צוערים');
     expect(values).toEqual(['050-1234567', '123456789', '12-345-67']);
+  });
+});
+
+describe('why Claude did not answer', () => {
+  it('names what to fix, without the key', () => {
+    expect(aiIssueOf(Object.assign(new Error('invalid x-api-key'), { status: 401 }))).toMatch(/לא תקין/);
+    expect(aiIssueOf(Object.assign(new Error('Your credit balance is too low'), { status: 400 }))).toMatch(/קרדיט/);
+    expect(aiIssueOf(Object.assign(new Error('Overloaded'), { status: 529 }))).toMatch(/עמוס/);
+    expect(aiIssueOf(new Error('Request timed out.'))).toMatch(/בזמן/);
+    expect(aiIssueOf(new Error('something else'))).toBe('Claude לא ענה הפעם');
   });
 });

@@ -190,6 +190,8 @@ export interface SmartAnalysis {
   items: SmartItem[];
   /** Claude is set up on the server (the reading may still have been the built-in one, when it failed) */
   aiAvailable: boolean;
+  /** when Claude is set up and did not answer: why, in words the staff can act on */
+  aiIssue?: string;
 }
 
 /** what one item filed came to */
