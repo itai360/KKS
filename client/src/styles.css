@@ -717,6 +717,96 @@ html[data-scrolled] .topbar {
   font-size: 14px;
 }
 
+/* ---------- the X at a search field's end: what was typed goes in one tap (SearchInput.tsx) ---------- */
+.clear-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 20%, transparent);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, transform 0.1s ease-out;
+  animation: clear-x-in 0.18s ease-out;
+}
+.clear-x:hover {
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  color: var(--ink);
+}
+.clear-x:active {
+  transform: scale(0.88);
+}
+.clear-x:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+@keyframes clear-x-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clear-x {
+    animation: none;
+  }
+}
+/* the browser's own X (some show one in a search field) would be a second one */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+.search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+.search-field > input {
+  padding-inline-end: 38px;
+}
+.search-field > input[type='search'] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search-field > .clear-x {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 50%;
+  margin-top: -12px;
+}
+/* a field's own space under it goes around it with its X */
+.search-field:has(> .ka-search) {
+  margin-bottom: 10px;
+}
+.search-field > .ka-search {
+  margin-bottom: 0;
+}
+/* the top bar's search: the X takes the place of the shortcut's hint */
+.search > .clear-x {
+  position: absolute;
+  inset-inline-end: 7px;
+  top: 7px;
+}
+.search:has(> .clear-x) input {
+  padding-inline-end: 38px;
+}
+/* the list picker's search, in its sheet */
+.pick-sheet-search > .clear-x {
+  position: absolute;
+  inset-inline-end: 10px;
+}
+.pick-sheet-search > .input {
+  padding-inline-end: 40px;
+}
+
 .search > svg {
   position: absolute;
   right: 13px;

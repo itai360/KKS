@@ -19,6 +19,7 @@ import { dateKeyOf, fmtAgo, fmtTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { SearchInput } from '../components/SearchInput';
 
 const URL_RE = /(https?:\/\/[^\s<>"']+)/g;
 
@@ -171,7 +172,7 @@ export function AlignmentPage() {
         />
       ) : (
         <div className="col gap-16">
-          <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש בהודעות או לפי שם..." aria-label="חיפוש בהודעות" />
+          <SearchInput className="input" value={q} placeholder="חיפוש בהודעות או לפי שם..." aria-label="חיפוש בהודעות" onValue={setQ} />
           {!query && data.pinned.length > 0 && (
             <section className="card" aria-label="הודעות מוצמדות">
               <div className="card-head">

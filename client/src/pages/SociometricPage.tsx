@@ -15,6 +15,7 @@ import { api } from '../lib/api';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { SearchInput } from '../components/SearchInput';
 
 type View = 'summary' | 'criteria';
 type Sort = 'outliers' | 'team' | 'company';
@@ -182,7 +183,7 @@ export function SociometricPage() {
                 ))}
               </Select>
             )}
-            <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש צוער" aria-label="חיפוש צוער" style={{ maxWidth: 200 }} />
+            <SearchInput className="input" value={q} placeholder="חיפוש צוער" aria-label="חיפוש צוער" style={{ maxWidth: 200 }} onValue={setQ} />
           </div>
 
           {rows.length === 0 ? (

@@ -18,6 +18,7 @@ import { Count } from './Count';
 import { Highlight } from './Highlight';
 import { Icon } from './Icon';
 import { Empty, initials } from './ui';
+import { ClearX } from './SearchInput';
 
 export interface MenuSection {
   title?: string;
@@ -122,11 +123,7 @@ export function NavMenu({ sections: nav, onNavigate }: { sections: MenuSection[]
           aria-label="חיפוש מסך או כלי"
           aria-controls="navigation-results"
         />
-        {query && (
-          <button type="button" className="icon-btn" onClick={clear} aria-label="ניקוי החיפוש">
-            <Icon name="x" size={16} />
-          </button>
-        )}
+        <ClearX show={!!query} onClear={clear} />
       </div>
       {searching && (
         <p className="tiny muted nav-search-status" role="status">

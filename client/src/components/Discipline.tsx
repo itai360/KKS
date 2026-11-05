@@ -17,6 +17,7 @@ import { useToast } from './Toasts';
 import { ErrorBox, Modal } from './ui';
 import { matchesSearch } from '@shared/search';
 import { ask } from './Confirm';
+import { SearchInput } from './SearchInput';
 
 export { NotesBadge, noteTone } from './DisciplineCard';
 
@@ -114,7 +115,7 @@ export function GuideView({ guide }: { guide: DisciplineGuide }) {
   const categories = [...new Set(offenses.map((o) => o.category))];
   return (
     <div className="col gap-16">
-      <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש מקרה..." aria-label="חיפוש מקרה" data-transient />
+      <SearchInput className="input" value={q} placeholder="חיפוש מקרה..." aria-label="חיפוש מקרה" data-transient onValue={setQ} />
       {categories.map((cat) => (
         <section key={cat || '-'} className="col gap-6">
           {cat && <div className="label-caps">{cat}</div>}

@@ -23,6 +23,7 @@ import { api } from '../../lib/api';
 import { useMedia } from '../../lib/media';
 import { BOTTOM_BAR_MEDIA } from '../../lib/bottomBar';
 import { CategoryDot, StatusPill } from './common';
+import { SearchInput } from '../SearchInput';
 
 export type TrackFilter = 'all' | 'open' | 'write' | 'deliver' | 'done';
 const FILTERS: { value: TrackFilter; label: string }[] = [
@@ -203,7 +204,7 @@ export function Tracking({ view, filter, setFilter, mutate }: { view: TakpatzTea
       <div className="tk-toolbar">
         <Seg value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ value: f.value, label: `${f.label} ${counts[f.value] ?? 0}` }))} />
         <div className="tk-toolbar-row">
-          <input className="input tk-search" type="search" placeholder="חיפוש צוער או התנסות" value={q} onChange={(e) => setQ(e.target.value)} aria-label="חיפוש" />
+          <SearchInput className="input tk-search" placeholder="חיפוש צוער או התנסות" value={q} aria-label="חיפוש" onValue={setQ} />
           <Select value={cadet} onChange={(e) => setCadet(e.target.value)} aria-label="צוער" fit>
             <option value="">כל הצוערים</option>
             {view.cadets.map((c) => (

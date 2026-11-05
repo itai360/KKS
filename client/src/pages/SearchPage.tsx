@@ -13,6 +13,7 @@ import { matchesSearch } from '@shared/search';
 import { useApi } from '../lib/useApi';
 import { safeUrl } from '../lib/safeUrl';
 import { readRecent, rememberSearch, writeRecent } from '../lib/recentSearches';
+import { SearchInput } from '../components/SearchInput';
 
 export function SearchPage() {
   const [params, setParams] = useSearchParams();
@@ -73,7 +74,7 @@ export function SearchPage() {
           results.current?.querySelector<HTMLAnchorElement>('a[href]')?.click();
         }}
       >
-        <input className="input" type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder="משימה, איש סגל, צוער, שבוע, תחקיר, מסמך או מילת מפתח" autoFocus aria-label="חיפוש" enterKeyHint="go" />
+        <SearchInput className="input" value={text} placeholder="משימה, איש סגל, צוער, שבוע, תחקיר, מסמך או מילת מפתח" autoFocus aria-label="חיפוש" enterKeyHint="go" onValue={setText} />
         <span className="btn btn-sm btn-ghost" style={{ pointerEvents: 'none' }}>
           <Icon name="search" />
         </span>

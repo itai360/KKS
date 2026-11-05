@@ -28,6 +28,7 @@ import { useApi } from '../lib/useApi';
 import { ask } from '../components/Confirm';
 import { onTabListKey, tabProps } from '../lib/tabKeys';
 import { WordButton } from '../components/DocNav';
+import { SearchInput } from '../components/SearchInput';
 
 const ADD_PLACEHOLDER: Record<DebriefItemKind, string> = {
   fact: 'הוספת עובדה...',
@@ -237,7 +238,7 @@ function LessonsBank() {
       ) : (
         <>
           <div className="row wrap gap-6 mb-12">
-            <input className="input grow" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לקח, שבוע או מופע..." aria-label="חיפוש בבנק הלקחים" style={{ maxWidth: 360 }} />
+            <SearchInput className="input grow" value={q} placeholder="חיפוש לקח, שבוע או מופע..." aria-label="חיפוש בבנק הלקחים" style={{ maxWidth: 360 }} onValue={setQ} />
             <Seg
               value={kind}
               onChange={setKind}

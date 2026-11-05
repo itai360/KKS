@@ -65,6 +65,7 @@ import { safeUrl } from '../lib/safeUrl';
 import { ask } from '../components/Confirm';
 import { Link } from 'react-router';
 import { takesKeys } from '../lib/keyboard';
+import { ClearX } from '../components/SearchInput';
 
 const ALL_VIEWS: CalView[] = ['agenda', 'day', 'three', 'four', 'week', 'month', 'year'];
 /** the pages beside the calendar (drawn to be seen, not used) */
@@ -255,6 +256,18 @@ export function SchedulePage() {
   const menuBtn = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const searching = !!q || (phone && searchOpen);
+  // the search field's words as typed (it is read on "search"): the X at its end shows while there are any
+  const [searchText, setSearchText] = useState(q ?? '');
+  const searchField = useRef<HTMLInputElement>(null);
+  const refocusSearch = useRef(false);
+  useEffect(() => {
+    setSearchText(q ?? '');
+    // cleared with the X: the field (made anew for the new words) keeps the focus to type again
+    if (refocusSearch.current) {
+      refocusSearch.current = false;
+      searchField.current?.focus();
+    }
+  }, [q]);
   const [miniFor, setMiniFor] = useState<{ day: string; month: string } | null>(null);
   const miniMonth = miniFor?.day === focus ? miniFor.month : focus;
   const miniShown = phone && pickerOpen && view !== 'month';
@@ -760,7 +773,30 @@ export function SchedulePage() {
         >
           <Icon name="chevronRight" size={22} />
         </button>
-        <input key={q} name="q" defaultValue={q} className="cal-search-input" placeholder="חיפוש אירועים" aria-label="חיפוש אירועים" enterKeyHint="search" autoComplete="off" autoFocus={phone && !q} />
+        <input
+          key={q}
+          ref={searchField}
+          name="q"
+          defaultValue={q}
+          onInput={(e) => setSearchText(e.currentTarget.value)}
+          className="cal-search-input"
+          placeholder="חיפוש אירועים"
+          aria-label="חיפוש אירועים"
+          enterKeyHint="search"
+          autoComplete="off"
+          autoFocus={phone && !q}
+        />
+        <ClearX
+          show={!!searchText}
+          onClear={() => {
+            setSearchText('');
+            if (searchField.current) searchField.current.value = '';
+            if (q) {
+              refocusSearch.current = true;
+              set({ q: null, event: null });
+            } else searchField.current?.focus();
+          }}
+        />
         <button type="submit" className="icon-btn" aria-label="חיפוש" title="חיפוש">
           <Icon name="search" size={20} />
         </button>

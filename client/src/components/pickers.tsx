@@ -31,6 +31,7 @@ import { usePresence } from '../lib/presence';
 import { usePeriodSwipe } from './periodSwipe';
 import { lockScroll } from '../lib/scrollLock';
 import { trapFocus } from '../lib/focusTrap';
+import { ClearX } from './SearchInput';
 
 // ---------------- the floating layer ----------------
 
@@ -599,6 +600,7 @@ export function Select({ value, onChange, children, className = 'select', style,
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onKey}
               />
+              <ClearX show={!!query} onClear={() => setQuery('')} />
             </div>
           }
         >

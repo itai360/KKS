@@ -16,6 +16,7 @@ import { telHref, vcard, waHref } from '../lib/contact';
 import { saveFile } from '../lib/download';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
+import { SearchInput } from '../components/SearchInput';
 
 export function DirectoryPage() {
   const { users, settings, user, isCommander } = useSession();
@@ -63,7 +64,7 @@ export function DirectoryPage() {
             { value: 'cadets', label: `צוערים (${cadets.data?.length ?? '...'})` },
           ]}
         />
-        <input className="input grow" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש שם, צוות או מספר..." aria-label="חיפוש איש קשר" style={{ maxWidth: 320 }} />
+        <SearchInput className="input grow" value={q} placeholder="חיפוש שם, צוות או מספר..." aria-label="חיפוש איש קשר" style={{ maxWidth: 320 }} onValue={setQ} />
       </div>
 
       {q.trim() && (

@@ -15,6 +15,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { safeUrl } from '../lib/safeUrl';
 import { ask } from '../components/Confirm';
+import { SearchInput } from '../components/SearchInput';
 
 /** the documents this person opened last, on this device - the first ones back at the top of the library */
 const recentKey = (userId: number) => `kks.docs.recent.${userId}`;
@@ -92,7 +93,7 @@ export function DocumentsPage() {
         ))}
       </div>
       <div className="filters">
-        <input className="input" placeholder="חיפוש מסמך..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <SearchInput className="input" placeholder="חיפוש מסמך..." value={q} onValue={setQ} />
       </div>
       <ErrorBox error={error} />
       {/* opened lately: one tap back to them */}

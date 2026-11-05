@@ -25,6 +25,7 @@ import { useToast } from '../components/Toasts';
 import { useDraft } from '../lib/draft';
 import { useApi, useTick } from '../lib/useApi';
 import { safeUrl } from '../lib/safeUrl';
+import { SearchInput } from '../components/SearchInput';
 
 export function TaskPage() {
   const { id } = useParams();
@@ -598,7 +599,7 @@ function AddDependency({ detail, onClose, onChange }: { detail: TaskDetail; onCl
   const exclude = new Set([detail.task.id, ...detail.dependsOn.map((d) => d.id)]);
   return (
     <Modal title="המשימה תלויה ב..." onClose={onClose}>
-      <input className="input" placeholder="חיפוש משימה..." value={q} onChange={(e) => setQ(e.target.value)} data-autofocus data-transient />
+      <SearchInput className="input" placeholder="חיפוש משימה..." value={q} data-autofocus data-transient onValue={setQ} />
       <div className="col gap-6 mt-12" style={{ maxHeight: 360, overflowY: 'auto' }}>
         {(data ?? [])
           .filter((t) => !exclude.has(t.id))

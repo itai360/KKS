@@ -12,6 +12,7 @@ import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { useMedia } from '../lib/media';
 import { readRecent, rememberSearch } from '../lib/recentSearches';
 import { useSession } from '../lib/session';
+import { ClearX } from './SearchInput';
 
 export function TopSearch({ pages }: { pages: FindPage[] }) {
   const navigate = useNavigate();
@@ -119,9 +120,21 @@ export function TopSearch({ pages }: { pages: FindPage[] }) {
         aria-autocomplete="list"
         autoComplete="off"
       />
-      <button type="button" className="search-palette hide-mobile" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))} aria-label="פקודה מהירה" aria-keyshortcuts="Control+K" title="פקודה מהירה: מסך, פעולה או פריט">
-        <span className="kbd">Ctrl K</span>
-      </button>
+      {/* what was typed goes in a tap; with nothing typed, the shortcut's hint is there instead */}
+      {q ? (
+        <ClearX
+          show
+          onClear={() => {
+            setQ('');
+            setOpen(true);
+            input.current?.focus();
+          }}
+        />
+      ) : (
+        <button type="button" className="search-palette hide-mobile" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))} aria-label="פקודה מהירה" aria-keyshortcuts="Control+K" title="פקודה מהירה: מסך, פעולה או פריט">
+          <span className="kbd">Ctrl K</span>
+        </button>
+      )}
       {shown && (
         <div className="search-pop" onMouseDown={(e) => e.preventDefault()}>
           <div className="search-pop-list" id="top-search-list" role="listbox" aria-label="תוצאות החיפוש" ref={list}>

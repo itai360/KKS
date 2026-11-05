@@ -11,6 +11,7 @@ import { useId, useMemo, useRef, useState } from 'react';
 import { matchesSearch } from '@shared/search';
 import { ALL_TRAITS, groupPlace, groupProblem, TRAIT_AXES, traitAxis, traitName, traitSubAxis, traitsUnder, type TraitGroup } from '@shared/evaluationTraits';
 import { Icon } from './Icon';
+import { SearchInput } from './SearchInput';
 
 /** a group being chosen: its traits by id */
 export interface DraftGroup {
@@ -128,7 +129,7 @@ function GroupEditor({
         <>
           <div className="tp-search">
             <Icon name="search" size={16} />
-            <input className="input" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חיפוש מאפיין בכל הצירים" aria-label="חיפוש מאפיין בכל הצירים" data-transient />
+            <SearchInput className="input" value={search} placeholder="חיפוש מאפיין בכל הצירים" aria-label="חיפוש מאפיין בכל הצירים" data-transient onValue={setSearch} />
           </div>
           {search.trim() ? (
             found.length ? (
@@ -192,7 +193,7 @@ function GroupEditor({
           {options.length > 8 && (
             <div className="tp-search tp-filter">
               <Icon name="search" size={15} />
-              <input className="input" type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="סינון המאפיינים" aria-label="סינון המאפיינים" data-transient />
+              <SearchInput className="input" value={filter} placeholder="סינון המאפיינים" aria-label="סינון המאפיינים" data-transient onValue={setFilter} />
             </div>
           )}
           <div className="tp-options" role="group" aria-label={`מאפיינים ב${groupPlace(g)}`}>

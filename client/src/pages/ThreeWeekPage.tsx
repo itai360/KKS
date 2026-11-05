@@ -24,6 +24,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { usePageTitle } from '../lib/title';
 import { useApi } from '../lib/useApi';
+import { SearchInput } from '../components/SearchInput';
 
 const TOPICS = ['plans', 'weeks', 'events', 'tasks', 'users', 'cadets', 'debriefs'];
 const NAME = 'אישור תוכניות תלת שבועי';
@@ -216,7 +217,7 @@ function KeyAdd({ weekId, days: asked, onClose }: { weekId: number; days: Days |
           : 'אירועים מהלו"ז של התקופה שלא נכנסו ללו"ז המפתח מעצמם - שיעורים, פגישות ועוד. מה שתסמנו ייכנס לתלת שבועי ולתוכנית של השבוע שלו.'}
       </p>
       {(!only || pool.length >= SEARCH_FROM) && (
-        <input className="input ka-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי שם או מקום" aria-label="חיפוש אירוע" />
+        <SearchInput className="input ka-search" value={q} placeholder="חיפוש לפי שם או מקום" aria-label="חיפוש אירוע" onValue={setQ} />
       )}
       {error && <p className="small text-red">{error}</p>}
       {loading && !data ? (

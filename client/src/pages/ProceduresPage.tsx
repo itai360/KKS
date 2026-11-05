@@ -25,6 +25,7 @@ import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { saveSheet } from '../lib/sheet';
 import { useApi } from '../lib/useApi';
+import { SearchInput } from '../components/SearchInput';
 
 type Period = '' | 'week' | 'last';
 const PERIODS: { key: Period; label: string }[] = [
@@ -211,7 +212,7 @@ export function ProceduresPage() {
             ))}
           </div>
           <div className="filters proc-filters">
-            <input className="input" placeholder="חיפוש צוער" value={q} onChange={(e) => setQ(e.target.value)} aria-label="חיפוש צוער" />
+            <SearchInput className="input" placeholder="חיפוש צוער" value={q} aria-label="חיפוש צוער" onValue={setQ} />
             {teams.length > 1 && (
               <Select className="select" value={team} onChange={(e) => set('team', e.target.value)} aria-label="צוות">
                 <option value="">כל הצוותים</option>
