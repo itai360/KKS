@@ -571,6 +571,8 @@ export interface Notification {
   snoozedUntil: string | null;
   /** what it is about is finished (or it was the news of something done): heard as it comes, not kept in the bell */
   finished?: boolean;
+  /** as it pops up the moment it comes - as on the phone: the thing itself, then what happened to it (only then) */
+  pop?: { title: string; body: string };
 }
 
 export type AttentionKind =

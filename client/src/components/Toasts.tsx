@@ -67,22 +67,28 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       onNotification((n) => {
+        // as it pops up on the phone: the thing itself first, then what happened to it (the list keeps it whole)
+        const { title, body } = n.pop ?? n;
         // the panel or the page is open: it comes in there, with no message on top
         if (!listInSight())
           push({
-            title: n.title,
-            body: n.body,
+            title,
+            body,
             link: n.link,
             tone: n.category === 'exception' ? 'red' : n.category === 'action' ? 'blue' : 'green',
           });
         // when the tab is in the background, surface it as a system notification (if allowed)
         if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-          const sys = new Notification(n.title, { body: n.body, lang: 'he', dir: 'rtl', tag: `kks-${n.id}`, icon: '/icon-192.png' });
-          sys.onclick = () => {
-            window.focus();
-            if (n.link) navigate(n.link);
-            sys.close();
-          };
+          try {
+            const sys = new Notification(title, { body, lang: 'he', dir: 'rtl', tag: `kks-${n.id}`, icon: '/icon-192.png' });
+            sys.onclick = () => {
+              window.focus();
+              if (n.link) navigate(n.link);
+              sys.close();
+            };
+          } catch {
+            // a phone's browser shows these only from the service worker - the push brings it there
+          }
         }
       }),
     [push, navigate],

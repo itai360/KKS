@@ -442,7 +442,7 @@ describe('web push', () => {
     await newTask(c.cmd, { title: 'תיאום מטווח', ownerIds: [c.ids.s1] });
     await new Promise((r) => setTimeout(r, 20));
     expect(sent).toHaveLength(1);
-    expect(sent[0].payload).toMatchObject({ title: 'נוספה לך משימה חדשה: "תיאום מטווח"' });
+    expect(sent[0].payload).toMatchObject({ title: 'תיאום מטווח' });
     expect(sent[0].payload.link).toMatch(/^\/tasks\/\d+$/);
   });
 
@@ -469,7 +469,7 @@ describe('web push', () => {
     });
     await new Promise((r) => setTimeout(r, 20));
     expect(sent[0].payload).toMatchObject({
-      title: 'נוספה לך משימה חדשה: "תיאום מטווח"',
+      title: 'תיאום מטווח',
       body: 'דד-ליין: מחר 14:00 (נותרו יום) · עדיפות גבוהה\nמאת מפקד הקורס\nפירוט: להזמין את המטווח ולתאם תחמושת',
     });
     // the reminder: the deadline in plain words, and what the task is
@@ -477,7 +477,7 @@ describe('web push', () => {
     runAutomation();
     await new Promise((r) => setTimeout(r, 20));
     expect(sent.at(-1)!.payload).toMatchObject({
-      title: 'נותרו 24 שעות לסיום המשימה "תיאום מטווח"',
+      title: 'תיאום מטווח',
       body: 'דד-ליין: מחר 14:00 (נותרו 23 שעות) · עדיפות גבוהה\nפירוט: להזמין את המטווח ולתאם תחמושת',
     });
   });

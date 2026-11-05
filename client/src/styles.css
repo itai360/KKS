@@ -3665,6 +3665,13 @@ input::-webkit-date-and-time-value {
 .toast .t-body {
   font-size: 12.5px;
   opacity: 0.8;
+  /* a notification's lines (what happened, the deadline, what it is about) - four at most */
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
 }
 
 @keyframes slide {

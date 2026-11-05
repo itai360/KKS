@@ -5,6 +5,7 @@ import type { Notification } from '../../shared/types';
 import { nowIso } from './core';
 import { db, type Param } from './db';
 import { sendPush } from './push';
+import { pushContent } from './pushText';
 import { broadcast, pushNotification, pushNotificationState, type Topic } from './realtime';
 import { forgetStaffGroups } from './staffGroups';
 
@@ -240,16 +241,20 @@ export function wakeSnoozed(now: string): number {
   return resurface(due.filter((r) => !r.finished));
 }
 
+/** a new one is heard at once: on the person's open screens - popping up as it does on the phone, the thing
+ * itself first (pushText.ts) - and on the phone */
+function heard(userId: number, n: Notification): void {
+  pushNotification(userId, { ...n, pop: pushContent(userId, n) });
+  void sendPush(userId, n).catch((e) => console.error('[push]', e));
+}
+
 function resurface(rows: NotificationRow[]): number {
   const at = nowIso();
   for (const r of rows) {
     db().run('UPDATE notifications SET snoozed_until = NULL, read_at = NULL, created_at = ? WHERE id = ?', at, r.id);
     notificationsChanged(r.user_id);
     const n = toNotification({ ...r, read_at: null, created_at: at, snoozed_until: null, finished: null });
-    db().onCommit(() => {
-      pushNotification(r.user_id, n);
-      void sendPush(r.user_id, n).catch((e) => console.error('[push]', e));
-    });
+    db().onCommit(() => heard(r.user_id, n));
   }
   return rows.length;
 }
@@ -289,10 +294,6 @@ export function notify(userIds: Iterable<number | null | undefined>, n: NotifyIn
     // the news of something done is finished as it comes: it is heard (a message, the phone), not kept in the bell
     const row = db().get<NotificationRow>(`${NOTIFICATION_ROWS} WHERE n.id = ?`, id)!;
     notificationsChanged(uid);
-    db().onCommit(() => {
-      const n = toNotification(row);
-      pushNotification(uid, n);
-      void sendPush(uid, n).catch((e) => console.error('[push]', e));
-    });
+    db().onCommit(() => heard(uid, toNotification(row)));
   }
 }
