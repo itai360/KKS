@@ -13,8 +13,9 @@ import { useMedia } from '../lib/media';
 import { Icon } from './Icon';
 import { Modal } from './ui';
 
-/** what a click inside does not count as "outside": the pickers' lists and calendars, dialogs, toasts */
-const INSIDE = '.cal-pop, .pop, .sheet-backdrop, .modal-backdrop, .toasts';
+/** what a click inside does not count as "outside": the pickers' lists and calendars, dialogs, toasts - and
+ * the new event's own block in the calendar, moved and stretched while its card is open */
+const INSIDE = '.cal-pop, .pop, .sheet-backdrop, .modal-backdrop, .toasts, [data-draft]';
 
 export interface Anchor {
   top: number;
@@ -78,7 +79,7 @@ export function Popover({
       const beside = leftRoom >= w + gap || rightRoom >= w + gap;
       const wantTop = beside ? anchor.top : anchor.bottom + gap + h <= innerHeight - 12 ? anchor.bottom + gap : anchor.top - gap - h;
       const top = Math.max(12, Math.min(innerHeight - h - 12, wantTop));
-      setPos({ top, left, width: w });
+      setPos((was) => ({ top, left, width: w, ...(was.visibility === 'hidden' ? {} : { transition: 'top 0.22s var(--spring), left 0.22s var(--spring)' }) }));
     };
     place();
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
@@ -106,7 +107,8 @@ export function Popover({
     const back = document.activeElement as HTMLElement | null;
     const onDown = (e: PointerEvent) => {
       const t = e.target as Element;
-      if (t.closest(INSIDE)) return;
+      // a calendar's free time pressed: the new event moves there (the card stays, with what was typed in it)
+      if (t.closest(INSIDE) || t.matches('[data-pop-keep]')) return;
       close.current();
     };
     const onKey = (e: KeyboardEvent) => {

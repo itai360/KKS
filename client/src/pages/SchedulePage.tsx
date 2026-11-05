@@ -7,7 +7,7 @@
 // calendars are layers - each loaded only while it is shown, through the API that says what each person
 // may see.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DAY_MINUTES, fromMinutes, MONTH_NAMES, monthWeeks, stepDate, toMinutes, viewDays, viewTitle } from '@shared/calendarGrid';
 import {
@@ -390,6 +390,17 @@ export function SchedulePage() {
   // the new event being made; on a phone first only chosen (pending: an outlined box, as Google Calendar's app),
   // its sheet opening when the box is tapped
   const [draft, setDraft] = useState<(Draft & { anchor: Anchor; pending?: boolean }) | null>(null);
+  // a computer: the new event's block moved or stretched - its card follows it, beside it where it now is
+  useLayoutEffect(() => {
+    if (phone || !draft || draft.pending) return;
+    const block = document.querySelector<HTMLElement>('.gc-event[data-draft]');
+    if (!block) return;
+    const r = block.getBoundingClientRect();
+    const a = draft.anchor;
+    if (Math.abs(r.top - a.top) < 2 && Math.abs(r.left - a.left) < 2 && Math.abs(r.bottom - a.bottom) < 2) return;
+    setDraft((d) => (d ? { ...d, anchor: { top: r.top, bottom: r.bottom, left: r.left, right: r.right } } : d));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- when the block is put elsewhere
+  }, [draft?.date, draft?.start, draft?.end, draft?.allDay, phone]);
   // a time only chosen goes when the days shown change (or the screen stops being a phone's), or on Escape
   useEffect(() => {
     setDraft((d) => (d?.pending ? null : d));
@@ -868,7 +879,9 @@ export function SchedulePage() {
               // and as long as it was made
               setDraft((prev) => {
                 // a phone: first only chosen - the box, its handles and its hours; a tap on it opens it
-                if (!prev || !phone) return phone ? { ...place, pending: true } : place;
+                if (!prev) return phone ? { ...place, pending: true } : place;
+                // a computer, its card open: the new event goes to the time pressed or drawn, with what was typed
+                if (!phone) return { ...prev, ...place };
                 if (d.start && prev.start && prev.end && !prev.allDay) {
                   const from = toMinutes(d.start);
                   const len = Math.max(15, toMinutes(prev.end) - toMinutes(prev.start));

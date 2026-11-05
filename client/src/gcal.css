@@ -1698,7 +1698,11 @@
   position: fixed;
   z-index: 90;
   max-height: calc(100dvh - 24px);
-  overflow: auto;
+  /* only up and down, and only when the window is short: nothing in it is wider than it */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   border-radius: 16px;
   background: var(--card);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.12);
@@ -2528,10 +2532,9 @@
   flex-shrink: 0;
 }
 .g-color-menu {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 4px);
-  inset-inline-start: 0;
+  /* over the page, placed by its button (EventDialogs.tsx): never cut by the card it opens from */
+  position: fixed;
+  z-index: 140;
   display: grid;
   grid-template-columns: repeat(6, 28px);
   gap: 8px;
@@ -3084,6 +3087,23 @@
 }
 .g-qc .qc-foot {
   align-items: center;
+}
+/* a short window: the card scrolls, its buttons stay in sight at its foot */
+.cal-pop.g-qc .qc-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-inline: -16px;
+  margin-bottom: -16px;
+  padding: 10px 16px 16px;
+  background: var(--card);
+}
+/* while the new event's block is moved or a new time drawn, its card steps aside; it comes back beside the
+   block where it is let go */
+.cal-dragging .cal-pop.g-qc {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-out;
 }
 
 
@@ -4598,6 +4618,55 @@
     from {
       opacity: 0;
     }
+  }
+}
+
+/* ---------------- a computer's new event: its block in hand while its card is open ---------------- */
+
+/* it appears where the time was pressed - grown from its start - and glides when put elsewhere */
+.gc-event.is-ghost.is-draft {
+  pointer-events: auto;
+  cursor: grab;
+  z-index: 6;
+  animation: draft-in 0.2s var(--spring) backwards;
+  transform-origin: top center;
+  transition: top 0.18s var(--spring), height 0.18s var(--spring);
+}
+.gc-event.is-ghost.is-draft.is-dragged {
+  z-index: 7;
+  cursor: grabbing;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  transition: none;
+}
+@keyframes draft-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.4);
+  }
+}
+/* its top and bottom edges: stretched to start earlier or end later */
+.gc-draft-edge {
+  position: absolute;
+  inset-inline: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+.gc-draft-edge.is-start {
+  top: -2px;
+}
+.gc-draft-edge.is-end {
+  bottom: -2px;
+}
+/* the time being drawn, before the mouse lets go: lifted a little, its hours in it */
+.gc-col > .gc-event.is-ghost:not(.is-draft) {
+  animation: draft-in 0.14s ease-out backwards;
+  transform-origin: top center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-event.is-ghost.is-draft,
+  .gc-col > .gc-event.is-ghost:not(.is-draft) {
+    animation: none;
+    transition: none;
   }
 }
 

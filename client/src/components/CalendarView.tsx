@@ -221,6 +221,11 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
   // the hours scrolled under the rows above them: a shadow under those, as the app has
   const [scrolled, setScrolled] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
+  const drawing = drag?.kind === 'create';
+  useEffect(() => {
+    document.documentElement.classList.toggle('cal-dragging', drawing);
+    return () => document.documentElement.classList.remove('cal-dragging');
+  }, [drawing]);
   const suppressClick = useRef(false);
 
   const timed = items.filter((i) => isTimed(i) && days.includes(i.date));
@@ -675,6 +680,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                 key={d}
                 className={`gc-col${d === today ? ' is-today' : ''}${canCreate(d) ? ' can-create' : ''}`}
                 data-date={d}
+                data-pop-keep
                 onPointerDown={(ev) => startCreate(ev, d)}
                 onClick={(ev) => clickColumn(ev, d)}
                 // a long press is ours on a phone, not the browser's menu
@@ -767,24 +773,33 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                   return (
                     <div
                       key="draft"
-                      className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}${app && onDraftMove ? ' is-draft' : ''}${held ? ' is-dragged' : ''}${app && draft!.pending ? ' is-selecting' : ''}`}
+                      data-draft
+                      className={`gc-event is-ghost${draft!.color ? ` c-${draft!.color}` : ''}${onDraftMove ? ' is-draft' : ''}${held ? ' is-dragged' : ''}${app && draft!.pending ? ' is-selecting' : ''}`}
                       role={app && draft!.pending ? 'button' : undefined}
                       aria-label={app && draft!.pending ? `אירוע חדש ${range(at.start, at.end)} - הקשה לפתיחה` : undefined}
+                      title={!app && onDraftMove ? 'גרירה מזיזה את האירוע, הקצוות משנים את השעות' : undefined}
                       style={{
                         top: `calc(var(--hour) * ${hours(at.start)})`,
                         height: `calc(var(--hour) * ${hours(Math.max(at.end - at.start, app ? APP_MIN_VISIBLE : MIN_VISIBLE))} - 2px)`,
                         ...(held?.dx ? { transform: `translateX(${held.dx}px)` } : {}),
                       }}
-                      onPointerDown={app && onDraftMove ? (ev) => startDraftDrag(ev, 'move') : undefined}
+                      onPointerDown={onDraftMove ? (ev) => startDraftDrag(ev, 'move') : undefined}
                     >
                       <span className="gc-event-title">{draftTitle}</span>
                       <span className="gc-event-meta">{range(at.start, at.end)}</span>
-                      {app && onDraftMove && (
-                        <>
-                          <span className="gc-draft-handle is-start" onPointerDown={(ev) => startDraftDrag(ev, 'start')} aria-hidden="true" />
-                          <span className="gc-draft-handle is-end" onPointerDown={(ev) => startDraftDrag(ev, 'end')} aria-hidden="true" />
-                        </>
-                      )}
+                      {onDraftMove &&
+                        (app ? (
+                          <>
+                            <span className="gc-draft-handle is-start" onPointerDown={(ev) => startDraftDrag(ev, 'start')} aria-hidden="true" />
+                            <span className="gc-draft-handle is-end" onPointerDown={(ev) => startDraftDrag(ev, 'end')} aria-hidden="true" />
+                          </>
+                        ) : (
+                          // a computer: its top and bottom edges stretch it, as an event's bottom edge does
+                          <>
+                            <span className="gc-draft-edge is-start" onPointerDown={(ev) => startDraftDrag(ev, 'start')} aria-hidden="true" />
+                            <span className="gc-draft-edge is-end" onPointerDown={(ev) => startDraftDrag(ev, 'end')} aria-hidden="true" />
+                          </>
+                        ))}
                     </div>
                   );
                 })()}

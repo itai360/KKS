@@ -3,7 +3,8 @@
 // colour menu, the notifications, the guests with their answers - and, KKS's own, moving the preparation
 // tasks' deadlines with a moved event.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { CAL_COLOR_LABELS, CAL_COLORS, type CalColor } from '@shared/calendarLayers';
 import { addDays, parseDateKey, weekdayOf } from '@shared/dates';
 import { describeRRule, formatRRule, parseRRule, placeInMonth, repeatPresets, WEEKDAY_WORDS, WEEKDAYS, type Freq, type RRule, type Weekday } from '@shared/rrule';
@@ -225,9 +226,33 @@ export function RecurrenceDialog({ date, value, onDone, onClose }: { date: strin
 export function ColorMenu({ value, onChange, calendarColor = 'blue' }: { value: CalColor | null; onChange: (c: CalColor | null) => void; calendarColor?: CalColor }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  // the swatches float over the page (not inside the card, which would cut them): under the button, or above
+  // it when there is no room below - toward the inside of the window either way
+  const [at, setAt] = useState<CSSProperties>({ visibility: 'hidden', top: 0, left: 0 });
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const b = ref.current?.getBoundingClientRect();
+      const m = menu.current;
+      if (!b || !m) return;
+      const w = m.offsetWidth;
+      const h = m.offsetHeight;
+      const left = Math.max(8, Math.min(innerWidth - w - 8, b.right - w));
+      const top = b.bottom + 4 + h <= innerHeight - 8 ? b.bottom + 4 : Math.max(8, b.top - 4 - h);
+      setAt({ top, left });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
   useEffect(() => {
     if (!open) return;
-    const off = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const off = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && !menu.current?.contains(e.target as Node) && setOpen(false);
     const key = (e: KeyboardEvent) => e.key === 'Escape' && (e.stopPropagation(), setOpen(false));
     document.addEventListener('pointerdown', off);
     document.addEventListener('keydown', key, true);
@@ -243,18 +268,21 @@ export function ColorMenu({ value, onChange, calendarColor = 'blue' }: { value: 
         <span className={`g-dot c-${shown}`} />
         <Icon name="chevronDown" size={16} />
       </button>
-      {open && (
-        <div className="g-color-menu" role="radiogroup" aria-label="צבע האירוע">
-          <button type="button" role="radio" aria-checked={!value} className={`g-swatch c-${calendarColor}${!value ? ' on' : ''}`} onClick={() => (onChange(null), setOpen(false))} title="צבע היומן" aria-label="צבע היומן">
-            {!value && <Icon name="check" size={14} />}
-          </button>
-          {CAL_COLORS.map((c) => (
-            <button key={c} type="button" role="radio" aria-checked={value === c} className={`g-swatch c-${c}${value === c ? ' on' : ''}`} onClick={() => (onChange(c), setOpen(false))} title={CAL_COLOR_LABELS[c]} aria-label={CAL_COLOR_LABELS[c]}>
-              {value === c && <Icon name="check" size={14} />}
+      {open &&
+        createPortal(
+          // "pop": a press in it is not a press outside the card it was opened from (Popover.tsx)
+          <div ref={menu} className="g-color-menu pop" role="radiogroup" aria-label="צבע האירוע" dir="rtl" style={at}>
+            <button type="button" role="radio" aria-checked={!value} className={`g-swatch c-${calendarColor}${!value ? ' on' : ''}`} onClick={() => (onChange(null), setOpen(false))} title="צבע היומן" aria-label="צבע היומן">
+              {!value && <Icon name="check" size={14} />}
             </button>
-          ))}
-        </div>
-      )}
+            {CAL_COLORS.map((c) => (
+              <button key={c} type="button" role="radio" aria-checked={value === c} className={`g-swatch c-${c}${value === c ? ' on' : ''}`} onClick={() => (onChange(c), setOpen(false))} title={CAL_COLOR_LABELS[c]} aria-label={CAL_COLOR_LABELS[c]}>
+                {value === c && <Icon name="check" size={14} />}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
