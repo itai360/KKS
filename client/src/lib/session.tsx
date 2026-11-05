@@ -82,6 +82,16 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
     });
   }, [refresh]);
 
+  // the opening screen (index.html, its ס turning) gives way once there is something to show: the app, or signing in
+  useEffect(() => {
+    if (state.status === 'loading') return;
+    const boot = document.getElementById('boot');
+    if (!boot) return;
+    boot.classList.add('is-done');
+    const t = window.setTimeout(() => boot.remove(), 320);
+    return () => window.clearTimeout(t);
+  }, [state.status]);
+
   if (state.status === 'loading') return <div className="boot" aria-busy="true" />;
   if (state.status === 'anon') return <>{anon(() => void refresh())}</>;
   return (

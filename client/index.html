@@ -15,7 +15,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content='קק"ס' />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <!-- what an iPhone shows while the app opens: the page's paper and the app's icon, for each screen size -->
+    <!-- what an iPhone shows while the app opens: the page's paper and קק״ס, as the opening screen below draws
+         it (its ס still), for each screen size -->
     <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1320x2868.png" />
     <link rel="apple-touch-startup-image" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1260x2736.png" />
     <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1206x2622.png" />
@@ -28,8 +29,79 @@
     <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/828x1792.png" />
     <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/750x1334.png" />
     <title>ניהול קורס קק"ס</title>
+    <!-- the opening screen, before the app's code is here: קק״ס, its ס turning while the app loads (lib/session.tsx
+         takes it away once there is something to show; the iPhone's launch images draw it still, public/splash) -->
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: grid;
+        place-items: center;
+        background: #f2f2f7;
+        transition: opacity 0.28s ease;
+      }
+      #boot.is-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot .kks-logo {
+        width: 196px;
+        height: auto;
+        overflow: visible;
+      }
+      #boot .kks-k {
+        fill: #1c3672;
+      }
+      #boot .kks-s {
+        fill: #3f6fd8;
+        transform-origin: 684px 1243.5px;
+        animation: kks-turn 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+      }
+      @keyframes kks-turn {
+        62%,
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme='light']) #boot {
+          background: #000;
+        }
+        html:not([data-theme='light']) #boot .kks-k {
+          fill: #e8edff;
+        }
+        html:not([data-theme='light']) #boot .kks-s {
+          fill: #8fb0ff;
+        }
+      }
+      html[data-theme='dark'] #boot {
+        background: #000;
+      }
+      html[data-theme='dark'] #boot .kks-k {
+        fill: #e8edff;
+      }
+      html[data-theme='dark'] #boot .kks-s {
+        fill: #8fb0ff;
+      }
+      /* less motion: the ס breathes instead of turning */
+      @media (prefers-reduced-motion: reduce) {
+        #boot .kks-s {
+          animation: kks-breathe 1.6s ease-in-out infinite;
+        }
+        @keyframes kks-breathe {
+          50% {
+            opacity: 0.45;
+          }
+        }
+      }
+    </style>
+
   </head>
   <body>
+    <div id="boot" aria-busy="true" aria-label="טוען">
+      <svg class="kks-logo" viewBox="51 189 5223 2050" role="img" aria-label="קק״ס"><path class="kks-k" d="M1825 824H1645L1782 189H2057ZM2272 824H2092L2229 189H2503ZM3152 1092V2239H2882V1092ZM2831 613H3449Q3703 613 3819 709.5Q3935 806 3935 1025Q3935 1310 3763 1536.5Q3591 1763 3269 1895V1608Q3457 1520 3559.5 1373.5Q3662 1227 3662 1057Q3662 945 3606 900Q3550 855 3410 855H2831ZM4491 1092V2239H4221V1092ZM4170 613H4788Q5042 613 5158 709.5Q5274 806 5274 1025Q5274 1310 5102 1536.5Q4930 1763 4608 1895V1608Q4796 1520 4898.5 1373.5Q5001 1227 5001 1057Q5001 945 4945 900Q4889 855 4749 855H4170Z"/><path class="kks-s" d="M133 1227Q133 1128 162.5 1020.5Q192 913 240 855H51V613H745Q1046 613 1181.5 740Q1317 867 1317 1149V1229Q1317 1548 1163 1711Q1009 1874 709 1874Q415 1874 274 1720.5Q133 1567 133 1258ZM475 855Q414 961 414 1211V1256Q414 1633 715 1633Q883 1633 958.5 1536Q1034 1439 1034 1221V1147Q1034 991 961.5 923Q889 855 725 855Z"/></svg>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
