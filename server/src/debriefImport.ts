@@ -92,7 +92,7 @@ const nameKey = (s: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-function people(): Person[] {
+export function people(): Person[] {
   const users = db().all<{ id: number; display_name: string }>('SELECT id, display_name FROM users WHERE active = 1');
   const cadets = db().all<{ id: number; first_name: string; last_name: string }>("SELECT id, first_name, last_name FROM cadets WHERE status = 'active'");
   const person = (owner: ProposalOwner): Person => {

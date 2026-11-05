@@ -187,7 +187,8 @@ describe('a company debrief from its document', () => {
     // nothing is fetched for one who may not fill it
     expect((await c.s3.post(`/api/debriefs/${id}/import/link`, { url: 'https://docs.google.com/document/d/abcdefghijklmnop/edit' })).status).toBe(403);
     const weekly = (await c.s2.post('/api/debriefs', { kind: 'weekly', weekId, title: 'תחקיר שבועי', occurredOn: '2026-10-08' })).body.debrief.id;
-    expect((await upload(c.s2, `/api/debriefs/${weekly}/import/file`, debriefDocx())).body.error).toBe('ייבוא מקובץ הוא לתחק"ש פלוגתי');
+    // another kind takes its own template, not the company's document
+    expect((await upload(c.s2, `/api/debriefs/${weekly}/import/file`, debriefDocx())).body.error).toContain('זה לא קובץ התבנית');
     await c.s2.patch(`/api/debriefs/${id}`, { answers: { company: [{ topic: 'נושא', proposal: '' }] } });
     await c.s2.patch(`/api/debriefs/${id}`, { status: 'final' });
     expect((await upload(c.s2, `/api/debriefs/${id}/import/file`, debriefDocx())).body.error).toContain('כבר סוכם');

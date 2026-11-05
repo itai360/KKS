@@ -38,12 +38,14 @@ export interface RunStyle {
   bold?: boolean;
   /** in points */
   size?: number;
+  /** a colour as Word writes it ("6B7280") */
+  color?: string;
 }
 
 /** a run of text, right to left; a line break in it stays one */
 export function run(text: string, s: RunStyle = {}): string {
-  // the order Word's schema asks for: bold, size, direction
-  const props = `${s.bold ? '<w:b/><w:bCs/>' : ''}${s.size ? `<w:sz w:val="${s.size * 2}"/><w:szCs w:val="${s.size * 2}"/>` : ''}<w:rtl/>`;
+  // the order Word's schema asks for: bold, colour, size, direction
+  const props = `${s.bold ? '<w:b/><w:bCs/>' : ''}${s.color ? `<w:color w:val="${s.color}"/>` : ''}${s.size ? `<w:sz w:val="${s.size * 2}"/><w:szCs w:val="${s.size * 2}"/>` : ''}<w:rtl/>`;
   const body = text
     .split('\n')
     .map((line) => `<w:t xml:space="preserve">${esc(line)}</w:t>`)

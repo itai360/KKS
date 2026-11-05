@@ -29,6 +29,7 @@ import { ask } from '../components/Confirm';
 import { onTabListKey, tabProps } from '../lib/tabKeys';
 import { WordButton } from '../components/DocNav';
 import { SearchInput } from '../components/SearchInput';
+import { DebriefImportDialog, TemplateButton } from '../components/DebriefImport';
 
 const ADD_PLACEHOLDER: Record<DebriefItemKind, string> = {
   fact: 'הוספת עובדה...',
@@ -544,6 +545,8 @@ export function DebriefPage() {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [dialog, setDialog] = useState<ItemDialog>(null);
+  // the debrief filled in its template, read into it
+  const [importing, setImporting] = useState(false);
 
   if (loading && !data)
     return (
@@ -590,6 +593,14 @@ export function DebriefPage() {
         actions={
           <>
             <WordButton title={d.title} target=".debrief-page" />
+            {d.canEdit && d.status === 'draft' && (
+              <>
+                <TemplateButton data={data} />
+                <button className="btn" onClick={() => setImporting(true)}>
+                  <Icon name="upload" /> ייבוא מקובץ
+                </button>
+              </>
+            )}
             {d.canEdit && (
               <>
                 <button className="btn" onClick={() => setEditing(true)}>
@@ -612,6 +623,7 @@ export function DebriefPage() {
           </>
         }
       />
+      {importing && <DebriefImportDialog data={data} answers={d.answers} set={() => undefined} flush={async () => undefined} onApplied={setData} onClose={() => setImporting(false)} />}
       {(d.summary || d.participants) && (
         <div className="card card-pad mb-12" style={{ marginBottom: 16 }}>
           {d.summary && <p style={{ whiteSpace: 'pre-wrap' }}>{d.summary}</p>}

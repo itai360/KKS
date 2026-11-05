@@ -6212,6 +6212,21 @@ button.stat:disabled {
 .dimport-intro {
   margin: 0;
 }
+/* the template's three steps: download, fill, upload */
+.dimport-steps {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-bg);
+  line-height: 1.5;
+}
+.dimport-steps .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
 .dimport-file {
   align-self: flex-start;
 }

@@ -43,7 +43,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { sortHe } from '@shared/sort';
 import { WordButton } from './DocNav';
-import { DebriefImportDialog } from './DebriefImport';
+import { DebriefImportDialog, downloadTemplate, TemplateButton } from './DebriefImport';
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -177,7 +177,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
   const { isCommander } = useSession();
   const [busy, setBusy] = useState(false);
   const owners = useOwnerPools(data, editable);
-  // the company's own summary document, read into the form
+  // the debrief filled in a file (its template, or a company's own document), read into it
   const [importing, setImporting] = useState(false);
 
   const lessons = data.items.filter((i) => i.kind === 'lesson');
@@ -305,11 +305,14 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
               <span className="hide-mobile">הדפסה</span>
             </button>
             <WordButton title={d.title} target=".dform-page" />
-            {d.kind === 'company' && editable && (
-              // on a phone it is a row of "עוד", with its name
-              <button className="btn" onClick={() => setImporting(true)}>
-                <Icon name="upload" /> ייבוא מקובץ
-              </button>
+            {editable && (
+              // on a phone they are rows of "עוד", with their names
+              <>
+                <TemplateButton data={data} />
+                <button className="btn" onClick={() => setImporting(true)}>
+                  <Icon name="upload" /> ייבוא מקובץ
+                </button>
+              </>
             )}
             {d.canEdit && (
               <>
@@ -383,14 +386,19 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
                 )}
               </div>
             )}
-            {d.kind === 'company' && editable && !questions.some((q) => answered(q, all)) && (
+            {editable && !questions.some((q) => answered(q, all)) && (
               <div className="small dform-import-hint">
                 <Icon name="file" size={15} />
                 <span>
-                  סיכום התחק"ש כבר כתוב בקובץ Word?{' '}
-                  <button type="button" className="link-btn" onClick={() => setImporting(true)}>
-                    ייבוא מהקובץ
+                  {d.kind === 'company' ? 'סיכום התחק"ש כבר כתוב בקובץ Word? ' : 'נוח יותר למלא בקובץ? '}
+                  <button type="button" className="link-btn" onClick={() => downloadTemplate(data)}>
+                    תבנית למילוי
                   </button>
+                  {' - ממלאים ב-Word או ב-Google Docs, ו'}
+                  <button type="button" className="link-btn" onClick={() => setImporting(true)}>
+                    ייבוא מקובץ
+                  </button>
+                  {' מכניס כל חלק למקומו.'}
                 </span>
               </div>
             )}
@@ -446,7 +454,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
         </nav>
       </div>
 
-      {importing && <DebriefImportDialog debriefId={d.id} answers={all} set={set} flush={flush} onClose={() => setImporting(false)} />}
+      {importing && <DebriefImportDialog data={data} answers={all} set={set} flush={flush} onApplied={setData} onClose={() => setImporting(false)} />}
 
       {editable && (
         <div className="fab-dock page-fab no-print">

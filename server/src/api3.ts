@@ -42,7 +42,7 @@ import { db } from './db';
 import {
   addItem,
   addWeekNote,
-  companyDebriefToFill,
+  debriefToFill,
   companyPresenter,
   createDebrief,
   debriefDetail,
@@ -86,7 +86,7 @@ import { cadetsFromSpreadsheet, downloadGoogleSheet, downloadGoogleSheetNamed } 
 import { deleteSocioRound, importSocio, previewSocio, readSocioSheets, socioOfCadet, socioRound, updateSocioRound } from './sociometric';
 import { addWeeklyItem, addWeeklyItems, deleteWeeklyItem, holdWeekly, reopenWeekly, updateWeeklyItem, weeklyTarget, weeklyView } from './weekly';
 import { deleteGuide, disciplineLog, disciplineOverview, fetchDocument, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
-import { importDebrief } from './debriefImport';
+import { importDocument } from './debriefTemplate';
 import { bulkSchema, runBulk } from './bulk';
 import { addAbsence, deleteAbsence, listAbsences, reasonSeenBy, staffLoad } from './absences';
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
@@ -455,17 +455,17 @@ export function v3Router(): Router {
     updateDebrief(me(req), id(req.params.id), req.body);
     res.json(debriefDetail(me(req), id(req.params.id)));
   });
-  // a company debrief written in the company's own document (a Word file, the document pasted, or its link):
-  // read for the form - the screen adds it to what the form holds
+  // a debrief's template filled in (a Word file, the document pasted, or its link): each part into its place
+  // (debriefTemplate.ts) - or a company debrief's own document, read for the screen to add to the form
   r.post('/debriefs/:id/import/file', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
-    res.json(importDebrief(me(req), id(req.params.id), req.body));
+    res.json(importDocument(me(req), id(req.params.id), req.body));
   });
   r.post('/debriefs/:id/import/link', async (req, res) => {
     const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
     // who may fill it, before anything is fetched
-    companyDebriefToFill(me(req), id(req.params.id));
-    res.json(importDebrief(me(req), id(req.params.id), await fetchDocument(url, config.maxUploadMb * 1024 * 1024)));
+    debriefToFill(me(req), id(req.params.id));
+    res.json(importDocument(me(req), id(req.params.id), await fetchDocument(url, config.maxUploadMb * 1024 * 1024)));
   });
   r.delete('/debriefs/:id', (req, res) => {
     deleteDebrief(me(req), id(req.params.id));

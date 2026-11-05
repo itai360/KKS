@@ -189,6 +189,18 @@ function debriefRow(id: number): DebriefRow {
  * A company debrief this user may fill now, to read the company's own document into it - and the cadets
  * holding a broad role then, whom a topic can be put on by their role.
  */
+/** a debrief about to be filled from its template file: may be filled now, what it holds, and whom its topics may go to */
+export function debriefToFill(
+  actor: UserRow,
+  id: number,
+): { kind: DebriefKind; answers: DebriefAnswers; participants: string; summary: string; broad: BroadHolder[]; items: { kind: DebriefItemKind; body: string; horizon: LessonHorizon | null }[] } {
+  const d = debriefRow(id);
+  if (!canEditDebrief(actor, d)) throw forbidden();
+  if (d.status !== 'draft') throw badRequest('התחקיר כבר סוכם. כדי לייבא אליו - קודם להחזיר אותו לטיוטה.');
+  const items = db().all<{ kind: DebriefItemKind; body: string; horizon: LessonHorizon | null }>('SELECT kind, body, horizon FROM debrief_items WHERE debrief_id = ? ORDER BY sort, id', id);
+  return { kind: d.kind, answers: parseAnswers(d.answers), participants: d.participants, summary: d.summary, broad: broadStaff(d), items };
+}
+
 export function companyDebriefToFill(actor: UserRow, id: number): { broad: BroadHolder[]; size: number } {
   const d = debriefRow(id);
   if (!canEditDebrief(actor, d)) throw forbidden();
