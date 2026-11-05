@@ -4396,6 +4396,19 @@
 .gc-app .gc-event:not(.is-short) .gc-event-title {
   white-space: normal;
 }
+/* a crowded hour: a narrow box gives its title the room its padding took, in a smaller type - words go on
+   to the next line whole, a long one breaks only when it cannot fit */
+.gc-app .gc-event.is-narrow {
+  padding-inline: 5px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+.gc-app .gc-event.is-narrow .gc-event-title {
+  overflow-wrap: break-word;
+}
+.gc-app .gc-event.is-narrow .gc-event-sub {
+  display: none;
+}
 /* three days: narrower columns, the app's smaller type */
 .gc-app.gc-three .gc-event {
   padding: 4px 6px 2px;

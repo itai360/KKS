@@ -215,7 +215,14 @@ export const APP_MIN_VISIBLE = 20;
  * are free while it lasts - to the day's end side when they all are. Positions are parts of the column's
  * width plus pixels (`leftPx`, `widthPx`).
  */
-export function layoutDayApp<T>(items: T[], span: (item: T) => { start: number; end: number }, minVisible = APP_MIN_VISIBLE, indentPx = APP_INDENT_PX): Placed<T>[] {
+export function layoutDayApp<T>(
+  items: T[],
+  span: (item: T) => { start: number; end: number },
+  minVisible = APP_MIN_VISIBLE,
+  indentPx = APP_INDENT_PX,
+  /** the day's column in pixels and the narrowest an event may be drawn: with both, a crowded hour stays readable */
+  fit: { colPx: number; minPx: number } | null = null,
+): Placed<T>[] {
   interface Box {
     pct: number;
     px: number;
@@ -269,6 +276,7 @@ export function layoutDayApp<T>(items: T[], span: (item: T) => { start: number; 
   // the room of each group (one lying on another comes after it): the whole column, or from the event under
   // it moved in by the step, on over the columns beside that one that are free while the group lasts
   const at = (b: Box, w: Box, part: number): Box => ({ pct: b.pct + w.pct * part, px: b.px + w.px * part });
+  const px = (b: Box) => (fit ? b.pct * fit.colPx + b.px : Infinity);
   for (const g of groups) {
     const on = g.on;
     if (on) {
@@ -277,9 +285,47 @@ export function layoutDayApp<T>(items: T[], span: (item: T) => { start: number; 
       const to = Math.max(...g.members.map(visibleEnd));
       let end = on.col + on.span;
       while (end < og.cols && !og.members.some((q) => q.col <= end && end < q.col + q.span && q.start < to && from < visibleEnd(q))) end++;
-      const right = at(og.left, og.width, end / og.cols);
       g.left = { pct: on.left, px: on.leftPx + indentPx };
+      let right = at(og.left, og.width, end / og.cols);
+      // too narrow to read beside busy columns: on over them - to the end side, and back toward the start side
+      // when that is not enough. What it covers began at least half an hour earlier (else it would sit beside
+      // it), so their titles show above it
+      const need = fit ? fit.minPx * Math.min(2, g.cols) : 0;
+      if (fit && px({ pct: right.pct - g.left.pct, px: right.px - g.left.px }) < need) {
+        right = at(og.left, og.width, 1);
+        const rightPx = px(right);
+        if (rightPx - px(g.left) < need) g.left = { pct: 0, px: Math.max(px(og.left), rightPx - need) };
+      }
       g.width = { pct: right.pct - g.left.pct, px: right.px - g.left.px };
+    }
+    // a crowded hour: as many side by side as stay readable. Each of the rest goes in the column where what it
+    // meets began longest before it, the whole column wide; of two there, the one that begins later is drawn
+    // over the other - whose title shows above it
+    if (fit && g.cols > 1) {
+      const room = Math.max(1, Math.floor(px(g.width) / fit.minPx));
+      if (g.cols > room) {
+        const kept = g.members.filter((p) => p.col < room);
+        for (const p of kept) p.span = Math.min(p.span, room - p.col);
+        const rest = g.members.filter((p) => p.col >= room).sort((a, b) => a.start - b.start || b.end - a.end);
+        for (const p of rest) {
+          let best = room - 1;
+          let bestGap = -Infinity;
+          for (let c = 0; c < room; c++) {
+            const there = kept.filter((q) => q.col <= c && c < q.col + q.span && overlap(q, p));
+            const gap = there.length ? p.start - Math.max(...there.map((q) => q.start)) : Infinity;
+            if (gap > bestGap) {
+              bestGap = gap;
+              best = c;
+            }
+          }
+          // drawn in the order they begin (as the day's events are): the later one over the earlier
+          p.col = best;
+          p.span = 1;
+          kept.push(p);
+        }
+        g.cols = room;
+        for (const p of g.members) p.cols = room;
+      }
     }
     for (const p of g.members) {
       const l = at(g.left, g.width, p.col / g.cols);

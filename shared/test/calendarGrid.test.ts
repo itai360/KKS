@@ -136,6 +136,29 @@ describe('calendar grid', () => {
     expect(placed.e).toMatchObject({ depth: 1, left: 0, leftPx: APP_INDENT_PX, width: 1, widthPx: -APP_INDENT_PX });
   });
 
+  it("the phone's layout, a crowded hour: never narrower than can be read - the rest go over what began longest before", () => {
+    const items = [
+      { id: 'long', s: '09:30', e: '11:45' },
+      { id: 'a', s: '09:15', e: '10:15' },
+      { id: 'b', s: '09:00', e: '10:00' },
+      { id: 'c', s: '10:00', e: '11:00' },
+      { id: 'd', s: '10:00', e: '10:30' },
+      { id: 'e', s: '10:05', e: '10:20' },
+      { id: 'f', s: '10:10', e: '10:30' },
+      { id: 'g', s: '09:30', e: '10:00' },
+    ];
+    const fit = { colPx: 340, minPx: 58 };
+    const placed = layoutDayApp(items, (i) => eventSpan(i.s, i.e), undefined, undefined, fit);
+    const px = (p: (typeof placed)[number]) => p.width * fit.colPx + (p.widthPx ?? 0);
+    // without the fit, the same hour splits into columns too narrow for a word
+    expect(Math.min(...layoutDayApp(items, (i) => eventSpan(i.s, i.e)).map((p) => p.width * fit.colPx + (p.widthPx ?? 0)))).toBeLessThan(fit.minPx);
+    for (const p of placed) expect(px(p)).toBeGreaterThanOrEqual(fit.minPx - 0.5);
+    // what does not fit beside the others lies over what began longest before it, its title in sight above
+    const by = Object.fromEntries(placed.map((p) => [p.item.id, p]));
+    const under = placed.filter((q) => q !== by.e && Math.abs(q.left - by.e.left) < 1e-9 && q.start < by.e.end && by.e.start < q.end);
+    expect(Math.max(...under.map((q) => q.start))).toBeLessThanOrEqual(by.e.start - 30);
+  });
+
   it('moves and resizes in whole steps inside the day', () => {
     expect(movedSpan(480, 540, 37)).toEqual({ start: 510, end: 570 });
     expect(movedSpan(480, 540, -600)).toEqual({ start: 0, end: 60 });

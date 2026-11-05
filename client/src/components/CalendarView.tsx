@@ -7,7 +7,7 @@
 // thing is in shared/calendarLayers.ts.
 
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { APP_MIN_VISIBLE, DAY_MINUTES, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutDayApp, layoutSpans, MIN_VISIBLE, MONTH_NAMES, monthWeeks, movedSpan, resizedEnd, snap, viewDays, yearMonths, type Lane } from '@shared/calendarGrid';
+import { APP_INDENT_PX, APP_MIN_VISIBLE, DAY_MINUTES, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutDayApp, layoutSpans, MIN_VISIBLE, MONTH_NAMES, monthWeeks, movedSpan, resizedEnd, snap, viewDays, yearMonths, type Lane } from '@shared/calendarGrid';
 import { dayOrder, isTimed, itemDays, loadByDay, type CalItem } from '@shared/calendarLayers';
 import { WEEKDAY_NAMES } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
@@ -218,6 +218,22 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
   const days = viewDays(view, date).filter((d) => !(hideWeekend && view === 'week' && isWeekend(d)));
   const bulk = useBulk();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // a phone: the width of a day's column - its layout keeps a crowded hour readable with it
+  const [colPx, setColPx] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!app || !el || typeof ResizeObserver !== 'function') return;
+    const measure = () => {
+      const gutter = el.querySelector<HTMLElement>('.gc-gutter')?.offsetWidth ?? 0;
+      setColPx(Math.max(0, (el.clientWidth - gutter) / Math.max(1, days.length)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [app, days.length]);
+  // the narrowest an event is drawn on a phone: a short word of its title in a line
+  const minPx = days.length === 1 ? 58 : 44;
   // the hours scrolled under the rows above them: a shadow under those, as the app has
   const [scrolled, setScrolled] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -668,7 +684,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
           {days.map((d) => {
             const own = timed.filter((i) => i.date === d && !(drag && drag.kind !== 'create' && eventOf(i)?.id === drag.id));
             const movingItem = drag && drag.kind !== 'create' && drag.date === d ? timed.find((i) => eventOf(i)?.id === drag.id) : undefined;
-            const placed = (app ? layoutDayApp : layoutDay)(
+            const placed = (app ? <T,>(xs: T[], f: (x: T) => { start: number; end: number }) => layoutDayApp(xs, f, APP_MIN_VISIBLE, APP_INDENT_PX, colPx ? { colPx, minPx } : null) : layoutDay)(
               [
                 ...own.map((i) => ({ i, span: eventSpan(i.start!, i.end) })),
                 ...(movingItem && drag ? [{ i: movingItem, span: { start: drag.start, end: drag.end } }] : []),
@@ -705,6 +721,8 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                     zIndex: isDragged ? undefined : 1 + Math.min(p.depth, 2),
                   };
                   const short = p.end - p.start < (app ? 35 : 50);
+                  // a phone, a crowded hour: a narrow box gives its title the room its padding took
+                  const narrow = app && colPx > 0 && p.width * colPx + (p.widthPx ?? 0) < 80;
                   const isNow = d === today && !item.faded && nowMin >= p.start && nowMin < p.end;
                   const past = dimPast && !isDragged && !item.faded && (d < today || (d === today && p.end <= nowMin));
                   const movable = !!e && canMove(e) && !bulk?.active;
@@ -719,6 +737,7 @@ function TimeGrid({ view, date, today, ready, nowTime, items, draft, allDayOpen,
                         `c-${item.color}`,
                         `k-${item.src.kind}`,
                         short && 'is-short',
+                        narrow && 'is-narrow',
                         item.faded && 'is-faded',
                         isNow && 'is-now',
                         past && 'is-past',
