@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { ROLE_LABELS, type Role } from '@shared/constants';
 import { ABILITY_GROUPS, COMMANDER_ONLY, staffMay, type AbilityInfo, type StaffAbility } from '@shared/permissions';
-import type { CourseSettings, RecurringRule, SnapshotInfo, SnapshotLabel, Template, User } from '@shared/types';
+import type { CourseSettings, RecurringRule, SnapshotInfo, GoogleRequest, SnapshotLabel, Template, User } from '@shared/types';
 import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
 import { GuideImportCard } from '../components/Discipline';
 import { AbsencesCard } from '../components/Absences';
@@ -316,9 +316,71 @@ function CourseSettingsCard() {
   );
 }
 
+/** a username from a Google address: the part before the @, as the list allows */
+const usernameOf = (email: string) => email.split('@')[0].replace(/[^\w.\-]/g, '').slice(0, 40) || 'user';
+
+/** Google accounts that tried to sign in and are not in the list: added in a tap, or let go */
+function GoogleRequests({ onAdd }: { onAdd: (g: GoogleRequest) => void }) {
+  const { data } = useApi<GoogleRequest[]>('/api/users/google-requests', ['users']);
+  const toast = useToast();
+  if (!data?.length) return null;
+  return (
+    <div className="card-body g-requests">
+      <div className="g-requests-head">
+        <div className="row gap-6">
+          <Icon name="bell" size={16} />
+          <b>{data.length === 1 ? 'מישהו ניסה להיכנס עם Google' : `${data.length} ניסו להיכנס עם Google`}</b>
+        </div>
+        <div className="tiny muted">עוד לא ברשימה - אחרי ההוספה נכנסים עם אותו חשבון</div>
+      </div>
+      <ul className="g-requests-list">
+        {data.map((g) => (
+          <li key={g.email} className="row wrap gap-6">
+            <div className="col grow" style={{ minWidth: 0 }}>
+              <span className="strong">{g.name || g.email}</span>
+              <span className="tiny muted" dir="ltr" style={{ textAlign: 'right' }}>
+                {g.email}
+              </span>
+            </div>
+            <span className="tiny muted">
+              {fmtWhen(g.lastAt)}
+              {g.tries > 1 ? ` · ${g.tries} ניסיונות` : ''}
+            </span>
+            <button className="btn btn-sm btn-primary" onClick={() => onAdd(g)}>
+              <Icon name="plus" /> הוספה
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={async () => {
+                await api.del(`/api/users/google-requests/${encodeURIComponent(g.email)}`);
+                emitLocalChange('users');
+                toast({ title: 'הבקשה הוסרה', body: 'אם ינסו שוב להיכנס, היא תחזור.' });
+              }}
+            >
+              הסרה
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** "היום 14:05", "אתמול", "3.11" */
+function fmtWhen(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86_400_000);
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (diff === 0) return `היום ${hm}`;
+  if (diff === 1) return `אתמול ${hm}`;
+  return `${d.getDate()}.${d.getMonth() + 1}`;
+}
+
 function StaffCard() {
   const { data } = useApi<User[]>('/api/users?all=1', ['users']);
-  const [editing, setEditing] = useState<User | 'new' | null>(null);
+  const [editing, setEditing] = useState<User | 'new' | GoogleRequest | null>(null);
   // the ones who can sign in; the ones turned off are out of the way, in a drawer under them
   const active = (data ?? []).filter((u) => u.active);
   const inactive = (data ?? []).filter((u) => !u.active);
@@ -346,8 +408,22 @@ function StaffCard() {
                 </span>
               </td>
               <td className="small">{u.title || '-'}</td>
-              <td className="mono small" dir="ltr" style={{ textAlign: 'right' }}>
-                {u.username}
+              <td className="small">
+                <div className="col">
+                  <span className="mono" dir="ltr" style={{ textAlign: 'right' }}>
+                    {u.username}
+                  </span>
+                  {u.email && (
+                    <span className="tiny muted row gap-4" dir="ltr" style={{ justifyContent: 'flex-end' }}>
+                      {u.email}
+                      {u.googleAt && (
+                        <span className="badge t-green g-badge" title={`נכנס/ה עם Google לאחרונה: ${fmtWhen(u.googleAt)}`}>
+                          Google
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
               </td>
               <td>
                 <span className={`badge${u.role === 'commander' ? ' t-blue' : ''}`}>{ROLE_LABELS[u.role]}</span>
@@ -396,6 +472,7 @@ function StaffCard() {
           <Icon name="plus" /> משתמש
         </button>
       </div>
+      <GoogleRequests onAdd={(g) => setEditing(g)} />
       {table(active)}
       {inactive.length > 0 && (
         <div className="card-body">
@@ -404,7 +481,13 @@ function StaffCard() {
           </DoneDrawer>
         </div>
       )}
-      {editing && <UserEditor user={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <UserEditor
+          user={editing === 'new' || !('id' in editing) ? null : editing}
+          draft={editing !== 'new' && !('id' in editing) ? editing : undefined}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
     </BulkScope>
   );
@@ -419,16 +502,16 @@ function StaffRow({ u, onOpen, children }: { u: User; onOpen: () => void; childr
   );
 }
 
-function UserEditor({ user, onClose }: { user: User | null; onClose: () => void }) {
+function UserEditor({ user, draft, onClose }: { user: User | null; draft?: GoogleRequest; onClose: () => void }) {
   const toast = useToast();
   const { staff, user: self } = useSession();
-  const [displayName, setDisplayName] = useState(user?.displayName ?? `מפק"צ ${staff.length + 1}`);
+  const [displayName, setDisplayName] = useState(user?.displayName ?? (draft?.name || `מפק"צ ${staff.length + 1}`));
   const [title, setTitle] = useState(user?.title ?? '');
-  const [username, setUsername] = useState(user?.username ?? '');
+  const [username, setUsername] = useState(user?.username ?? (draft ? usernameOf(draft.email) : ''));
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>(user?.role ?? 'staff');
   const [phone, setPhone] = useState(user?.phone ?? '');
-  const [email, setEmail] = useState(user?.email ?? '');
+  const [email, setEmail] = useState(user?.email ?? draft?.email ?? '');
   const [active, setActive] = useState(user?.active ?? true);
   const [assignsFreely, setAssignsFreely] = useState(user?.assignsFreely ?? false);
   const [error, setError] = useState<string | null>(null);
@@ -436,7 +519,7 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
     setError(null);
     try {
       if (user) await api.patch(`/api/users/${user.id}`, { displayName, title, username, role, phone, email, active, assignsFreely, ...(password ? { password } : {}) });
-      else await api.post('/api/users', { displayName, title, username, password, role, phone, email });
+      else await api.post('/api/users', { displayName, title, username, ...(password ? { password } : {}), role, phone, email });
       toast({ title: user ? 'המשתמש עודכן' : 'המשתמש נוסף', body: user ? undefined : `שם משתמש: ${username}`, tone: 'green' });
       emitLocalChange('users');
       onClose();
@@ -469,13 +552,17 @@ function UserEditor({ user, onClose }: { user: User | null; onClose: () => void 
         <Field label="שם משתמש" required hint="אותיות לועזיות וספרות">
           <input className="input" dir="ltr" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
         </Field>
-        <Field label={user ? 'סיסמה חדשה (לאיפוס)' : 'סיסמה זמנית'} required={!user} hint="בכניסה הראשונה המשתמש יתבקש לבחור סיסמה אישית">
-          <input className="input" dir="ltr" type="text" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder={user ? 'השאר ריק ללא שינוי' : 'לפחות 8 תווים, אותיות וספרה'} />
+        <Field
+          label={user ? 'סיסמה חדשה (לאיפוס)' : 'סיסמה זמנית'}
+          required={!user && !email.trim()}
+          hint={!user && email.trim() ? 'אפשר להשאיר ריק: הכניסה תהיה עם חשבון Google של המייל' : 'בכניסה הראשונה המשתמש יתבקש לבחור סיסמה אישית'}
+        >
+          <input className="input" dir="ltr" type="text" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder={user || email.trim() ? 'השאר ריק ללא שינוי' : 'לפחות 8 תווים, אותיות וספרה'} />
         </Field>
         <Field label="טלפון">
           <input className="input" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>
-        <Field label="מייל" hint="לכניסה עם חשבון Google (אם הופעלה)">
+        <Field label="מייל" hint={draft ? 'החשבון שניסה להיכנס עם Google' : 'לכניסה עם חשבון Google (אם הופעלה)'}>
           <input className="input" dir="ltr" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="הרשאה">

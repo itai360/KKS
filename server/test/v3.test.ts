@@ -506,6 +506,36 @@ describe('google sign-in', () => {
     expect((await post(forged)).status).toBe(401);
   });
 
+  it('an account not in the list waits for the commander, who adds it without a password', async () => {
+    const post = (email: string, name = 'Dana Test') => request(c.app).post('/api/auth/google').set('x-kks', '1').send({ credential: token({ email, name }) });
+    const first = await post('new.person@example.com');
+    expect(first.status).toBe(403);
+    expect(first.body.error).toMatch(/נשלחה למפקד/);
+    await post('new.person@example.com');
+    const reqs = (await c.cmd.get('/api/users/google-requests')).body as { email: string; name: string; tries: number }[];
+    expect(reqs).toEqual([expect.objectContaining({ email: 'new.person@example.com', name: 'Dana Test', tries: 2 })]);
+    expect((await c.s1.get('/api/users/google-requests')).status).toBe(403);
+
+    const added = await c.cmd.post('/api/users', { displayName: 'Dana Test', username: 'new.person', role: 'staff', email: 'new.person@example.com' });
+    expect(added.status).toBe(200);
+    expect((await c.cmd.get('/api/users/google-requests')).body).toEqual([]);
+
+    const agent = request.agent(c.app);
+    const ok = await agent.post('/api/auth/google').set('x-kks', '1').send({ credential: token({ email: 'new.person@example.com' }) });
+    expect(ok.status).toBe(200);
+    const me = (await agent.get('/api/auth/me')).body as { mustChangePassword?: boolean };
+    expect(me.mustChangePassword).toBe(false);
+    const list = (await c.cmd.get('/api/users?all=1')).body as { id: number; googleAt?: string | null }[];
+    expect(list.find((u) => u.id === added.body.id)?.googleAt).toBeTruthy();
+
+    // a password is still asked for without an e-mail
+    expect((await c.cmd.post('/api/users', { displayName: 'X', username: 'nomail', role: 'staff' })).status).toBe(400);
+    // dismissed
+    await post('other@example.com');
+    await c.cmd.del('/api/users/google-requests/other@example.com');
+    expect((await c.cmd.get('/api/users/google-requests')).body).toEqual([]);
+  });
+
   it('is disabled without a client id', async () => {
     delete process.env.GOOGLE_CLIENT_ID;
     expect((await request(c.app).post('/api/auth/google').set('x-kks', '1').send({ credential: token({ email: 'a@b.c' }) })).status).toBe(404);

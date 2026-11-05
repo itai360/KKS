@@ -17,6 +17,7 @@ export interface UserRow {
   active: number;
   created_at: string;
   must_change_password: number;
+  google_at?: string | null;
   totp_secret: string | null;
   /** gives tasks to the staff without their taking them on first (the commander sets it) */
   assigns_freely?: number;

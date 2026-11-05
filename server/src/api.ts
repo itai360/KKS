@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
 import { isOpenStatus, ROLES } from '../../shared/constants';
 import { addDays, dayRange, isDateKey, localDateKey } from '../../shared/dates';
 import { GOOGLE_COLOR_IDS } from '../../shared/calendarLayers';
-import type { Task } from '../../shared/types';
+import type { GoogleRequest, Task } from '../../shared/types';
 import {
   clearSessionCookie,
   createSession,
@@ -151,6 +151,24 @@ const id = (v: unknown): number => {
 const me = (req: Request): UserRow => req.user!;
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length ? v : undefined);
 
+
+/** the most Google sign-in requests kept: the newest; an old one nobody answered gives way */
+const GOOGLE_REQUESTS_KEPT = 30;
+
+/** A Google account not in the list tried to sign in: kept for the commander, once per account. */
+function noteGoogleRequest(email: string, name: string): void {
+  const now = nowIso();
+  db().run(
+    'INSERT INTO google_requests(email, name, first_at, last_at) VALUES (?, ?, ?, ?) ON CONFLICT(email) DO UPDATE SET name = excluded.name, last_at = excluded.last_at, tries = tries + 1',
+    email,
+    name.trim().slice(0, 80),
+    now,
+    now,
+  );
+  db().run('DELETE FROM google_requests WHERE email NOT IN (SELECT email FROM google_requests ORDER BY last_at DESC LIMIT ?)', GOOGLE_REQUESTS_KEPT);
+  changed('users');
+}
+
 export function apiRouter(): Router {
   const r = Router();
 
@@ -249,9 +267,14 @@ export function apiRouter(): Router {
     const u = db().get<UserRow>('SELECT * FROM users WHERE email = ? AND active = 1', identity.email);
     if (!u) {
       loginFailed(key);
-      throw new HttpError(403, `החשבון ${identity.email} לא מוגדר במערכת. פנה למפקד הקורס.`);
+      // not in the list yet: the commander sees the request in the settings and adds them in a tap
+      // (a user turned off is not a request - the commander turned them off)
+      const off = db().get('SELECT 1 FROM users WHERE email = ?', identity.email);
+      if (!off) noteGoogleRequest(identity.email, identity.name);
+      throw new HttpError(403, off ? `החשבון ${identity.email} הושבת. פנה למפקד הקורס.` : `החשבון ${identity.email} עוד לא מוגדר במערכת. הבקשה נשלחה למפקד הקורס - אחרי שיאשר, אפשר להיכנס.`);
     }
     loginSucceeded(key);
+    db().run('UPDATE users SET google_at = ? WHERE id = ?', nowIso(), u.id);
     if (u.totp_secret) return res.json({ twoFactor: true, ticket: issueTicket(u.id) });
     setSessionCookie(res, createSession(u.id));
     setCourseCookie(res, null);
@@ -389,7 +412,18 @@ export function apiRouter(): Router {
     // who has two-step sign-in, and on how many devices phone notifications: the commander's business only
     if (!isCommander(me(req))) return void res.json(rows.map(toUser));
     const devices = subscriptionCounts();
-    res.json(rows.map((r) => ({ ...toUser(r), twoFactor: !!r.totp_secret, pushDevices: devices.get(r.id) ?? 0 })));
+    res.json(rows.map((r) => ({ ...toUser(r), twoFactor: !!r.totp_secret, pushDevices: devices.get(r.id) ?? 0, googleAt: r.google_at ?? null })));
+  });
+
+  // Google accounts that tried to sign in and are not in the list yet
+  r.get('/users/google-requests', requireCommander, (_req, res) => {
+    const rows = db().all<{ email: string; name: string; first_at: string; last_at: string; tries: number }>('SELECT * FROM google_requests ORDER BY last_at DESC');
+    res.json(rows.map((g): GoogleRequest => ({ email: g.email, name: g.name, firstAt: g.first_at, lastAt: g.last_at, tries: g.tries })));
+  });
+  r.delete('/users/google-requests/:email', requireCommander, (req, res) => {
+    db().run('DELETE FROM google_requests WHERE email = ?', String(req.params.email).toLowerCase());
+    changed('users');
+    res.json({ ok: true });
   });
 
   const userSchema = z.object({
@@ -403,10 +437,16 @@ export function apiRouter(): Router {
   });
 
   r.post('/users', requireCommander, (req, res) => {
-    const input = userSchema.parse(req.body);
+    // someone who signs in with Google needs no password: without one, a random one no one knows (the
+    // commander can set one later)
+    const body = { ...(req.body as Record<string, unknown>) };
+    const googleOnly = !body.password && typeof body.email === 'string' && !!body.email.trim();
+    if (googleOnly) body.password = `${randomBytes(18).toString('base64url')}A1`;
+    const input = userSchema.parse(body);
     if (db().get('SELECT 1 FROM users WHERE username = ?', input.username)) throw badRequest('שם המשתמש תפוס');
     if (input.email && db().get('SELECT 1 FROM users WHERE email = ?', input.email.toLowerCase())) throw badRequest('כתובת המייל כבר משויכת למשתמש אחר');
-    const newId = createUser({ ...input, mustChangePassword: true });
+    const newId = createUser({ ...input, mustChangePassword: !googleOnly });
+    if (input.email) db().run('DELETE FROM google_requests WHERE email = ?', input.email.toLowerCase());
     changed('users');
     res.json(toUser(getUserRow(newId)!));
   });
@@ -463,6 +503,7 @@ export function apiRouter(): Router {
       uid,
     );
     if (p.assignsFreely !== undefined) db().run('UPDATE users SET assigns_freely = ? WHERE id = ?', p.assignsFreely ? 1 : 0, uid);
+    if (email) db().run('DELETE FROM google_requests WHERE email = ?', email);
     if (p.password) {
       db().run('UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?', hashPassword(p.password), uid === me(req).id ? 0 : 1, uid);
       db().run('DELETE FROM sessions WHERE user_id = ? ', uid);

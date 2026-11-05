@@ -8840,6 +8840,42 @@ label.prev-task {
   background: var(--card-2);
 }
 
+/* Google accounts waiting to be added (settings - staff and users) */
+.g-requests {
+  border-bottom: 1px solid var(--line);
+}
+.g-requests-head {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.g-requests-head > .row {
+  align-items: center;
+}
+.g-requests-list .col {
+  flex: 1 1 200px;
+}
+.g-requests-list .col > span {
+  overflow-wrap: anywhere;
+}
+.g-requests-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.g-requests-list > li {
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+}
+.g-badge {
+  font-size: 10px;
+  padding: 0 6px;
+}
+
 /* ---------- the sociometric ---------- */
 .socio-outliers {
   text-align: start;

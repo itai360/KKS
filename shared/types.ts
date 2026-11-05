@@ -44,6 +44,17 @@ export interface User {
   pushDevices?: number;
   /** gives tasks to the staff without their taking them on first (the commander sets it) */
   assignsFreely?: boolean;
+  /** when they last signed in with Google (the commander's list of users) */
+  googleAt?: string | null;
+}
+
+/** a Google account that tried to sign in and is not in the list of users yet (the commander's) */
+export interface GoogleRequest {
+  email: string;
+  name: string;
+  firstAt: string;
+  lastAt: string;
+  tries: number;
 }
 
 /** signing in: a session, or - with two-step sign-in - a ticket for the code step */
