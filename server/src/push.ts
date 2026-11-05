@@ -4,10 +4,10 @@
 // needs no extra configuration.
 
 import webpush from 'web-push';
-import type { Notification } from '../../shared/types';
 import { nowIso } from './core';
 import { db } from './db';
 import { isPushEndpoint } from './netguard';
+import { pushContent, type PushNote } from './pushText';
 
 interface VapidKeys {
   publicKey: string;
@@ -73,21 +73,23 @@ export function pushesSettled(): Promise<unknown> {
   return Promise.allSettled([...inFlight]);
 }
 
-export function sendPush(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>): Promise<number> {
+export function sendPush(userId: number, n: PushNote): Promise<number> {
   const p = deliver(userId, n);
   inFlight.add(p);
   void p.finally(() => inFlight.delete(p)).catch(() => undefined);
   return p;
 }
 
-async function deliver(userId: number, n: Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'>): Promise<number> {
+async function deliver(userId: number, n: PushNote): Promise<number> {
   // only to a browser's push service - never to an address of someone's choosing
   const subs = db()
     .all<{ endpoint: string; p256dh: string; auth: string }>('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', userId)
     .filter((s) => isPushEndpoint(s.endpoint));
   if (!subs.length) return 0;
   const keys = vapidKeys();
-  const payload = JSON.stringify({ title: n.title, body: n.body, link: n.link, tag: `kks-${n.id}`, category: n.category });
+  // what it is about and when it is due, said whole (pushText.ts)
+  const { title, body } = pushContent(userId, n);
+  const payload = JSON.stringify({ title, body, link: n.link, tag: `kks-${n.id}`, category: n.category, at: Date.now() });
   let sent = 0;
   await Promise.all(
     subs.map(async (s) => {

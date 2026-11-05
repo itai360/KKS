@@ -8390,6 +8390,8 @@ li > .points-view {
 .notif-body {
   display: -webkit-box;
   margin-top: 2px;
+  /* a list (the morning brief) keeps its lines */
+  white-space: pre-line;
   overflow: hidden;
   color: var(--ink-2);
   font-size: 13px;

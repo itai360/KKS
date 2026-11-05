@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
 import { isOpenStatus, ROLES } from '../../shared/constants';
@@ -152,6 +152,9 @@ const me = (req: Request): UserRow => req.user!;
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length ? v : undefined);
 
 
+/** two texts compared in a time that does not tell how much of them matched */
+const sameText = (a: string, b: string) => timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
+
 /** the most Google sign-in requests kept: the newest; an old one nobody answered gives way */
 const GOOGLE_REQUESTS_KEPT = 30;
 
@@ -173,6 +176,16 @@ export function apiRouter(): Router {
   const r = Router();
 
   // ---------------- public & auth ----------------
+
+  // the daily scheduled call (vercel-output.mjs): on the serverless deployment nothing runs between visits, so
+  // this wakes the server each morning - the brief, the reminders and what is due run as on any visit (cloud.ts)
+  r.get('/cron/daily', (req, res) => {
+    // when the deployment has a secret for it, only the platform's own call is answered (no secret: a call does
+    // nothing a visit to any page does not)
+    const secret = process.env.CRON_SECRET ?? '';
+    if (secret && !sameText(req.headers.authorization ?? '', `Bearer ${secret}`)) throw new HttpError(401, 'לא מורשה');
+    res.json({ ok: true });
+  });
 
   r.get('/public/info', (_req, res) => {
     const s = getSettings();

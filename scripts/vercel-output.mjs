@@ -98,6 +98,10 @@ writeFileSync(
         { handle: 'filesystem' },
         { src: '/(.*)', dest: '/index.html', headers: { 'Cache-Control': 'no-cache' } },
       ],
+      // nothing runs here between visits: once a day the platform calls the server, so the morning brief (the
+      // day's tasks to each phone) goes out even before anyone opens the app - 05:00 UTC is 07:00-08:00 in Israel
+      // (a daily call is what every plan allows; it may come any time within that hour)
+      crons: [{ path: '/api/cron/daily', schedule: '0 5 * * *' }],
     },
     null,
     2,

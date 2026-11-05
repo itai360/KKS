@@ -1,14 +1,32 @@
-// The morning brief: once a day from 07:00, everyone on the staff who has something today
-// gets one notification on the phone - what is due today, what is late, the activities they
-// run - so the day starts without opening anything. Nobody away that day gets one.
+// The morning brief: once a day from 07:00, everyone on the staff with open tasks gets one notification on the
+// phone that lists them - what is late, what is due today, tomorrow and in the coming week, each with its
+// deadline - and the activities they run today, so the day starts without opening anything. Nobody away that
+// day gets one. On the serverless deployment a daily scheduled call wakes the server for it (vercel-output.mjs),
+// so it comes even when nobody opened the app yet.
 
-import { dayRange, localDateKey, localTime } from '../../shared/dates';
+import { addDays, dayRange, formatDeadline, localDateKey, localTime } from '../../shared/dates';
 import { awayOn } from './absences';
 import { tz } from './core';
 import { db } from './db';
 import { firstTime, notify } from './journal';
 
+/** how far ahead the brief lists: the coming week */
+const AHEAD_DAYS = 7;
+/** a phone shows a handful of lines: the tasks past these are counted, not listed */
+const TASK_LINES = 6;
+
 let briefedOn = '';
+
+const clip = (s: string, n: number) => {
+  const t = s.replace(/\s+/g, ' ').trim();
+  return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
+};
+const tasksWord = (n: number) => (n === 1 ? 'משימה אחת' : `${n} משימות`);
+
+interface BriefTask {
+  title: string;
+  deadline: string;
+}
 
 export function morningBrief(now: Date): number {
   const zone = tz();
@@ -17,43 +35,64 @@ export function morningBrief(now: Date): number {
   // from seven; a server first woken in the afternoon sends no "morning" brief
   if (time < '07:00' || time >= '11:00' || briefedOn === today) return 0;
   briefedOn = today;
-  const to = dayRange(today, zone)[1].toISOString();
   const nowIso = now.toISOString();
+  const endOfToday = dayRange(today, zone)[1].toISOString();
+  const endOfWeek = dayRange(addDays(today, AHEAD_DAYS - 1), zone)[1].toISOString();
   const away = awayOn(today);
   const users = db().all<{ id: number; role: string }>('SELECT id, role FROM users WHERE active = 1');
   let sent = 0;
   for (const u of users) {
     if (away.has(u.id)) continue;
-    const c = db().get<{ today: number; overdue: number }>(
-      `SELECT sum(CASE WHEN deadline >= ? AND deadline < ? THEN 1 ELSE 0 END) AS today, sum(CASE WHEN deadline < ? THEN 1 ELSE 0 END) AS overdue
-       FROM tasks WHERE owner_id = ? AND status NOT IN ('done', 'cancelled')`,
-      nowIso,
-      to,
-      nowIso,
+    // the tasks that are theirs or that they are on - the same the reminders go to
+    const open = db().all<BriefTask>(
+      `SELECT t.title, t.deadline FROM tasks t
+       WHERE t.status NOT IN ('done', 'cancelled')
+         AND (t.owner_id = ? OR EXISTS (SELECT 1 FROM task_participants p WHERE p.task_id = t.id AND p.user_id = ?))
+       ORDER BY t.deadline, t.id`,
       u.id,
-    )!;
-    const events = db().all<{ start_time: string; title: string }>(
+      u.id,
+    );
+    const late = open.filter((t) => t.deadline < nowIso);
+    const dueToday = open.filter((t) => t.deadline >= nowIso && t.deadline < endOfToday);
+    const thisWeek = open.filter((t) => t.deadline >= endOfToday && t.deadline < endOfWeek);
+    const later = open.length - late.length - dueToday.length - thisWeek.length;
+    const events = db().all<{ start_time: string | null; title: string }>(
       'SELECT start_time, title FROM events WHERE owner_id = ? AND date = ? AND cancelled = 0 AND deleted_at IS NULL ORDER BY start_time',
       u.id,
       today,
     );
-    const dueToday = c.today ?? 0;
-    const overdue = c.overdue ?? 0;
-    if (!dueToday && !overdue && !events.length) continue;
+    if (!late.length && !dueToday.length && !thisWeek.length && !events.length) continue;
     if (!firstTime(`brief:${today}:${u.id}`)) continue;
+
     const parts = [
-      dueToday ? (dueToday === 1 ? 'משימה אחת' : `${dueToday} משימות`) : '',
-      overdue ? `${overdue} באיחור` : '',
+      dueToday.length ? `${tasksWord(dueToday.length)} להיום` : '',
+      late.length ? `${late.length} באיחור` : '',
+      thisWeek.length ? `${thisWeek.length} השבוע` : '',
       events.length ? (events.length === 1 ? 'פעילות אחת באחריותך' : `${events.length} פעילויות באחריותך`) : '',
+    ].filter(Boolean);
+    // one line a task, the most pressing first: late, today, then the week by its deadline
+    const listed = [
+      ...late.map((t) => `באיחור · ${clip(t.title, 40)} (${formatDeadline(t.deadline, now, zone)})`),
+      ...dueToday.map((t) => `היום ${localTime(t.deadline, zone)} · ${clip(t.title, 40)}`),
+      ...thisWeek.map((t) => `${formatDeadline(t.deadline, now, zone)} · ${clip(t.title, 40)}`),
+    ];
+    // past the lines a phone shows, and further than the week: counted
+    const hidden = Math.max(0, listed.length - TASK_LINES) + later;
+    const lines = [
+      ...listed.slice(0, TASK_LINES),
+      hidden ? (hidden === 1 ? 'ועוד משימה פתוחה אחת' : `ועוד ${hidden} משימות פתוחות`) : '',
+      events.length
+        ? `בלו"ז היום: ${events
+            .slice(0, 3)
+            .map((e) => `${e.start_time ? `${e.start_time} ` : ''}${clip(e.title, 30)}`)
+            .join(' · ')}`
+        : '',
     ].filter(Boolean);
     notify([u.id], {
       type: 'brief',
-      category: overdue ? 'action' : 'info',
-      title: `בוקר טוב - היום: ${parts.join(', ')}`,
-      body: events
-        .slice(0, 3)
-        .map((e) => `${e.start_time} ${e.title}`)
-        .join(' · '),
+      category: late.length ? 'action' : 'info',
+      title: `בוקר טוב - ${parts.join(', ')}`,
+      body: lines.join('\n'),
       link: u.role === 'commander' ? '/briefing' : '/my',
     });
     sent++;

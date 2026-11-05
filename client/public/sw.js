@@ -23,6 +23,8 @@ self.addEventListener('push', (event) => {
       // the small icon in an Android phone's status bar: Android reads only its shape, so it is white on clear
       badge: '/badge-96.png',
       requireInteraction: data.category === 'exception',
+      // when it happened, as the phone lists it (not when the phone got around to showing it)
+      timestamp: typeof data.at === 'number' ? data.at : Date.now(),
       data: { link: data.link || '/' },
     }),
   );

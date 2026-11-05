@@ -421,7 +421,7 @@ describe('documents (section 31)', () => {
 });
 
 describe('web push', () => {
-  const sent: { target: PushTarget; payload: { title: string; link: string; category: string } }[] = [];
+  const sent: { target: PushTarget; payload: { title: string; body: string; link: string; category: string } }[] = [];
   let status = 201;
   beforeEach(() => {
     sent.length = 0;
@@ -456,6 +456,41 @@ describe('web push', () => {
     const r = await c.cmd.post('/api/push/test');
     expect(r.body.sent).toBe(0);
     expect(db().get<{ n: number }>('SELECT count(*) AS n FROM push_subscriptions')!.n).toBe(0);
+  });
+
+  it('a push about a task says what it is and when it is due', async () => {
+    await c.s1.post('/api/push/subscribe', sub);
+    await newTask(c.cmd, {
+      title: 'תיאום מטווח',
+      description: 'להזמין את המטווח ולתאם תחמושת',
+      ownerIds: [c.ids.s1],
+      deadline: at('2026-10-02', '14:00'),
+      priority: 'high',
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent[0].payload).toMatchObject({
+      title: 'נוספה לך משימה חדשה: "תיאום מטווח"',
+      body: 'דד-ליין: מחר 14:00 (נותרו יום) · עדיפות גבוהה\nמאת מפקד הקורס\nפירוט: להזמין את המטווח ולתאם תחמושת',
+    });
+    // the reminder: the deadline in plain words, and what the task is
+    clock.set(new Date(at('2026-10-01', '15:00')));
+    runAutomation();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent.at(-1)!.payload).toMatchObject({
+      title: 'נותרו 24 שעות לסיום המשימה "תיאום מטווח"',
+      body: 'דד-ליין: מחר 14:00 (נותרו 23 שעות) · עדיפות גבוהה\nפירוט: להזמין את המטווח ולתאם תחמושת',
+    });
+  });
+
+  it('the daily call wakes the server; with a secret set, only the platform may make it', async () => {
+    expect((await request(c.app).get('/api/cron/daily')).body).toEqual({ ok: true });
+    process.env.CRON_SECRET = 'cron-test-secret';
+    try {
+      expect((await request(c.app).get('/api/cron/daily')).status).toBe(401);
+      expect((await request(c.app).get('/api/cron/daily').set('authorization', 'Bearer cron-test-secret')).status).toBe(200);
+    } finally {
+      delete process.env.CRON_SECRET;
+    }
   });
 
   it('the commander sees who gets them on the phone; the staff do not', async () => {

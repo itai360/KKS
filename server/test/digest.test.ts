@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clock } from '../src/core';
+import { db } from '../src/db';
 import { runAutomation } from '../src/automation';
 import { morningBrief, resetMorningBrief } from '../src/digest';
 import { streamHandler } from '../src/realtime';
@@ -11,7 +12,10 @@ beforeEach(async () => {
   resetMorningBrief();
 });
 
-const briefs = (uid: number) => notificationsOf(uid).filter((n) => n.type === 'brief');
+const briefs = (uid: number) =>
+  notificationsOf(uid)
+    .filter((n) => n.type === 'brief')
+    .map((n) => ({ ...n, body: db().get<{ body: string }>("SELECT body FROM notifications WHERE user_id = ? AND type = 'brief' AND title = ?", uid, n.title)!.body }));
 
 describe('morning brief', () => {
   it('once a day from seven: what is due today, what is late, the activities one runs - and only when there is something', async () => {
@@ -26,8 +30,16 @@ describe('morning brief', () => {
     expect(morningBrief(clock.now())).toBe(0);
     clock.set(new Date(at('2026-10-02', '07:01')));
     morningBrief(clock.now());
-    expect(briefs(c.ids.s1)).toEqual([expect.objectContaining({ title: 'בוקר טוב - היום: משימה אחת, 1 באיחור, פעילות אחת באחריותך', category: 'action', link: '/my' })]);
-    expect(briefs(c.ids.s2)).toHaveLength(0); // nothing today
+    expect(briefs(c.ids.s1)).toEqual([
+      expect.objectContaining({
+        title: 'בוקר טוב - משימה אחת להיום, 1 באיחור, פעילות אחת באחריותך',
+        // each task on a line of its own, with its deadline: late first, then today
+        body: 'באיחור · דוח ציוד (אתמול 18:00)\nהיום 16:00 · סגירת לו"ז\nבלו"ז היום: 08:00 מטווח',
+        category: 'action',
+        link: '/my',
+      }),
+    ]);
+    expect(briefs(c.ids.s2)).toHaveLength(0); // nothing open
     expect(briefs(c.ids.s3)).toHaveLength(0); // away
     // again that day (another instance, or a restart): still one
     resetMorningBrief();
@@ -36,6 +48,26 @@ describe('morning brief', () => {
     // a server first woken in the afternoon sends no morning brief
     resetMorningBrief();
     expect(morningBrief(new Date(at('2026-10-04', '15:00')))).toBe(0);
+  });
+});
+
+describe('morning brief - the week ahead', () => {
+  it('lists the tasks of the coming days too, every day there are any, and counts what does not fit', async () => {
+    const make = (title: string, date: string, time = '12:00', ownerIds = [c.ids.s2]) => c.cmd.post('/api/tasks', { title, ownerIds, deadline: at(date, time) });
+    await make('תיאום הסעה', '2026-10-03', '09:00');
+    await make('הכנת מצגת', '2026-10-05', '18:00');
+    // more than a week away: counted, not listed
+    await make('סיכום קורס', '2026-10-20');
+    // one they are on, not theirs
+    const [shared] = (await c.cmd.post('/api/tasks', { title: 'תרגיל משותף', ownerIds: [c.ids.s3], deadline: at('2026-10-04', '10:00') })).body.ids;
+    await c.cmd.patch(`/api/tasks/${shared}`, { participantIds: [c.ids.s2] });
+
+    clock.set(new Date(at('2026-10-02', '07:30')));
+    morningBrief(clock.now());
+    const [b] = briefs(c.ids.s2);
+    expect(b.title).toBe('בוקר טוב - 3 השבוע');
+    expect(b.category).toBe('info');
+    expect(b.body.split('\n')).toEqual(['מחר 09:00 · תיאום הסעה', 'ראשון 10:00 · תרגיל משותף', 'שני 18:00 · הכנת מצגת', 'ועוד משימה פתוחה אחת']);
   });
 });
 
@@ -48,14 +80,15 @@ describe('snoozed notifications', () => {
     expect(await unread()).toBe(1);
 
     expect((await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-01', '09:00') })).status).toBe(400); // in the past
-    const res = await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-02', '08:00') });
+    const res = await c.s1.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-02', '06:30') });
     expect(res.body.unread).toBe(0);
     expect(await list()).toHaveLength(0);
-    expect((await list('?snoozed=1')).map((x) => x.snoozedUntil)).toEqual([at('2026-10-02', '08:00')]);
+    expect((await list('?snoozed=1')).map((x) => x.snoozedUntil)).toEqual([at('2026-10-02', '06:30')]);
     // someone else's: not found
     expect((await c.s2.post(`/api/notifications/${n.id}/snooze`, { until: at('2026-10-03') })).status).toBe(404);
 
-    clock.set(new Date(at('2026-10-02', '08:01')));
+    // before seven: no morning brief in between
+    clock.set(new Date(at('2026-10-02', '06:31')));
     runAutomation();
     const back = await list();
     expect(back[0]).toMatchObject({ id: n.id, read: false, snoozedUntil: null });
