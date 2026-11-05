@@ -40,6 +40,8 @@ import { switchCourse } from '../lib/courses';
 import { isTypingField, takesKeys } from '../lib/keyboard';
 import { onThemeChange, setThemePref, shownTheme, syncBrowserBar } from '../lib/theme';
 import { useMedia } from '../lib/media';
+import { hoverOffered, onRailChange, railHover, railPref, setRailHover, setRailPref } from '../lib/railPrefs';
+import { useToast } from './Toasts';
 import { usePullToRefresh } from '../lib/pullRefresh';
 
 interface NavItem {
@@ -332,17 +334,11 @@ export function useNavSections(): NavSection[] {
 /** the course's cycle, as its name says it ("מחזור כ׳") - the top of the menu names it; a name without one is shown whole */
 export const courseCycle = (name: string) => /מחזור\s*[^\s,()·-]+/.exec(name)?.[0] ?? name;
 
-const RAIL_KEY = 'kks.rail';
 const MEDIUM = '(max-width: 1279px)';
-
-function readRailPref(): 'collapsed' | 'expanded' | null {
-  try {
-    const v = localStorage.getItem(RAIL_KEY);
-    return v === 'collapsed' || v === 'expanded' ? v : null;
-  } catch {
-    return null;
-  }
-}
+/** the pointer rests on the folded menu this long before it opens (passing over it on the way elsewhere does not) */
+const PEEK_IN_MS = 140;
+/** and may leave it this long - a slip past its edge - before it folds back */
+const PEEK_OUT_MS = 260;
 
 export function Layout({ children }: { children: ReactNode }) {
   const { user, settings, unread, logout, isCommander, can, viewing, weeks } = useSession();
@@ -562,9 +558,19 @@ export function Layout({ children }: { children: ReactNode }) {
   const focusPage = location.pathname.startsWith('/event/');
   const today = todayKey();
 
-  // the side menu folds to icons on a medium screen (a tablet, a small laptop) unless
-  // the person pinned it; hovering a folded menu opens it over the content
-  const [railPref, setRailPref] = useState(readRailPref);
+  // the side menu folds to icons on a medium screen (a tablet, a small laptop) unless the person pinned it
+  // open; folded, it shows only the main topics - and, when the person chose so, opens over the page while
+  // the mouse is over it (lib/railPrefs.ts)
+  const [railFold, setRailFold] = useState(railPref);
+  const [hoverOpens, setHoverOpens] = useState(railHover);
+  useEffect(
+    () =>
+      onRailChange(() => {
+        setRailFold(railPref());
+        setHoverOpens(railHover());
+      }),
+    [],
+  );
   const [mediumScreen, setMediumScreen] = useState(() => window.matchMedia(MEDIUM).matches);
   useEffect(() => {
     const mq = window.matchMedia(MEDIUM);
@@ -588,19 +594,73 @@ export function Layout({ children }: { children: ReactNode }) {
     };
   }, [calShell]);
   const deskBar = !phone && onCalendar ? calBar : null;
-  const folded = !phone && (railPref ? railPref === 'collapsed' : mediumScreen);
+  const folded = !phone && (railFold ? railFold === 'collapsed' : mediumScreen);
   // just folded: it stays folded under the pointer (no opening on hover) until the pointer leaves it
   const [noPeek, setNoPeek] = useState(false);
+  const toast = useToast();
   const toggleRail = () => {
     const next = folded ? 'expanded' : 'collapsed';
     setNoPeek(next === 'collapsed');
+    endPeek();
     setRailPref(next);
-    try {
-      localStorage.setItem(RAIL_KEY, next);
-    } catch {
-      /* this visit only */
+    // folded by hand for the first time on this device, with a mouse: it can open by itself
+    if (next === 'collapsed' && !hoverOpens && window.matchMedia('(hover: hover)').matches && !hoverOffered()) {
+      toast({
+        title: 'סרגל הצד מכווץ - רק הנושאים הראשיים',
+        body: 'אפשר שיישאר מכווץ ויתרחב לבד כשהעכבר עובר עליו. משנים בכל עת בהגדרות, תחת "מראה".',
+        action: { label: 'שייפתח במעבר עכבר', run: () => setRailHover(true) },
+      });
     }
   };
+
+  // folded, the menu opens over the page for a moment ("peek"): while the mouse is over it (when the person
+  // chose so), or from a topic pressed in it - only the main topics, each opening its screens on a press
+  const [peek, setPeek] = useState<'hover' | 'press' | null>(null);
+  const [peekGroups, setPeekGroups] = useState<Record<string, boolean>>({});
+  const peekTimer = useRef(0);
+  const endPeek = () => {
+    window.clearTimeout(peekTimer.current);
+    setPeek(null);
+    setPeekGroups({});
+  };
+  useEffect(() => {
+    if (!folded) endPeek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- as it opens or folds
+  }, [folded]);
+  // opened from a press: a screen chosen, a press elsewhere or Escape fold it back
+  useEffect(() => {
+    if (peek === 'press') endPeek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on moving to another screen
+  }, [location.pathname]);
+  useEffect(() => {
+    if (peek !== 'press') return;
+    const away = (e: PointerEvent) => {
+      if (!railRef.current?.contains(e.target as Node)) endPeek();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') endPeek();
+    };
+    document.addEventListener('pointerdown', away, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', away, true);
+      document.removeEventListener('keydown', onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- while opened from a press
+  }, [peek]);
+  const onRailEnter = () => {
+    window.clearTimeout(peekTimer.current);
+    if (!folded || !hoverOpens || noPeek || peek) return;
+    peekTimer.current = window.setTimeout(() => setPeek('hover'), PEEK_IN_MS);
+  };
+  const onRailLeave = () => {
+    setNoPeek(false);
+    window.clearTimeout(peekTimer.current);
+    if (peek) peekTimer.current = window.setTimeout(endPeek, PEEK_OUT_MS);
+  };
+  useEffect(() => {
+    return () => window.clearTimeout(peekTimer.current);
+  }, []);
 
   // the phone's bar grows small while reading down - a short capsule of its symbols, every tab still one press
   // away - and is whole again on scrolling up, at the top or the end, or on moving to another screen. It
@@ -764,8 +824,16 @@ export function Layout({ children }: { children: ReactNode }) {
     if (drawer) setGroups(here ? { [here]: true } : {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- as it opens
   }, [drawer]);
-  const groupOpen = (title: string) => groups[title] ?? false;
-  const toggleGroup = (title: string) => setGroups((g) => keepGroups({ ...g, [title]: !g[title] }));
+  // folded, the topics show closed - only the main ones; a topic pressed then opens its screens in the menu
+  // opened over the page, and they close again as it folds back (the open menu keeps its own as they were)
+  const groupOpen = (title: string) => (folded ? !!peekGroups[title] : (groups[title] ?? false));
+  const toggleGroup = (title: string) => {
+    if (!folded) return setGroups((g) => keepGroups({ ...g, [title]: !g[title] }));
+    window.clearTimeout(peekTimer.current);
+    setNoPeek(false);
+    setPeekGroups((g) => ({ ...g, [title]: !g[title] }));
+    if (!peek) setPeek('press');
+  };
   // with the phone's bar below, home is its first tab - not in the menu too
   const railLinks = (items: NavItem[]) =>
     items
@@ -941,11 +1009,14 @@ export function Layout({ children }: { children: ReactNode }) {
       <aside
         ref={railRef}
         id="main-menu"
-        className={`rail gside${noPeek ? ' no-peek' : ''}`}
+        className={`rail gside${noPeek ? ' no-peek' : ''}${peek ? ' is-peek' : ''}`}
         aria-label="ניווט ראשי"
         tabIndex={phone ? -1 : undefined}
         inert={(phone && !menuOpen) || undefined}
-        onMouseLeave={() => setNoPeek(false)}
+        onMouseEnter={onRailEnter}
+        onMouseLeave={onRailLeave}
+        // the keyboard leaving a menu opened from a press folds it back
+        onBlur={(e) => peek === 'press' && !e.currentTarget.contains(e.relatedTarget as Node | null) && endPeek()}
         onFocus={(e) => noPeek && !(e.target as HTMLElement).classList.contains('gside-menu') && setNoPeek(false)}
         // a phone: a screen chosen closes the menu, also the one already on show
         onClick={(e) => phone && (e.target as Element).closest('a[href]') && setMenuOpen(false)}

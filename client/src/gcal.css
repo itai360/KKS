@@ -566,11 +566,11 @@
   justify-content: center;
   padding: 0;
 }
-.rail-collapsed .rail.gside:not(:has(:focus-visible)) .gside-brand,
+.rail-collapsed .rail.gside:not(.is-peek):not(:has(:focus-visible)) .gside-brand,
 .rail-collapsed .rail.gside.no-peek .gside-brand {
   display: none;
 }
-.rail-collapsed .rail.gside:not(.no-peek):has(:focus-visible) .gside-top {
+.rail-collapsed .rail.gside:not(.no-peek):is(.is-peek, :has(:focus-visible)) .gside-top {
   justify-content: flex-start;
   padding-inline: 2px 6px;
 }

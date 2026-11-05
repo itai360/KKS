@@ -25,6 +25,9 @@ import { fmtAgo, fmtDateTime } from '../lib/format';
 import { useApi } from '../lib/useApi';
 import { useHashScroll } from '../lib/hashScroll';
 import { onThemeChange, setThemePref, themePref, type ThemePref } from '../lib/theme';
+import { onRailChange, railHover, railPref, setRailHover, setRailPref } from '../lib/railPrefs';
+import { useMedia } from '../lib/media';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { GenerateWeeks } from './WeeksPage';
 import { turnPushOff, turnPushOn, usePushState } from '../lib/push';
 import { ask } from '../components/Confirm';
@@ -1125,29 +1128,62 @@ function ContactCard() {
   );
 }
 
+type RailChoice = 'expanded' | 'collapsed' | 'hover';
+/** the side menu as it is now: the person's choice, or the screen's width */
+const railChoice = (): RailChoice => {
+  const fold = railPref() ?? (window.matchMedia('(max-width: 1279px)').matches ? 'collapsed' : 'expanded');
+  return fold === 'expanded' ? 'expanded' : railHover() ? 'hover' : 'collapsed';
+};
+
 function AppearanceCard() {
   const [pref, setPref] = useState<ThemePref>(themePref);
   // the button in the top bar changes it too
   useEffect(() => onThemeChange(() => setPref(themePref())), []);
+  // the side menu (a computer's): its button changes it too
+  const phone = useMedia(BOTTOM_BAR_MEDIA);
+  const [rail, setRail] = useState<RailChoice>(railChoice);
+  useEffect(() => onRailChange(() => setRail(railChoice())), []);
   return (
     <div className="card">
       <div className="card-head">
         <h3 className="grow">מראה</h3>
       </div>
-      <div className="card-body row wrap">
-        <span className="grow small muted">בהיר, כהה (נוח בלילה ובשטח), או לפי ההגדרה של המכשיר. נשמר במכשיר הזה.</span>
-        <Seg<ThemePref>
-          value={pref}
-          onChange={(v) => {
-            setPref(v);
-            setThemePref(v);
-          }}
-          options={[
-            { value: 'auto', label: 'לפי המכשיר' },
-            { value: 'light', label: 'בהיר' },
-            { value: 'dark', label: 'כהה' },
-          ]}
-        />
+      <div className="card-body col gap-12">
+        <div className="row wrap">
+          <span className="grow small muted">בהיר, כהה (נוח בלילה ובשטח), או לפי ההגדרה של המכשיר. נשמר במכשיר הזה.</span>
+          <Seg<ThemePref>
+            value={pref}
+            onChange={(v) => {
+              setPref(v);
+              setThemePref(v);
+            }}
+            options={[
+              { value: 'auto', label: 'לפי המכשיר' },
+              { value: 'light', label: 'בהיר' },
+              { value: 'dark', label: 'כהה' },
+            ]}
+          />
+        </div>
+        {!phone && (
+          <div className="row wrap">
+            <span className="grow small muted">
+              <b className="strong">סרגל הצד:</b> פתוח, או מכווץ לנושאים הראשיים בלבד - ואפשר שיתרחב לבד כשהעכבר עובר עליו ויתכווץ כשהעכבר יוצא.
+            </span>
+            <Seg<RailChoice>
+              value={rail}
+              onChange={(v) => {
+                setRail(v);
+                if (v !== 'expanded') setRailHover(v === 'hover');
+                setRailPref(v === 'expanded' ? 'expanded' : 'collapsed');
+              }}
+              options={[
+                { value: 'expanded', label: 'פתוח' },
+                { value: 'collapsed', label: 'מכווץ' },
+                { value: 'hover', label: 'מכווץ, נפתח במעבר עכבר' },
+              ]}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
