@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d5596"/><stop offset="1" stop-color="#1c3f7a"/></linearGradient></defs>
+  <defs><linearGradient id="g" x1="0.281" y1="-0.102" x2="0.719" y2="1.102"><stop offset="0" stop-color="#496595"/><stop offset="1" stop-color="#1c3f7a"/></linearGradient></defs>
   <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <path d="M18 40 L32 16 L46 40" fill="none" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
-  <path d="M22 48 H42" stroke="#9fbcec" stroke-width="5" stroke-linecap="round"/>
+  <svg x="5.12" y="21.45" width="53.76" height="21.10" viewBox="51 189 5223 2050"><path d="M1825 824H1645L1782 189H2057ZM2272 824H2092L2229 189H2503ZM3152 1092V2239H2882V1092ZM2831 613H3449Q3703 613 3819 709.5Q3935 806 3935 1025Q3935 1310 3763 1536.5Q3591 1763 3269 1895V1608Q3457 1520 3559.5 1373.5Q3662 1227 3662 1057Q3662 945 3606 900Q3550 855 3410 855H2831ZM4491 1092V2239H4221V1092ZM4170 613H4788Q5042 613 5158 709.5Q5274 806 5274 1025Q5274 1310 5102 1536.5Q4930 1763 4608 1895V1608Q4796 1520 4898.5 1373.5Q5001 1227 5001 1057Q5001 945 4945 900Q4889 855 4749 855H4170Z" fill="#fff"/><path d="M133 1227Q133 1128 162.5 1020.5Q192 913 240 855H51V613H745Q1046 613 1181.5 740Q1317 867 1317 1149V1229Q1317 1548 1163 1711Q1009 1874 709 1874Q415 1874 274 1720.5Q133 1567 133 1258ZM475 855Q414 961 414 1211V1256Q414 1633 715 1633Q883 1633 958.5 1536Q1034 1439 1034 1221V1147Q1034 991 961.5 923Q889 855 725 855Z" fill="#fff"/></svg>
 </svg>
