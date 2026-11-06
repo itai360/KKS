@@ -9,11 +9,14 @@ import { App } from './App';
 import { reportIssue } from './lib/api';
 import { watchInstall } from './lib/install';
 import { watchKeyboard } from './lib/keyboard';
+import { openAtSnapshot } from './lib/launch';
 import { dropUnusedServiceWorker } from './lib/push';
 import { watchForUpdates } from './lib/update';
 import { applyTheme, onThemeChange, syncBrowserBar } from './lib/theme';
 
 applyTheme();
+// the app opened - from its icon, its address - starts at the snapshot (תמונת המצב), before anything is drawn
+openAtSnapshot();
 // Chrome offers to install the app once, early - kept for the app's own install button (lib/install.ts)
 watchInstall();
 watchKeyboard();

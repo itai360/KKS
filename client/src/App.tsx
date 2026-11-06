@@ -9,6 +9,7 @@ import { SmartEntryHost } from './components/SmartEntry';
 import { WeeklyAddHost } from './components/WeeklyAdd';
 import { ToastProvider } from './components/Toasts';
 import { Empty, Loading } from './components/ui';
+import { useOpenings } from './lib/launch';
 import { SessionGate, useSession } from './lib/session';
 import { LoginPage } from './pages/LoginPage';
 import { MyTasksPage } from './pages/MyTasksPage';
@@ -95,6 +96,7 @@ function ToCalendar() {
 
 function AuthedRoutes() {
   const { isCommander, can } = useSession();
+  useOpenings();
   useEffect(() => {
     prefetchPages();
   }, []);

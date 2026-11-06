@@ -40,7 +40,10 @@ self.addEventListener('notificationclick', (event) => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (const w of windows) {
         if (new URL(w.url).origin === self.location.origin && 'focus' in w) {
-          if ('navigate' in w) await w.navigate(url).catch(() => undefined);
+          if ('navigate' in w && (await w.navigate(url).catch(() => null))) return w.focus();
+          // a browser that does not let the worker move the page (or a page it does not control): the page goes
+          // there itself (lib/launch.ts) - and does not take the moment to open on its snapshot instead
+          w.postMessage({ type: 'open', link: url });
           return w.focus();
         }
       }
