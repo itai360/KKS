@@ -62,6 +62,8 @@ export interface TaskRow {
   subtask_done: number;
   open_deps: number;
   participant_ids: string | null;
+  /** the commanders among them - attached to oversee it (בבקרה), not theirs to do */
+  overseer_ids: string | null;
   group_copies: string | null;
 }
 
@@ -74,6 +76,8 @@ SELECT t.*, o.display_name AS owner_name, c.display_name AS created_by_name, c.r
   (SELECT count(*) FROM task_dependencies d JOIN tasks dt ON dt.id = d.depends_on_id
      WHERE d.task_id = t.id AND dt.status NOT IN ('done', 'cancelled')) AS open_deps,
   (SELECT group_concat(p.user_id) FROM task_participants p WHERE p.task_id = t.id) AS participant_ids,
+  (SELECT group_concat(p.user_id) FROM task_participants p JOIN users pu ON pu.id = p.user_id
+     WHERE p.task_id = t.id AND pu.role = 'commander') AS overseer_ids,
   (SELECT group_concat(g.id || ':' || g.owner_id || ':' || (g.status = 'done')) FROM tasks g
      WHERE g.group_id = t.group_id AND g.status <> 'cancelled') AS group_copies
 FROM tasks t
@@ -104,6 +108,23 @@ export function participantsOf(t: TaskRow): number[] {
   return t.participant_ids ? t.participant_ids.split(',').map(Number) : [];
 }
 
+/** A commander attached to a task that is not his oversees it (בבקרה): told of what happens to it, and of it
+ * going late - not reminded to do it, and not counted among his tasks. */
+export function overseersOf(t: TaskRow): number[] {
+  return t.overseer_ids ? t.overseer_ids.split(',').map(Number) : [];
+}
+
+/** the ones on a task to do it: its owner and those taking part - not a commander overseeing it */
+export function doerIds(t: TaskRow): number[] {
+  const overseers = overseersOf(t);
+  return [t.owner_id, ...participantsOf(t).filter((p) => !overseers.includes(p))];
+}
+
+/** SQL: the task (t) is the person's (its two "?" are their id) - theirs, or one they take part in; a commander
+ * attached to it oversees it, it is not his */
+export const THEIRS = `(t.owner_id = ? OR EXISTS (SELECT 1 FROM task_participants tp JOIN users tu ON tu.id = tp.user_id
+  WHERE tp.task_id = t.id AND tp.user_id = ? AND tu.role <> 'commander'))`;
+
 export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().staleDays): Task {
   const flags = computeFlags(
     { status: r.status, priority: r.priority, deadline: r.deadline, lastActivityAt: r.last_activity_at },
@@ -111,6 +132,7 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     staleDays,
   );
   const participantIds = participantsOf(r);
+  const overseerIds = overseersOf(r);
   const groupCopies = r.group_id && r.group_copies ? r.group_copies.split(',').map((c) => c.split(':').map(Number)).map(([id, ownerId, done]) => ({ id, ownerId, done: done === 1 })) : [];
   return {
     id: r.id,
@@ -119,6 +141,7 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     ownerId: r.owner_id,
     ownerName: r.owner_name,
     participantIds,
+    overseerIds,
     createdBy: r.created_by,
     createdByName: r.created_by_name,
     creatorRole: r.creator_role,
@@ -136,7 +159,7 @@ export function toTask(r: TaskRow, now = clock.now(), staleDays = getSettings().
     parentId: r.parent_id,
     groupId: r.group_id,
     groupCopies,
-    groupName: groupNameOf(groupCopies.length ? groupCopies.map((c) => c.ownerId) : [r.owner_id, ...participantIds], r.created_by),
+    groupName: groupNameOf(groupCopies.length ? groupCopies.map((c) => c.ownerId) : [r.owner_id, ...participantIds.filter((p) => !overseerIds.includes(p))], r.created_by),
     recurringRuleId: r.recurring_rule_id,
     cadetId: r.cadet_id,
     cadetName: r.cadet_name,

@@ -804,7 +804,7 @@ function NextUp({ after }: { after: number }) {
  * themselves in a tap ("צרפו אותי") and leaves it; the ones on it, its creator and the commander attach others.
  */
 function Attached({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
-  const { user, userName } = useSession();
+  const { user, userName, isCommander } = useSession();
   const t = detail.task;
   const m = useTaskMutation(t.id, onChange);
   const [picking, setPicking] = useState(false);
@@ -814,10 +814,16 @@ function Attached({ detail, onChange }: { detail: TaskDetail; onChange: (d: Task
   const send = (body: { add?: number[]; remove?: number[] }, done: string) => void m.run(() => api.post<TaskDetail>(`/api/tasks/${t.id}/attach`, body), done);
   return (
     <span className="attached">
-      {t.participantIds.length ? t.participantIds.map((p) => userName(p)).join(', ') : <span className="muted">אף אחד עדיין</span>}
+      {/* a commander attached oversees it (בבקרה) - it is not his to do */}
+      {t.participantIds.length ? t.participantIds.map((p) => (t.overseerIds.includes(p) ? `${userName(p)} (בבקרה)` : userName(p))).join(', ') : <span className="muted">אף אחד עדיין</span>}
       {open && !owner && !mine && (
-        <button type="button" className="btn btn-sm attached-me" onClick={() => send({ add: [user.id] }, 'צורפת למשימה - תופיע אצלך ותקבל עליה עדכונים')} disabled={m.busy}>
-          <Icon name="plus" size={14} /> צרפו אותי
+        <button
+          type="button"
+          className="btn btn-sm attached-me"
+          onClick={() => send({ add: [user.id] }, isCommander ? 'נוספה לבקרה שלך - תופיע ב"בקרה שלי" ותקבל עליה עדכונים' : 'צורפת למשימה - תופיע אצלך ותקבל עליה עדכונים')}
+          disabled={m.busy}
+        >
+          <Icon name="plus" size={14} /> {isCommander ? 'לבקרה שלי' : 'צרפו אותי'}
         </button>
       )}
       {open && detail.permissions.canAttach && (
@@ -826,8 +832,8 @@ function Attached({ detail, onChange }: { detail: TaskDetail; onChange: (d: Task
         </button>
       )}
       {mine && (
-        <button type="button" className="link-btn tiny muted" onClick={() => send({ remove: [user.id] }, 'יצאת מהמשימה')} disabled={m.busy}>
-          יציאה
+        <button type="button" className="link-btn tiny muted" onClick={() => send({ remove: [user.id] }, isCommander ? 'הוסרה מהבקרה שלך' : 'יצאת מהמשימה')} disabled={m.busy}>
+          {isCommander ? 'הסרה מהבקרה' : 'יציאה'}
         </button>
       )}
       {picking && <AttachDialog detail={detail} onClose={() => setPicking(false)} onSave={(ids) => {
@@ -861,7 +867,7 @@ function AttachDialog({ detail, onClose, onSave }: { detail: TaskDetail; onClose
         </>
       }
     >
-      <p className="small muted mb-12">מי שמצורף רואה את המשימה אצלו ומקבל עדכונים עליה. האחראי נשאר {t.ownerName}.</p>
+      <p className="small muted mb-12">מי שמצורף רואה את המשימה אצלו ומקבל עדכונים עליה - ומפקד הקורס מקבל אותה לבקרה שלו, לא כמשימה שלו. האחראי נשאר {t.ownerName}.</p>
       <UserPicker value={ids.filter((i) => i !== t.ownerId)} onChange={setIds} />
     </Modal>
   );

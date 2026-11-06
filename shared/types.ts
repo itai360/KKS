@@ -106,6 +106,8 @@ export interface Task {
   ownerId: number;
   ownerName: string;
   participantIds: number[];
+  /** the commanders among them: attached to oversee it (בבקרה) - told of it, not theirs to do */
+  overseerIds: number[];
   createdBy: number;
   createdByName: string;
   creatorRole: Role;
@@ -681,6 +683,8 @@ export interface MyTasksData {
   later: Task[];
   waiting: Task[];
   recentDone: Task[];
+  /** the open tasks of others one oversees (בבקרה) - attached to them as a commander; late first */
+  oversight: Task[];
   myWeeks: Week[];
   /** company-wide tasks of others; the copies of an all-staff task once, with how many finished it */
   teamTasks: Task[];

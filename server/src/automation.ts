@@ -11,7 +11,7 @@ import { learningReminders } from './debriefs';
 import { morningBrief } from './digest';
 import { changed, logActivity, notify, wakeSnoozed } from './journal';
 import { generateRecurring } from './recurring';
-import { involvedIds, queryTasks } from './taskRepo';
+import { doerIds, overseersOf, queryTasks } from './taskRepo';
 import { applyTemplate } from './templates';
 import { weeklyDebriefTasks } from './weeklyDebriefTask';
 import { experienceFeedbackTasks } from './cadets';
@@ -41,14 +41,18 @@ export function runAutomation(): AutomationResult {
     db().tx(() => {
       db().run('UPDATE tasks SET overdue_notified = 1 WHERE id = ?', t.id);
       logActivity({ taskId: t.id, weekId: t.week_id, action: 'overdue', text: 'המשימה עברה את הדד-ליין וסומנה "באיחור"', touches: false });
-      notify(involvedIds(t), {
+      notify(doerIds(t), {
         type: 'overdue',
         category: 'exception',
         title: `המשימה "${t.title}" עברה את הדד-ליין`,
         body: 'נא לעדכן: צפוי להסתיים היום / נדרש דד-ליין חדש / קיים חסם / נדרשת החלטת מפקד',
         taskId: t.id,
       });
-      if (t.priority === 'critical' || t.priority === 'high') {
+      const urgent = t.priority === 'critical' || t.priority === 'high';
+      // the commander overseeing it (בבקרה) hears it went late - whose it is, not what to do (an urgent one
+      // reaches every commander below)
+      if (!urgent) notify(overseersOf(t), { type: 'overdue', category: 'info', title: `המשימה "${t.title}" עברה את הדד-ליין`, body: `אחראי: ${t.owner_name}`, taskId: t.id });
+      if (urgent) {
         notify(commanderIds(), {
           type: 'critical_overdue',
           category: 'exception',
@@ -66,7 +70,7 @@ export function runAutomation(): AutomationResult {
   for (const t of queryTasks("t.status NOT IN ('done', 'cancelled') AND t.reminded_24h = 0 AND t.deadline >= ? AND t.deadline <= ?", nowS, in24)) {
     db().tx(() => {
       db().run('UPDATE tasks SET reminded_24h = 1 WHERE id = ?', t.id);
-      notify(involvedIds(t), { type: 'reminder_24h', category: 'action', title: `נותרו 24 שעות לסיום המשימה "${t.title}"`, taskId: t.id });
+      notify(doerIds(t), { type: 'reminder_24h', category: 'action', title: `נותרו 24 שעות לסיום המשימה "${t.title}"`, taskId: t.id });
     });
     res.reminders24++;
   }
@@ -80,7 +84,7 @@ export function runAutomation(): AutomationResult {
   )) {
     db().tx(() => {
       db().run('UPDATE tasks SET reminded_2h = 1 WHERE id = ?', t.id);
-      notify(involvedIds(t), { type: 'reminder_2h', category: 'action', title: `נותרו שעתיים לסיום המשימה "${t.title}"`, taskId: t.id });
+      notify(doerIds(t), { type: 'reminder_2h', category: 'action', title: `נותרו שעתיים לסיום המשימה "${t.title}"`, taskId: t.id });
     });
     res.reminders2++;
   }

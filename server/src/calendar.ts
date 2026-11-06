@@ -18,7 +18,7 @@ import { db } from './db';
 import { getFile, putFile, removeFile } from './files';
 import { listEventsFor } from './schedule';
 import { writtenUids } from './gcalSync';
-import { queryTasks, type TaskRow } from './taskRepo';
+import { queryTasks, THEIRS, type TaskRow } from './taskRepo';
 import { createWeek, inferWeekNumber, listWeeks, updateWeek } from './weeks';
 
 // ---------------- out: the schedule as an iCal feed ----------------
@@ -128,7 +128,7 @@ function taskLines(t: TaskRow, origin: string, stamp: string): string[] {
 function openTasksOf(userId: number, today: string, zone: string): TaskRow[] {
   return queryTasks(
     `t.status NOT IN ('done', 'cancelled') AND t.deadline >= ? AND t.deadline < ?
-     AND (t.owner_id = ? OR EXISTS (SELECT 1 FROM task_participants tp WHERE tp.task_id = t.id AND tp.user_id = ?))`,
+     AND ${THEIRS}`,
     zonedToUtc(addDays(today, -30), '00:00', zone).toISOString(),
     zonedToUtc(addDays(today, 366), '00:00', zone).toISOString(),
     userId,

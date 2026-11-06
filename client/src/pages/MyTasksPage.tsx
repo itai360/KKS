@@ -31,7 +31,7 @@ export function MyTasksPage() {
 
   const total = data ? data.overdue.length + data.today.length + data.important.length + data.week.length + data.later.length + data.waiting.length : 0;
 
-  const allTasks = data ? [...data.overdue, ...data.today, ...data.important, ...data.week, ...data.later, ...data.waiting, ...data.teamTasks] : [];
+  const allTasks = data ? [...data.overdue, ...data.today, ...data.important, ...data.week, ...data.later, ...data.waiting, ...data.oversight, ...data.teamTasks] : [];
 
   return (
     <TaskBulkScope tasks={allTasks}>
@@ -65,11 +65,12 @@ export function MyTasksPage() {
           <DayProgress done={data.stats.doneToday} late={data.stats.overdue} today={data.stats.today} />
           {/* four zeros say nothing: with nothing open and nothing done today, the empty state says it */}
           {/* what was done today is in "היום שלך" above; these go to what is still open */}
-          {total > 0 && (
+          {(total > 0 || data.oversight.length > 0) && (
             <div className="count-taps" role="group" aria-label="המשימות שלך במספרים">
               <CountPill n={data.stats.overdue} label="באיחור" alert={data.stats.overdue > 0} target="group-overdue" />
               <CountPill n={data.stats.today} label="היום" target="group-today" />
               <CountPill n={data.stats.week} label="השבוע" target="group-week" />
+              {data.oversight.length > 0 && <CountPill n={data.oversight.length} label="בבקרה" target="group-oversight" />}
             </div>
           )}
 
@@ -96,6 +97,8 @@ export function MyTasksPage() {
               <TaskSection id="group-week" title="השבוע" tasks={data.week} tone="yellow" showOwner={false} />
               <TaskSection title="בהמשך" tasks={data.later} tone="gray" showOwner={false} />
               <TaskSection title="ממתין לאישור מפקד" tasks={data.waiting} tone="blue" showOwner={false} />
+              {/* others' tasks one was attached to as the commander: watched, not done - with whose they are */}
+              <TaskSection id="group-oversight" title="בבקרה שלי" tasks={data.oversight} tone="blue" />
               {/* what was done is out of the way: one line that opens to it */}
               <DoneDrawer id="my-done" count={data.recentDone.length} label="הושלמו לאחרונה">
                 <TaskList tasks={data.recentDone} showOwner={false} />

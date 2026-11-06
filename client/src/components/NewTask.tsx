@@ -441,8 +441,8 @@ function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial
           <label className="check new-task-attach">
             <input type="checkbox" checked={attach} onChange={(e) => setAttach(e.target.checked)} />
             <span>
-              {isCommander ? 'לצרף אותי' : 'לצרף את מפקד הקורס'}
-              <span className="tiny muted"> - {isCommander ? 'תופיע אצלי ואקבל עליה עדכונים' : 'יראה אותה אצלו ויקבל עליה עדכונים'}</span>
+              {isCommander ? 'לצרף אותי לבקרה' : 'לצרף את מפקד הקורס לבקרה'}
+              <span className="tiny muted"> - {isCommander ? 'תופיע אצלי ב"בקרה שלי" ואקבל עליה עדכונים' : 'תופיע אצלו בבקרה, לא כמשימה שלו, ויקבל עליה עדכונים'}</span>
             </span>
           </label>
         )}

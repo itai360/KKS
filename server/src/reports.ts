@@ -34,7 +34,10 @@ import { listDocuments } from './documents';
 const ms = (iso: string) => Date.parse(iso);
 const byDeadline = (a: Task, b: Task) => ms(a.deadline) - ms(b.deadline);
 const byPriorityThenDeadline = (a: Task, b: Task) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority] || byDeadline(a, b);
-const involves = (t: Task, uid: number) => t.ownerId === uid || t.participantIds.includes(uid);
+/** the task is the person's: theirs, or one they take part in - a commander attached to oversee it excepted */
+const involves = (t: Task, uid: number) => t.ownerId === uid || (t.participantIds.includes(uid) && !t.overseerIds.includes(uid));
+/** a commander attached to someone else's task: it is in his oversight (בבקרה), not among his tasks */
+const oversees = (t: Task, uid: number) => t.ownerId !== uid && t.overseerIds.includes(uid);
 
 function ctx() {
   const now = clock.now();
@@ -262,6 +265,10 @@ export function myTasks(actor: UserRow): MyTasksData {
   const recentDone = mine
     .filter((t) => t.status === 'done' && t.completedAt && c.nowMs - ms(t.completedAt) < 3 * DAY)
     .sort((a, b) => ms(b.completedAt!) - ms(a.completedAt!));
+  // others' tasks one was attached to as a commander: watched, not done - the late ones first
+  const oversight = visible
+    .filter((t) => oversees(t, actor.id) && isOpenStatus(t.status))
+    .sort((a, b) => Number(b.overdue) - Number(a.overdue) || byDeadline(a, b));
   return {
     overdue,
     today,
@@ -270,6 +277,7 @@ export function myTasks(actor: UserRow): MyTasksData {
     later,
     waiting,
     recentDone,
+    oversight,
     myWeeks: listWeeks('w.lead_id = ? AND w.end_date >= ?', actor.id, c.today),
     ...teamTasks(visible, mine, actor.id),
     stats: {
@@ -290,7 +298,7 @@ function teamTasks(visible: Task[], mine: Task[], uid: number): Pick<MyTasksData
   const myGroups = new Set(mine.map((t) => t.groupId).filter(Boolean));
   const seenGroups = new Set<string>();
   const list = visible
-    .filter((t) => t.visibility === 'team' && !involves(t, uid) && isOpenStatus(t.status))
+    .filter((t) => t.visibility === 'team' && !involves(t, uid) && !oversees(t, uid) && isOpenStatus(t.status))
     .filter((t) => {
       if (!t.groupId) return true;
       if (myGroups.has(t.groupId) || seenGroups.has(t.groupId)) return false;

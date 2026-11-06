@@ -268,18 +268,20 @@ export function createTasks(actor: UserRow, raw: CreateTaskInput, opts: CreateOp
               },
           actor.id,
         );
-        // the attached follow it: told so, not handed it
-        notify(
-          attached,
-          {
-            type: 'task_assigned',
-            category: 'info',
-            title: `צורפת למשימה: "${input.title}"`,
-            body: `מאת ${actor.display_name} · אחראי: ${getUserRow(unit.owner)?.display_name ?? ''} · דד-ליין ${fmt(input.deadline)}`,
-            taskId: id,
-          },
-          actor.id,
-        );
+        // the attached follow it: told so, not handed it - a commander oversees it (בבקרה)
+        for (const watching of [true, false]) {
+          notify(
+            attached.filter((a) => (getUserRow(a)?.role === 'commander') === watching),
+            {
+              type: 'task_assigned',
+              category: 'info',
+              title: watching ? `לבקרה שלך: "${input.title}"` : `צורפת למשימה: "${input.title}"`,
+              body: `מאת ${actor.display_name} · אחראי: ${getUserRow(unit.owner)?.display_name ?? ''} · דד-ליין ${fmt(input.deadline)}`,
+              taskId: id,
+            },
+            actor.id,
+          );
+        }
       }
     }
   });
@@ -459,7 +461,10 @@ export function updateTask(actor: UserRow, id: number, raw: UpdateTaskInput, byp
         const names = (ids: number[]) => ids.map((i) => getUserRow(i)?.display_name).join(', ');
         if (added.length) logs.push({ action: 'participants', text: `${who} צירף את ${names(added)} למשימה` });
         if (removed.length) logs.push({ action: 'participants', text: `${who} הסיר את ${names(removed)} מהמשימה` });
-        notify(added, { type: 'task_assigned', category: 'action', title: `צורפת למשימה: "${t.title}"`, taskId: id }, actor.id);
+        // a commander attached oversees it (בבקרה): told of it, not handed it
+        const watching = (u: number) => getUserRow(u)?.role === 'commander';
+        notify(added.filter(watching), { type: 'task_assigned', category: 'info', title: `לבקרה שלך: "${t.title}"`, taskId: id }, actor.id);
+        notify(added.filter((u) => !watching(u)), { type: 'task_assigned', category: 'action', title: `צורפת למשימה: "${t.title}"`, taskId: id }, actor.id);
       }
     }
     if (sets.length) {

@@ -9,8 +9,8 @@ import { useApi } from './useApi';
 /** copies of one task, one for each person (at least two of them left) */
 export const isGrouped = (t: Task) => !!t.groupId && t.groupCopies.length > 1;
 
-/** the people a task went to: whose each copy is, or its owner with its participants */
-export const peopleOf = (t: Task): number[] => (isGrouped(t) ? t.groupCopies.map((c) => c.ownerId) : [t.ownerId, ...t.participantIds]);
+/** the people a task went to: whose each copy is, or its owner with its participants (not a commander overseeing it) */
+export const peopleOf = (t: Task): number[] => (isGrouped(t) ? t.groupCopies.map((c) => c.ownerId) : [t.ownerId, ...t.participantIds.filter((p) => !t.overseerIds.includes(p))]);
 
 /** the task's group column: the group's name, a few names for people who are not one, nothing for one person */
 export function groupLabel(t: Task, userName: (id: number) => string): string {

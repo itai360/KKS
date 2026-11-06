@@ -8,7 +8,7 @@ const userName = (id: number) => names[id] ?? '';
 
 // a task as a list gets it - only what folding reads
 function task(id: number, ownerId: number, over: Partial<Task> = {}): Task {
-  return { id, title: `משימה ${id}`, ownerId, ownerName: userName(ownerId), participantIds: [], createdBy: ME, groupId: null, groupCopies: [], groupName: null, status: 'todo', overdue: false, tone: 'gray', deadline: '2026-10-05T15:00:00.000Z', ...over } as Task;
+  return { id, title: `משימה ${id}`, ownerId, ownerName: userName(ownerId), participantIds: [], overseerIds: [], createdBy: ME, groupId: null, groupCopies: [], groupName: null, status: 'todo', overdue: false, tone: 'gray', deadline: '2026-10-05T15:00:00.000Z', ...over } as Task;
 }
 const copies = [
   { id: 10, ownerId: 2, done: false },

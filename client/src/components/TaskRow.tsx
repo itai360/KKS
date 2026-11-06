@@ -151,7 +151,7 @@ export function useGroupTag(task: Task, ownerShown: boolean): string {
   if (people.length < 2) return '';
   if (task.groupName) return task.groupName;
   // one task they share, its owner already named: who shares it with them
-  if (!isGrouped(task) && ownerShown) return `עם ${namesOf(task.participantIds.map(userName))}`;
+  if (!isGrouped(task) && ownerShown) return `עם ${namesOf(people.slice(1).map(userName))}`;
   return namesOf(people.map(userName));
 }
 

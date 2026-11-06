@@ -19,7 +19,7 @@ import { getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, notFound, nowIso, patchSchema, tz } from './core';
 import { db } from './db';
 import { changed, logActivity, notificationsChanged, notify } from './journal';
-import { queryTasks, toTask, visibleTasks } from './taskRepo';
+import { queryTasks, THEIRS, toTask, visibleTasks } from './taskRepo';
 import { listAttachments, updateTask, weekForDate } from './taskService';
 import { listDebriefs } from './debriefs';
 import { may } from './abilities';
@@ -207,7 +207,7 @@ export function listEventsFor(actor: UserRow, from: string, to: string): Schedul
       .all<{ id: number; n: number }>(
         `SELECT t.event_id AS id, count(*) AS n FROM tasks t JOIN events e ON e.id = t.event_id
          WHERE e.date >= ? AND e.date <= ? AND t.status <> 'cancelled'
-           AND (t.owner_id = ? OR EXISTS (SELECT 1 FROM task_participants p WHERE p.task_id = t.id AND p.user_id = ?))
+           AND ${THEIRS}
          GROUP BY t.event_id`,
         from,
         to,

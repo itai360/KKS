@@ -9,6 +9,7 @@ import { awayOn } from './absences';
 import { tz } from './core';
 import { db } from './db';
 import { firstTime, notify } from './journal';
+import { THEIRS } from './taskRepo';
 
 /** how far ahead the brief lists: the coming week */
 const AHEAD_DAYS = 7;
@@ -43,15 +44,27 @@ export function morningBrief(now: Date): number {
   let sent = 0;
   for (const u of users) {
     if (away.has(u.id)) continue;
-    // the tasks that are theirs or that they are on - the same the reminders go to
+    // the tasks that are theirs or that they are on - the same the reminders go to (not the ones a commander oversees)
     const open = db().all<BriefTask>(
       `SELECT t.title, t.deadline FROM tasks t
-       WHERE t.status NOT IN ('done', 'cancelled')
-         AND (t.owner_id = ? OR EXISTS (SELECT 1 FROM task_participants p WHERE p.task_id = t.id AND p.user_id = ?))
+       WHERE t.status NOT IN ('done', 'cancelled') AND ${THEIRS}
        ORDER BY t.deadline, t.id`,
       u.id,
       u.id,
     );
+    // a commander's oversight (בבקרה): what of it is late or due today - counted, not listed as his
+    const watched =
+      u.role === 'commander'
+        ? db().all<{ deadline: string }>(
+            `SELECT t.deadline FROM tasks t JOIN task_participants p ON p.task_id = t.id AND p.user_id = ?
+             WHERE t.owner_id <> ? AND t.status NOT IN ('done', 'cancelled') AND t.deadline < ?`,
+            u.id,
+            u.id,
+            endOfToday,
+          )
+        : [];
+    const watchedLate = watched.filter((t) => t.deadline < nowIso).length;
+    const watchedToday = watched.length - watchedLate;
     const late = open.filter((t) => t.deadline < nowIso);
     const dueToday = open.filter((t) => t.deadline >= nowIso && t.deadline < endOfToday);
     const thisWeek = open.filter((t) => t.deadline >= endOfToday && t.deadline < endOfWeek);
@@ -61,7 +74,7 @@ export function morningBrief(now: Date): number {
       u.id,
       today,
     );
-    if (!late.length && !dueToday.length && !thisWeek.length && !events.length) continue;
+    if (!late.length && !dueToday.length && !thisWeek.length && !events.length && !watched.length) continue;
     if (!firstTime(`brief:${today}:${u.id}`)) continue;
 
     const parts = [
@@ -69,6 +82,8 @@ export function morningBrief(now: Date): number {
       late.length ? `${late.length} באיחור` : '',
       thisWeek.length ? `${thisWeek.length} השבוע` : '',
       events.length ? (events.length === 1 ? 'פעילות אחת באחריותך' : `${events.length} פעילויות באחריותך`) : '',
+      // nothing of his own: the title says the oversight
+      !open.length && !events.length && watched.length ? `${tasksWord(watched.length)} בבקרה שלך` : '',
     ].filter(Boolean);
     // one line a task, the most pressing first: late, today, then the week by its deadline
     const listed = [
@@ -81,6 +96,7 @@ export function morningBrief(now: Date): number {
     const lines = [
       ...listed.slice(0, TASK_LINES),
       hidden ? (hidden === 1 ? 'ועוד משימה פתוחה אחת' : `ועוד ${hidden} משימות פתוחות`) : '',
+      watched.length ? `בבקרה שלך: ${[watchedLate ? `${watchedLate} באיחור` : '', watchedToday ? `${watchedToday} להיום` : ''].filter(Boolean).join(', ')}` : '',
       events.length
         ? `בלו"ז היום: ${events
             .slice(0, 3)
@@ -90,7 +106,7 @@ export function morningBrief(now: Date): number {
     ].filter(Boolean);
     notify([u.id], {
       type: 'brief',
-      category: late.length ? 'action' : 'info',
+      category: late.length || watchedLate ? 'action' : 'info',
       title: `בוקר טוב - ${parts.join(', ')}`,
       body: lines.join('\n'),
       link: u.role === 'commander' ? '/briefing' : '/my',
