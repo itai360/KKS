@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CARRY_ACTION_LABELS, LESSON_KIND_LABELS, LESSON_KINDS, WEEK_STATUS_LABELS, type CarryAction, type LessonKind } from '@shared/constants';
 import { addDays, diffDays, shortDate, weekdayName, weekdayOf } from '@shared/dates';
-import type { CarryDecision, CloseCheck, PreviousCycleWeek, Task, Template, Week, WeekDetail } from '@shared/types';
+import type { CarryDecision, CloseCheck, PreviousCycleWeek, Task, Template, Week, WeekDetail, WeekRenumber } from '@shared/types';
 import { KindBadge, PriorLessons } from '../components/DebriefBits';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { CalendarWeeksModal } from '../components/GoogleCalendar';
@@ -28,6 +28,7 @@ export function WeeksPage() {
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [fromCalendar, setFromCalendar] = useState(false);
+  const [renumbering, setRenumbering] = useState(false);
   const today = todayKey();
 
   return (
@@ -45,7 +46,7 @@ export function WeeksPage() {
     <div className="page">
       <PageHead
         title="שבועות הקורס"
-        sub="ציר הזמן של הקורס: מפק״צ מוביל, משימות ואחוז מוכנות לכל שבוע."
+        sub="ציר הזמן של הקורס: אחראי, משימות ואחוז מוכנות לכל שבוע."
         actions={
           <>
             <Link to="/tracks" className="btn btn-ghost">
@@ -63,6 +64,11 @@ export function WeeksPage() {
               <button className="btn" onClick={() => setGenerating(true)}>
                 <Icon name="layers" /> יצירת שבועות
               </button>
+              {list.length > 0 && (
+                <button className="btn btn-ghost" onClick={() => setRenumbering(true)} title="מספר כל שבוע - מספר השבוע של התאריכים שלו ביומן">
+                  <Icon name="calendar" /> מספור לפי היומן
+                </button>
+              )}
               <button className="btn btn-primary" onClick={() => setCreating(true)}>
                 <Icon name="plus" /> שבוע
               </button>
@@ -76,13 +82,105 @@ export function WeeksPage() {
       ) : !list.length ? (
         <Empty icon="layers" title="עדיין אין שבועות" text={can('weeks') ? 'צרו את רשימת שבועות הקורס - שם, נושא ואחראי לכל שבוע.' : 'מפקד הקורס עדיין לא הגדיר שבועות.'} />
       ) : (
-        <WeekCards list={list} today={today} />
+        <>
+          {can('weeks') && <RenumberNotice />}
+          <WeekCards list={list} today={today} />
+        </>
       )}
+      {renumbering && <RenumberDialog byCalendar onClose={() => setRenumbering(false)} />}
       {creating && <WeekForm onClose={() => setCreating(false)} />}
       {generating && <GenerateWeeks onClose={() => setGenerating(false)} />}
       {fromCalendar && <CalendarWeeksModal onClose={() => setFromCalendar(false)} />}
     </div>
     </BulkScope>
+  );
+}
+
+/** weeks whose number is not their dates' in the calendar (copied into a new course before it was fixed, or
+ * moved): said above the weeks, and set right in one tap */
+function RenumberNotice() {
+  const { data } = useApi<WeekRenumber>('/api/weeks/renumber', ['weeks']);
+  const [open, setOpen] = useState(false);
+  const changes = data?.changes ?? [];
+  if (!changes.length) return null;
+  const first = changes[0];
+  return (
+    <>
+      <div className="info-box renumber-notice row gap-8 wrap" role="status">
+        <Icon name="alert" size={16} />
+        <span className="grow">
+          {changes.length === 1 ? 'המספר של שבוע אחד לא תואם' : `המספרים של ${changes.length} שבועות לא תואמים`} לתאריכים שלהם ביומן - למשל {first.name} ({shortDate(first.startDate)}): בתאריכים שלו זה שבוע {first.to}.
+        </span>
+        <button className="btn btn-sm btn-primary" onClick={() => setOpen(true)}>
+          עדכון המספרים
+        </button>
+      </div>
+      {open && <RenumberDialog onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+/** what each week's number becomes, and doing it */
+function RenumberDialog({ byCalendar, onClose }: { byCalendar?: boolean; onClose: () => void }) {
+  const { data, error, loading } = useApi<WeekRenumber>(`/api/weeks/renumber${byCalendar ? '?calendar=1' : ''}`, ['weeks']);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
+  const changes = data?.changes ?? [];
+  const submit = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api.post<{ updated: number }>('/api/weeks/renumber', { calendar: !!byCalendar });
+      emitLocalChange('weeks');
+      toast({ title: r.updated === 1 ? 'מספר של שבוע אחד עודכן' : `המספרים של ${r.updated} שבועות עודכנו`, tone: 'green' });
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="מספרי השבועות לפי התאריכים"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose} disabled={busy}>
+            {changes.length ? 'ביטול' : 'סגירה'}
+          </button>
+          {changes.length > 0 && (
+            <button className="btn btn-primary" onClick={() => void submit()} disabled={busy}>
+              {busy ? 'מעדכן...' : changes.length === 1 ? 'עדכון השבוע' : `עדכון ${changes.length} שבועות`}
+            </button>
+          )}
+        </>
+      }
+    >
+      <div className="col gap-12">
+        <ErrorBox error={error ?? err} />
+        {loading && !data ? (
+          <Loading rows={3} />
+        ) : !changes.length ? (
+          <Empty icon="check" title="כל המספרים תואמים לתאריכים" text="מספר כל שבוע הוא מספר השבוע של התאריכים שלו ביומן." />
+        ) : (
+          <>
+            <p className="small muted">כל שבוע יקבל את מספר השבוע של התאריכים שלו ביומן{changes.some((c) => c.newName !== c.name) ? ', וגם המספר שבשם שלו' : ''}.</p>
+            <div className="renumber-list">
+              {changes.map((c) => (
+                <div key={c.id} className="renumber-row">
+                  <span className="mono tiny muted">{shortDate(c.startDate)}</span>
+                  <span className="grow small">{c.newName !== c.name ? `${c.name} ← ${c.newName}` : c.name}</span>
+                  <span className="small strong nowrap">
+                    {c.from} ← {c.to}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   );
 }
 

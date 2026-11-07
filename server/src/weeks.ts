@@ -2,12 +2,12 @@
 
 import { z } from 'zod';
 import { CARRY_ACTIONS, isOpenStatus, LESSON_KINDS } from '../../shared/constants';
-import { addDays, diffDays, isDateKey, localDateKey, localTime, zonedIso } from '../../shared/dates';
+import { addDays, diffDays, isDateKey, localDateKey, localTime, weekdayOf, zonedIso } from '../../shared/dates';
 import { readinessPct } from '../../shared/taskLogic';
-import type { CloseCheck, DomainReadiness, Lesson, Week, WeekDetail } from '../../shared/types';
+import type { CloseCheck, DomainReadiness, Lesson, WeekRenumber, Week, WeekDetail } from '../../shared/types';
 import { commanderIds, getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
-import { db } from './db';
+import { currentSlot, db, homeDb, type Db } from './db';
 import { changed, logActivity, notify } from './journal';
 import { listEvents } from './schedule';
 import { listExperiences } from './cadets';
@@ -172,6 +172,80 @@ function notifyLead(actor: UserRow, weekId: number, leadId: number, name: string
   notify([leadId], { type: 'week_lead', category: 'action', title: `מונית לאחראי על ${name}`, link: `/weeks/${weekId}` }, actor.id);
 }
 
+// ---------------- the weeks' numbers by the calendar ----------------
+
+/** a week's number by the calendar: weeks of Sunday to Saturday, the first the one January 1 is in */
+export function calendarWeekNumber(start: string): number {
+  const saturday = addDays(start, 6 - weekdayOf(start));
+  return Math.floor(diffDays(saturday, `${saturday.slice(0, 4)}-01-01`) / 7) + 1;
+}
+
+/** the same by the international rule (weeks of Monday to Sunday, the first the one with the year's first
+ * Thursday) - of the Monday the week reaches */
+function isoWeekNumber(start: string): number {
+  const monday = weekdayOf(start) === 0 ? addDays(start, 1) : start;
+  const thursday = addDays(monday, 3 - ((weekdayOf(monday) + 6) % 7));
+  return Math.floor(diffDays(thursday, `${thursday.slice(0, 4)}-01-01`) / 7) + 1;
+}
+
+/** a calendar's way of numbering the weeks of the year - and how far from it a course counts (a week either way) */
+export interface WeekNumbering {
+  rule: (start: string) => number;
+  offset: number;
+}
+
+export const numberOn = (n: WeekNumbering, start: string) => Math.max(1, n.rule(start) + n.offset);
+
+/** how a course numbers its weeks: by the calendar (38, 39, 40 - most of them so), or null - its own (1, 2, 3) */
+export function weekNumbering(d: Db = db()): WeekNumbering | null {
+  const weeks = d.all<{ number: number; start_date: string }>('SELECT number, start_date FROM weeks ORDER BY start_date, number');
+  if (weeks.length < 2 || weeks[0].number <= 1) return null;
+  let best: (WeekNumbering & { n: number }) | null = null;
+  for (const rule of [calendarWeekNumber, isoWeekNumber]) {
+    for (const offset of [0, -1, 1]) {
+      const n = weeks.filter((w) => w.number === rule(w.start_date) + offset).length;
+      if (!best || n > best.n) best = { rule, offset, n };
+    }
+  }
+  return best && best.n >= Math.ceil(weeks.length * 0.75) ? { rule: best.rule, offset: best.offset } : null;
+}
+
+/** "שבוע 38 - שטח" become week 11: "שבוע 11 - שטח" */
+export const renamedWeek = (name: unknown, was: unknown, now: number) =>
+  typeof name === 'string' && typeof was === 'number' && was !== now ? name.replace(new RegExp(`^(\\s*שבוע\\s+)${was}(?!\\d)`), `$1${now}`) : name;
+
+/**
+ * The weeks whose number is not their dates' in the calendar, and what it is - by the way this course numbers
+ * them, or (a course opened beside the current one, its weeks copied before) the current course's way; asked
+ * for, by the calendar's own numbers. None when the course numbers its weeks its own way (1, 2, 3).
+ */
+export function renumberPlan(byCalendar = false): WeekRenumber {
+  const numbering = weekNumbering() ?? (currentSlot() ? weekNumbering(homeDb()) : null) ?? (byCalendar ? { rule: calendarWeekNumber, offset: 0 } : null);
+  if (!numbering) return { changes: [] };
+  const weeks = db().all<{ id: number; number: number; name: string; start_date: string }>('SELECT id, number, name, start_date FROM weeks ORDER BY start_date, number');
+  return {
+    changes: weeks
+      .map((w) => {
+        const to = numberOn(numbering, w.start_date);
+        return { id: w.id, name: w.name, startDate: w.start_date, from: w.number, to, newName: String(renamedWeek(w.name, w.number, to)) };
+      })
+      .filter((c) => c.from !== c.to),
+  };
+}
+
+/** each week the number of its dates in the calendar (renumberPlan) */
+export function renumberWeeks(actor: UserRow, byCalendar = false): number {
+  if (!may(actor, 'weeks')) throw forbidden('את מספרי השבועות מעדכנים מפקד הקורס או מי שהוא הרשה');
+  const { changes } = renumberPlan(byCalendar);
+  if (!changes.length) return 0;
+  db().tx(() => {
+    for (const c of changes) db().run('UPDATE weeks SET number = ?, name = ? WHERE id = ?', c.to, c.newName, c.id);
+    logActivity({ userId: actor.id, action: 'week_updated', text: `${actor.display_name} עדכן את מספרי ${changes.length === 1 ? 'שבוע אחד' : `${changes.length} שבועות`} לפי התאריכים שלהם ביומן` });
+  });
+  changed('weeks', 'tasks');
+  return changes.length;
+}
+
 export function updateWeek(actor: UserRow, id: number, raw: Partial<z.input<typeof weekSchema>>): void {
   const cur = getWeek(id);
   if (!canManage(actor, cur)) throw forbidden();
@@ -183,6 +257,14 @@ export function updateWeek(actor: UserRow, id: number, raw: Partial<z.input<type
   checkLead(patch.leadId);
   const next = { ...cur, ...patch };
   if ((patch.endDate ?? cur.endDate) < (patch.startDate ?? cur.startDate)) throw badRequest('תאריך הסיום לפני תאריך ההתחלה');
+  // moved to other dates in a course numbered by the calendar: the number of its new dates (and in its name)
+  if (patch.startDate && patch.startDate !== cur.startDate && patch.number === undefined) {
+    const numbering = weekNumbering();
+    if (numbering && cur.number === numberOn(numbering, cur.startDate)) {
+      next.number = numberOn(numbering, patch.startDate);
+      if (patch.name === undefined) next.name = String(renamedWeek(cur.name, cur.number, next.number));
+    }
+  }
   db().tx(() => {
     db().run(
       'UPDATE weeks SET number = ?, name = ?, topic = ?, goals = ?, start_date = ?, end_date = ?, lead_id = ? WHERE id = ?',

@@ -8664,6 +8664,30 @@ html[data-kb] .topbar .search-pop {
   margin-top: 2px;
 }
 
+/* weeks whose number is not their dates' (pages/WeeksPage.tsx) */
+.renumber-notice {
+  align-items: center;
+  margin-bottom: 12px;
+  color: var(--ink);
+}
+.renumber-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(50vh, 440px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.renumber-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.renumber-row + .renumber-row {
+  border-top: 1px solid var(--line);
+}
+
 /* courses side by side (components/ParallelCourses.tsx, CourseSwitch.tsx) */
 .pcourse-list {
   display: flex;

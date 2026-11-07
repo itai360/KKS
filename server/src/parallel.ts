@@ -15,13 +15,14 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
-import { addDays, diffDays, isDateKey, localDateKey, weekdayOf } from '../../shared/dates';
+import { addDays, diffDays, isDateKey, localDateKey } from '../../shared/dates';
 import { searchKey } from '../../shared/search';
 import type { CopyArea, CopySource, ParallelCourse } from '../../shared/types';
 import { parseCookies, type UserRow } from './auth';
 import { badRequest, clock, config, forbidden, HttpError, notFound, nowIso, resetSettingsCache, tz } from './core';
 import { currentSlot, Db, db, homeDb, migrate, withDb, withSlot } from './db';
 import { changed } from './journal';
+import { numberOn, renamedWeek, weekNumbering } from './weeks';
 import type { Topic } from './realtime';
 
 export const SLOT_COOKIE = 'kks_course';
@@ -305,41 +306,6 @@ function shiftDays(from: Db, to: Db): number {
   return typeof a === 'string' && typeof b === 'string' && isDateKey(a) && isDateKey(b) ? Math.round(diffDays(b, a) / 7) * 7 : 0;
 }
 
-// ---------------- the weeks' numbers ----------------
-
-/** a week's number by the calendar: weeks of Sunday to Saturday, the first the one January 1 is in */
-export function calendarWeekNumber(start: string): number {
-  const saturday = addDays(start, 6 - weekdayOf(start));
-  return Math.floor(diffDays(saturday, `${saturday.slice(0, 4)}-01-01`) / 7) + 1;
-}
-
-/** the same by the international rule (weeks of Monday to Sunday, the first the one with the year's first
- * Thursday) - of the Monday the week reaches */
-function isoWeekNumber(start: string): number {
-  const monday = weekdayOf(start) === 0 ? addDays(start, 1) : start;
-  const thursday = addDays(monday, 3 - ((weekdayOf(monday) + 6) % 7));
-  return Math.floor(diffDays(thursday, `${thursday.slice(0, 4)}-01-01`) / 7) + 1;
-}
-
-type Numbering = (start: string) => number;
-
-/** how a course numbers its weeks: by the calendar (38, 39, 40 - most of them so), or null - its own (1, 2, 3) */
-export function weekNumbering(d: Db): Numbering | null {
-  const weeks = d.all<{ number: number; start_date: string }>('SELECT number, start_date FROM weeks ORDER BY start_date, number');
-  if (weeks.length < 2 || weeks[0].number <= 1) return null;
-  let best: Numbering | null = null;
-  let most = 0;
-  for (const rule of [calendarWeekNumber, isoWeekNumber]) {
-    const n = weeks.filter((w) => w.number === rule(w.start_date)).length;
-    if (n > most) [best, most] = [rule, n];
-  }
-  return most >= Math.ceil(weeks.length * 0.75) ? best : null;
-}
-
-/** "שבוע 38 - שטח" moved to week 11: "שבוע 11 - שטח" */
-const renamedWeek = (name: unknown, was: unknown, now: number) =>
-  typeof name === 'string' && typeof was === 'number' && was !== now ? name.replace(new RegExp(`^(\\s*שבוע\\s+)${was}(?!\\d)`), `$1${now}`) : name;
-
 /** Opens a course beside the current one: its own database, with what was chosen to take along. */
 export function openParallelCourse(actor: UserRow, raw: unknown): ParallelCourse {
   const p = openCourseSchema.parse(raw);
@@ -419,7 +385,7 @@ function copyWhole(area: CopyArea, from: Db, to: Db, shift: number, take: CopyAr
       const numbering = shift ? weekNumbering(from) : null;
       copyRows(from, to, 'weeks', '1=1', (r) => {
         const start = shiftDate(r.start_date, shift) as string;
-        const number = numbering ? numbering(start) : (r.number as number);
+        const number = numbering ? numberOn(numbering, start) : (r.number as number);
         return {
           ...r,
           number,
@@ -572,7 +538,7 @@ function insertOne(area: CopyArea, from: Db, to: Db, r: Record<string, unknown>,
     case 'weeks': {
       const start = shiftDate(r.start_date, shift) as string;
       const numbering = shift ? weekNumbering(from) : null;
-      const wanted = numbering ? numbering(start) : (r.number as number);
+      const wanted = numbering ? numberOn(numbering, start) : (r.number as number);
       const number = to.get('SELECT 1 FROM weeks WHERE number = ?', wanted) ? (to.get<{ n: number | null }>('SELECT max(number) AS n FROM weeks')!.n ?? 0) + 1 : wanted;
       insertNew(from, to, 'weeks', {
         ...r,

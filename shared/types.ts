@@ -579,6 +579,11 @@ export interface Notification {
   courseSlot?: number | null;
 }
 
+/** the weeks whose number is not their dates' in the calendar - and what it becomes */
+export interface WeekRenumber {
+  changes: { id: number; name: string; startDate: string; from: number; to: number; newName: string }[];
+}
+
 /** what a course opened beside the current one can take from it - at its opening, and later */
 export type CopyArea = 'weeks' | 'tracks' | 'templates' | 'recurring' | 'teams' | 'documents' | 'guide' | 'lessons';
 

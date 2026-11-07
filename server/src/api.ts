@@ -126,6 +126,8 @@ import {
   getWeek,
   listWeeks,
   openWeek,
+  renumberPlan,
+  renumberWeeks,
   updateWeek,
   weekDetail,
 } from './weeks';
@@ -906,6 +908,12 @@ export function apiRouter(): Router {
   });
   // course weeks from a Google calendar: preview first, then create / update the chosen ones
   const calendarUrl = z.string().trim().min(8, 'הדביקו את כתובת היומן').max(2000);
+  // the weeks whose number is not their dates' in the calendar - and setting them right
+  r.get('/weeks/renumber', requireAbility('weeks'), (req, res) => res.json(renumberPlan(req.query.calendar === '1')));
+  r.post('/weeks/renumber', requireAbility('weeks'), (req, res) => {
+    const { calendar } = z.object({ calendar: z.boolean().optional().default(false) }).parse(req.body ?? {});
+    res.json({ updated: renumberWeeks(me(req), calendar) });
+  });
   r.get('/weeks/calendar', requireCommander, (_req, res) => res.json({ url: weeksCalendarUrl() }));
   r.post('/weeks/calendar/preview', requireCommander, async (req, res) => {
     res.json(await previewCalendarWeeks(z.object({ url: calendarUrl }).parse(req.body).url));

@@ -6,7 +6,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { CopySource, Notification, ParallelCourse, PreviousCycleWeek, Task, Week } from '../../shared/types';
+import type { CopySource, Notification, ParallelCourse, PreviousCycleWeek, Task, Week, WeekRenumber } from '../../shared/types';
 import { runAutomation } from '../src/automation';
 import { clock, config } from '../src/core';
 import { db } from '../src/db';
@@ -226,3 +226,74 @@ describe('a course beside the current one', () => {
     expect((await c.cmd.post('/api/courses/parallel', { name: 'עוד אחד' })).status).toBe(400);
   });
 });
+
+describe("a week's number by its dates", () => {
+  const numbered = async () => {
+    await c.cmd.patch('/api/settings', { courseName: 'קורס בדיקה - מחזור 1', startDate: '2026-09-13' });
+    for (const [number, name, start, end] of [
+      [38, 'שבוע 38 - שטח', '2026-09-13', '2026-09-17'],
+      [39, 'שבוע 39', '2026-09-20', '2026-09-24'],
+      [40, 'שבוע 40', '2026-09-27', '2026-10-01'],
+    ] as const)
+      expect((await c.cmd.post('/api/weeks', { number, name, startDate: start, endDate: end })).status).toBe(200);
+  };
+
+  it('weeks copied with their old numbers are said, and set right in one tap', async () => {
+    await numbered();
+    const course = await openBeside({ startDate: '2027-03-07', take: ['weeks'] });
+    // as a course copied before the numbers moved with the dates
+    withSlotDb(course.id, () => {
+      db().run("UPDATE weeks SET number = 38, name = 'שבוע 38 - שטח' WHERE start_date = '2027-03-07'");
+      db().run("UPDATE weeks SET number = 39, name = 'שבוע 39' WHERE start_date = '2027-03-14'");
+      db().run("UPDATE weeks SET number = 40, name = 'שבוע 40' WHERE start_date = '2027-03-21'");
+    });
+    const { persistSlot } = await import('../src/parallel');
+    persistSlot(course.id);
+    await into(c.cmd, course.id);
+    const plan = (await c.cmd.get('/api/weeks/renumber')).body as WeekRenumber;
+    expect(plan.changes.map((x) => [x.from, x.to, x.newName])).toEqual([
+      [38, 11, 'שבוע 11 - שטח'],
+      [39, 12, 'שבוע 12'],
+      [40, 13, 'שבוע 13'],
+    ]);
+    // someone in the current course, at the same moment: nothing there to set right
+    expect((await c.s1.post('/api/weeks/renumber', {})).body).toEqual({ updated: 0 });
+    expect((await c.cmd.post('/api/weeks/renumber', {})).body).toEqual({ updated: 3 });
+    expect((await weeks(c.cmd)).map((w) => [w.number, w.name])).toEqual([
+      [11, 'שבוע 11 - שטח'],
+      [12, 'שבוע 12'],
+      [13, 'שבוע 13'],
+    ]);
+    expect((await c.cmd.get('/api/weeks/renumber')).body).toEqual({ changes: [] });
+    // the current course is as it was
+    await into(c.cmd, null);
+    expect((await weeks(c.cmd)).map((w) => w.number)).toEqual([38, 39, 40]);
+  });
+
+  it('a week moved to other dates takes their number', async () => {
+    await numbered();
+    const w = (await weeks(c.cmd)).find((x) => x.number === 40)!;
+    expect((await c.cmd.patch(`/api/weeks/${w.id}`, { startDate: '2026-10-04', endDate: '2026-10-08' })).status).toBe(200);
+    expect((await weeks(c.cmd)).map((x) => [x.number, x.name])).toEqual([
+      [38, 'שבוע 38 - שטח'],
+      [39, 'שבוע 39'],
+      [41, 'שבוע 41'],
+    ]);
+  });
+
+  it("a course numbering its weeks its own way (1, 2, 3) is left so - unless asked for the calendar's", async () => {
+    for (const [name, start, end] of [
+      ['שבוע פתיחה', '2026-09-13', '2026-09-17'],
+      ['שבוע שטח', '2026-09-20', '2026-09-24'],
+    ])
+      await c.cmd.post('/api/weeks', { name, startDate: start, endDate: end });
+    expect((await weeks(c.cmd)).map((x) => x.number)).toEqual([1, 2]);
+    expect((await c.cmd.get('/api/weeks/renumber')).body).toEqual({ changes: [] });
+    const asked = (await c.cmd.get('/api/weeks/renumber?calendar=1')).body as WeekRenumber;
+    expect(asked.changes.map((x) => [x.from, x.to])).toEqual([
+      [1, 38],
+      [2, 39],
+    ]);
+  });
+});
+
