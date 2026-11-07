@@ -475,7 +475,7 @@ export const copyPreviousSchema = z.object({
 export async function copyPreviousCycleTasks(actor: UserRow, weekId: number, raw: unknown): Promise<{ created: number; skipped: number }> {
   const p = copyPreviousSchema.parse(raw);
   const w = liveWeek(weekId);
-  if (!may(actor, 'weeks') && w.lead_id !== actor.id) throw forbidden('מעתיקים משימות מהמחזור הקודם - מפקד הקורס או מפק"צ השבוע');
+  if (!may(actor, 'weeks') && w.lead_id !== actor.id) throw forbidden('מעתיקים משימות מהמחזור הקודם - מפקד הקורס או אחראי השבוע');
   const a = await previousCourse(p.archiveId);
   if (!a) throw notFound('הקורס הקודם לא נמצא');
   const prev = a.d;

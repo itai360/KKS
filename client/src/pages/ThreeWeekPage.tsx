@@ -85,7 +85,7 @@ function WeekCard({ part, today }: { part: ThreeWeekWeek; today: string }) {
       <div className="tiny muted mono">{dateRange(w.startDate, w.endDate)}</div>
       <div className="tiny tw-week-facts">
         <span>
-          <span className="muted">מפק"צ השבוע: </span>
+          <span className="muted">אחראי השבוע: </span>
           {w.leadName ?? <span className="text-orange">לא נקבע</span>}
         </span>
         <span>

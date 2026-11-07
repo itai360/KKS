@@ -192,7 +192,7 @@ export function StaffPage() {
             <div className="card-head">
               <h3>שבועות באחריותו</h3>
             </div>
-            {data.weeks.length === 0 && <div className="card-body small muted">לא משויך כמפק"צ אחראי לשבוע.</div>}
+            {data.weeks.length === 0 && <div className="card-body small muted">לא אחראי על אף שבוע.</div>}
             {data.weeks.map((w) => (
               <Link key={w.id} to={`/weeks/${w.id}`} className="row" style={{ padding: '12px 18px', borderTop: '1px solid var(--line)' }}>
                 <div className="grow">

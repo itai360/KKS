@@ -345,7 +345,7 @@ export function PlanPage() {
               <tr>
                 <th>תאריכים</th>
                 <td className="mono">{range(w.startDate, w.endDate)}</td>
-                <th>מפק"צ השבוע</th>
+                <th>אחראי השבוע</th>
                 <td>{w.leadName ?? '-'}</td>
               </tr>
               <tr>

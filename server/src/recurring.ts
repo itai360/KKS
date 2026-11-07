@@ -43,7 +43,7 @@ interface RuleRow {
 
 function assigneeLabel(a: string): string {
   if (a === 'all') return 'כל הסגל';
-  if (a === 'week_lead') return 'מפק"צ השבוע';
+  if (a === 'week_lead') return 'אחראי השבוע';
   return getUserRow(Number(a))?.display_name ?? 'לא ידוע';
 }
 

@@ -71,6 +71,23 @@ describe('a course beside the current one', () => {
     expect(((await c.cmd.get('/api/users')).body as { id: number }[]).map((u) => u.id).sort()).toEqual(Object.values(c.ids).sort());
   });
 
+  it("weeks numbered by the calendar get the calendar's numbers at their new dates - still Sunday to Saturday", async () => {
+    await c.cmd.patch('/api/settings', { courseName: 'קורס בדיקה - מחזור 1', startDate: '2026-09-13' });
+    for (const [number, name, start, end] of [
+      [38, 'שבוע 38 - שטח', '2026-09-13', '2026-09-17'],
+      [39, 'שבוע 39', '2026-09-20', '2026-09-24'],
+    ] as const)
+      expect((await c.cmd.post('/api/weeks', { number, name, startDate: start, endDate: end })).status).toBe(200);
+    expect((await weeks(c.cmd)).map((w) => w.number)).toEqual([38, 39]);
+    // opened from a Wednesday: the weeks keep their Sundays, the nearest whole number of weeks on
+    const course = await openBeside({ startDate: '2027-03-10', take: ['weeks'] });
+    await into(c.cmd, course.id);
+    expect((await weeks(c.cmd)).map((w) => [w.number, w.name, w.startDate, w.endDate])).toEqual([
+      [11, 'שבוע 11 - שטח', '2027-03-07', '2027-03-11'],
+      [12, 'שבוע 12', '2027-03-14', '2027-03-18'],
+    ]);
+  });
+
   it('what is done in it stays in it - and its notifications reach the person, marked with their course', async () => {
     await fillCourse();
     const course = await openBeside({ take: ['weeks'] });
@@ -194,12 +211,12 @@ describe('a course beside the current one', () => {
     runAutomation();
     await into(c.cmd, course.id);
     expect(await titles(c.cmd)).toEqual([]);
-    // from the day it starts - a recurring task from the same point of it as here (it began 2.10 here: 26 days on, 28.10)
+    // from the day it starts - a recurring task from the same point of it as here (it began 2.10 here: 4 weeks on, 30.10)
     const made = () => withSlotDb(course.id, () => db().all<{ title: string }>('SELECT DISTINCT title FROM tasks').map((t) => t.title));
     clock.set(new Date(at('2026-10-02', '09:00')));
     runAutomation();
     expect(made()).toEqual([]);
-    clock.set(new Date(at('2026-10-28', '09:00')));
+    clock.set(new Date(at('2026-10-30', '09:00')));
     runAutomation();
     expect(made()).toEqual(['דוח בוקר']);
   });

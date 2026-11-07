@@ -37,7 +37,7 @@ export function WeeksPage() {
       topics={['weeks', 'tasks']}
       ids={list.map((w) => w.id)}
       actions={[
-        ...(can('weeks') ? [{ key: 'lead', label: 'מפק"צ אחראי', icon: 'users', ask: { title: 'מפק"צ אחראי לשבועות', label: 'מפק"צ', options: [{ value: '', label: 'ללא מפק"צ' }, ...staff.map((u) => ({ value: String(u.id), label: u.displayName }))] } }] : []),
+        ...(can('weeks') ? [{ key: 'lead', label: 'אחראי שבוע', icon: 'users', ask: { title: 'אחראי לשבועות', label: 'אחראי', options: [{ value: '', label: 'בלי אחראי' }, ...staff.map((u) => ({ value: String(u.id), label: u.displayName }))] } }] : []),
         // deleting weeks stays the commander's
         ...(isCommander ? [{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} שבועות? המשימות שלהם יישארו, בלי שיוך לשבוע.' }] : []),
       ]}
@@ -74,7 +74,7 @@ export function WeeksPage() {
       {loading && !list.length ? (
         <Loading rows={3} />
       ) : !list.length ? (
-        <Empty icon="layers" title="עדיין אין שבועות" text={can('weeks') ? 'צרו את רשימת שבועות הקורס - שם, נושא ומפק"צ אחראי לכל שבוע.' : 'מפקד הקורס עדיין לא הגדיר שבועות.'} />
+        <Empty icon="layers" title="עדיין אין שבועות" text={can('weeks') ? 'צרו את רשימת שבועות הקורס - שם, נושא ואחראי לכל שבוע.' : 'מפקד הקורס עדיין לא הגדיר שבועות.'} />
       ) : (
         <WeekCards list={list} today={today} />
       )}
@@ -159,7 +159,7 @@ function WeekCards({ list, today }: { list: Week[]; today: string }) {
                 </div>
                 <div className="row">
                   <div className="grow">
-                    <div className="small">{w.leadName ? `מפק"צ: ${w.leadName}` : <span className="text-orange">ללא מפק"צ אחראי</span>}</div>
+                    <div className="small">{w.leadName ? `אחראי: ${w.leadName}` : <span className="text-orange">בלי אחראי שבוע</span>}</div>
                     <div className="tiny muted">
                       {w.doneTasks}/{w.totalTasks} משימות{w.overdueTasks > 0 && <span className="text-red strong"> · {w.overdueTasks} באיחור</span>}
                     </div>
@@ -245,7 +245,7 @@ export function WeekForm({ week, onClose }: { week?: Week; onClose: () => void }
             <Field label="תאריך סיום" required>
               <DateInput value={end} onChange={(v) => setEnd(v)} />
             </Field>
-            <Field label='מפק"צ אחראי' className="span-2">
+            <Field label="אחראי השבוע" className="span-2">
               <UserPicker value={lead} onChange={setLead} multiple={false} />
             </Field>
           </>
@@ -257,7 +257,7 @@ export function WeekForm({ week, onClose }: { week?: Week; onClose: () => void }
           <textarea className="textarea" value={goals} onChange={(e) => setGoals(e.target.value)} />
         </Field>
       </div>
-      {!staff.length && isCommander && <p className="tiny muted mt-8">טיפ: הוסיפו אנשי סגל במסך ההגדרות כדי לשייך מפק"צ אחראי.</p>}
+      {!staff.length && isCommander && <p className="tiny muted mt-8">טיפ: הוסיפו אנשי סגל במסך ההגדרות כדי לשייך אחראי לכל שבוע.</p>}
       <div className="mt-12">
         <ErrorBox error={error} />
       </div>
@@ -318,9 +318,9 @@ export function GenerateWeeks({ onClose }: { onClose: () => void }) {
                 style={{ width: 170 }}
                 value={r.lead ?? ''}
                 onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, lead: e.target.value ? Number(e.target.value) : null } : x)))}
-                aria-label='מפק"צ אחראי'
+                aria-label="אחראי השבוע"
               >
-                <option value="">מפק"צ אחראי...</option>
+                <option value="">אחראי השבוע...</option>
                 {staff.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.displayName}
@@ -494,7 +494,7 @@ export function WeekPage() {
               {shortDate(w.startDate)}-{shortDate(w.endDate)}
             </span>
             {' · '}
-            {w.leadName ? `מפק"צ אחראי: ${w.leadName}` : 'ללא מפק"צ אחראי'}
+            {w.leadName ? `אחראי: ${w.leadName}` : 'בלי אחראי שבוע'}
             {' · '}
             {WEEK_STATUS_LABELS[w.status]}
             {w.approvedAt && ` · אושר ע"י ${w.approvedByName}`}
@@ -726,7 +726,7 @@ function LeadWorkflow({ week }: { week: Week }) {
   return (
     <div className="card">
       <div className="card-head">
-        <h3>מסלול מפק"צ השבוע</h3>
+        <h3>מסלול אחראי השבוע</h3>
       </div>
       <div className="card-body">
         <div className="timeline">
@@ -781,7 +781,7 @@ function OpenWeek({ detail, onClose }: { detail: WeekDetail; onClose: () => void
     }
   };
 
-  const ownerLabel = (spec?: string) => (spec === 'week_lead' ? (w.leadName ?? 'מפק"צ השבוע') : spec && /^\d+$/.test(spec) ? userName(Number(spec)) : (w.leadName ?? 'מפק"צ השבוע'));
+  const ownerLabel = (spec?: string) => (spec === 'week_lead' ? (w.leadName ?? 'אחראי השבוע') : spec && /^\d+$/.test(spec) ? userName(Number(spec)) : (w.leadName ?? 'אחראי השבוע'));
 
   return (
     <Modal

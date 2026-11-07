@@ -149,7 +149,7 @@ export function WeeklyPage() {
             <span className="mono">
               {shortDate(w.startDate)}-{shortDate(w.endDate)}
             </span>
-            {w.leadName && ` · מפק"צ אחראי: ${w.leadName}`}
+            {w.leadName && ` · אחראי: ${w.leadName}`}
             {' · '}
             {held ? `התקיים ${fmtDateTime(data.heldAt!)}${data.heldByName ? ` · סוכם ע"י ${data.heldByName}` : ''}` : w.endDate < today ? 'עוד לא סוכם' : 'בהכנה'}
           </>

@@ -338,7 +338,7 @@ function AttentionRow({ i, onDecided, leaving }: { i: AttentionItem; onDecided: 
               </div>
               <div className="attn-title">{i.title}</div>
               <div className="attn-sub">
-                {[i.ownerName && (i.kind === 'readiness' ? `מפק"צ: ${i.ownerName}` : `אחראי: ${i.ownerName}`), i.deadline && `דד-ליין: ${fmtDeadline(i.deadline)}`, i.subtitle].filter(Boolean).join(' · ')}
+                {[i.ownerName && `אחראי: ${i.ownerName}`, i.deadline && `דד-ליין: ${fmtDeadline(i.deadline)}`, i.subtitle].filter(Boolean).join(' · ')}
               </div>
               {d.error && <div className="tiny text-red">{d.error}</div>}
             </div>
@@ -411,7 +411,7 @@ function WeekCard({ data }: { data: DashboardData }) {
               {w.name}
             </div>
             <div className="tiny muted">
-              {shortDate(w.startDate)}-{shortDate(w.endDate)} · {w.leadName ? `מפק"צ: ${w.leadName}` : 'ללא מפק"צ אחראי'}
+              {shortDate(w.startDate)}-{shortDate(w.endDate)} · {w.leadName ? `אחראי: ${w.leadName}` : 'בלי אחראי שבוע'}
             </div>
             <div className="tiny muted">
               {w.doneTasks}/{w.totalTasks} משימות {w.approvedAt ? '· אושר' : ''}

@@ -310,7 +310,7 @@ function RuleEditor({ rule, from, onClose }: { rule: RecurringRule | null; from?
           </Field>
           <Field label="אחראי">
             <Select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-              <option value="week_lead">מפק"צ השבוע</option>
+              <option value="week_lead">אחראי השבוע</option>
               <option value="all">כל הסגל (עותק לכל אחד)</option>
               {users.map((u) => (
                 <option key={u.id} value={String(u.id)}>

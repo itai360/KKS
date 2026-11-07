@@ -57,7 +57,7 @@ export const ADDED_TRACKS = ['הדרכה', 'הערכה'];
 export const VISIBILITIES = ['normal', 'team', 'private'] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
 export const VISIBILITY_LABELS: Record<Visibility, string> = {
-  normal: 'רגילה - אחראים, יוצר ומפק"צ השבוע',
+  normal: 'רגילה - אחראים, יוצר ואחראי השבוע',
   team: 'כללית - גלויה לכל הסגל',
   private: 'מוגבלת - אחראים ומפקד בלבד',
 };

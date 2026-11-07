@@ -246,7 +246,7 @@ function TemplateEditor({ template, onClose }: { template: Template | null; onCl
                 <div className="row wrap gap-6 mt-8">
                   <Select className="select" style={{ width: 170, height: 34 }} value={it.owner ?? ''} onChange={(e) => upd(i, { owner: e.target.value })} aria-label="אחראי">
                     <option value="">אחראי: לבחירה בהפעלה</option>
-                    {kind !== 'activity' && <option value="week_lead">מפק"צ השבוע</option>}
+                    {kind !== 'activity' && <option value="week_lead">אחראי השבוע</option>}
                     {kind === 'activity' && <option value="event_owner">אחראי הפעילות</option>}
                     {users.map((u) => (
                       <option key={u.id} value={String(u.id)}>

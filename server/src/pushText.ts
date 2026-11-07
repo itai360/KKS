@@ -41,7 +41,8 @@ const OPENERS: [string, RegExp, (m: RegExpExecArray) => Headline][] = [
   ['debrief', /^תחקיר "(.+)" סוכם$/, (m) => ({ title: m[1], lead: 'התחקיר סוכם' })],
   ['lessons', /^(.+ ממופעים קודמים|הכנת סגל): (.+)$/, (m) => ({ title: m[2], lead: m[1] })],
   ['weekly_closure', /^(סגירה מקצועית לשבועי): (.+)$/, (m) => ({ title: m[2], lead: m[1] })],
-  ['week_lead', /^(מונית למפק"צ אחראי) על (.+)$/, (m) => ({ title: m[2], lead: m[1] })],
+  // "מונית לאחראי על שבוע 3" (and as it was said before: "מונית למפק"צ אחראי על")
+  ['week_lead', /^(מונית ל(?:מפק"צ )?אחראי) על (.+)$/, (m) => ({ title: m[2], lead: m[1] })],
   ['track_lead', /^(מונית לאחראי) על (.+)$/, (m) => ({ title: m[2], lead: m[1] })],
   ['entry', /^(אישור כניסה): (.+)$/, (m) => ({ title: m[2], lead: m[1] })],
   ['experience_feedback', /^התקבל (משוב .+)$/, (m) => ({ title: m[1], lead: '' })],

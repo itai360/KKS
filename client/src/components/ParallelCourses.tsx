@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import type { CopyArea, CopySource, ParallelCourse } from '@shared/types';
 import { api } from '../lib/api';
-import { enterCourse } from '../lib/courses';
+import { enterCourse, reloadAt } from '../lib/courses';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { useHashScroll } from '../lib/hashScroll';
@@ -66,7 +66,7 @@ export function ParallelCoursesCard() {
     if (!ok) return;
     try {
       await api.del(`/api/courses/parallel/${c.id}`);
-      if (here === c.id) window.location.assign('/settings#part-courses');
+      if (here === c.id) reloadAt('/settings#part-courses');
       else {
         toast({ title: `${c.name} נמחק`, tone: 'green' });
         await reload();
@@ -356,7 +356,7 @@ function PromoteCourse({ course, main, onClose }: { course: ParallelCourse; main
     setError(null);
     try {
       await api.post(`/api/courses/parallel/${course.id}/promote`, { archiveName });
-      window.location.assign('/overview');
+      reloadAt('/overview');
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);

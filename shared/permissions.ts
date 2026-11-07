@@ -38,7 +38,7 @@ export const ABILITY_GROUPS: { title: string; abilities: AbilityInfo[] }[] = [
     title: 'משימות ותכנון',
     abilities: [
       { key: 'tasks', label: 'כל המשימות', hint: 'צפייה בכל המשימות (חוץ ממשימות פרטיות), ופתיחת משימה לכל אחד - גם לך ולכל הסגל יחד', on: true },
-      { key: 'weeks', label: 'שבועות הקורס', hint: 'הוספת שבועות, תאריכים, שם ומפק"צ אחראי; פתיחה וסגירה של כל שבוע והעתקה מהמחזור הקודם', on: true },
+      { key: 'weeks', label: 'שבועות הקורס', hint: 'הוספת שבועות, תאריכים, שם ואחראי; פתיחה וסגירה של כל שבוע והעתקה מהמחזור הקודם', on: true },
       { key: 'schedule', label: 'לו"ז', hint: 'הוספה, עריכה, ביטול ומחיקה של אירועים בכל יום', on: true },
       { key: 'tracks', label: 'צירים', hint: 'הוספה, שם, אחראי ומחיקה', on: true },
       { key: 'templates', label: 'תבניות ומשימות חוזרות', hint: 'הוספה, עריכה ומחיקה - גם מלקח בתחקיר', on: true },

@@ -15,7 +15,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
-import { addDays, diffDays, isDateKey, localDateKey } from '../../shared/dates';
+import { addDays, diffDays, isDateKey, localDateKey, weekdayOf } from '../../shared/dates';
 import { searchKey } from '../../shared/search';
 import type { CopyArea, CopySource, ParallelCourse } from '../../shared/types';
 import { parseCookies, type UserRow } from './auth';
@@ -297,12 +297,48 @@ function settingOf(d: Db, key: string): unknown {
 const putSetting = (d: Db, key: string, value: unknown) =>
   d.run('INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, JSON.stringify(value));
 
-/** how many days on the new course is from the current one: its start from this one's - none when either is unknown */
+/** how many days on the new course is from the current one: its start from this one's, in whole weeks - a week
+ * stays Sunday to Thursday, and a weekly task on its day; none when either start is unknown */
 function shiftDays(from: Db, to: Db): number {
   const a = settingOf(from, 'startDate') ?? from.get<{ d: string | null }>('SELECT min(start_date) AS d FROM weeks')?.d;
   const b = settingOf(to, 'startDate');
-  return typeof a === 'string' && typeof b === 'string' && isDateKey(a) && isDateKey(b) ? diffDays(b, a) : 0;
+  return typeof a === 'string' && typeof b === 'string' && isDateKey(a) && isDateKey(b) ? Math.round(diffDays(b, a) / 7) * 7 : 0;
 }
+
+// ---------------- the weeks' numbers ----------------
+
+/** a week's number by the calendar: weeks of Sunday to Saturday, the first the one January 1 is in */
+export function calendarWeekNumber(start: string): number {
+  const saturday = addDays(start, 6 - weekdayOf(start));
+  return Math.floor(diffDays(saturday, `${saturday.slice(0, 4)}-01-01`) / 7) + 1;
+}
+
+/** the same by the international rule (weeks of Monday to Sunday, the first the one with the year's first
+ * Thursday) - of the Monday the week reaches */
+function isoWeekNumber(start: string): number {
+  const monday = weekdayOf(start) === 0 ? addDays(start, 1) : start;
+  const thursday = addDays(monday, 3 - ((weekdayOf(monday) + 6) % 7));
+  return Math.floor(diffDays(thursday, `${thursday.slice(0, 4)}-01-01`) / 7) + 1;
+}
+
+type Numbering = (start: string) => number;
+
+/** how a course numbers its weeks: by the calendar (38, 39, 40 - most of them so), or null - its own (1, 2, 3) */
+export function weekNumbering(d: Db): Numbering | null {
+  const weeks = d.all<{ number: number; start_date: string }>('SELECT number, start_date FROM weeks ORDER BY start_date, number');
+  if (weeks.length < 2 || weeks[0].number <= 1) return null;
+  let best: Numbering | null = null;
+  let most = 0;
+  for (const rule of [calendarWeekNumber, isoWeekNumber]) {
+    const n = weeks.filter((w) => w.number === rule(w.start_date)).length;
+    if (n > most) [best, most] = [rule, n];
+  }
+  return most >= Math.ceil(weeks.length * 0.75) ? best : null;
+}
+
+/** "שבוע 38 - שטח" moved to week 11: "שבוע 11 - שטח" */
+const renamedWeek = (name: unknown, was: unknown, now: number) =>
+  typeof name === 'string' && typeof was === 'number' && was !== now ? name.replace(new RegExp(`^(\\s*שבוע\\s+)${was}(?!\\d)`), `$1${now}`) : name;
 
 /** Opens a course beside the current one: its own database, with what was chosen to take along. */
 export function openParallelCourse(actor: UserRow, raw: unknown): ParallelCourse {
@@ -378,20 +414,28 @@ const shiftDate = (d: unknown, days: number) => (typeof d === 'string' && isDate
 
 function copyWhole(area: CopyArea, from: Db, to: Db, shift: number, take: CopyArea[]): void {
   switch (area) {
-    case 'weeks':
-      // at the same point of the new course, to be planned again
-      copyRows(from, to, 'weeks', '1=1', (r) => ({
-        ...r,
-        start_date: shiftDate(r.start_date, shift),
-        end_date: shiftDate(r.end_date, shift),
-        status: 'planning',
-        approved_at: null,
-        approved_by: null,
-        closed_at: null,
-        closed_by: null,
-        calendar_uid: null,
-      }));
+    case 'weeks': {
+      // at the same point of the new course, to be planned again - numbered by the calendar where this course is
+      const numbering = shift ? weekNumbering(from) : null;
+      copyRows(from, to, 'weeks', '1=1', (r) => {
+        const start = shiftDate(r.start_date, shift) as string;
+        const number = numbering ? numbering(start) : (r.number as number);
+        return {
+          ...r,
+          number,
+          name: renamedWeek(r.name, r.number, number),
+          start_date: start,
+          end_date: shiftDate(r.end_date, shift),
+          status: 'planning',
+          approved_at: null,
+          approved_by: null,
+          closed_at: null,
+          closed_by: null,
+          calendar_uid: null,
+        };
+      });
       return;
+    }
     case 'tracks':
       replaceRows(from, to, 'tracks');
       return;
@@ -526,11 +570,15 @@ const userThere = (to: Db, id: unknown) => (typeof id === 'number' && to.get('SE
 function insertOne(area: CopyArea, from: Db, to: Db, r: Record<string, unknown>, shift: number): void {
   switch (area) {
     case 'weeks': {
-      const number = (to.get<{ n: number | null }>('SELECT max(number) AS n FROM weeks')!.n ?? 0) + 1;
+      const start = shiftDate(r.start_date, shift) as string;
+      const numbering = shift ? weekNumbering(from) : null;
+      const wanted = numbering ? numbering(start) : (r.number as number);
+      const number = to.get('SELECT 1 FROM weeks WHERE number = ?', wanted) ? (to.get<{ n: number | null }>('SELECT max(number) AS n FROM weeks')!.n ?? 0) + 1 : wanted;
       insertNew(from, to, 'weeks', {
         ...r,
-        number: to.get('SELECT 1 FROM weeks WHERE number = ?', r.number as number) ? number : r.number,
-        start_date: shiftDate(r.start_date, shift),
+        number,
+        name: renamedWeek(r.name, r.number, number),
+        start_date: start,
         end_date: shiftDate(r.end_date, shift),
         status: 'planning',
         lead_id: userThere(to, r.lead_id),

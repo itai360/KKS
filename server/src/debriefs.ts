@@ -851,7 +851,7 @@ export function reviewLesson(actor: UserRow, itemId: number, raw: z.input<typeof
   const f = { weekId: p.weekId, eventId: p.eventId };
   const event = p.eventId ? eventRow(p.eventId) : null;
   if (p.weekId) weekRow(p.weekId);
-  if (!canDecideLessons(actor, f)) throw forbidden('על לקחי המחזור הקודם מחליטים מפקד הקורס ומפק"צ השבוע (או האחראי על הפעילות)');
+  if (!canDecideLessons(actor, f)) throw forbidden('על לקחי המחזור הקודם מחליטים מפקד הקורס ואחראי השבוע (או האחראי על הפעילות)');
   const context = contextKey(f);
   db().tx(() => {
     if (p.decision === null) {

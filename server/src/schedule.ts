@@ -630,7 +630,7 @@ export function createEvent(actor: UserRow, raw: z.input<typeof eventSchema> & {
   const rrule = e.recurrence || (legacy ? rruleFromRepeat(legacy) : null);
   const calendar: EventCalendar = e.calendar ?? 'course';
   if (calendar === 'course' && !may(actor, 'schedule') && weekLeadOn(e.date) !== actor.id && e.ownerId !== actor.id) {
-    throw forbidden('רק מפקד הקורס או מפק"צ השבוע יכולים להוסיף אירועים ללו"ז הקורס - אפשר להוסיף ליומן האישי');
+    throw forbidden('רק מפקד הקורס או אחראי השבוע יכולים להוסיף אירועים ללו"ז הקורס - אפשר להוסיף ליומן האישי');
   }
   if (e.ownerId && !getUserRow(e.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
   const { endDate, startTime, endTime } = daysAndHours(e);
@@ -740,7 +740,7 @@ export function updateEvent(actor: UserRow, id: number, raw: Partial<z.input<typ
   if (!canEditRow(actor, cur, isGuest)) throw forbidden();
   const patch = patchSchema(eventSchema).parse(raw);
   if (patch.calendar === 'course' && cur.calendar === 'personal' && !may(actor, 'schedule') && weekLeadOn(patch.date ?? cur.date) !== actor.id) {
-    throw forbidden('רק מפקד הקורס או מפק"צ השבוע מעבירים אירוע ללו"ז הקורס');
+    throw forbidden('רק מפקד הקורס או אחראי השבוע מעבירים אירוע ללו"ז הקורס');
   }
   const allDay = patch.allDay ?? !!cur.all_day;
   const date = patch.date ?? cur.date;

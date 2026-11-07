@@ -310,7 +310,7 @@ function WeekHead({ week }: { week: Week }) {
       <b>{week.name}</b>
       <span className="muted">
         {shortDate(week.startDate)} - {shortDate(week.endDate)}
-        {week.leadName ? ` · מפק"צ השבוע: ${week.leadName}` : ''}
+        {week.leadName ? ` · אחראי השבוע: ${week.leadName}` : ''}
       </span>
       <Icon name="chevronLeft" size={14} />
     </Link>

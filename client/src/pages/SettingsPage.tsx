@@ -138,7 +138,7 @@ function SetupChecklist() {
       { done: true, label: 'יצירת הקורס', hint: settings.courseName },
       { done: !!settings.startDate && !!settings.endDate, label: 'תאריכי התחלה וסיום', hint: settings.startDate ? `${settings.startDate} - ${settings.endDate ?? '?'}` : 'בכרטיס פרטי הקורס' },
       { done: weeks.length > 0, label: 'רשימת שבועות הקורס', hint: weeks.length ? `${weeks.length} שבועות` : undefined, action: () => setGen(true), actionLabel: 'יצירת שבועות' },
-      { done: weeks.length > 0 && weeks.every((w) => w.leadId), label: 'מפק"צ אחראי לכל שבוע', hint: weeks.length ? `${weeks.filter((w) => w.leadId).length}/${weeks.length}` : undefined, link: '/weeks' },
+      { done: weeks.length > 0 && weeks.every((w) => w.leadId), label: 'אחראי לכל שבוע', hint: weeks.length ? `${weeks.filter((w) => w.leadId).length}/${weeks.length}` : undefined, link: '/weeks' },
       { done: staff.length > 0, label: 'אנשי הסגל', hint: staff.length ? `${staff.length} אנשי סגל` : 'בכרטיס אנשי סגל' },
       { done: settings.domains.length > 0, label: 'תחומי אחריות', hint: `${settings.domains.length} תחומים` },
       { done: (templates.data?.length ?? 0) > 0, label: 'תבניות בסיסיות', hint: templates.data?.length ? `${templates.data.length} תבניות` : undefined, link: '/templates' },

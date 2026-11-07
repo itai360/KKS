@@ -1,17 +1,27 @@
 import { api } from './api';
 import { SNAPSHOT } from './launch';
 
+/** the app loaded again at that address - also when it is the page on show (a link to its own part only
+ * scrolls there, and the screens would stay the other course's) */
+export function reloadAt(to: string): void {
+  const url = new URL(to, window.location.href);
+  if (url.pathname === window.location.pathname && url.search === window.location.search) {
+    history.replaceState(history.state, '', url);
+    window.location.reload();
+  } else window.location.assign(url);
+}
+
 /** opens a previous course for reading (null: back to the current one) - every screen loads again */
 export async function switchCourse(id: number | null): Promise<void> {
   await api.post('/api/courses/view', { id });
-  window.location.assign(id === null ? '/courses' : '/');
+  reloadAt(id === null ? '/courses' : '/');
 }
 
 /** moves into a course opened beside the current one (null: the current course) - every screen loads again,
  * that course's */
 export async function enterCourse(id: number | null, to: string = SNAPSHOT): Promise<void> {
   await api.post('/api/courses/switch', { id });
-  window.location.assign(to);
+  reloadAt(to);
 }
 
 // the course this screen is in, among those beside each other (session.tsx says): a notification about

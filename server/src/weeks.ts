@@ -120,7 +120,7 @@ export const weekSchema = z.object({
 function checkLead(id: number | null | undefined): void {
   if (!id) return;
   const u = getUserRow(id);
-  if (!u || !u.active) throw badRequest('המפק"צ שנבחר אינו פעיל');
+  if (!u || !u.active) throw badRequest('האחראי שנבחר אינו פעיל');
 }
 
 /**
@@ -169,7 +169,7 @@ export function createWeek(actor: UserRow, raw: z.input<typeof weekSchema>): num
 }
 
 function notifyLead(actor: UserRow, weekId: number, leadId: number, name: string): void {
-  notify([leadId], { type: 'week_lead', category: 'action', title: `מונית למפק"צ אחראי על ${name}`, link: `/weeks/${weekId}` }, actor.id);
+  notify([leadId], { type: 'week_lead', category: 'action', title: `מונית לאחראי על ${name}`, link: `/weeks/${weekId}` }, actor.id);
 }
 
 export function updateWeek(actor: UserRow, id: number, raw: Partial<z.input<typeof weekSchema>>): void {
@@ -178,7 +178,7 @@ export function updateWeek(actor: UserRow, id: number, raw: Partial<z.input<type
   const patch = patchSchema(weekSchema).parse(raw);
   // The lead may update goals/topic; dates, name and lead belong to the commander (and the staff he lets).
   if (!may(actor, 'weeks') && (patch.startDate || patch.endDate || patch.leadId !== undefined || patch.name || patch.number !== undefined)) {
-    throw forbidden('רק מפקד הקורס יכול לשנות תאריכים, שם ומפק"צ אחראי');
+    throw forbidden('רק מפקד הקורס יכול לשנות תאריכים, שם ואחראי');
   }
   checkLead(patch.leadId);
   const next = { ...cur, ...patch };
@@ -427,7 +427,7 @@ export function addLesson(actor: UserRow, weekId: number, raw: z.input<typeof le
     if (input.task) {
       const next = nextWeekAfter(w);
       const mayAssign = canManage(actor, w) || input.task.ownerId === actor.id;
-      if (!mayAssign) throw forbidden('רק מפקד הקורס או מפק"צ השבוע יכולים לפתוח משימה לאחרים מתוך לקח');
+      if (!mayAssign) throw forbidden('רק מפקד הקורס או אחראי השבוע יכולים לפתוח משימה לאחרים מתוך לקח');
       [taskId] = createTasks(
         actor,
         {

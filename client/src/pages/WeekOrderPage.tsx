@@ -125,7 +125,7 @@ function WeekOrder({ data }: { data: WeekDetail }) {
               <tr>
                 <th>תאריכים</th>
                 <td className="mono">{range(w.startDate, w.endDate)}</td>
-                <th>מפק"צ השבוע</th>
+                <th>אחראי השבוע</th>
                 <td>{w.leadName ?? '-'}</td>
               </tr>
               <tr>
@@ -296,7 +296,7 @@ function WeekOrder({ data }: { data: WeekDetail }) {
         <footer className="doc-foot">
           <div className="doc-sign">
             <div>
-              <span>מפק"צ השבוע</span>
+              <span>אחראי השבוע</span>
               <span className="line">{w.leadName ?? ''}</span>
             </div>
             <div>

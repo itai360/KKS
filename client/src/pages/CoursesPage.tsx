@@ -8,7 +8,7 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui';
 import { api } from '../lib/api';
-import { switchCourse } from '../lib/courses';
+import { reloadAt, switchCourse } from '../lib/courses';
 import { fmtDateTime } from '../lib/format';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
@@ -158,7 +158,7 @@ function EndCourse({ current, onClose }: { current: string; onClose: () => void 
     setError(null);
     try {
       await api.post('/api/courses/new', { archiveName, name, startDate: startDate || null, endDate: endDate || null });
-      window.location.assign('/courses');
+      reloadAt('/courses');
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
