@@ -1167,7 +1167,7 @@ function AppearanceCard() {
         {!phone && (
           <div className="row wrap">
             <span className="grow small muted">
-              <b className="strong">סרגל הצד:</b> פתוח, או מכווץ לנושאים הראשיים בלבד - ואפשר שיתרחב לבד כשהעכבר עובר עליו ויתכווץ כשהעכבר יוצא.
+              <b className="strong">סרגל הצד:</b> הנושאים, פתוח או מכווץ לסמלים - ומכווץ, הוא נפתח מעל הדף כשהעכבר עובר עליו ומתכווץ כשהעכבר יוצא. המסכים של כל נושא בלשוניות שבראש הדף.
             </span>
             <Seg<RailChoice>
               value={rail}

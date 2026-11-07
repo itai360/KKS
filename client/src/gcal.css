@@ -579,6 +579,166 @@
   padding-inline: 13px;
 }
 
+/* the topics: the menu holds them alone - one row each, the one of the screen on show marked; its screens
+   are the tabs at the top of the page */
+.rail-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.gside .rail-topic {
+  font-weight: 600;
+}
+
+/* folded and opened over the page by the mouse resting on it: a floating panel, as an app's sidebar opens
+   over its content - lifted from the page, its edge and shadow showing */
+.rail-collapsed .rail.gside:not(.no-peek):is(.is-peek, :has(:focus-visible)) {
+  box-shadow:
+    0 28px 70px -20px rgba(0, 0, 0, 0.34),
+    0 0 0 1px var(--line);
+}
+
+/* ---------------- a topic's screens: tabs at the top of the page ---------------- */
+
+/* as a segmented control: the screens on one rounded track, the one on show on a raised thumb that slides to
+   the one pressed (components/SectionTabs.tsx) */
+.section-tabs {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 18px 32px 0;
+}
+.section-tabs + .page {
+  padding-top: 16px;
+}
+.section-tabs-track {
+  display: flex;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--fill);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.section-tabs-track::-webkit-scrollbar {
+  display: none;
+}
+/* more hidden at an edge: it fades there (the page reads right to left - its start is at the right) */
+.section-tabs-track.fade-start {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 32px);
+  mask-image: linear-gradient(to left, transparent, #000 32px);
+}
+.section-tabs-track.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px);
+  mask-image: linear-gradient(to right, transparent, #000 32px);
+}
+.section-tabs-track.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+.section-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.section-tab > :not(.section-tab-thumb) {
+  position: relative;
+  z-index: 1;
+}
+.section-tab svg {
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+.section-tab.on {
+  color: var(--ink);
+}
+.section-tab.on svg {
+  color: var(--tint);
+}
+@media (hover: hover) {
+  .section-tab:not(.on):hover {
+    color: var(--ink);
+    background: var(--hover-2);
+  }
+}
+/* pressed: it gives under the finger at once */
+.section-tab:not(.on):active {
+  transform: scale(0.96);
+}
+.section-tab:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 1px;
+}
+.section-tab .count {
+  margin-inline-start: 2px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 17px;
+}
+.section-tab-thumb {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 3px 10px -3px rgba(0, 0, 0, 0.16);
+  transform-origin: center;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .section-tab-thumb {
+    background: #636366;
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+  }
+}
+:root[data-theme='dark'] .section-tab-thumb {
+  background: #636366;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+}
+@media (max-width: 860px) {
+  .section-tabs {
+    padding: 10px 16px 0;
+  }
+  .section-tabs + .page {
+    padding-top: 10px;
+  }
+  .section-tab {
+    min-height: 36px;
+    padding: 0 13px;
+  }
+  /* a phone: the words alone, so more of them fit across */
+  .section-tab svg {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .section-tab,
+  .section-tab svg {
+    transition: none;
+  }
+}
+
 /* ---------------- a phone: the top bar one piece with the strip behind the clock ---------------- */
 
 /* solid, in the page's own colour (what the phone paints behind its clock): no frosted glass blurring what

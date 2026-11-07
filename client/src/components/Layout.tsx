@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
+import { Link, NavLink, useLocation, useNavigate, useNavigationType } from 'react-router';
 import type { EntryRequest, Task, TaskRequest } from '@shared/types';
 import { pendingRequests, reportIssue } from '../lib/api';
 import { onNotification, onStatus } from '../lib/realtime';
@@ -30,8 +30,10 @@ import { ShortcutsHelp } from './Shortcuts';
 import { initials } from './ui';
 import { SETTINGS_ITEM } from './NavMenu';
 import { NotificationsPanel } from './Notifications';
-import { frequentScreens, noteScreen, screenOf } from '../lib/frequent';
-import { BOTTOM_BAR_MEDIA, BOTTOM_BAR_SCREENS } from '../lib/bottomBar';
+import { noteScreen, screenOf } from '../lib/frequent';
+import { noteTopicScreen, screenAt, topicTarget } from '../lib/topics';
+import { SectionTabs } from './SectionTabs';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { shortDate, weekdayName } from '@shared/dates';
 import { useDrawerSwipe } from '../lib/drawerSwipe';
 import { trapFocus } from '../lib/focusTrap';
@@ -40,8 +42,7 @@ import { switchCourse } from '../lib/courses';
 import { isTypingField, takesKeys } from '../lib/keyboard';
 import { onThemeChange, setThemePref, shownTheme, syncBrowserBar } from '../lib/theme';
 import { useMedia } from '../lib/media';
-import { hoverOffered, onRailChange, railHover, railPref, setRailHover, setRailPref } from '../lib/railPrefs';
-import { useToast } from './Toasts';
+import { onRailChange, railHover, railPref, setRailPref } from '../lib/railPrefs';
 import { usePullToRefresh } from '../lib/pullRefresh';
 
 interface NavItem {
@@ -56,24 +57,8 @@ interface NavItem {
 
 /** the menu's last group: the course's calendar and, on it, which calendars it shows */
 const CAL_GROUP = 'יומן';
-/** each group of the menu, by its title - shown alone when the menu is folded to icons */
+/** each topic of the menu, by its title - its mark beside it, and alone when the menu is folded to icons */
 const GROUP_ICONS: Record<string, string> = { 'ניהול משימות': 'tasks', 'תכנון הקורס': 'plan', 'פיקוד ובקרה': 'pulse', צוערים: 'cap', 'תחקירים ולמידה': 'lightbulb', 'סגל וכלים': 'wrench', [CAL_GROUP]: 'calendar' };
-const GROUPS_KEY = 'kks.navGroups';
-function readGroups(): Record<string, boolean> {
-  try {
-    return JSON.parse(localStorage.getItem(GROUPS_KEY) ?? '{}') as Record<string, boolean>;
-  } catch {
-    return {};
-  }
-}
-function saveGroups(g: Record<string, boolean>): Record<string, boolean> {
-  try {
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(g));
-  } catch {
-    /* this visit only */
-  }
-  return g;
-}
 
 /** the bell: how many are new, a short ring as one arrives, and a tap opens them over the screen (Notifications.tsx) */
 function Bell({ unread }: { unread: number }) {
@@ -597,61 +582,39 @@ export function Layout({ children }: { children: ReactNode }) {
   const folded = !phone && (railFold ? railFold === 'collapsed' : mediumScreen);
   // just folded: it stays folded under the pointer (no opening on hover) until the pointer leaves it
   const [noPeek, setNoPeek] = useState(false);
-  const toast = useToast();
+  // its button folds it to the topics' icons and opens it again - and it stays as left (on this device)
   const toggleRail = () => {
     const next = folded ? 'expanded' : 'collapsed';
     setNoPeek(next === 'collapsed');
     endPeek();
     setRailPref(next);
-    // folded by hand for the first time on this device, with a mouse: it can open by itself
-    if (next === 'collapsed' && !hoverOpens && window.matchMedia('(hover: hover)').matches && !hoverOffered()) {
-      toast({
-        title: 'סרגל הצד מכווץ - רק הנושאים הראשיים',
-        body: 'אפשר שיישאר מכווץ ויתרחב לבד כשהעכבר עובר עליו. משנים בכל עת בהגדרות, תחת "מראה".',
-        action: { label: 'שייפתח במעבר עכבר', run: () => setRailHover(true) },
-      });
-    }
   };
 
-  // folded, the menu opens over the page for a moment ("peek"): while the mouse is over it (when the person
-  // chose so), or from a topic pressed in it - only the main topics, each opening its screens on a press
-  const [peek, setPeek] = useState<'hover' | 'press' | null>(null);
-  const [peekGroups, setPeekGroups] = useState<Record<string, boolean>>({});
+  // folded, it opens over the page - a floating panel - while the mouse rests on it, and folds back as the
+  // mouse leaves (unless the person turned that off: settings, "מראה"); a keyboard reaching it opens it too
+  const [peek, setPeek] = useState(false);
   const peekTimer = useRef(0);
   const endPeek = () => {
     window.clearTimeout(peekTimer.current);
-    setPeek(null);
-    setPeekGroups({});
+    setPeek(false);
   };
   useEffect(() => {
     if (!folded) endPeek();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- as it opens or folds
   }, [folded]);
-  // opened from a press: a screen chosen, a press elsewhere or Escape fold it back
+  // Escape folds it back
   useEffect(() => {
-    if (peek === 'press') endPeek();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- on moving to another screen
-  }, [location.pathname]);
-  useEffect(() => {
-    if (peek !== 'press') return;
-    const away = (e: PointerEvent) => {
-      if (!railRef.current?.contains(e.target as Node)) endPeek();
-    };
+    if (!peek) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') endPeek();
     };
-    document.addEventListener('pointerdown', away, true);
     document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', away, true);
-      document.removeEventListener('keydown', onKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- while opened from a press
+    return () => document.removeEventListener('keydown', onKey);
   }, [peek]);
   const onRailEnter = () => {
     window.clearTimeout(peekTimer.current);
     if (!folded || !hoverOpens || noPeek || peek) return;
-    peekTimer.current = window.setTimeout(() => setPeek('hover'), PEEK_IN_MS);
+    peekTimer.current = window.setTimeout(() => setPeek(true), PEEK_IN_MS);
   };
   const onRailLeave = () => {
     setNoPeek(false);
@@ -809,31 +772,13 @@ export function Layout({ children }: { children: ReactNode }) {
     };
   }, [drawer]);
 
-  // the menu's groups (תכנון הקורס, צוערים, בקרה, כלים) open and close, and the group of the screen on show opens
-  // by itself (the calendar's: its last group, "יומן"). A computer's side bar remembers how each was left; a
-  // phone's menu opens every time with only the group of the screen on show open
-  const [groups, setGroups] = useState<Record<string, boolean>>(() => (phone ? {} : readGroups()));
-  const hereSection = sections.find((s) => s.items.some((it) => (it.end ? path === it.to : path === it.to || path.startsWith(`${it.to}/`))));
-  const here = hereSection ? (hereSection.title ?? CAL_GROUP) : undefined;
-  const keepGroups = (g: Record<string, boolean>) => (phone ? g : saveGroups(g));
+  // the topic of the screen on show (the calendar has none: it is the menu's first row) - each topic keeps the
+  // screen of it last used, and the menu opens it there
+  const hereSection = sections.find((s) => s.title && screenAt(path, s.items));
+  const hereScreen = hereSection ? screenAt(path, hereSection.items) : undefined;
   useEffect(() => {
-    if (here) setGroups((g) => (g[here] ? g : keepGroups({ ...g, [here]: true })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- on the screen's group changing
-  }, [here]);
-  useLayoutEffect(() => {
-    if (drawer) setGroups(here ? { [here]: true } : {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- as it opens
-  }, [drawer]);
-  // folded, the topics show closed - only the main ones; a topic pressed then opens its screens in the menu
-  // opened over the page, and they close again as it folds back (the open menu keeps its own as they were)
-  const groupOpen = (title: string) => (folded ? !!peekGroups[title] : (groups[title] ?? false));
-  const toggleGroup = (title: string) => {
-    if (!folded) return setGroups((g) => keepGroups({ ...g, [title]: !g[title] }));
-    window.clearTimeout(peekTimer.current);
-    setNoPeek(false);
-    setPeekGroups((g) => ({ ...g, [title]: !g[title] }));
-    if (!peek) setPeek('press');
-  };
+    if (hereSection?.title && hereScreen) noteTopicScreen(hereSection.title, hereScreen.to);
+  }, [hereSection?.title, hereScreen?.to]);
   // with the phone's bar below, home is its first tab - not in the menu too
   const railLinks = (items: NavItem[]) =>
     items
@@ -845,57 +790,27 @@ export function Layout({ children }: { children: ReactNode }) {
           <Count n={it.count ?? 0} />
         </NavLink>
       ));
-  const railGroup = (title: string, id: string, body: ReactNode, total = 0) => {
-    const open = groupOpen(title);
+  // a topic: one row - it opens the screen of it last used, and its screens are tabs at the top of the page
+  const topicLink = (s: NavSection) => {
+    const title = s.title!;
+    const to = topicTarget(title, s.items);
+    const on = s === hereSection;
+    const waiting = s.items.reduce((n, it) => n + (it.count ?? 0), 0);
     return (
-      <nav key={id} aria-label={title} className={`rail-group${open ? ' open' : ''}${title === here ? ' here' : ''}`}>
-        <button
-          type="button"
-          className="rail-group-head"
-          aria-expanded={open}
-          aria-controls={id}
-          onClick={() => toggleGroup(title)}
-          title={title === here && !open ? `${title} - המסך הפתוח נמצא כאן` : title}
-        >
-          <Icon name={GROUP_ICONS[title] ?? 'layers'} />
-          <span className="rail-label">{title}</span>
-          {/* closed, with the screen on show inside: marked, so it is clear where one is */}
-          {!open && title === here && <span className="rail-group-here" aria-hidden="true" />}
-          {!open && <Count n={total} />}
-          <Icon name="chevronDown" size={15} className="rail-group-chev" />
-        </button>
-        <div className="rail-group-body" id={id} inert={!open}>
-          <div className="rail-group-inner">{body}</div>
-        </div>
-      </nav>
+      <Link
+        key={title}
+        to={to}
+        className={`rail-link rail-topic${on ? ' active' : ''}`}
+        aria-current={on ? (path === to ? 'page' : 'true') : undefined}
+        title={s.items.length > 1 ? `${title}: ${s.items.map((it) => it.label).join(', ')}` : title}
+      >
+        <Icon name={GROUP_ICONS[title] ?? 'layers'} />
+        <span className="rail-label">{title}</span>
+        <Count n={waiting} />
+      </Link>
     );
   };
-  // "בשימוש תדיר": the four screens this person opens most (frequent.ts counts each screen entered) - not the
-  // calendar, which leads the menu, and on a phone not its bar's tabs. Before there is a habit: each group's
-  // first screen. Read as the page loads, and on a phone as its menu opens: the links do not move under the pointer
-  const menuItems: NavItem[] = [...sections.flatMap((s) => s.items), SETTINGS_ITEM];
-  const offeredKey = menuItems
-    .filter((it) => it.to !== '/' && !(phone && BOTTOM_BAR_SCREENS.includes(it.to)))
-    .map((it) => it.to)
-    .join(',');
-  const firstsKey = sections
-    .flatMap((s) => (s.title ? s.items.filter((it) => offeredKey.split(',').includes(it.to)).slice(0, 1) : []))
-    .map((it) => it.to)
-    .join(',');
-  const frequentTo = useMemo(
-    () => frequentScreens(user.id, offeredKey.split(',').filter(Boolean), firstsKey.split(',').filter(Boolean), 4),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- read again as a phone's menu opens
-    [user.id, offeredKey, firstsKey, drawer],
-  );
-  const frequentItems = frequentTo.map((to) => menuItems.find((it) => it.to === to)).filter((it): it is NavItem => !!it);
-  const frequentNav = frequentItems.length > 0 && (
-    <nav className="rail-frequent" aria-labelledby="rail-frequent-title">
-      <div className="rail-section" id="rail-frequent-title">
-        בשימוש תדיר
-      </div>
-      {railLinks(frequentItems)}
-    </nav>
-  );
+  const topics = sections.filter((s) => s.title && s.items.length).map(topicLink);
   // the calendar first: the course's home, its row saying what day it is. On it, and only there, its own tools
   // come under it - the month, to go to a day, then which calendars it shows - in one place, as Google
   // Calendar's side bar and Outlook's calendar pane have them (elsewhere they only pushed the menu down)
@@ -923,12 +838,6 @@ export function Layout({ children }: { children: ReactNode }) {
     </div>
   );
 
-  // every group of the menu, each opening and closing (a computer's menu; a phone's "כל המסכים")
-  const allGroups = sections.map((s, i) => {
-    const links = s.title ? railLinks(s.items) : [];
-    if (!s.title || !links.length) return null;
-    return railGroup(s.title, `rail-group-${i}`, links, s.items.reduce((n, it) => n + (it.count ?? 0), 0));
-  });
   // a phone's menu: every screen, by its groups - and on the calendar first the calendar's own, as Google
   // Calendar's app has it: its views, what it can do and its calendars
   const calMenu = calBar && (
@@ -982,8 +891,9 @@ export function Layout({ children }: { children: ReactNode }) {
           <span className="gside-sep" aria-hidden="true" />
         </>
       )}
-      {frequentNav}
-      {allGroups}
+      <nav className="rail-topics" aria-label="נושאים">
+        {topics}
+      </nav>
       <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
         <Icon name="settings" />
         <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
@@ -1015,8 +925,6 @@ export function Layout({ children }: { children: ReactNode }) {
         inert={(phone && !menuOpen) || undefined}
         onMouseEnter={onRailEnter}
         onMouseLeave={onRailLeave}
-        // the keyboard leaving a menu opened from a press folds it back
-        onBlur={(e) => peek === 'press' && !e.currentTarget.contains(e.relatedTarget as Node | null) && endPeek()}
         onFocus={(e) => noPeek && !(e.target as HTMLElement).classList.contains('gside-menu') && setNoPeek(false)}
         // a phone: a screen chosen closes the menu, also the one already on show
         onClick={(e) => phone && (e.target as Element).closest('a[href]') && setMenuOpen(false)}
@@ -1048,8 +956,9 @@ export function Layout({ children }: { children: ReactNode }) {
           ) : (
             <>
               {calSection}
-              {frequentNav}
-              {allGroups}
+              <nav className="rail-topics" aria-label="נושאים">
+                {topics}
+              </nav>
               <NavLink to="/settings" className={({ isActive }) => `rail-link rail-settings${isActive ? ' active' : ''}`}>
                 <Icon name="settings" />
                 <span className="rail-label">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
@@ -1182,6 +1091,8 @@ export function Layout({ children }: { children: ReactNode }) {
           <Icon name="arrowUp" size={18} />
         </div>
         <main id="main" tabIndex={-1} ref={mainRef}>
+          {/* the topic's screens, as tabs above the page (the menu holds the topics alone) */}
+          {hereSection && hereSection.items.length > 1 && !focusPage && <SectionTabs title={hereSection.title!} items={hereSection.items} path={path} />}
           <BackContext.Provider value={phone ? null : back}>
             <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
           </BackContext.Provider>
