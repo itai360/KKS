@@ -5,7 +5,7 @@
 
 import webpush from 'web-push';
 import { nowIso } from './core';
-import { db } from './db';
+import { homeDb } from './db';
 import { isPushEndpoint } from './netguard';
 import { pushContent, type PushNote } from './pushText';
 
@@ -15,11 +15,11 @@ interface VapidKeys {
 }
 
 function vapidKeys(): VapidKeys {
-  const row = db().get<{ value: string }>("SELECT value FROM meta WHERE key = 'vapid_keys'");
+  const row = homeDb().get<{ value: string }>("SELECT value FROM meta WHERE key = 'vapid_keys'");
   if (row) return JSON.parse(row.value) as VapidKeys;
   const keys = webpush.generateVAPIDKeys();
-  db().run("INSERT INTO meta(key, value) VALUES ('vapid_keys', ?) ON CONFLICT(key) DO NOTHING", JSON.stringify(keys));
-  return JSON.parse(db().get<{ value: string }>("SELECT value FROM meta WHERE key = 'vapid_keys'")!.value) as VapidKeys;
+  homeDb().run("INSERT INTO meta(key, value) VALUES ('vapid_keys', ?) ON CONFLICT(key) DO NOTHING", JSON.stringify(keys));
+  return JSON.parse(homeDb().get<{ value: string }>("SELECT value FROM meta WHERE key = 'vapid_keys'")!.value) as VapidKeys;
 }
 
 export function vapidPublicKey(): string {
@@ -41,7 +41,7 @@ export function setPushSender(fn: Sender): void {
 }
 
 export function subscribe(userId: number, target: PushTarget, userAgent = ''): void {
-  db().run(
+  homeDb().run(
     `INSERT INTO push_subscriptions(user_id, endpoint, p256dh, auth, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, user_agent = excluded.user_agent`,
     userId,
@@ -54,16 +54,16 @@ export function subscribe(userId: number, target: PushTarget, userAgent = ''): v
 }
 
 export function unsubscribe(userId: number, endpoint: string): void {
-  db().run('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?', userId, endpoint);
+  homeDb().run('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?', userId, endpoint);
 }
 
 export function subscriptionCount(userId: number): number {
-  return db().get<{ n: number }>('SELECT count(*) AS n FROM push_subscriptions WHERE user_id = ?', userId)!.n;
+  return homeDb().get<{ n: number }>('SELECT count(*) AS n FROM push_subscriptions WHERE user_id = ?', userId)!.n;
 }
 
 /** each person's devices with notifications on (the commander's list of the staff) */
 export function subscriptionCounts(): Map<number, number> {
-  return new Map(db().all<{ user_id: number; n: number }>('SELECT user_id, count(*) AS n FROM push_subscriptions GROUP BY user_id').map((r) => [r.user_id, r.n]));
+  return new Map(homeDb().all<{ user_id: number; n: number }>('SELECT user_id, count(*) AS n FROM push_subscriptions GROUP BY user_id').map((r) => [r.user_id, r.n]));
 }
 
 const inFlight = new Set<Promise<number>>();
@@ -80,16 +80,22 @@ export function sendPush(userId: number, n: PushNote): Promise<number> {
   return p;
 }
 
+/** with a course opened beside the current one, a tap opens the notification in its own course */
+function courseLink(n: PushNote): string | null {
+  if (!homeDb().get('SELECT 1 FROM course_slots LIMIT 1')) return n.link;
+  return `/api/courses/open?c=${n.courseSlot ? `s${n.courseSlot}` : 'main'}&to=${encodeURIComponent(n.link ?? '/')}`;
+}
+
 async function deliver(userId: number, n: PushNote): Promise<number> {
   // only to a browser's push service - never to an address of someone's choosing
-  const subs = db()
+  const subs = homeDb()
     .all<{ endpoint: string; p256dh: string; auth: string }>('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', userId)
     .filter((s) => isPushEndpoint(s.endpoint));
   if (!subs.length) return 0;
   const keys = vapidKeys();
   // what it is about and when it is due, said whole (pushText.ts)
   const { title, body } = pushContent(userId, n);
-  const payload = JSON.stringify({ title, body, link: n.link, tag: `kks-${n.id}`, category: n.category, at: Date.now() });
+  const payload = JSON.stringify({ title, body, link: courseLink(n), tag: `kks-${n.id}`, category: n.category, at: Date.now() });
   let sent = 0;
   await Promise.all(
     subs.map(async (s) => {
@@ -103,7 +109,7 @@ async function deliver(userId: number, n: PushNote): Promise<number> {
       } catch (e) {
         const status = (e as { statusCode?: number }).statusCode;
         // the browser unsubscribed or the subscription expired
-        if (status === 404 || status === 410) db().run('DELETE FROM push_subscriptions WHERE endpoint = ?', s.endpoint);
+        if (status === 404 || status === 410) homeDb().run('DELETE FROM push_subscriptions WHERE endpoint = ?', s.endpoint);
         else console.error('[push] send failed', status ?? e);
       }
     }),

@@ -11,6 +11,7 @@ import { clearApiCache, setApiCacheOwner, useApi } from './useApi';
 import { ReauthDialog } from '../components/Reauth';
 import { FirstPasswordDialog } from '../components/FirstPassword';
 import { clearDrafts } from './draft';
+import { setCourseHere } from './courses';
 
 interface MeResponse {
   user: User;
@@ -22,6 +23,15 @@ interface MeResponse {
   course?: { id: number; name: string } | null;
   /** backup codes left, with two-step sign-in on */
   recoveryLeft?: number | null;
+  /** courses opened beside the current one (absent: none), and the one chosen to work in (null: the current) */
+  parallel?: Parallel;
+}
+
+export interface Parallel {
+  /** the current course's name */
+  main: string;
+  slot: { id: number; name: string } | null;
+  slots: { id: number; name: string }[];
 }
 
 export interface Session {
@@ -37,6 +47,8 @@ export interface Session {
   can: (ability: StaffAbility) => boolean;
   /** a previous course open for reading: every screen shows it, and nothing can be changed */
   viewing: { id: number; name: string } | null;
+  /** courses opened beside the current one, and the one worked in now - null when there are none */
+  parallel: Parallel | null;
   /** backup codes left for two-step sign-in (null: it is off) */
   recoveryLeft: number | null;
   /** the course's people, weeks and settings have come in (until then the lists are empty, not "none") */
@@ -65,7 +77,8 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
     try {
       const me = await api.get<MeResponse>('/api/auth/me');
       // what screens kept from another person (or another course) is not shown to this one
-      setApiCacheOwner(`${me.user.id}:${me.course?.id ?? ''}`);
+      setApiCacheOwner(`${me.user.id}:${me.course?.id ?? ''}:${me.parallel?.slot?.id ?? ''}`);
+      setCourseHere(me.parallel?.slot?.id ?? null, !!me.parallel);
       setTimezone(me.settings.timezone);
       setState({ status: 'authed', me });
     } catch {
@@ -168,6 +181,7 @@ function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; r
       isCommander: me.user.role === 'commander',
       can: (ability) => me.user.role === 'commander' || staffMay(currentSettings.staffPermissions, ability),
       viewing: me.course ?? null,
+      parallel: me.parallel ?? null,
       recoveryLeft: me.recoveryLeft ?? null,
       loaded: !!users.data && !!weeks.data && !!tracks.data && !!settings.data,
       unread,

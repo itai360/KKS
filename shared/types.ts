@@ -575,6 +575,30 @@ export interface Notification {
   finished?: boolean;
   /** as it pops up the moment it comes - as on the phone: the thing itself, then what happened to it (only then) */
   pop?: { title: string; body: string };
+  /** about a course opened beside the current one (its id); absent: the current course */
+  courseSlot?: number | null;
+}
+
+/** what a course opened beside the current one can take from it - at its opening, and later */
+export type CopyArea = 'weeks' | 'tracks' | 'templates' | 'recurring' | 'teams' | 'documents' | 'guide' | 'lessons';
+
+/** a course opened beside the current one (the next cycle, prepared while this one runs) */
+export interface ParallelCourse {
+  id: number;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  stats: { tasks: number; weeks: number; events: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** what the current course has of an area, to take into the course beside it */
+export interface CopySource {
+  area: CopyArea;
+  /** the current course's name */
+  from: string;
+  items: { id: number; name: string; sub: string; exists: boolean }[];
 }
 
 export type AttentionKind =

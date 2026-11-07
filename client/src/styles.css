@@ -8664,6 +8664,115 @@ html[data-kb] .topbar .search-pop {
   margin-top: 2px;
 }
 
+/* courses side by side (components/ParallelCourses.tsx, CourseSwitch.tsx) */
+.pcourse-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.pcourse {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.pcourse + .pcourse {
+  border-top: 1px solid var(--line);
+}
+.pcourse > svg {
+  flex: none;
+  color: var(--ink-2);
+}
+.pcourse > .grow {
+  min-width: 160px;
+}
+.pcourse.is-here {
+  background: var(--tint-bg, var(--card-2));
+}
+.pcourse-take {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.pcourse-take legend {
+  padding-inline: 4px;
+}
+.pcourse-items {
+  display: flex;
+  flex-direction: column;
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.check.pcourse-item {
+  gap: 10px;
+  padding: 8px 12px;
+}
+.check.pcourse-item + .check.pcourse-item {
+  border-top: 1px solid var(--line);
+}
+.check.pcourse-item.is-there {
+  color: var(--muted);
+}
+.course-menu {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.course-menu-label {
+  padding: 4px 16px 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.course-menu-sub {
+  display: block;
+  font-weight: 400;
+}
+/* a course's name on one line: the menu as wide as it needs, up to a point */
+.dd-user:has(.course-menu) {
+  min-width: min(320px, calc(100vw - 24px));
+}
+.course-menu .grow {
+  min-width: 0;
+}
+.notif-course {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--purple-ink, var(--ink-2));
+  font-weight: 600;
+}
+/* in a phone's side menu */
+.gside-body .course-menu {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+.gside-body .course-menu-label {
+  padding-inline: 20px;
+}
+.rail-link.course-rail-item {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.update-bar.course-bar.is-beside {
+  background: var(--purple-bg, var(--blue-bg));
+}
+
 /* a previous course open for reading: said on every screen */
 .update-bar.course-bar {
   background: var(--blue-bg);

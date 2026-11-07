@@ -9,7 +9,7 @@ import type { Notification } from '../../shared/types';
 import { clock, tz } from './core';
 import { db } from './db';
 
-export type PushNote = Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'> & Partial<Pick<Notification, 'type' | 'taskId'>>;
+export type PushNote = Pick<Notification, 'id' | 'title' | 'body' | 'link' | 'category'> & Partial<Pick<Notification, 'type' | 'taskId' | 'courseSlot'>>;
 
 /** the phone's title - the thing itself - and the news of it, when there is more to say than "new for you" */
 export interface Headline {

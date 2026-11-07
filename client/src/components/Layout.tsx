@@ -23,6 +23,7 @@ import { TopSearch } from './TopSearch';
 import { CalendarLayers } from './SideBar';
 import { MiniMonth } from './MiniMonth';
 import { CalendarControls, HelpButton, UserMenu, ViewSwitcher } from './TopBarParts';
+import { CourseBesideBar, CourseMenuItems } from './CourseSwitch';
 import { PHONE_VIEWS, showCalendarNow, useCalendarBar, VIEW_ICONS, VIEW_LABELS } from '../lib/calendarBar';
 import { setMainMenuHost } from '../lib/mainMenu';
 import { todayKey } from '../lib/format';
@@ -952,7 +953,11 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
         <div className="gside-body">
           {phone ? (
-            phoneMenu
+            <>
+              {phoneMenu}
+              {/* courses side by side: moving between them (a computer has it in the person's menu) */}
+              <CourseMenuItems itemClass="rail-link course-rail-item" iconSize={20} close={closeMenu} />
+            </>
           ) : (
             <>
               {calSection}
@@ -1062,6 +1067,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </div>
         )}
+        <CourseBesideBar />
         {lost && (
           <div className="update-bar offline no-print" role="status">
             <Icon name="alert" size={16} />

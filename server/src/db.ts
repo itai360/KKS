@@ -1510,7 +1510,25 @@ CREATE TABLE google_requests (
 );
 `;
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50, V51_GOOGLE_EVENTS, SCHEMA_V52, SCHEMA_V53, SCHEMA_V54, SCHEMA_V55, SCHEMA_V56];
+// A course opened beside the current one (parallel.ts): its whole database, kept here as one value - saved with
+// this one, so the deployment's single shared copy holds both. A notification from it says which course it
+// is about, and the task there it is about.
+const SCHEMA_V57 = `
+CREATE TABLE course_slots (
+  -- never given again: a link or a choice kept from a course since deleted does not land in another
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  data BLOB NOT NULL,
+  token TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+ALTER TABLE notifications ADD COLUMN course_slot INTEGER;
+ALTER TABLE notifications ADD COLUMN slot_task_id INTEGER;
+`;
+
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50, V51_GOOGLE_EVENTS, SCHEMA_V52, SCHEMA_V53, SCHEMA_V54, SCHEMA_V55, SCHEMA_V56, SCHEMA_V57];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {
@@ -1540,6 +1558,12 @@ export function openDb(path: string, opts: { wal?: boolean } = {}): Db {
   return db;
 }
 
+/** the current course's database - also while a request runs against another course's */
+export function homeDb(): Db {
+  if (!current) throw new Error('Database not initialised');
+  return current;
+}
+
 export function db(): Db {
   const inScope = scoped.getStore();
   if (inScope) return inScope;
@@ -1550,4 +1574,22 @@ export function db(): Db {
 /** runs fn (and everything it awaits) with db() returning `d` */
 export function withDb<T>(d: Db, fn: () => T): T {
   return scoped.run(d, fn);
+}
+
+/** a course opened beside the current one, a request runs against (parallel.ts) */
+export interface SlotScope {
+  id: number;
+  name: string;
+  db: Db;
+}
+const slotScope = new AsyncLocalStorage<SlotScope>();
+
+/** the course beside the current one this runs in - null: the current course */
+export function currentSlot(): SlotScope | null {
+  return slotScope.getStore() ?? null;
+}
+
+/** runs fn (and everything it awaits) in that course: db() is its database */
+export function withSlot<T>(slot: SlotScope, fn: () => T): T {
+  return slotScope.run(slot, () => scoped.run(slot.db, fn));
 }

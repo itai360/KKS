@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import type { Tone } from '@shared/constants';
 import { onNotification } from '../lib/realtime';
 import { listInSight } from '../lib/notifications';
+import { follow, notificationHref } from '../lib/courses';
 import { Icon } from './Icon';
 
 interface Toast {
@@ -74,7 +75,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           push({
             title,
             body,
-            link: n.link,
+            link: notificationHref(n),
             tone: n.category === 'exception' ? 'red' : n.category === 'action' ? 'blue' : 'green',
           });
         // when the tab is in the background, surface it as a system notification (if allowed)
@@ -83,7 +84,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             const sys = new Notification(title, { body, lang: 'he', dir: 'rtl', tag: `kks-${n.id}`, icon: '/icon-192.png' });
             sys.onclick = () => {
               window.focus();
-              if (n.link) navigate(n.link);
+              const href = notificationHref(n);
+              if (href) follow(href, navigate);
               sys.close();
             };
           } catch {
@@ -99,7 +101,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="toasts no-print" aria-live="polite">
         {toasts.map((t) => (
-          <ToastItem key={t.id} toast={t} onGone={() => remove(t.id)} onOpen={(link) => navigate(link)} />
+          <ToastItem key={t.id} toast={t} onGone={() => remove(t.id)} onOpen={(link) => follow(link, navigate)} />
         ))}
       </div>
     </Ctx.Provider>

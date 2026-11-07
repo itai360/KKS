@@ -32,6 +32,7 @@ import { GenerateWeeks } from './WeeksPage';
 import { turnPushOff, turnPushOn, usePushState } from '../lib/push';
 import { ask } from '../components/Confirm';
 import { TwoFactorSettings } from '../components/TwoFactor';
+import { ParallelCoursesCard } from '../components/ParallelCourses';
 import { STAFF_GROUP_RULE_LABELS, type StaffGroupDef } from '@shared/staffGroups';
 import { useStaffGroups } from '../lib/taskGroups';
 
@@ -43,6 +44,7 @@ export function SettingsPage() {
       ? [
           { key: 'setup', label: 'הקמת הקורס', node: <SetupChecklist /> },
           { key: 'course', label: 'פרטי הקורס', node: <CourseSettingsCard /> },
+          { key: 'courses', label: 'קורסים', node: <ParallelCoursesCard /> },
           { key: 'staff', label: 'סגל ומשתמשים', node: <StaffCard /> },
           { key: 'domains', label: 'תחומים', node: <DomainsCard /> },
           { key: 'groups', label: 'קבוצות סגל', node: <StaffGroupsCard /> },

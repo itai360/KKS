@@ -42,6 +42,7 @@ import { newPassword } from './netguard';
 import { completeSignIn, disable, enable, issueTicket, recoveryLeft, regenerateRecovery, startSetup, turnOff } from './twofactor';
 import { shareTarget } from './alignment';
 import { setCourseCookie, viewingName } from './courses';
+import { coursesFor, inSlot } from './parallel';
 import {
   addCalendarSource,
   addPlanCalendar,
@@ -350,9 +351,20 @@ export function apiRouter(): Router {
 
   r.get('/auth/me', (req, res) => {
     const unread = unreadCount(me(req).id);
+    // a course opened beside the current one: which, and the one chosen (its settings: its name, its dates)
+    const parallel = coursesFor(req);
+    let settings = getSettings();
+    if (parallel.slot) {
+      try {
+        settings = inSlot(parallel.slot.id, getSettings);
+      } catch (e) {
+        console.error('[parallel] could not open the course', parallel.slot.id, e);
+      }
+    }
     res.json({
       user: { ...toUser(me(req)), twoFactor: !!me(req).totp_secret },
-      settings: getSettings(),
+      settings,
+      ...(parallel.slots.length ? { parallel } : {}),
       unread,
       serverTime: nowIso(),
       mustChangePassword: !!me(req).must_change_password,

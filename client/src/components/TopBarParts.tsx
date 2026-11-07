@@ -9,6 +9,7 @@ import { useSession } from '../lib/session';
 import { onThemeChange, setThemePref, shownTheme } from '../lib/theme';
 import { Icon } from './Icon';
 import { NotificationsPanel } from './Notifications';
+import { CourseMenuItems } from './CourseSwitch';
 import { Sheet } from './pickers';
 import { OPEN_SHORTCUTS } from './Shortcuts';
 import { initials } from './ui';
@@ -179,6 +180,7 @@ export function UserMenu() {
               <span className="small muted">{role}</span>
             </span>
           </div>
+          <CourseMenuItems itemClass="dd-item" iconSize={18} close={close} />
           <Link to="/settings" role="menuitem" className="dd-item" onClick={close}>
             <Icon name="settings" size={18} />
             <span className="grow">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>
@@ -271,6 +273,7 @@ export function AppAccount() {
             <Icon name={shown === 'dark' ? 'sun' : 'moon'} size={22} />
             <span className="grow">{shown === 'dark' ? 'מצב בהיר' : 'מצב כהה'}</span>
           </button>
+          <CourseMenuItems itemClass="gph-item" iconSize={22} close={close} />
           <Link to="/settings" role="menuitem" className="gph-item" onClick={close}>
             <Icon name="settings" size={22} />
             <span className="grow">{isCommander ? 'הגדרות והקמת קורס' : 'הגדרות'}</span>

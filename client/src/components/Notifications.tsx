@@ -23,6 +23,8 @@ import { Icon } from './Icon';
 import { Sheet, usePhonePicker } from './pickers';
 import { PushBellOffer } from './PushOffer';
 import { useToast } from './Toasts';
+import { useSession } from '../lib/session';
+import { follow, notificationHref } from '../lib/courses';
 import { Empty, openable, Seg } from './ui';
 
 export const NOTIFICATION_TONE: Record<NotificationCategory, string> = { action: 'blue', info: 'green', exception: 'red' };
@@ -56,8 +58,11 @@ export function dayLabel(iso: string, today = todayKey()): string {
 export function NotificationItem({ n, fresh, leaving, onOpen, snoozedView }: { n: Notification; fresh?: boolean; leaving?: LeavePhase; onOpen: (n: Notification) => void; snoozedView?: boolean }) {
   const toast = useToast();
   const bulk = useBulk();
+  const { parallel } = useSession();
   const [later, setLater] = useState(false);
   const fail = (e: unknown) => toast({ title: (e as Error).message, tone: 'red' });
+  // with courses side by side: the course it is about, when another than the one worked in now
+  const course = parallel && (n.courseSlot ?? null) !== (parallel.slot?.id ?? null) ? (n.courseSlot ? parallel.slots.find((c) => c.id === n.courseSlot)?.name : parallel.main) : undefined;
   const toggle = () => void (n.read ? markUnread([n.id]) : markRead([n.id])).catch(fail);
   const remove = () => quickDelete({ entity: 'notifications', id: n.id, label: n.title, topics: ['notifications'], toast });
   const putOff = (at: string | null, label?: string) => {
@@ -88,7 +93,12 @@ export function NotificationItem({ n, fresh, leaving, onOpen, snoozedView }: { n
           <div className="notif-title">{n.title}</div>
           {n.body && <div className="notif-body">{n.body}</div>}
           <div className="notif-meta">
-            <span>{NOTIFICATION_CATEGORY_LABELS[n.category]}</span>
+            {course && (
+              <span className="notif-course">
+                <Icon name="layers" size={12} /> {course}
+              </span>
+            )}
+            <span className={course ? 'sep' : undefined}>{NOTIFICATION_CATEGORY_LABELS[n.category]}</span>
             <span className="sep">
               {n.snoozedUntil ? (
                 `חוזרת ${fmtDateTime(n.snoozedUntil)}`
@@ -202,7 +212,9 @@ export function useOpenNotification(after?: () => void) {
   return (n: Notification) => {
     after?.();
     if (!n.read) markRead([n.id]).catch((e: Error) => toast({ title: e.message, tone: 'red' }));
-    if (n.link) navigate(n.link);
+    // about a course beside this one: opened in its own course
+    const href = notificationHref(n);
+    if (href) follow(href, navigate);
   };
 }
 

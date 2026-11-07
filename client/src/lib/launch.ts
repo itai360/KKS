@@ -85,7 +85,10 @@ export function useOpenings(): void {
       if (data?.type !== 'open' || typeof data.link !== 'string') return;
       clearTimeout(timer);
       const to = new URL(data.link, window.location.origin);
-      if (to.origin === window.location.origin) navigate(`${to.pathname}${to.search}${to.hash}`);
+      if (to.origin !== window.location.origin) return;
+      // into another course first (a notification about a course beside this one): the app loads again there
+      if (to.pathname.startsWith('/api/')) window.location.assign(to.href);
+      else navigate(`${to.pathname}${to.search}${to.hash}`);
     };
     document.addEventListener('visibilitychange', onVisibility);
     navigator.serviceWorker?.addEventListener('message', onMessage);

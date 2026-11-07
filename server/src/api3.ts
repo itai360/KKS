@@ -91,7 +91,8 @@ import { bulkSchema, runBulk } from './bulk';
 import { addAbsence, deleteAbsence, listAbsences, reasonSeenBy, staffLoad } from './absences';
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
-import { copyPreviousCycleTasks, coursesOverview, previousCycleWeek, startNewCourse, viewCourse, viewingCourse } from './courses';
+import { copyPreviousCycleTasks, coursesOverview, previousCycleWeek, promoteParallelCourse, startNewCourse, viewCourse, viewingCourse } from './courses';
+import { COPY_AREAS, copyIntoSlot, copySource, deleteSlot, openParallelCourse, parallelCourses, slotOf, switchSlot } from './parallel';
 import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
@@ -621,6 +622,50 @@ export function v3Router(): Router {
   r.post('/courses/view', requireCommander, (req, res) => {
     const { id } = z.object({ id: z.number().int().positive().nullable() }).parse(req.body);
     viewCourse(res, id);
+    res.json({ ok: true });
+  });
+
+  // ---------------- a course opened beside the current one (parallel.ts) ----------------
+
+  r.get('/courses/parallel', requireCommander, (req, res) => res.json({ courses: parallelCourses(), in: slotOf(req) }));
+  r.post('/courses/parallel', requireCommander, (req, res) => {
+    const course = openParallelCourse(me(req), req.body);
+    changed('settings');
+    res.json(course);
+  });
+  // moving between the courses: everyone works in the one they chose (null: the current course)
+  r.post('/courses/switch', (req, res) => {
+    const { id } = z.object({ id: z.number().int().positive().nullable() }).parse(req.body);
+    switchSlot(res, id);
+    res.json({ ok: true });
+  });
+  // a link from a notification: into the course it is about, then the screen
+  r.get('/courses/open', (req, res) => {
+    const c = String(req.query.c ?? '');
+    const to = String(req.query.to ?? '/');
+    const m = /^s(\d+)$/.exec(c);
+    try {
+      switchSlot(res, m ? Number(m[1]) : null);
+    } catch {
+      switchSlot(res, null); // a course since deleted, or become the current one
+    }
+    // only a screen of this app - never an address elsewhere
+    res.redirect(302, /^\/(?![/\\])/.test(to) && !to.startsWith('/api/') ? to : '/');
+  });
+  r.get('/courses/parallel/:id/copy/:area', requireCommander, (req, res) => {
+    const area = z.enum(COPY_AREAS as [string, ...string[]]).parse(req.params.area) as (typeof COPY_AREAS)[number];
+    res.json(copySource(id(req.params.id), area));
+  });
+  r.post('/courses/parallel/:id/copy', requireCommander, (req, res) => res.json(copyIntoSlot(id(req.params.id), req.body)));
+  r.post('/courses/parallel/:id/promote', requireCommander, async (req, res) => {
+    const archive = await promoteParallelCourse(me(req), id(req.params.id), req.body);
+    switchSlot(res, null);
+    res.json(archive);
+  });
+  r.delete('/courses/parallel/:id', requireCommander, (req, res) => {
+    deleteSlot(id(req.params.id));
+    changed('settings');
+    if (slotOf(req) === id(req.params.id)) switchSlot(res, null);
     res.json({ ok: true });
   });
 

@@ -5,8 +5,8 @@
 
 import { addDays, diffDays, HOUR, localDateKey } from '../../shared/dates';
 import { commanderIds, getUserRow, type UserRow } from './auth';
-import { clock, nowIso, tz } from './core';
-import { db } from './db';
+import { clock, getSettings, nowIso, tz } from './core';
+import { currentSlot, db } from './db';
 import { learningReminders } from './debriefs';
 import { morningBrief } from './digest';
 import { changed, logActivity, notify, wakeSnoozed } from './journal';
@@ -17,6 +17,7 @@ import { weeklyDebriefTasks } from './weeklyDebriefTask';
 import { experienceFeedbackTasks } from './cadets';
 import { ENTRY_KEEP_DAYS, ENTRY_UNSENT_KEEP_DAYS } from './entries';
 import { extendRecurrences, purgeOldTrash, sendEventReminders } from './schedule';
+import { forEachSlot } from './parallel';
 
 export interface AutomationResult {
   overdue: number;
@@ -89,15 +90,22 @@ export function runAutomation(): AutomationResult {
     res.reminders2++;
   }
 
-  // 4. Recurring tasks for today.
+  // a course opened beside the current one (parallel.ts) - the next cycle, being prepared: the reminders of its
+  // tasks go out from the first; the tasks the system makes by itself (recurring, templates, debriefs, feedback)
+  // only from the day it starts, so the current course's routine is not made twice
+  const beside = !!currentSlot();
   const today = localDateKey(now, tz());
-  res.recurring = generateRecurring(today);
+  const start = getSettings().startDate;
+  const working = !beside || (!!start && start <= today);
+
+  // 4. Recurring tasks for today.
+  if (working) res.recurring = generateRecurring(today);
 
   // 5. "A new week opens -> its templates are created automatically".
   const templates = db().all<{ id: number; auto_apply_days_before: number; created_by: number | null }>(
     'SELECT id, auto_apply_days_before, created_by FROM templates WHERE auto_apply_days_before IS NOT NULL',
   );
-  if (templates.length) {
+  if (working && templates.length) {
     const weeks = db().all<{ id: number; start_date: string; end_date: string }>(
       "SELECT id, start_date, end_date FROM weeks WHERE status <> 'closed' AND end_date >= ? AND start_date <= ?",
       today,
@@ -122,35 +130,37 @@ export function runAutomation(): AutomationResult {
 
   // 6. The learning loop: the weekly debrief, and the lessons an earlier cycle kept.
   try {
-    res.learning = learningReminders(now);
+    if (working) res.learning = learningReminders(now);
   } catch (e) {
     console.error('[automation] learning', e);
   }
 
   // 6b. The week's lead gets the weekly debrief as a task on the week's Tuesday at 10:00, due the next Tuesday at 12:00.
   try {
-    res.debriefTasks = weeklyDebriefTasks(now);
+    if (working) res.debriefTasks = weeklyDebriefTasks(now);
   } catch (e) {
     console.error('[automation] debrief tasks', e);
   }
 
   // 6c. A mentor gets the feedback task of an experience a week before it ends.
   try {
-    res.feedbackTasks = experienceFeedbackTasks(now);
+    if (working) res.feedbackTasks = experienceFeedbackTasks(now);
   } catch (e) {
     console.error('[automation] feedback tasks', e);
   }
 
+  // the brief of the day and the notifications themselves are the current course's
+
   // 7. The morning brief, once a day from 07:00.
   try {
-    res.briefs = morningBrief(now);
+    if (!beside) res.briefs = morningBrief(now);
   } catch (e) {
     console.error('[automation] brief', e);
   }
 
   // 8. Notifications put off until now come back.
   try {
-    wakeSnoozed(nowS);
+    if (!beside) wakeSnoozed(nowS);
   } catch (e) {
     console.error('[automation] snoozed', e);
   }
@@ -164,6 +174,8 @@ export function runAutomation(): AutomationResult {
 
   if (res.overdue || res.reminders24 || res.reminders2 || res.recurring || res.templates) changed('tasks', 'weeks');
   housekeeping(now);
+  // and each course opened beside this one, its turn
+  if (!beside) forEachSlot(() => void runAutomation());
   return res;
 }
 
@@ -175,12 +187,13 @@ const ALL_NOTIFICATIONS_DAYS = 120;
  * over two months ago (any over four), expired login locks. Keeps the
  * database (saved whole on every change in the serverless deployment) small.
  */
-let housekeptOn = '';
+const housekeptOn = new Map<number, string>();
 export function housekeeping(now: Date): number {
-  // the day is remembered in memory: the database changes only when something is removed
+  // the day is remembered in memory, for each course: the database changes only when something is removed
   const today = localDateKey(now, tz());
-  if (housekeptOn === today) return 0;
-  housekeptOn = today;
+  const course = currentSlot()?.id ?? 0;
+  if (housekeptOn.get(course) === today) return 0;
+  housekeptOn.set(course, today);
   const ago = (days: number) => new Date(now.getTime() - days * 24 * HOUR).toISOString();
   let removed = 0;
   db().tx(() => {

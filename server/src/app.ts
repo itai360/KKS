@@ -7,6 +7,7 @@ import { apiRouter } from './api';
 import { csrfGuard, loadUser } from './auth';
 import { googleSignInEnabled } from './google';
 import { courseScope } from './courses';
+import { slotScope } from './parallel';
 import { HttpError } from './core';
 import { zodMessage } from './validation';
 
@@ -64,6 +65,8 @@ export function createApp(opts: { staticDir?: string } = {}) {
     loadUser,
     csrfGuard,
     courseScope,
+    // or the course opened beside the current one, chosen to work in
+    slotScope,
     apiRouter(),
   );
 

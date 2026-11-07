@@ -19,8 +19,9 @@ import type { Priority, TaskStatus } from '../../shared/constants';
 import type { CourseArchive, CoursesOverview, CourseStats, PreviousCycleWeek } from '../../shared/types';
 import { parseCookies, type UserRow } from './auth';
 import { clock, config, forbidden, getSettings, HttpError, notFound, nowIso, resetSettingsCache, tz, updateSettings } from './core';
-import { db, Db, migrate, withDb } from './db';
+import { currentSlot, db, Db, homeDb, migrate, withDb } from './db';
 import { changed } from './journal';
+import { listSlots, takeSlotIn } from './parallel';
 import type { Topic } from './realtime';
 import { fetchSnapshot, takeSnapshot } from './snapshots';
 import { keepPrepForNextCourse, prepForNextCourse } from './staffPrep';
@@ -39,6 +40,8 @@ const CARRIED = new Set([
   'snapshots',
   'login_lockouts',
   'course_archives',
+  // the courses opened beside this one go on beside the next
+  'course_slots',
   'settings',
   'templates',
   'recurring_rules',
@@ -166,6 +169,49 @@ export async function startNewCourse(actor: UserRow, raw: unknown): Promise<Cour
     clearCourse();
     keepPrepForNextCourse(prep);
     updateSettings({ courseName: p.name, ...(p.symbol ? { courseSymbol: p.symbol } : {}), startDate: p.startDate, endDate: p.endDate });
+    return archiveId;
+  });
+  resetSettingsCache();
+  changed(...ALL_TOPICS);
+  return toArchive(archiveRow(id)!);
+}
+
+export const promoteSchema = z.object({
+  /** the name the course that ends is kept under */
+  archiveName: z.string().trim().min(1, 'חסר שם לקורס שמסתיים').max(120),
+});
+
+/**
+ * Ends the current course and makes the one opened beside it the current course: the current one is kept
+ * whole as an archive first (as when a course ends), then its data is replaced by the other's. If the
+ * archive cannot be saved nothing changes.
+ */
+export async function promoteParallelCourse(actor: UserRow, slotId: number, raw: unknown): Promise<CourseArchive> {
+  const p = promoteSchema.parse(raw);
+  if (!listSlots().some((s) => s.id === slotId)) throw notFound('הקורס לא נמצא');
+  const range = courseRange();
+  const stats = courseStats();
+  const prep = prepForNextCourse();
+  let snapshotId: string;
+  try {
+    snapshotId = await takeSnapshot('archive');
+  } catch (e) {
+    console.error('[courses] could not keep the course', e);
+    throw new HttpError(503, 'לא הצלחנו לשמור את הקורס הנוכחי, ולכן לא הוחלף דבר. נסו שוב בעוד רגע.');
+  }
+  const id = db().tx(() => {
+    const archiveId = db().run(
+      'INSERT INTO course_archives(snapshot_id, name, start_date, end_date, stats, archived_by, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      snapshotId,
+      p.archiveName,
+      range.startDate,
+      range.endDate,
+      JSON.stringify(stats),
+      actor.id,
+      nowIso(),
+    ).id;
+    takeSlotIn(slotId);
+    keepPrepForNextCourse(prep);
     return archiveId;
   });
   resetSettingsCache();
@@ -372,12 +418,30 @@ function assigneesFor(owners: number[], w: WeekRow, fallback: number): number[] 
 
 const timing = (r: PrevTaskRow, startDate: string) => ({ dayOffset: diffDays(localDateKey(r.deadline, tz()), startDate), time: localTime(r.deadline, tz()) });
 
+/** the course before this one: the most recent that ended (or the one asked for) - and, for a course opened
+ * beside the current one (parallel.ts), the current course itself (id 0) */
+async function previousCourse(id?: number): Promise<{ id: number; name: string; d: Db } | null> {
+  if (currentSlot()) {
+    if (id !== undefined && id !== 0) return null;
+    const v = homeDb().get<{ value: string }>("SELECT value FROM settings WHERE key = 'courseName'")?.value;
+    let name = 'הקורס הנוכחי';
+    try {
+      if (v) name = String(JSON.parse(v)) || name;
+    } catch {
+      /* as is */
+    }
+    return { id: 0, name, d: homeDb() };
+  }
+  const a = id === undefined ? db().get<ArchiveRow>(`${ARCHIVE_SELECT} ORDER BY a.archived_at DESC, a.id DESC LIMIT 1`) : archiveRow(id);
+  return a ? { id: a.id, name: a.name, d: await archiveDb(a) } : null;
+}
+
 /** what was done in this week in the most recent previous course - null when there is none */
 export async function previousCycleWeek(weekId: number, actor: UserRow): Promise<PreviousCycleWeek | null> {
   const w = liveWeek(weekId);
-  const a = db().get<ArchiveRow>(`${ARCHIVE_SELECT} ORDER BY a.archived_at DESC, a.id DESC LIMIT 1`);
+  const a = await previousCourse();
   if (!a) return null;
-  const prev = await archiveDb(a);
+  const prev = a.d;
   const match = matchingWeek(prev, w);
   const out: PreviousCycleWeek = { archiveId: a.id, archiveName: a.name, week: match ? { name: match.name, number: match.number, startDate: match.start_date } : null, tasks: [] };
   if (!match) return out;
@@ -402,7 +466,8 @@ export async function previousCycleWeek(weekId: number, actor: UserRow): Promise
 }
 
 export const copyPreviousSchema = z.object({
-  archiveId: z.number().int().positive(),
+  /** 0: the current course, from a course opened beside it */
+  archiveId: z.number().int().min(0),
   taskIds: z.array(z.number().int().positive()).min(1, 'לא נבחרו משימות').max(300),
 });
 
@@ -411,9 +476,9 @@ export async function copyPreviousCycleTasks(actor: UserRow, weekId: number, raw
   const p = copyPreviousSchema.parse(raw);
   const w = liveWeek(weekId);
   if (!may(actor, 'weeks') && w.lead_id !== actor.id) throw forbidden('מעתיקים משימות מהמחזור הקודם - מפקד הקורס או מפק"צ השבוע');
-  const a = archiveRow(p.archiveId);
+  const a = await previousCourse(p.archiveId);
   if (!a) throw notFound('הקורס הקודם לא נמצא');
-  const prev = await archiveDb(a);
+  const prev = a.d;
   const match = matchingWeek(prev, w);
   if (!match) throw notFound('השבוע הזה לא נמצא בקורס הקודם');
   const items = previousItems(prev, match.id, p.taskIds);

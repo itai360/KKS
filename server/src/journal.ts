@@ -3,7 +3,7 @@
 import type { NotificationCategory } from '../../shared/constants';
 import type { Notification } from '../../shared/types';
 import { nowIso } from './core';
-import { db, type Param } from './db';
+import { currentSlot, db, homeDb, type Param, type SlotScope } from './db';
 import { sendPush } from './push';
 import { pushContent } from './pushText';
 import { broadcast, pushNotification, pushNotificationState, type Topic } from './realtime';
@@ -81,6 +81,9 @@ interface NotificationRow {
   snoozed_until?: string | null;
   ref?: string | null;
   finished_at?: string | null;
+  /** about a course opened beside the current one (parallel.ts), and the task there it is about */
+  course_slot?: number | null;
+  slot_task_id?: number | null;
   /** read with FINISHED: its subject is finished */
   finished?: number | null;
 }
@@ -142,6 +145,7 @@ export const NOTIFICATIONS_FROM = 'notifications n LEFT JOIN tasks t ON t.id = n
  */
 export const FINISHED = `coalesce((CASE
   WHEN n.finished_at IS NOT NULL THEN 1
+  WHEN n.course_slot IS NOT NULL THEN (n.type IN (${quoted(NEWS_OF_DONE)}) OR (n.type = 'request_decided' AND n.category = 'info'))
   WHEN n.type IN (${quoted(NEWS_OF_DONE)}) THEN 1
   WHEN n.type = 'request_decided' AND n.category = 'info' THEN 1
   WHEN n.type IN (${quoted(TASK_KINDS)}) AND (n.task_id IS NULL OR t.id IS NULL OR t.status IN ('done', 'cancelled')) THEN 1
@@ -184,26 +188,30 @@ export function toNotification(r: NotificationRow): Notification {
     category: r.category,
     title: r.title,
     body: r.body,
-    taskId: r.task_id,
+    taskId: r.task_id ?? r.slot_task_id ?? null,
     link: r.link ?? (r.task_id ? `/tasks/${r.task_id}` : null),
     read: !!r.read_at,
     createdAt: r.created_at,
     snoozedUntil: r.snoozed_until ?? null,
     ...(r.finished ? { finished: true } : {}),
+    ...(r.course_slot ? { courseSlot: r.course_slot } : {}),
   };
 }
 
 /** how many unread - of the ones still open (what is finished does not count) */
 export function unreadCount(userId: number): number {
-  return db().get<{ n: number }>(`SELECT count(*) AS n FROM ${NOTIFICATIONS_FROM} WHERE n.user_id = ? AND n.read_at IS NULL AND NOT ${FINISHED}`, userId)!.n;
+  return homeDb().get<{ n: number }>(`SELECT count(*) AS n FROM ${NOTIFICATIONS_FROM} WHERE n.user_id = ? AND n.read_at IS NULL AND NOT ${FINISHED}`, userId)!.n;
 }
 
 /** what some notifications are about was finished in a way the rules of FINISHED cannot see (an earlier
  * cycle's lessons all decided): marked so - and unmarked when it opens again (a decision taken back) */
 export function finishNotifications(finished: boolean, where: string, ...params: Param[]): void {
-  const rows = db().all<{ id: number; user_id: number }>(`SELECT id, user_id FROM notifications WHERE (${where}) AND finished_at IS ${finished ? '' : 'NOT '}NULL`, ...params);
+  // a course's own: a course beside the current one has its notifications among the current one's
+  const slot = currentSlot();
+  const course = slot ? `course_slot = ${slot.id}` : 'course_slot IS NULL';
+  const rows = homeDb().all<{ id: number; user_id: number }>(`SELECT id, user_id FROM notifications WHERE (${where}) AND ${course} AND finished_at IS ${finished ? '' : 'NOT '}NULL`, ...params);
   for (const r of rows) {
-    db().run('UPDATE notifications SET finished_at = ? WHERE id = ?', finished ? nowIso() : null, r.id);
+    homeDb().run('UPDATE notifications SET finished_at = ? WHERE id = ?', finished ? nowIso() : null, r.id);
     notificationsChanged(r.user_id);
   }
 }
@@ -241,6 +249,37 @@ export function wakeSnoozed(now: string): number {
   return resurface(due.filter((r) => !r.finished));
 }
 
+/**
+ * From a course beside the current one: among the person's notifications (one list, whatever the course),
+ * marked with its course and the task there it is about - written once that course's change is saved (a
+ * change undone tells no one).
+ */
+function notifyFromSlot(slot: SlotScope, userIds: Iterable<number | null | undefined>, n: NotifyInput, actorId?: number | null): void {
+  const to = [...new Set([...userIds].filter((u): u is number => !!u && u !== actorId))];
+  if (!to.length) return;
+  slot.db.onCommit(() => {
+    const home = homeDb();
+    for (const uid of to) {
+      const id = home.run(
+        'INSERT INTO notifications(user_id, type, category, title, body, task_id, link, ref, created_at, course_slot, slot_task_id) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)',
+        uid,
+        n.type,
+        n.category,
+        n.title,
+        n.body ?? '',
+        n.link ?? (n.taskId ? `/tasks/${n.taskId}` : null),
+        n.ref ?? null,
+        nowIso(),
+        slot.id,
+        n.taskId ?? null,
+      ).id;
+      const row = home.get<NotificationRow>(`${NOTIFICATION_ROWS} WHERE n.id = ?`, id)!;
+      notificationsChanged(uid);
+      heard(uid, toNotification(row));
+    }
+  });
+}
+
 /** a new one is heard at once: on the person's open screens - popping up as it does on the phone, the thing
  * itself first (pushText.ts) - and on the phone */
 function heard(userId: number, n: Notification): void {
@@ -273,6 +312,8 @@ function replaceOlder(uid: number, n: NotifyInput, id: number, at: string): void
 
 /** Sends a notification to each recipient except the actor who caused it. */
 export function notify(userIds: Iterable<number | null | undefined>, n: NotifyInput, actorId?: number | null): void {
+  const slot = currentSlot();
+  if (slot) return notifyFromSlot(slot, userIds, n, actorId);
   const seen = new Set<number>();
   for (const uid of userIds) {
     if (!uid || seen.has(uid) || uid === actorId) continue;
