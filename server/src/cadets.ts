@@ -33,6 +33,7 @@ import { matchesSearch } from '../../shared/search';
 import { cleanAnswers, isTalkType, talkText } from '../../shared/talks';
 import { createTasks, isoDateTime, updateTask, weekForDate } from './taskService';
 import { may } from './abilities';
+import { weaponFormsOf } from './weaponForms';
 
 const today = () => localDateKey(clock.now(), tz());
 
@@ -725,6 +726,7 @@ export function cadetDetail(actor: UserRow, id: number): CadetDetail {
       .filter((r) => r.kind === 'evaluation' && r.score !== null)
       .map((r) => ({ date: r.occurred_on, criterion: r.category || 'כללי', score: r.score as number }))
       .sort((a, b) => a.date.localeCompare(b.date)),
+    weaponForms: weaponFormsOf(actor, c),
   };
 }
 

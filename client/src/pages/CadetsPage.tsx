@@ -48,6 +48,7 @@ import { matchesSearch } from '@shared/search';
 import { ask } from '../components/Confirm';
 import { TalkDialog, TalkHighlights, TalkView } from '../components/Talks';
 import { SocioCard } from '../components/SocioCard';
+import { WeaponFormDialog, WeaponFormsCard } from './WeaponFormPage';
 
 export function CadetsPage() {
   const { isCommander, can, user, viewing } = useSession();
@@ -301,6 +302,7 @@ function useCadetMenuItems(c: Cadet, onExempt: () => void): RowMenuItem[] {
     ...(may('talk') ? [{ key: 'talk', label: 'שיחה אישית', icon: 'message', run: () => write('talk') }] : []),
     ...(may('discipline') ? [{ key: 'discipline', label: 'רישום משמעת', icon: 'shield', run: () => write('discipline') }] : []),
     ...(may('evaluation') ? [{ key: 'evaluation', label: 'הערכה', icon: 'chart', run: () => write('evaluation') }] : []),
+    ...(!viewing ? [{ key: 'weapon', label: 'טופס נשק חריג', icon: 'alert', run: () => navigate(`/cadets/${c.id}?add=weapon`) }] : []),
     ...(c.canEdit && !viewing ? [{ key: 'exempt', label: 'הוספת פטור', icon: 'flag', run: onExempt }] : []),
     ...(tel ? [{ key: 'call', label: 'חיוג', icon: 'phone', run: () => void (location.href = tel) }] : []),
     ...(wa ? [{ key: 'wa', label: 'וואטסאפ', icon: 'message', run: () => void window.open(wa, '_blank', 'noopener') }] : []),
@@ -603,14 +605,14 @@ export function CadetPage() {
   const { id } = useParams();
   const { data, error, loading, status } = useApi<CadetDetail>(`/api/cadets/${id}`, ['cadets', 'tasks']);
   const teams = useApi<Team[]>('/api/teams', ['cadets']);
-  const { isCommander, user } = useSession();
+  const { isCommander, user, viewing } = useSession();
   const newTask = useNewTask();
   const [kind, setKind] = useState<RecordKind | 'all'>('all');
-  const [dialog, setDialog] = useState<null | 'edit' | 'experience' | 'talk'>(null);
+  const [dialog, setDialog] = useState<null | 'edit' | 'experience' | 'talk' | 'weapon'>(null);
   const navigate = useNavigate();
   // opened from a cadet's quick menu (?add=note): the file comes up ready to write that, once
   const [params, setParams] = useSearchParams();
-  const add = params.get('add') as RecordKind | null;
+  const add = params.get('add') as RecordKind | 'weapon' | null;
   const ready = !!data;
   // the cadets of the same team, one after another: the one before and the one after, by name and the arrows
   const all = useApi<Cadet[]>('/api/cadets', ['cadets']).data ?? [];
@@ -627,6 +629,7 @@ export function CadetPage() {
   useEffect(() => {
     if (!ready || !add) return;
     if (add === 'talk') setDialog('talk');
+    if (add === 'weapon') setDialog('weapon');
     setParams(
       (p) => {
         p.delete('add');
@@ -677,6 +680,11 @@ export function CadetPage() {
                 <Icon name="message" /> שיחה אישית
               </button>
             )}
+            {!viewing && (
+              <button className="btn" onClick={() => setDialog('weapon')}>
+                <Icon name="alert" /> טופס נשק חריג
+              </button>
+            )}
             {c.canEdit && (
               <button className="btn" onClick={() => setDialog('edit')}>
                 <Icon name="edit" /> עריכה
@@ -705,7 +713,7 @@ export function CadetPage() {
       )}
       <div className="split">
         <div className="col gap-16">
-          <RecordForm cadet={c} records={data.records} onFullTalk={() => setDialog('talk')} start={add && add !== 'talk' ? add : undefined} />
+          <RecordForm cadet={c} records={data.records} onFullTalk={() => setDialog('talk')} start={add && add !== 'talk' && add !== 'weapon' ? add : undefined} />
           <div>
             <div className="row wrap mb-12">
               <div className="section-title grow" style={{ margin: 0 }}>
@@ -731,6 +739,7 @@ export function CadetPage() {
           {(c.canManage || c.disciplineNotes > 0) && (
             <DisciplineSummary count={c.disciplineNotes} committee={c.notesCommittee} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
           )}
+          {data.weaponForms.length > 0 && <WeaponFormsCard cadetId={c.id} forms={data.weaponForms} onNew={viewing ? undefined : () => setDialog('weapon')} />}
           {(c.canEdit || data.exemptions.length > 0) && <ExemptionsCard cadet={c} exemptions={data.exemptions} />}
           {c.canManage && <SocioCard cadetId={c.id} />}
           <Development detail={data} />
@@ -782,6 +791,7 @@ export function CadetPage() {
       {dialog === 'edit' && <CadetForm cadet={c} teams={teams.data ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'experience' && <ExperienceForm cadetId={c.id} onClose={() => setDialog(null)} />}
       {dialog === 'talk' && <TalkDialog cadet={c} records={data.records} onClose={() => setDialog(null)} />}
+      {dialog === 'weapon' && <WeaponFormDialog cadetId={c.id} cadetName={c.fullName} onClose={() => setDialog(null)} />}
     </div>
   );
 }

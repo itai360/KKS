@@ -25,6 +25,7 @@ const CadetPage = lazyPage(() => import('./pages/CadetsPage'), 'CadetPage');
 const CadetsPage = lazyPage(() => import('./pages/CadetsPage'), 'CadetsPage');
 const DebriefPage = lazyPage(() => import('./pages/DebriefsPage'), 'DebriefPage');
 const DiscussionsPage = lazyPage(() => import('./pages/DiscussionsPage'), 'DiscussionsPage');
+const WeaponFormPage = lazyPage(() => import('./pages/WeaponFormPage'), 'WeaponFormPage');
 const DiscussionPage = lazyPage(() => import('./pages/DiscussionsPage'), 'DiscussionPage');
 const DebriefsPage = lazyPage(() => import('./pages/DebriefsPage'), 'DebriefsPage');
 const DocumentsPage = lazyPage(() => import('./pages/DocumentsPage'), 'DocumentsPage');
@@ -161,6 +162,7 @@ function AuthedRoutes() {
               <Route path="/alignment" element={<AlignmentPage />} />
               <Route path="/cadets/:id" element={<CadetPage />} />
               <Route path="/cadets/:id/talks/:recordId" element={<TalkPage />} />
+              <Route path="/cadets/:id/weapon/:formId" element={<WeaponFormPage />} />
               <Route path="/experiences" element={<ExperiencesPage />} />
               <Route path="/procedures" element={<ProceduresPage />} />
               <Route path="/evaluations" element={<EvaluationsPage />} />

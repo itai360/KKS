@@ -29,6 +29,7 @@ import type {
   WeekStatus,
 } from './constants';
 import type { DiscussionKind } from './discussions';
+import type { WeaponException } from './weaponForms';
 
 export interface User {
   id: number;
@@ -1303,6 +1304,44 @@ export interface CadetDetail {
   experiences: Experience[];
   tasks: Task[];
   scores: { date: string; criterion: string; score: number }[];
+  /** the exceptional-weapon forms the person may see (the team's commander, the course commander, who wrote one) */
+  weaponForms: WeaponFormSummary[];
+}
+
+/** an exceptional-weapon form of a cadet, in their file */
+export interface WeaponFormSummary {
+  id: number;
+  cadetId: number;
+  occurredOn: string;
+  occurredAt: string | null;
+  kind: WeaponException;
+  kindText: string;
+  authorName: string | null;
+  /** the course commander decided on it - and so it is closed */
+  decided: boolean;
+}
+
+export interface WeaponForm extends WeaponFormSummary {
+  cadetName: string;
+  personalNumber: string;
+  teamName: string | null;
+  teamCommanderName: string | null;
+  place: string;
+  kindOther: string;
+  weaponType: string;
+  weaponNumber: string;
+  description: string;
+  foundBy: string;
+  cadetVersion: string;
+  handling: string;
+  decision: string;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  authorId: number | null;
+  createdAt: string;
+  canEdit: boolean;
+  canDecide: boolean;
+  canDelete: boolean;
 }
 
 export interface DebriefItem {

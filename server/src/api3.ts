@@ -110,6 +110,7 @@ import {
   updateDiscussion,
   updatePoint as updateDiscussionPoint,
 } from './discussions';
+import { createWeaponForm, decideWeaponForm, deleteWeaponForm, updateWeaponForm, weaponForm } from './weaponForms';
 import { COPY_AREAS, copyIntoSlot, copySource, deleteSlot, openParallelCourse, parallelCourses, slotOf, switchSlot } from './parallel';
 import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
@@ -642,6 +643,20 @@ export function v3Router(): Router {
     viewCourse(res, id);
     res.json({ ok: true });
   });
+
+  // ---------------- a cadet's exceptional-weapon form (weaponForms.ts) ----------------
+
+  r.post('/cadets/:id/weapon-forms', (req, res) => res.json(weaponForm(me(req), createWeaponForm(me(req), id(req.params.id), req.body))));
+  r.get('/weapon-forms/:id', (req, res) => res.json(weaponForm(me(req), id(req.params.id))));
+  r.patch('/weapon-forms/:id', (req, res) => {
+    updateWeaponForm(me(req), id(req.params.id), req.body);
+    res.json(weaponForm(me(req), id(req.params.id)));
+  });
+  r.post('/weapon-forms/:id/decision', (req, res) => {
+    decideWeaponForm(me(req), id(req.params.id), req.body);
+    res.json(weaponForm(me(req), id(req.params.id)));
+  });
+  r.delete('/weapon-forms/:id', (req, res) => res.json({ ok: true, cadetId: deleteWeaponForm(me(req), id(req.params.id)) }));
 
   // ---------------- discussions (discussions.ts) ----------------
 
