@@ -58,7 +58,7 @@ const CARRIED = new Set([
 /** kept in part: the debriefs with lessons for the next cycle, and the staff's absences still ahead */
 const IN_PART = new Set(['debriefs', 'debrief_items', 'absences']);
 
-const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment', 'plans', 'weekly', 'entries'];
+const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment', 'plans', 'weekly', 'entries', 'discussions'];
 
 interface ArchiveRow {
   id: number;

@@ -47,6 +47,9 @@ const OPENERS: [string, RegExp, (m: RegExpExecArray) => Headline][] = [
   ['entry', /^(אישור כניסה): (.+)$/, (m) => ({ title: m[2], lead: m[1] })],
   ['experience_feedback', /^התקבל (משוב .+)$/, (m) => ({ title: m[1], lead: '' })],
   ['brief', /^בוקר טוב - (.+)$/, (m) => ({ title: m[1], lead: '' })],
+  // a discussion asked to: the discussion itself (its kind and time are the line under it)
+  ['discussion_invite', /^זומנת לדיון: (.+)$/, (m) => ({ title: m[1], lead: '' })],
+  ['discussion_summary', /^(סוכם הדיון): (.+)$/, (m) => ({ title: m[2], lead: m[1] })],
 ];
 
 /** a phone shows a few hundred characters at most; past that it cuts on its own, mid-word */

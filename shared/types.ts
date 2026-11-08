@@ -28,6 +28,7 @@ import type {
   Visibility,
   WeekStatus,
 } from './constants';
+import type { DiscussionKind } from './discussions';
 
 export interface User {
   id: number;
@@ -577,6 +578,63 @@ export interface Notification {
   pop?: { title: string; body: string };
   /** about a course opened beside the current one (its id); absent: the current course */
   courseSlot?: number | null;
+}
+
+/** where a follow-up action of a discussion stands: no task opened for it yet, or its task's state */
+export type DiscussionActionState = 'open' | 'task' | 'late' | 'done' | 'cancelled';
+
+export interface DiscussionAction {
+  id: number;
+  body: string;
+  ownerId: number | null;
+  ownerName: string | null;
+  dueOn: string | null;
+  taskId: number | null;
+  state: DiscussionActionState;
+}
+
+export interface DiscussionPoint {
+  id: number;
+  body: string;
+  /** what came up, what was decided on it */
+  outcome: string;
+  done: boolean;
+}
+
+/** a discussion in the list */
+export interface DiscussionSummary {
+  id: number;
+  kind: DiscussionKind;
+  title: string;
+  heldOn: string;
+  heldAt: string | null;
+  status: 'planned' | 'summarized';
+  leadId: number | null;
+  leadName: string | null;
+  weekId: number | null;
+  weekName: string | null;
+  participants: number;
+  points: number;
+  pointsDone: number;
+  /** its follow-up actions: how many, how many still open (late among them), done */
+  actions: { total: number; open: number; late: number; done: number };
+  /** the person reading is in it - leads it, was asked to it, or owns an action of it */
+  mine: boolean;
+}
+
+export interface Discussion extends DiscussionSummary {
+  background: string;
+  decisions: string;
+  guests: string;
+  participantList: { id: number; name: string }[];
+  pointList: DiscussionPoint[];
+  actionList: DiscussionAction[];
+  createdBy: number | null;
+  createdByName: string | null;
+  summarizedAt: string | null;
+  summarizedByName: string | null;
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
 /** the weeks whose number is not their dates' in the calendar - and what it becomes */

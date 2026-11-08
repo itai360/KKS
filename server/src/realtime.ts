@@ -22,7 +22,8 @@ export type Topic =
   | 'plans'
   | 'weekly'
   | 'entries'
-  | 'takpatz';
+  | 'takpatz'
+  | 'discussions';
 
 const clients = new Map<number, Set<Response>>();
 let pending = new Set<Topic>();

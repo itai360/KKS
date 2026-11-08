@@ -8664,6 +8664,245 @@ html[data-kb] .topbar .search-pop {
   margin-top: 2px;
 }
 
+/* discussions (pages/DiscussionsPage.tsx) */
+.disc-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.disc-group-title {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.disc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.disc-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color 0.15s;
+}
+@media (hover: hover) {
+  .disc-card:hover {
+    background: var(--hover);
+  }
+}
+.disc-card:active {
+  scale: 0.99;
+}
+.disc-card > svg {
+  flex: none;
+  color: var(--muted);
+}
+.disc-card-main {
+  min-width: 0;
+  gap: 2px;
+}
+.disc-card-title {
+  overflow-wrap: anywhere;
+}
+.disc-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 2px;
+  color: var(--ink-2);
+}
+.disc-mine {
+  color: var(--blue-ink, var(--ink-2));
+  font-weight: 600;
+}
+.disc-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--card-2);
+  color: var(--ink-2);
+}
+.disc-mark.t-purple,
+.t-purple > .disc-mark {
+  background: var(--purple-bg);
+  color: var(--purple-ink, var(--ink));
+}
+.disc-mark.t-yellow,
+.t-yellow > .disc-mark {
+  background: var(--yellow-bg);
+  color: var(--yellow-ink, var(--ink));
+}
+.disc-mark.t-orange,
+.t-orange > .disc-mark {
+  background: var(--orange-bg);
+  color: var(--orange-ink, var(--ink));
+}
+.disc-mark.t-blue,
+.t-blue > .disc-mark {
+  background: var(--blue-bg);
+  color: var(--blue-ink, var(--ink));
+}
+.disc-mark.t-green,
+.t-green > .disc-mark {
+  background: var(--green-bg);
+  color: var(--green-ink);
+}
+.disc-mark.t-red,
+.t-red > .disc-mark {
+  background: var(--red-bg);
+  color: var(--red-ink);
+}
+.disc-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+.disc-kind-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.disc-kind-pick .col {
+  gap: 2px;
+}
+.disc-kind-pick.on {
+  border-color: var(--ink);
+  background: var(--card-2);
+}
+.disc-kind-pick:focus-visible {
+  outline: 2px solid var(--focus, var(--ink));
+  outline-offset: 2px;
+}
+.disc-people {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--ink-2);
+}
+.disc-people > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.disc-points {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: point;
+}
+.disc-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+}
+.disc-point + .disc-point {
+  border-top: 1px solid var(--line);
+}
+.disc-point-check {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 36px;
+  flex: none;
+}
+.disc-point-check input {
+  width: 18px;
+  height: 18px;
+}
+.disc-point-body {
+  font-weight: 600;
+}
+.disc-point.is-done .disc-point-body {
+  color: var(--ink-2);
+}
+.disc-point-outcome {
+  min-height: 36px;
+  font-size: 13.5px;
+}
+.disc-row-tools {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+.disc-actions {
+  display: flex;
+  flex-direction: column;
+}
+.disc-action {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+}
+.disc-action + .disc-action {
+  border-top: 1px solid var(--line);
+}
+.disc-action-main,
+.disc-action-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.disc-action-main > .input {
+  flex: 1 1 220px;
+}
+.disc-action-meta .select,
+.disc-action-meta .input {
+  flex: 1 1 150px;
+  max-width: 220px;
+}
+.disc-action.is-done .disc-action-main .strong {
+  color: var(--ink-2);
+  text-decoration: line-through;
+}
+.disc-action-add {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-2, var(--line));
+}
+@media (max-width: 720px) {
+  .disc-action-add {
+    grid-template-columns: 1fr 1fr;
+  }
+  .disc-action-add > .input:first-child {
+    grid-column: 1 / -1;
+  }
+}
+.disc-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--card-2);
+}
+.disc-summed {
+  text-align: center;
+}
+
 /* weeks whose number is not their dates' (pages/WeeksPage.tsx) */
 .renumber-notice {
   align-items: center;

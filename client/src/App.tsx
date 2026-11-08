@@ -24,6 +24,8 @@ const BriefingPage = lazyPage(() => import('./pages/BriefingPage'), 'BriefingPag
 const CadetPage = lazyPage(() => import('./pages/CadetsPage'), 'CadetPage');
 const CadetsPage = lazyPage(() => import('./pages/CadetsPage'), 'CadetsPage');
 const DebriefPage = lazyPage(() => import('./pages/DebriefsPage'), 'DebriefPage');
+const DiscussionsPage = lazyPage(() => import('./pages/DiscussionsPage'), 'DiscussionsPage');
+const DiscussionPage = lazyPage(() => import('./pages/DiscussionsPage'), 'DiscussionPage');
 const DebriefsPage = lazyPage(() => import('./pages/DebriefsPage'), 'DebriefsPage');
 const DocumentsPage = lazyPage(() => import('./pages/DocumentsPage'), 'DocumentsPage');
 const CommitteePage = lazyPage(() => import('./pages/EvaluationsPage'), 'CommitteePage');
@@ -169,6 +171,8 @@ function AuthedRoutes() {
               <Route path="/evaluations/:cadetId" element={<EvaluationFilePage />} />
               <Route path="/debriefs" element={<DebriefsPage />} />
               <Route path="/debriefs/:id" element={<DebriefPage />} />
+              <Route path="/discussions" element={<DiscussionsPage />} />
+              <Route path="/discussions/:id" element={<DiscussionPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/more" element={<MorePage />} />
               <Route path="*" element={<NotFound />} />

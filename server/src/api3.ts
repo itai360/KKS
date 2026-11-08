@@ -92,6 +92,24 @@ import { addAbsence, deleteAbsence, listAbsences, reasonSeenBy, staffLoad } from
 import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
 import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
 import { copyPreviousCycleTasks, coursesOverview, previousCycleWeek, promoteParallelCourse, startNewCourse, viewCourse, viewingCourse } from './courses';
+import {
+  addAction,
+  addPoint as addDiscussionPoint,
+  createDiscussion,
+  deleteAction,
+  deleteDiscussion,
+  deletePoint as deleteDiscussionPoint,
+  discussionDetail,
+  listDiscussions,
+  openActionTask,
+  openActionTasks,
+  orderPoints,
+  reopenDiscussion,
+  summarizeDiscussion,
+  updateAction,
+  updateDiscussion,
+  updatePoint as updateDiscussionPoint,
+} from './discussions';
 import { COPY_AREAS, copyIntoSlot, copySource, deleteSlot, openParallelCourse, parallelCourses, slotOf, switchSlot } from './parallel';
 import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
@@ -623,6 +641,49 @@ export function v3Router(): Router {
     const { id } = z.object({ id: z.number().int().positive().nullable() }).parse(req.body);
     viewCourse(res, id);
     res.json({ ok: true });
+  });
+
+  // ---------------- discussions (discussions.ts) ----------------
+
+  r.get('/discussions', (req, res) => res.json(listDiscussions(me(req), { kind: typeof req.query.kind === 'string' ? req.query.kind : undefined })));
+  r.post('/discussions', (req, res) => res.json(discussionDetail(me(req), createDiscussion(me(req), req.body))));
+  r.get('/discussions/:id', (req, res) => res.json(discussionDetail(me(req), id(req.params.id))));
+  r.patch('/discussions/:id', (req, res) => {
+    updateDiscussion(me(req), id(req.params.id), req.body);
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+  r.delete('/discussions/:id', (req, res) => {
+    deleteDiscussion(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.post('/discussions/:id/points', (req, res) => {
+    addDiscussionPoint(me(req), id(req.params.id), req.body);
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+  r.post('/discussions/:id/points/order', (req, res) => {
+    orderPoints(me(req), id(req.params.id), req.body);
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+  r.patch('/discussion-points/:id', (req, res) => res.json(discussionDetail(me(req), updateDiscussionPoint(me(req), id(req.params.id), req.body))));
+  r.delete('/discussion-points/:id', (req, res) => res.json(discussionDetail(me(req), deleteDiscussionPoint(me(req), id(req.params.id)))));
+  r.post('/discussions/:id/actions', (req, res) => {
+    addAction(me(req), id(req.params.id), req.body);
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+  r.patch('/discussion-actions/:id', (req, res) => res.json(discussionDetail(me(req), updateAction(me(req), id(req.params.id), req.body))));
+  r.delete('/discussion-actions/:id', (req, res) => res.json(discussionDetail(me(req), deleteAction(me(req), id(req.params.id)))));
+  r.post('/discussion-actions/:id/task', (req, res) => res.json(discussionDetail(me(req), openActionTask(me(req), id(req.params.id)))));
+  r.post('/discussions/:id/tasks', (req, res) => {
+    const result = openActionTasks(me(req), id(req.params.id));
+    res.json({ ...result, discussion: discussionDetail(me(req), id(req.params.id)) });
+  });
+  r.post('/discussions/:id/summarize', (req, res) => {
+    const result = summarizeDiscussion(me(req), id(req.params.id), req.body);
+    res.json({ ...result, discussion: discussionDetail(me(req), id(req.params.id)) });
+  });
+  r.post('/discussions/:id/reopen', (req, res) => {
+    reopenDiscussion(me(req), id(req.params.id));
+    res.json(discussionDetail(me(req), id(req.params.id)));
   });
 
   // ---------------- a course opened beside the current one (parallel.ts) ----------------

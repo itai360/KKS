@@ -207,6 +207,7 @@ export function useNavSections(): NavSection[] {
     ],
   };
   const learning: NavSection = { title: 'תחקירים ולמידה', tab: 'weeks', items: [{ to: '/debriefs', label: 'תחקירים ולקחים', icon: 'lightbulb', keywords: 'תחקיר שבועי פעילות עצימה תחק"ש פלוגתי לקחים בנק לקחים' }] };
+  const discussions = { to: '/discussions', label: 'דיונים', icon: 'clipboard', keywords: 'דיון תכנוני תחקירי הערכת מצב החלטה תיאום בטיחות סיכום דיון פעולות להמשך' };
   const threeWeek = { to: '/three-week', label: 'אישור תוכניות תלת שבועי', icon: 'threeWeeks', keywords: 'תלת שבועי תלת-שבועי שלושה שבועות ארבעה שבועות תוכנית' };
   const home: NavSection = { tab: 'home', items: [{ to: '/', label: 'יומן הקורס', icon: 'calendar', end: true, keywords: 'לו"ז לוז בית אירועים יומן' }] };
   if (isCommander) {
@@ -241,6 +242,7 @@ export function useNavSections(): NavSection[] {
         items: [
           { to: '/overview', label: 'תמונת מצב', icon: 'home', keywords: 'דף הבית לוח המפקד דורש טיפול' },
           { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
+          discussions,
           { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
           { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
           { to: '/day-end', label: 'סיכום היום', icon: 'moon' },
@@ -295,6 +297,7 @@ export function useNavSections(): NavSection[] {
       items: [
         { to: '/overview', label: 'תמונת מצב', icon: 'home', keywords: 'דף הבית דורש טיפול' },
         { to: '/briefing', label: 'תדריך בוקר', icon: 'sun' },
+        discussions,
         { to: '/reports/weekly', label: 'תמונת מצב שבועית', icon: 'chart' },
         { to: '/lookahead', label: 'מבט קדימה', icon: 'eye' },
         { to: '/day-end', label: 'סיכום היום', icon: 'moon' },

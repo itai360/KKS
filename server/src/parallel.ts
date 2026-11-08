@@ -27,7 +27,7 @@ import type { Topic } from './realtime';
 
 export const SLOT_COOKIE = 'kks_course';
 
-const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment', 'plans', 'weekly', 'entries'];
+const ALL_TOPICS: Topic[] = ['tasks', 'weeks', 'events', 'templates', 'recurring', 'users', 'settings', 'requests', 'cadets', 'debriefs', 'documents', 'announcements', 'alignment', 'plans', 'weekly', 'entries', 'discussions'];
 
 // ---------------- which course a request is in ----------------
 
