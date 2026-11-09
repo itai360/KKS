@@ -623,10 +623,19 @@ export interface DiscussionSummary {
   mine: boolean;
 }
 
+/** a participant from outside the staff */
+export interface DiscussionGuest {
+  name: string;
+  /** what they are: "קצין הבטיחות", "נציג הגדוד" */
+  role: string;
+  /** where the summary is sent - may be empty */
+  email: string;
+}
+
 export interface Discussion extends DiscussionSummary {
   background: string;
   decisions: string;
-  guests: string;
+  guestList: DiscussionGuest[];
   participantList: { id: number; name: string }[];
   pointList: DiscussionPoint[];
   actionList: DiscussionAction[];

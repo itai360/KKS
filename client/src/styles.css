@@ -8963,6 +8963,59 @@ html[data-kb] .topbar .search-pop {
     grid-column: 1 / -1;
   }
 }
+.disc-guest-mail {
+  display: inline-flex;
+  margin-inline-start: 3px;
+  color: var(--blue-ink, var(--ink-2));
+  vertical-align: middle;
+}
+.disc-guests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.disc-guests legend {
+  padding-inline: 4px;
+}
+.disc-guests > p {
+  margin: 0;
+}
+.disc-guest-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.disc-guest-err {
+  grid-column: 1 / -1;
+}
+@media (max-width: 640px) {
+  .disc-guest-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .disc-guest-row > input[type='email'] {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+}
+.disc-mail-to {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
 .disc-sum {
   display: flex;
   flex-wrap: wrap;

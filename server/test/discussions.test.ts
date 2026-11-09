@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Discussion, DiscussionSummary } from '../../shared/types';
 import { DISCUSSION_POINTS } from '../../shared/discussions';
-import { db } from '../src/db';
+import { Db, db, migrate } from '../src/db';
 import { at, notificationsOf, setup, staffMay, type Ctx } from './helpers';
 
 let c: Ctx;
@@ -144,5 +144,41 @@ describe('discussions', () => {
     await c.s1.patch(`/api/discussions/${d.id}`, { participantIds: [c.ids.s2, c.ids.s3] });
     expect(notificationsOf(c.ids.s3).at(-1)).toMatchObject({ type: 'discussion_invite' });
     expect(notificationsOf(c.ids.s2).length).toBe(before);
+  });
+
+  it('participants from outside the staff: a name, what they are, an email for the summary', async () => {
+    const d = await open({
+      guestList: [
+        { name: 'רס"ן ישראל ישראלי', role: 'קצין בטיחות חטיבתי', email: 'Safety.Officer@Example.com' },
+        { name: 'נציג הגדוד', role: '', email: '' },
+      ],
+    });
+    expect(d.guestList).toEqual([
+      { name: 'רס"ן ישראל ישראלי', role: 'קצין בטיחות חטיבתי', email: 'safety.officer@example.com' },
+      { name: 'נציג הגדוד', role: '', email: '' },
+    ]);
+    expect((await c.s1.patch(`/api/discussions/${d.id}`, { guestList: [{ name: 'א', email: 'לא מייל' }] })).status).toBe(400);
+    expect((await c.s1.patch(`/api/discussions/${d.id}`, { guestList: [{ name: '', email: 'a@b.co' }] })).status).toBe(400);
+    const out = (await c.s1.patch(`/api/discussions/${d.id}`, { guestList: [{ name: 'נציג הגדוד', role: 'קמב"ץ', email: 'ops@example.com' }] })).body as Discussion;
+    expect(out.guestList).toEqual([{ name: 'נציג הגדוד', role: 'קמב"ץ', email: 'ops@example.com' }]);
+    // the list unchanged when not sent
+    expect(((await c.s1.patch(`/api/discussions/${d.id}`, { decisions: 'x' })).body as Discussion).guestList).toHaveLength(1);
+    // others on the staff do not change it
+    expect((await c.s3.patch(`/api/discussions/${d.id}`, { guestList: [] })).status).toBe(403);
+  });
+});
+
+describe('discussions kept before external participants had their own list', () => {
+  it('the line written of them becomes one of them', () => {
+    const d = new Db(':memory:');
+    migrate(d, 59);
+    d.run(
+      "INSERT INTO discussions(kind, title, held_on, guests, created_at, updated_at) VALUES ('planning', 'תכנון', '2026-10-04', 'קצין הבטיחות, נציג הגדוד', '2026-10-01T07:00:00Z', '2026-10-01T07:00:00Z')",
+    );
+    d.run("INSERT INTO discussions(kind, title, held_on, created_at, updated_at) VALUES ('debrief', 'תחקיר', '2026-10-04', '2026-10-01T07:00:00Z', '2026-10-01T07:00:00Z')");
+    migrate(d);
+    expect(d.all('SELECT discussion_id, name, email FROM discussion_guests')).toEqual([{ discussion_id: 1, name: 'קצין הבטיחות, נציג הגדוד', email: '' }]);
+    expect(d.all("SELECT guests FROM discussions WHERE guests <> ''")).toEqual([]);
+    d.close();
   });
 });

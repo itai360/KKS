@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { shortDate, weekdayName } from '@shared/dates';
 import { DISCUSSION_KIND_HINTS, DISCUSSION_KIND_ICONS, DISCUSSION_KIND_LABELS, DISCUSSION_KIND_TONES, DISCUSSION_KINDS, DISCUSSION_POINTS, type DiscussionKind } from '@shared/discussions';
-import type { Discussion, DiscussionAction, DiscussionActionState, DiscussionSummary } from '@shared/types';
+import type { Discussion, DiscussionAction, DiscussionActionState, DiscussionGuest, DiscussionSummary } from '@shared/types';
 import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
 import { UserPicker } from '../components/NewTask';
@@ -161,6 +161,7 @@ function NewDiscussion({ kind: initial, onClose }: { kind: DiscussionKind | null
   const [heldAt, setHeldAt] = useState('');
   const [lead, setLead] = useState<number[]>([user.id]);
   const [people, setPeople] = useState<number[]>([]);
+  const [guests, setGuests] = useState<DiscussionGuest[]>([]);
   const [points, setPoints] = useState(DISCUSSION_POINTS[initial ?? 'planning'].join('\n'));
   const [pointsTouched, setPointsTouched] = useState(false);
   const [background, setBackground] = useState('');
@@ -183,6 +184,7 @@ function NewDiscussion({ kind: initial, onClose }: { kind: DiscussionKind | null
         heldAt: heldAt || null,
         leadId: lead[0] ?? null,
         participantIds: people,
+        guestList: guests,
         background,
         points: points
           .split('\n')
@@ -206,7 +208,7 @@ function NewDiscussion({ kind: initial, onClose }: { kind: DiscussionKind | null
           <button className="btn" onClick={onClose} disabled={busy}>
             ביטול
           </button>
-          <button className="btn btn-primary" onClick={() => void submit()} disabled={busy || !title.trim() || !heldOn}>
+          <button className="btn btn-primary" onClick={() => void submit()} disabled={busy || !title.trim() || !heldOn || !guestsOk(guests)}>
             {busy ? 'פותח...' : 'פתיחת הדיון'}
           </button>
         </>
@@ -243,6 +245,7 @@ function NewDiscussion({ kind: initial, onClose }: { kind: DiscussionKind | null
         <Field label="משתתפים" hint="יקבלו התראה על הדיון">
           <UserPicker value={people} onChange={setPeople} />
         </Field>
+        <GuestsEditor value={guests} onChange={setGuests} />
         <Field label="רקע ומטרה">
           <textarea className="textarea" rows={2} value={background} onChange={(e) => setBackground(e.target.value)} maxLength={5000} placeholder="למה מתכנסים, ומה צריך לצאת מהדיון" />
         </Field>
@@ -268,8 +271,8 @@ function NewDiscussion({ kind: initial, onClose }: { kind: DiscussionKind | null
 /** the summary to send on: what was discussed, decided, and who does what by when */
 function summaryText(d: Discussion): string {
   const lines = [`${DISCUSSION_KIND_LABELS[d.kind]}: ${d.title}`, `${when(d)}${d.leadName ? ` · מוביל: ${d.leadName}` : ''}`];
-  const who = [...d.participantList.map((p) => p.name), ...(d.guests.trim() ? [d.guests.trim()] : [])];
-  if (who.length) lines.push(`משתתפים: ${who.join(', ')}`);
+  if (d.participantList.length) lines.push(`משתתפים: ${d.participantList.map((p) => p.name).join(', ')}`);
+  if (d.guestList.length) lines.push(`משתתפים חיצוניים: ${d.guestList.map(guestLabel).join(', ')}`);
   if (d.background.trim()) lines.push('', d.background.trim());
   if (d.pointList.length) {
     lines.push('', 'נקודות לדיון:');
@@ -290,6 +293,8 @@ export function DiscussionPage() {
   const { data: d, error, status, loading, setData } = useApi<Discussion>(`/api/discussions/${id}`, ['discussions', 'tasks']);
   const [editing, setEditing] = useState(false);
   const [summing, setSumming] = useState(false);
+  // the summary to send by email: the discussion as it is then (just summed up, it may be newer than what is shown)
+  const [mailing, setMailing] = useState<Discussion | null>(null);
 
   if (loading && !d)
     return (
@@ -361,6 +366,9 @@ export function DiscussionPage() {
         }
         actions={
           <>
+            <button className="btn" onClick={() => setMailing(d)}>
+              <Icon name="mail" /> שליחה במייל
+            </button>
             <button className="btn" onClick={() => void share()}>
               <Icon name="share" /> שיתוף הסיכום
             </button>
@@ -379,12 +387,28 @@ export function DiscussionPage() {
       />
 
       <div className="col gap-16">
-        {(d.participantList.length > 0 || d.guests) && (
+        {d.participantList.length > 0 && (
           <div className="disc-people small" aria-label="משתתפים">
             <Icon name="users" size={16} />
+            <span className="grow">{d.participantList.map((p) => p.name).join(', ')}</span>
+          </div>
+        )}
+        {d.guestList.length > 0 && (
+          <div className="disc-people small" aria-label="משתתפים חיצוניים">
+            <Icon name="external" size={16} />
             <span className="grow">
-              {d.participantList.map((p) => p.name).join(', ')}
-              {d.guests && `${d.participantList.length ? ', ' : ''}${d.guests}`}
+              <span className="muted">חיצוניים: </span>
+              {d.guestList.map((g, i) => (
+                <span key={i} className="disc-guest">
+                  {i > 0 && ', '}
+                  {guestLabel(g)}
+                  {g.email && (
+                    <a href={`mailto:${g.email}`} className="disc-guest-mail" title={g.email} aria-label={`מייל ל${g.name}`}>
+                      <Icon name="mail" size={13} />
+                    </a>
+                  )}
+                </span>
+              ))}
             </span>
           </div>
         )}
@@ -430,6 +454,10 @@ export function DiscussionPage() {
           <p className="tiny muted disc-summed">
             סוכם {d.summarizedAt && fmtDateTime(d.summarizedAt)}
             {d.summarizedByName && ` על ידי ${d.summarizedByName}`}
+            {' · '}
+            <button type="button" className="link-btn" onClick={() => setMailing(d)}>
+              שליחת הסיכום במייל
+            </button>
             {d.canEdit && (
               <>
                 {' · '}
@@ -443,7 +471,8 @@ export function DiscussionPage() {
       </div>
 
       {editing && <EditDiscussion d={d} onClose={() => setEditing(false)} onSaved={setData} />}
-      {summing && <SumUp d={d} ready={ready.length} onClose={() => setSumming(false)} onDone={setData} />}
+      {summing && <SumUp d={d} ready={ready.length} onClose={() => setSumming(false)} onDone={setData} onMail={setMailing} />}
+      {mailing && <MailSummary d={mailing} text={summaryText(mailing)} onClose={() => setMailing(null)} />}
     </div>
   );
 }
@@ -785,14 +814,14 @@ function EditDiscussion({ d, onClose, onSaved }: { d: Discussion; onClose: () =>
   const [heldAt, setHeldAt] = useState(d.heldAt ?? '');
   const [lead, setLead] = useState<number[]>(d.leadId ? [d.leadId] : []);
   const [people, setPeople] = useState<number[]>(d.participantList.map((p) => p.id));
-  const [guests, setGuests] = useState(d.guests);
+  const [guests, setGuests] = useState<DiscussionGuest[]>(d.guestList);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
-      onSaved(await api.patch<Discussion>(`/api/discussions/${d.id}`, { kind, title, heldOn, heldAt: heldAt || null, leadId: lead[0] ?? null, participantIds: people, guests }));
+      onSaved(await api.patch<Discussion>(`/api/discussions/${d.id}`, { kind, title, heldOn, heldAt: heldAt || null, leadId: lead[0] ?? null, participantIds: people, guestList: guests }));
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -808,7 +837,7 @@ function EditDiscussion({ d, onClose, onSaved }: { d: Discussion; onClose: () =>
           <button className="btn" onClick={onClose} disabled={busy}>
             ביטול
           </button>
-          <button className="btn btn-primary" onClick={() => void submit()} disabled={busy || !title.trim() || !heldOn}>
+          <button className="btn btn-primary" onClick={() => void submit()} disabled={busy || !title.trim() || !heldOn || !guestsOk(guests)}>
             {busy ? 'שומר...' : 'שמירה'}
           </button>
         </>
@@ -841,18 +870,18 @@ function EditDiscussion({ d, onClose, onSaved }: { d: Discussion; onClose: () =>
         <Field label="משתתפים" hint="מי שנוסף יקבל התראה">
           <UserPicker value={people} onChange={setPeople} />
         </Field>
-        <Field label="משתתפים נוספים" hint="מחוץ לסגל - שמות או תפקידים">
-          <input className="input" value={guests} onChange={(e) => setGuests(e.target.value)} maxLength={500} placeholder='לדוגמה: קצין הבטיחות, נציג הגדוד' />
-        </Field>
+        <GuestsEditor value={guests} onChange={setGuests} />
         <ErrorBox error={error} />
       </div>
     </Modal>
   );
 }
 
-function SumUp({ d, ready, onClose, onDone }: { d: Discussion; ready: number; onClose: () => void; onDone: (d: Discussion) => void }) {
+function SumUp({ d, ready, onClose, onDone, onMail }: { d: Discussion; ready: number; onClose: () => void; onDone: (d: Discussion) => void; onMail: (d: Discussion) => void }) {
   const toast = useToast();
   const [openTasks, setOpenTasks] = useState(ready > 0);
+  const mailable = d.guestList.filter((g) => g.email).length;
+  const [mail, setMail] = useState(mailable > 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const undiscussed = d.pointList.filter((p) => !p.done).length;
@@ -865,6 +894,8 @@ function SumUp({ d, ready, onClose, onDone }: { d: Discussion; ready: number; on
       toast({ title: r.opened ? `הדיון סוכם - ${r.opened === 1 ? 'נפתחה משימה אחת' : `נפתחו ${r.opened} משימות`}` : 'הדיון סוכם', tone: 'green' });
       for (const f of r.failed) toast({ title: `"${f.body}": ${f.error}`, tone: 'red' });
       onClose();
+      // and on to the email, the summary as it now is
+      if (mail) onMail(r.discussion);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -894,8 +925,161 @@ function SumUp({ d, ready, onClose, onDone }: { d: Discussion; ready: number; on
             <span className="small">{ready === 1 ? 'לפתוח משימה לפעולה עם אחראי' : `לפתוח משימות ל-${ready} הפעולות עם אחראי`}</span>
           </label>
         )}
+        {mailable > 0 && (
+          <label className="check">
+            <input type="checkbox" checked={mail} onChange={(e) => setMail(e.target.checked)} />
+            <span className="small">{mailable === 1 ? 'לשלוח את הסיכום במייל למשתתף החיצוני' : `לשלוח את הסיכום במייל ל-${mailable} המשתתפים החיצוניים`}</span>
+          </label>
+        )}
         {d.actionList.some((a) => !a.ownerId) && <p className="tiny muted">פעולה בלי אחראי נשארת פתוחה בדיון, בלי משימה.</p>}
         <ErrorBox error={error} />
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------- participants from outside the staff, and the summary by email ----------------
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const guestLabel = (g: DiscussionGuest) => (g.role ? `${g.name} (${g.role})` : g.name);
+/** every one named, and an email that is one (or none) */
+const guestsOk = (list: DiscussionGuest[]) => list.every((g) => g.name.trim() && (!g.email.trim() || EMAIL.test(g.email.trim())));
+
+/** the participants from outside the staff: a name, what they are, an email for the summary */
+function GuestsEditor({ value, onChange }: { value: DiscussionGuest[]; onChange: (v: DiscussionGuest[]) => void }) {
+  const set = (i: number, patch: Partial<DiscussionGuest>) => onChange(value.map((g, j) => (j === i ? { ...g, ...patch } : g)));
+  return (
+    <fieldset className="disc-guests">
+      <legend className="small strong">משתתפים חיצוניים</legend>
+      <p className="tiny muted">מחוץ לסגל - עם מייל, יקבלו את הסיכום.</p>
+      {value.map((g, i) => {
+        const bad = !!g.email.trim() && !EMAIL.test(g.email.trim());
+        return (
+          <div key={i} className="disc-guest-row">
+            <input className="input" value={g.name} onChange={(e) => set(i, { name: e.target.value })} maxLength={120} placeholder="שם" aria-label="שם" aria-invalid={!g.name.trim()} />
+            <input className="input" value={g.role} onChange={(e) => set(i, { role: e.target.value })} maxLength={120} placeholder="תפקיד" aria-label="תפקיד" />
+            <input
+              className="input"
+              type="email"
+              dir="ltr"
+              inputMode="email"
+              autoComplete="email"
+              value={g.email}
+              onChange={(e) => set(i, { email: e.target.value })}
+              maxLength={200}
+              placeholder="email@example.com"
+              aria-label="מייל"
+              aria-invalid={bad}
+            />
+            <button type="button" className="icon-btn" aria-label={`הסרת ${g.name || 'המשתתף'}`} title="הסרה" onClick={() => onChange(value.filter((_, j) => j !== i))}>
+              <Icon name="x" size={15} />
+            </button>
+            {bad && <span className="tiny text-red disc-guest-err">כתובת המייל לא תקינה</span>}
+          </div>
+        );
+      })}
+      <div>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange([...value, { name: '', role: '', email: '' }])}>
+          <Icon name="plus" size={15} /> משתתף חיצוני
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
+/** a mail app's address: the recipients, the subject and the text, written in */
+const mailtoHref = (to: string[], subject: string, body: string) => `mailto:${to.map(encodeURIComponent).join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+const gmailHref = (to: string[], subject: string, body: string) =>
+  `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to.join(','))}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+/** past this a mail app may cut the text short (Gmail on the web takes it whole) */
+const MAILTO_MAX = 1800;
+
+/**
+ * The summary by email: it opens in the person's own email - the phone's mail app, Gmail or Outlook - written to
+ * the chosen people, with the subject and the text; they send it from there.
+ */
+function MailSummary({ d, text, onClose }: { d: Discussion; text: string; onClose: () => void }) {
+  const { users } = useSession();
+  const toast = useToast();
+  // the staff in it: the lead and the participants, with an email of their own
+  const staff = [...new Set([...(d.leadId ? [d.leadId] : []), ...d.participantList.map((p) => p.id)])]
+    .map((id) => users.find((u) => u.id === id))
+    .filter((u): u is NonNullable<typeof u> => !!u && !!u.email);
+  const options = [
+    ...d.guestList.filter((g) => g.email).map((g) => ({ key: `g:${g.email}`, email: g.email, label: guestLabel(g), outside: true })),
+    ...staff.map((u) => ({ key: `u:${u.id}`, email: u.email, label: u.displayName, outside: false })),
+  ];
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(options.filter((o) => o.outside).map((o) => o.key)));
+  const [subject, setSubject] = useState(`סיכום ${DISCUSSION_KIND_LABELS[d.kind]}: ${d.title}`);
+  const [body, setBody] = useState(text);
+  const to = [...new Set(options.filter((o) => picked.has(o.key)).map((o) => o.email))];
+  const noEmail = d.guestList.filter((g) => !g.email);
+  const toggle = (key: string) =>
+    setPicked((p) => {
+      const n = new Set(p);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  const long = mailtoHref(to, subject, body).length > MAILTO_MAX;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(to.join(', '));
+      toast({ title: to.length === 1 ? 'הכתובת הועתקה' : 'הכתובות הועתקו', tone: 'green' });
+    } catch {
+      toast({ title: 'לא הצלחנו להעתיק', tone: 'red' });
+    }
+  };
+  return (
+    <Modal
+      title="שליחת הסיכום במייל"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            סגירה
+          </button>
+          <a className={`btn${to.length ? '' : ' disabled'}`} href={to.length ? gmailHref(to, subject, body) : undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!to.length} onClick={() => to.length && onClose()}>
+            <Icon name="external" /> פתיחה ב-Gmail
+          </a>
+          <a className={`btn btn-primary${to.length ? '' : ' disabled'}`} href={to.length ? mailtoHref(to, subject, body) : undefined} aria-disabled={!to.length} onClick={() => to.length && onClose()}>
+            <Icon name="mail" /> פתיחה במייל
+          </a>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        <p className="small muted">המייל נפתח אצלך - באפליקציית המייל או ב-Gmail - עם הנמענים, הנושא והסיכום. משם שולחים.</p>
+        {options.length ? (
+          <div className="disc-mail-to" role="group" aria-label="נמענים">
+            {options.map((o) => (
+              <label key={o.key} className="check">
+                <input type="checkbox" checked={picked.has(o.key)} onChange={() => toggle(o.key)} />
+                <span className="small">
+                  {o.label} <span className="muted mono tiny" dir="ltr">{o.email}</span>
+                  {!o.outside && <span className="muted tiny"> · מהסגל</span>}
+                </span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="small text-orange">לאף משתתף אין מייל. אפשר להוסיף מייל למשתתפים החיצוניים בעריכת הדיון.</p>
+        )}
+        {noEmail.length > 0 && <p className="tiny muted">בלי מייל: {noEmail.map(guestLabel).join(', ')}</p>}
+        <Field label="נושא">
+          <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={200} />
+        </Field>
+        <Field label="הסיכום">
+          <textarea className="textarea" rows={8} value={body} onChange={(e) => setBody(e.target.value)} />
+        </Field>
+        {long && <p className="tiny muted">הסיכום ארוך - אם אפליקציית המייל פותחת אותו חתוך, ב-Gmail הוא נפתח שלם.</p>}
+        {to.length > 0 && (
+          <div>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copy()}>
+              <Icon name="copy" size={15} /> העתקת הכתובות
+            </button>
+          </div>
+        )}
       </div>
     </Modal>
   );

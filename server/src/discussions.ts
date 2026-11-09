@@ -9,7 +9,7 @@
 import { z } from 'zod';
 import { addDays, isDateKey, isTimeString, localDateKey, shortDate, zonedIso } from '../../shared/dates';
 import { DISCUSSION_KIND_LABELS, DISCUSSION_KINDS, type DiscussionKind } from '../../shared/discussions';
-import type { Discussion, DiscussionAction, DiscussionActionState, DiscussionSummary } from '../../shared/types';
+import type { Discussion, DiscussionAction, DiscussionActionState, DiscussionGuest, DiscussionSummary } from '../../shared/types';
 import { getUserRow, type UserRow } from './auth';
 import { badRequest, clock, forbidden, getSettings, HttpError, notFound, nowIso, tz } from './core';
 import { db } from './db';
@@ -28,7 +28,6 @@ interface Row {
   week_name: string | null;
   lead_id: number | null;
   lead_name: string | null;
-  guests: string;
   decisions: string;
   status: 'planned' | 'summarized';
   summarized_at: string | null;
@@ -159,7 +158,7 @@ export function discussionDetail(me: UserRow, id: number): Discussion {
     ),
     background: r.background,
     decisions: r.decisions,
-    guests: r.guests,
+    guestList: db().all<DiscussionGuest>('SELECT name, role, email FROM discussion_guests WHERE discussion_id = ? ORDER BY sort, id', id),
     participantList: people,
     pointList: points.map((p) => ({ id: p.id, body: p.body, outcome: p.outcome, done: !!p.done })),
     actionList: actions.map(toAction),
@@ -183,6 +182,25 @@ const timeOrNull = z
   .transform((v) => v || null);
 const person = z.number().int().positive();
 
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** someone from outside the staff: a name, what they are, an email (or none) */
+const guestSchema = z.object({
+  name: z.string().trim().min(1, 'חסר שם למשתתף החיצוני').max(120),
+  role: z.string().trim().max(120).optional().default(''),
+  email: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .default('')
+    .refine((v) => !v || EMAIL.test(v), 'כתובת המייל לא תקינה'),
+});
+
+function putGuests(id: number, guests: DiscussionGuest[]): void {
+  db().run('DELETE FROM discussion_guests WHERE discussion_id = ?', id);
+  guests.forEach((g, i) => db().run('INSERT INTO discussion_guests(discussion_id, name, role, email, sort) VALUES (?, ?, ?, ?, ?)', id, g.name, g.role, g.email.toLowerCase(), i + 1));
+}
+
 export const discussionSchema = z.object({
   kind: z.enum(DISCUSSION_KINDS),
   title: z.string().trim().min(1, 'חסר נושא לדיון').max(200),
@@ -192,7 +210,7 @@ export const discussionSchema = z.object({
   weekId: person.nullable().optional(),
   leadId: person.nullable().optional(),
   participantIds: z.array(person).max(80).optional().default([]),
-  guests: z.string().trim().max(500).optional().default(''),
+  guestList: z.array(guestSchema).max(40).optional().default([]),
   /** the points to go through - the kind's usual ones, as kept or changed */
   points: z.array(z.string().trim().min(1).max(300)).max(40).optional().default([]),
 });
@@ -207,7 +225,7 @@ const updateSchema = z
     weekId: person.nullable(),
     leadId: person.nullable(),
     participantIds: z.array(person).max(80),
-    guests: z.string().trim().max(500),
+    guestList: z.array(guestSchema).max(40),
     decisions: z.string().max(10000),
   })
   .partial();
@@ -241,7 +259,7 @@ export function createDiscussion(me: UserRow, raw: unknown): number {
   const at = nowIso();
   const id = db().tx(() => {
     const id = db().run(
-      'INSERT INTO discussions(kind, title, background, held_on, held_at, week_id, lead_id, guests, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO discussions(kind, title, background, held_on, held_at, week_id, lead_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       p.kind,
       p.title,
       p.background,
@@ -249,12 +267,12 @@ export function createDiscussion(me: UserRow, raw: unknown): number {
       p.heldAt,
       weekId ?? null,
       lead ?? null,
-      p.guests,
       me.id,
       at,
       at,
     ).id;
     for (const u of people) db().run('INSERT INTO discussion_participants(discussion_id, user_id) VALUES (?, ?)', id, u);
+    putGuests(id, p.guestList);
     p.points.forEach((body, i) => db().run('INSERT INTO discussion_points(discussion_id, body, sort) VALUES (?, ?, ?)', id, body, i + 1));
     logActivity({ userId: me.id, weekId: weekId ?? null, action: 'discussion', text: `${me.display_name} פתח ${DISCUSSION_KIND_LABELS[p.kind]}: ${p.title}` });
     return id;
@@ -278,7 +296,7 @@ export function updateDiscussion(me: UserRow, id: number, raw: unknown): void {
   if (weekId && !db().get('SELECT 1 FROM weeks WHERE id = ?', weekId)) throw badRequest('השבוע לא נמצא');
   db().tx(() => {
     db().run(
-      'UPDATE discussions SET kind = ?, title = ?, background = ?, held_on = ?, held_at = ?, week_id = ?, lead_id = ?, guests = ?, decisions = ?, updated_at = ? WHERE id = ?',
+      'UPDATE discussions SET kind = ?, title = ?, background = ?, held_on = ?, held_at = ?, week_id = ?, lead_id = ?, decisions = ?, updated_at = ? WHERE id = ?',
       p.kind ?? cur.kind,
       p.title ?? cur.title,
       p.background ?? cur.background,
@@ -286,7 +304,6 @@ export function updateDiscussion(me: UserRow, id: number, raw: unknown): void {
       p.heldAt !== undefined ? p.heldAt : cur.held_at,
       weekId ?? null,
       p.leadId !== undefined ? p.leadId : cur.lead_id,
-      p.guests ?? cur.guests,
       p.decisions ?? cur.decisions,
       nowIso(),
       id,
@@ -295,6 +312,7 @@ export function updateDiscussion(me: UserRow, id: number, raw: unknown): void {
       db().run('DELETE FROM discussion_participants WHERE discussion_id = ?', id);
       for (const u of people) db().run('INSERT INTO discussion_participants(discussion_id, user_id) VALUES (?, ?)', id, u);
     }
+    if (p.guestList) putGuests(id, p.guestList);
   });
   // asked to it now: told (the one now leading it too)
   const added = [...(people ?? []).filter((u) => !before.includes(u)), ...(p.leadId && p.leadId !== cur.lead_id && !before.includes(p.leadId) ? [p.leadId] : [])];
