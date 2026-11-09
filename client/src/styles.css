@@ -16420,3 +16420,50 @@ html:has(.subtask-fold) {
   flex-direction: column;
   gap: 4px;
 }
+
+/* who a point of the company debrief is on: one or more, each a chip (DebriefFormView.tsx) */
+.owners-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.owners-pick .select.owners-add {
+  flex: 1 1 140px;
+  width: auto;
+  max-width: 220px;
+  min-width: 120px;
+}
+.owners-pick.missing .select.owners-add {
+  border-color: var(--orange, #c2410c);
+}
+.owner-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  max-width: 100%;
+}
+.owner-chip-x {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.owner-chip-x:hover {
+  background: var(--line);
+}
+.dq-proposal > .owners-pick {
+  flex: 1 1 auto;
+}

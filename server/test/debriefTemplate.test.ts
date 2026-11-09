@@ -120,7 +120,8 @@ describe('a debrief as a template to fill in', () => {
     const target = await create({ kind: 'company', weekId, title: 'תחק"ש - עותק', occurredOn: '2026-10-08' });
     expect((await upload(c.s2, `/api/debriefs/${target}/import/file`, templateOf(await detail(source)))).status).toBe(200);
     const a = (await detail(target)).debrief.answers;
-    expect(a.company).toEqual(company);
+    // kept with its owners as a list too
+    expect(a.company).toEqual(company.map((r) => (r.owner ? { ...r, owners: [r.owner] } : r)));
     expect(a.mood).toEqual(['עייפות', 'גאווה']);
     expect(a.staffPoints).toBe('הסגל הודה לפלוגה');
   });

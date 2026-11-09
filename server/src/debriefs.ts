@@ -12,7 +12,12 @@ import {
   DEBRIEF_KIND_LABELS,
   formFor,
   goalsFromText,
+  groupOf,
   isWeekDebrief,
+  NEXT_CYCLE_GROUPS,
+  ownerNames,
+  ownersOf,
+  type ProposalOwner,
   LESSON_DECISIONS,
   LESSON_HORIZONS,
   LESSON_REQUIRED,
@@ -370,28 +375,39 @@ function checkReady(d: DebriefRow, answers: DebriefAnswers): void {
     const ofTopics = form.filter((s) => s.questions.some((q) => q.type === 'proposals'));
     throw badRequest(`כדי לסכם צריך לפחות נושא אחד - ${(ofTopics.length ? ofTopics : form).map((s) => s.title).join(', ')}`);
   }
-  const lessons = db().all<{ horizon: LessonHorizon | null; owner_id: number | null; due_date: string | null; task_id: number | null }>(
-    "SELECT horizon, owner_id, due_date, task_id FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson'",
+  const lessons = db().all<{ horizon: LessonHorizon | null; owner_id: number | null; owners: string; due_date: string | null; task_id: number | null }>(
+    "SELECT horizon, owner_id, owners, due_date, task_id FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson'",
     d.id,
   );
   if (!lessons.length && LESSON_REQUIRED[d.kind]) throw badRequest('תחקיר בלי לקחים לא משנה דבר - הוסיפו לפחות לקח אחד');
-  if (lessons.some((l) => l.horizon === 'now' && !l.task_id && (!l.owner_id || !l.due_date))) throw badRequest('לכל לקח להמשך המחזור צריך אחראי ותאריך - כך הוא הופך למשימה');
+  if (lessons.some((l) => l.horizon === 'now' && !l.task_id && ((!l.owner_id && !parseOwners(l.owners).length) || !l.due_date)))
+    throw badRequest(d.kind === 'company' ? 'לכל נקודה לטיפול צריך אחראי ותאריך - כך היא הופכת למשימה' : 'לכל לקח להמשך המחזור צריך אחראי ותאריך - כך הוא הופך למשימה');
 }
 
-/** on summing up: every lesson for this cycle becomes a task for its owner, by its date */
+/**
+ * On summing up: every lesson for this cycle becomes a task for its owners, by its date - the staff among
+ * them; one on a group or a cadet alone is followed by the debrief's facilitator (or whoever sums it up),
+ * who it is on written in the task.
+ */
 function lessonsToTasks(actor: UserRow, d: DebriefRow): number {
-  const rows = db().all<{ id: number; body: string; owner_id: number; due_date: string }>(
-    "SELECT id, body, owner_id, due_date FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson' AND horizon = 'now' AND task_id IS NULL AND owner_id IS NOT NULL AND due_date IS NOT NULL",
-    d.id,
-  );
+  const rows = db()
+    .all<{ id: number; body: string; owner_id: number | null; owner_name: string | null; owners: string; due_date: string }>(
+      "SELECT i.id, i.body, i.owner_id, o.display_name AS owner_name, i.owners, i.due_date FROM debrief_items i LEFT JOIN users o ON o.id = i.owner_id WHERE i.debrief_id = ? AND i.kind = 'lesson' AND i.horizon = 'now' AND i.task_id IS NULL AND i.due_date IS NOT NULL",
+      d.id,
+    )
+    .map((l) => ({ ...l, list: itemOwners(l) }))
+    .filter((l) => l.list.length);
   const time = getSettings().defaultDeadlineTime;
   for (const l of rows) {
+    const staff = l.list.filter((o) => o.kind === 'user' && getUserRow(o.id)?.active).map((o) => o.id);
+    const others = l.list.some((o) => o.kind !== 'user');
+    const follower = d.facilitator_id && getUserRow(d.facilitator_id)?.active ? d.facilitator_id : actor.id;
     const [taskId] = createTasks(
       actor,
       {
         title: l.body.split('\n')[0].slice(0, 200),
-        description: `לקח מ${DEBRIEF_KIND_LABELS[d.kind]} "${d.title}":\n${l.body}`,
-        ownerIds: [l.owner_id],
+        description: `לקח מ${DEBRIEF_KIND_LABELS[d.kind]} "${d.title}":\n${l.body}${others ? `\n\nבאחריות: ${ownerNames(l.list)}` : ''}`,
+        ownerIds: staff.length ? staff : [follower],
         deadline: zonedIso(l.due_date, time, tz()),
         domain: 'הערכה',
         debriefId: d.id,
@@ -427,9 +443,26 @@ interface ItemRow {
   horizon: LessonHorizon | null;
   owner_id: number | null;
   owner_name: string | null;
+  owners: string;
   due_date: string | null;
   target: string;
 }
+
+/** the owners kept with a lesson (a list, as JSON; none before there could be several) */
+function parseOwners(v: string | null | undefined): ProposalOwner[] {
+  if (!v) return [];
+  try {
+    return ownersOf(JSON.parse(v));
+  } catch {
+    return [];
+  }
+}
+
+/** a lesson's owners: its list, or the one staff member it had */
+const itemOwners = (i: Pick<ItemRow, 'owners' | 'owner_id' | 'owner_name'>): ProposalOwner[] => {
+  const list = parseOwners(i.owners);
+  return list.length ? list : i.owner_id ? [{ kind: 'user', id: i.owner_id, name: i.owner_name ?? '' }] : [];
+};
 
 const ITEM_BASE = `
 SELECT i.*, t.title AS task_title, t.status AS task_status, r.title AS recurring_title, o.display_name AS owner_name
@@ -453,6 +486,7 @@ function toItem(i: ItemRow): DebriefItem {
     horizon: i.horizon,
     ownerId: i.owner_id,
     ownerName: i.owner_name,
+    owners: itemOwners(i),
     dueDate: i.due_date,
     target: i.target,
   };
@@ -469,8 +503,34 @@ export const itemSchema = z.object({
   body: z.string().trim().min(1, 'הפריט ריק').max(3000),
   horizon: z.enum(LESSON_HORIZONS).nullable().optional().default(null),
   ownerId: z.number().int().positive().nullable().optional().default(null),
+  /** several (the company debrief): people, cadets, groups */
+  owners: z.array(z.unknown()).max(12).optional(),
   dueDate: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional().default(null),
 });
+
+/**
+ * A lesson's owners as kept: each one there (an active staff member, a cadet of the course, a group) under
+ * its name now - for the next cycle, not this cycle's company or its broad staff, nor one of its cadets. The
+ * first staff member among them is the one the task is for.
+ */
+function settleOwners(horizon: LessonHorizon | null, raw: unknown[]): { list: ProposalOwner[]; ownerId: number | null } {
+  const list = ownersOf(raw).map((o): ProposalOwner => {
+    if (o.kind === 'user') {
+      const u = getUserRow(o.id);
+      if (!u?.active) throw badRequest('האחראי שנבחר אינו פעיל');
+      return { ...o, name: u.display_name };
+    }
+    if (o.kind === 'cadet') {
+      const c = db().get<{ name: string }>("SELECT trim(first_name || ' ' || last_name) AS name FROM cadets WHERE id = ?", o.id);
+      if (!c) throw badRequest('הצוער שנבחר לא נמצא');
+      return { ...o, name: c.name };
+    }
+    return o;
+  });
+  if (horizon === 'next' && list.some((o) => o.kind === 'cadet' || (o.kind === 'group' && !NEXT_CYCLE_GROUPS.includes(groupOf(o)!))))
+    throw badRequest('לקח למחזור הבא - על הסגל, לא על הפלוגה או סגל הרוחב של המחזור הזה');
+  return { list, ownerId: list.find((o) => o.kind === 'user')?.id ?? null };
+}
 
 /** what a lesson for the next cycle is for: the week (by number and name) or the event (by name) */
 function lessonTarget(d: DebriefRow): { target: string; key: string; week: number | null } {
@@ -487,17 +547,23 @@ export function addItem(actor: UserRow, debriefId: number, raw: z.input<typeof i
   if (!canEditDebrief(actor, d)) throw forbidden();
   const it = itemSchema.parse(raw);
   if (it.ownerId && !getUserRow(it.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
-  const id = insertItem(d, it, actor.id);
+  let owners: ProposalOwner[] = [];
+  if (it.owners) {
+    const s = settleOwners(it.horizon, it.owners);
+    owners = s.list;
+    it.ownerId = s.ownerId;
+  }
+  const id = insertItem(d, { ...it, owners }, actor.id);
   changed('debriefs');
   return id;
 }
 
 /** an item at the end of the debrief, written by `by` (a lesson for the next cycle keeps what it is for) */
-function insertItem(d: DebriefRow, it: Pick<DebriefItem, 'kind' | 'body' | 'horizon' | 'ownerId' | 'dueDate'>, by: number | null, at = nowIso()): number {
+function insertItem(d: DebriefRow, it: Pick<DebriefItem, 'kind' | 'body' | 'horizon' | 'ownerId' | 'dueDate'> & { owners?: ProposalOwner[] }, by: number | null, at = nowIso()): number {
   const t = it.horizon === 'next' ? lessonTarget(d) : { target: '', key: '', week: null };
   const sort = (db().get<{ n: number | null }>('SELECT max(sort) AS n FROM debrief_items WHERE debrief_id = ?', d.id)?.n ?? 0) + 1;
   const id = db().run(
-    'INSERT INTO debrief_items(debrief_id, kind, body, sort, created_by, created_at, horizon, owner_id, due_date, target, target_key, target_week) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO debrief_items(debrief_id, kind, body, sort, created_by, created_at, horizon, owner_id, due_date, target, target_key, target_week, owners) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     d.id,
     it.kind,
     it.body,
@@ -510,6 +576,7 @@ function insertItem(d: DebriefRow, it: Pick<DebriefItem, 'kind' | 'body' | 'hori
     t.target,
     t.key,
     t.week,
+    it.owners?.length ? JSON.stringify(it.owners) : '',
   ).id;
   db().run('UPDATE debriefs SET updated_at = ? WHERE id = ?', nowIso(), d.id);
   return id;
@@ -613,6 +680,7 @@ export function weekNoteTarget(): { weekId: number | null; weeks: WeekNoteWeek[]
 export const itemPatchSchema = z.object({
   body: z.string().max(3000).optional(),
   ownerId: z.number().int().positive().nullable().optional(),
+  owners: z.array(z.unknown()).max(12).optional(),
   dueDate: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional(),
 });
 
@@ -623,10 +691,13 @@ export function updateItem(actor: UserRow, id: number, raw: z.input<typeof itemP
   const text = p.body !== undefined ? p.body.trim() : i.body;
   if (!text) throw badRequest('הפריט ריק');
   if (p.ownerId && !getUserRow(p.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
+  // several (the company debrief) - or one staff member, the list going with it
+  const settled = p.owners ? settleOwners(i.horizon, p.owners) : null;
   db().run(
-    'UPDATE debrief_items SET body = ?, owner_id = ?, due_date = ? WHERE id = ?',
+    'UPDATE debrief_items SET body = ?, owner_id = ?, owners = ?, due_date = ? WHERE id = ?',
     text,
-    p.ownerId !== undefined ? p.ownerId : i.owner_id,
+    settled ? settled.ownerId : p.ownerId !== undefined ? p.ownerId : i.owner_id,
+    settled ? (settled.list.length ? JSON.stringify(settled.list) : '') : p.ownerId !== undefined ? '' : i.owners,
     p.dueDate !== undefined ? p.dueDate : i.due_date,
     id,
   );
@@ -740,14 +811,18 @@ interface BankRow {
 }
 
 function bankRows(): BankRow[] {
-  return db().all<BankRow>(
-    `SELECT i.id, i.body, i.target, i.target_key, i.target_week, o.display_name AS owner_name, d.id AS debrief_id, d.title AS debrief_title,
+  return db().all<BankRow & { owners: string }>(
+    `SELECT i.id, i.body, i.target, i.target_key, i.target_week, o.display_name AS owner_name, i.owners, d.id AS debrief_id, d.title AS debrief_title,
        d.kind, d.occurred_on, d.week_id, d.event_id, c.display_name AS created_by_name
      FROM debrief_items i JOIN debriefs d ON d.id = i.debrief_id
      LEFT JOIN users o ON o.id = i.owner_id LEFT JOIN users c ON c.id = i.created_by
      WHERE i.kind = 'lesson' AND i.horizon = 'next'
      ORDER BY d.occurred_on DESC, i.id`,
-  );
+  ).map(({ owners, ...r }) => {
+    // several, or a group: their names
+    const list = parseOwners(owners);
+    return list.length ? { ...r, owner_name: ownerNames(list) } : r;
+  });
 }
 
 /**

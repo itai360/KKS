@@ -6,7 +6,7 @@
 // document, or the document pasted.
 
 import { useRef, useState, type ClipboardEvent } from 'react';
-import { withImported, DEBRIEF_KIND_LABELS, type DebriefAnswers, type DebriefImport } from '@shared/debriefForms';
+import { withImported, DEBRIEF_KIND_LABELS, ownerNames, type DebriefAnswers, type DebriefImport } from '@shared/debriefForms';
 import { debriefTemplateDocx, DOCX_TYPE, type TemplateResult } from '@shared/debriefTemplate';
 import { shortDate } from '@shared/dates';
 import type { DebriefDetail } from '@shared/types';
@@ -32,7 +32,7 @@ export function importSummary(r: DebriefImport): string {
     a.mood?.length ? 'הלך הרוח' : '',
     a.unsolved?.length ? 'מסרים ופערים בלי פתרון' : '',
     a.staffPoints ? 'נקודות הסגל' : '',
-    a.more ? 'נקודות נוספות' : '',
+    a.more ? 'דברי המ״פ' : '',
   ].filter(Boolean);
   const asWritten = r.owners.asWritten ? ` ${count(r.owners.asWritten, 'אחראי אחד נשמר', 'אחראים נשמרו')} כפי שנכתב - אפשר לבחור מהרשימה.` : '';
   return `${parts.join(' · ')}.${asWritten}`;
@@ -59,7 +59,7 @@ export function downloadTemplate(data: DebriefDetail): void {
     participants: d.participants,
     summary: d.summary,
     answers: d.answers,
-    items: data.items.map((i) => ({ kind: i.kind, body: i.body, horizon: i.horizon, ownerName: i.ownerName, dueDate: i.dueDate })),
+    items: data.items.map((i) => ({ kind: i.kind, body: i.body, horizon: i.horizon, ownerName: i.owners.length ? ownerNames(i.owners) : i.ownerName, dueDate: i.dueDate })),
     weekGoals: data.week?.goals,
   });
   void shareOrSave(name, new Blob([file as BlobPart], { type: DOCX_TYPE }));

@@ -68,29 +68,73 @@ export interface GoalAnswer {
   note: string;
 }
 
-/** who a topic is put on: a staff member or a cadet, with the name as it was when chosen */
+/**
+ * Who a point of the company debrief can be on besides one person: a group (the staff, the company, its broad
+ * staff, its ממ"שים, those who run the experiences, the team commanders).
+ */
+export const OWNER_GROUPS = ['staff', 'company', 'broadStaff', 'mamash', 'instructors', 'teamCommanders'] as const;
+export type OwnerGroup = (typeof OWNER_GROUPS)[number];
+export const OWNER_GROUP_LABELS: Record<OwnerGroup, string> = {
+  staff: 'סגל',
+  company: 'פלוגה',
+  broadStaff: 'סגל רוחב',
+  mamash: 'ממ״שים',
+  instructors: 'מעבירי התנסויות',
+  teamCommanders: 'מפק״צים',
+};
+/** a lesson for the next cycle is not on this cycle's company or its broad staff (they are its cadets) */
+export const NEXT_CYCLE_GROUPS: OwnerGroup[] = ['staff', 'mamash', 'instructors', 'teamCommanders'];
+
+/** who a topic is put on: a staff member, a cadet or a group (its id: its place in OWNER_GROUPS, from 1), with the name as it was when chosen */
 export interface ProposalOwner {
-  kind: 'user' | 'cadet';
+  kind: 'user' | 'cadet' | 'group';
   id: number;
   name: string;
 }
+
+/** a group as an owner */
+export const groupOwner = (g: OwnerGroup): ProposalOwner => ({ kind: 'group', id: OWNER_GROUPS.indexOf(g) + 1, name: OWNER_GROUP_LABELS[g] });
+/** the group an owner is (null: a person) */
+export const groupOf = (o: Pick<ProposalOwner, 'kind' | 'id'>): OwnerGroup | null => (o.kind === 'group' ? (OWNER_GROUPS[o.id - 1] ?? null) : null);
+export const ownerKey = (o: Pick<ProposalOwner, 'kind' | 'id'>) => `${o.kind === 'user' ? 'u' : o.kind === 'cadet' ? 'c' : 'g'}:${o.id}`;
 
 /** a topic raised, what is proposed for it, and who it is on (the company debrief) */
 export interface ProposalAnswer {
   topic: string;
   proposal: string;
+  /** the first of the owners (as kept before a topic had several) */
   owner?: ProposalOwner | null;
+  /** who it is on - one or more */
+  owners?: ProposalOwner[];
   /** who it is on as a document wrote it, when that is no one in the course's lists - kept until someone is chosen */
   ownerText?: string;
   /** what has been done about it since (תיעוד התקדמות) */
   progress?: string;
 }
 
-function ownerOf(v: unknown): ProposalOwner | null {
+export function ownerOf(v: unknown): ProposalOwner | null {
   const o = v as Partial<ProposalOwner> | null | undefined;
-  if (!o || (o.kind !== 'user' && o.kind !== 'cadet') || !Number.isInteger(o.id) || (o.id as number) <= 0) return null;
+  if (!o || (o.kind !== 'user' && o.kind !== 'cadet' && o.kind !== 'group') || !Number.isInteger(o.id) || (o.id as number) <= 0) return null;
+  if (o.kind === 'group') {
+    const g = groupOf({ kind: 'group', id: o.id as number });
+    return g ? groupOwner(g) : null;
+  }
   return { kind: o.kind, id: o.id as number, name: typeof o.name === 'string' ? o.name.slice(0, 120) : '' };
 }
+
+/** the owners of a row, a lesson: a list of them, or the one kept before there could be several - each once */
+export function ownersOf(list: unknown, one?: unknown): ProposalOwner[] {
+  const raw = Array.isArray(list) ? list : one ? [one] : [];
+  const out: ProposalOwner[] = [];
+  for (const x of raw) {
+    const o = ownerOf(x);
+    if (o && !out.some((y) => ownerKey(y) === ownerKey(o))) out.push(o);
+  }
+  return out.slice(0, 12);
+}
+
+/** the owners' names, as one line */
+export const ownerNames = (list: ProposalOwner[]) => list.map((o) => o.name).filter(Boolean).join(', ');
 
 const textOf = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -99,7 +143,9 @@ export function proposalRows(v: unknown): ProposalAnswer[] {
   if (!Array.isArray(v)) return [];
   return v.map((x) => {
     if (typeof x === 'string') return { topic: x, proposal: '', owner: null };
-    const row: ProposalAnswer = { topic: textOf(x?.topic), proposal: textOf(x?.proposal), owner: ownerOf(x?.owner) };
+    const owners = ownersOf(x?.owners, x?.owner);
+    const row: ProposalAnswer = { topic: textOf(x?.topic), proposal: textOf(x?.proposal), owner: owners[0] ?? null };
+    if (owners.length) row.owners = owners;
     // the name as written goes once someone is chosen
     const ownerText = textOf(x?.ownerText).slice(0, 300);
     if (ownerText.trim() && !row.owner) row.ownerText = ownerText;
@@ -302,7 +348,7 @@ export const COMPANY_FORM: DebriefSection[] = [
       { id: 'mood', label: 'הלך רוח - תחושות בזמן התחק"ש', type: 'list' },
       { id: 'unsolved', label: 'מסרים / פערים שלא מצאנו להם פתרון', type: 'list' },
       { id: 'staffPoints', label: 'נקודות של הסגל', hint: 'מה הסגל אמר לפלוגה', type: 'text' },
-      { id: 'more', label: 'נקודות נוספות', type: 'text' },
+      { id: 'more', label: 'דברי המ״פ', type: 'text' },
     ],
   },
 ];

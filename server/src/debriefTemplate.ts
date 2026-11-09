@@ -24,7 +24,7 @@ import type { BroadHolder } from '../../shared/types';
 import type { UserRow } from './auth';
 import { badRequest, clock, tz } from './core';
 import { db } from './db';
-import { blocksOf, importDebrief, people, personNamed, type Person } from './debriefImport';
+import { blocksOf, importDebrief, ownersNamed, people, personNamed, type Person } from './debriefImport';
 import { addItem, debriefDetail, debriefToFill, updateDebrief } from './debriefs';
 import type { Block } from './discipline';
 
@@ -212,9 +212,11 @@ export function readTemplate(blocks: Block[], kind: DebriefKind, all: Person[] =
           const row: ProposalAnswer = { topic: r[0] ?? '', proposal: r[1] ?? '', owner: null };
           const who = (r[2] ?? '').trim();
           if (who) {
-            const found = personNamed(who, all, broad);
-            if (found) row.owner = found;
-            else row.ownerText = who;
+            const found = ownersNamed(who, all, broad);
+            if (found) {
+              row.owner = found[0];
+              row.owners = found;
+            } else row.ownerText = who;
           }
           if (r[3]) row.progress = r[3];
           return row;
@@ -280,7 +282,7 @@ function mergedAnswer(type: TemplateSlot['type'], had: unknown, read: unknown): 
       // one already there keeps whom it was put on, when the file names no one
       ...theirs.map((t) => {
         const m = mine.find((x) => key(x) === key(t));
-        return m && !t.owner && !t.ownerText ? { ...t, owner: m.owner ?? null, ...(m.ownerText ? { ownerText: m.ownerText } : {}) } : t;
+        return m && !t.owner && !t.ownerText ? { ...t, owner: m.owner ?? null, ...(m.owners?.length ? { owners: m.owners } : {}), ...(m.ownerText ? { ownerText: m.ownerText } : {}) } : t;
       }),
       ...mine.filter((m) => !theirs.some((t) => key(t) === key(m))),
     ];

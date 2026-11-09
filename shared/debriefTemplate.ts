@@ -20,6 +20,7 @@ import {
   type GoalAnswer,
   type LessonHorizon,
   type QuestionType,
+  ownerNames,
 } from './debriefForms';
 
 import type { DebriefDetail } from './types';
@@ -169,7 +170,7 @@ function answerOf(input: TemplateInput, q: DebriefQuestion): string {
       return grid(
         [3, 3.4, 1.8, 2.2],
         PROPOSAL_HEADERS,
-        proposalRows(v).map((r) => [r.topic, r.proposal, r.owner?.name ?? r.ownerText ?? '', r.progress ?? '']),
+        proposalRows(v).map((r) => [r.topic, r.proposal, r.owners?.length ? ownerNames(r.owners) : (r.ownerText ?? ''), r.progress ?? '']),
       );
   }
 }

@@ -119,3 +119,43 @@ describe('company debrief (תחק"ש פלוגתי)', () => {
     expect(list).toEqual(['company', 'weekly']);
   });
 });
+
+describe('company debrief - who a point is on: people, groups, several', () => {
+  const group = (id: number) => ({ kind: 'group', id, name: '' });
+  it('a topic on groups and people at once; a point to handle on a group becomes a task its facilitator follows', async () => {
+    const { weekId } = await course();
+    const id = (await c.s2.post('/api/debriefs', { kind: 'company', weekId, title: 'תחק"ש פלוגתי', occurredOn: '2026-10-08' })).body.debrief.id;
+    // סגל (1) and מפק"צ 3: a topic on both
+    const r = await c.s2.patch(`/api/debriefs/${id}`, { answers: { staffGeneral: [{ topic: 'עומס בערבים', proposal: 'לקצר את הערב', owners: [group(1), { kind: 'user', id: c.ids.s3, name: 'x' }] }] } });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const row = r.body.debrief.answers.staffGeneral[0];
+    expect(row.owners.map((o: { kind: string; name: string }) => [o.kind, o.name])).toEqual([
+      ['group', 'סגל'],
+      ['user', 'x'],
+    ]);
+    expect(row.owner).toMatchObject({ kind: 'group', id: 1 });
+
+    // a point to handle on the team commanders (6) and the company (2); one on the commander too
+    const add = (body: object) => c.s2.post(`/api/debriefs/${id}/items`, { kind: 'lesson', body: 'נקודה', ...body });
+    const p1 = await add({ horizon: 'now', body: 'לבדוק את לוח התורנויות', owners: [group(6), group(2)], dueDate: '2026-10-12' });
+    expect(p1.status, JSON.stringify(p1.body)).toBe(200);
+    const item = (p1.body.items as { body: string; owners: { name: string }[]; ownerId: number | null }[]).find((i) => i.body === 'לבדוק את לוח התורנויות')!;
+    expect(item.owners.map((o) => o.name)).toEqual(['מפק״צים', 'פלוגה']);
+    expect(item.ownerId).toBeNull();
+    expect((await add({ horizon: 'now', body: 'שיחה עם הקה"ד', owners: [{ kind: 'user', id: c.ids.cmd }, group(4)], dueDate: '2026-10-12' })).status).toBe(200);
+
+    // the next cycle: not this cycle's company or its broad staff
+    expect((await add({ horizon: 'next', owners: [group(2)] })).body.error).toContain('לא על הפלוגה');
+    expect((await add({ horizon: 'next', owners: [group(3)] })).status).toBe(400);
+    expect((await add({ horizon: 'next', owners: [group(5), group(4)] })).status).toBe(200);
+
+    // summed up: each point a task - the group's followed by whoever sums it up (no facilitator), with who it is on
+    const done = await c.s2.patch(`/api/debriefs/${id}`, { status: 'final' });
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    const tasks = db().all<{ title: string; description: string; owner_id: number }>("SELECT title, description, owner_id FROM tasks WHERE title IN ('לבדוק את לוח התורנויות', 'שיחה עם הקה\"ד') ORDER BY title");
+    const byTitle = Object.fromEntries(tasks.map((t) => [t.title, t]));
+    expect(byTitle['לבדוק את לוח התורנויות']).toMatchObject({ owner_id: c.ids.s2 });
+    expect(byTitle['לבדוק את לוח התורנויות'].description).toContain('באחריות: מפק״צים, פלוגה');
+    expect(byTitle['שיחה עם הקה"ד']).toMatchObject({ owner_id: c.ids.cmd });
+  });
+});

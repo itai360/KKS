@@ -1,6 +1,6 @@
 // API data shapes shared by the server (producer) and the client (consumer).
 
-import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon } from './debriefForms';
+import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon, ProposalOwner } from './debriefForms';
 import type { EntryFields } from './entry';
 import type { TraitGroup } from './evaluationTraits';
 import type { ExperienceFeedbackForm } from './experienceFeedback';
@@ -1420,6 +1420,8 @@ export interface DebriefItem {
   horizon: LessonHorizon | null;
   ownerId: number | null;
   ownerName: string | null;
+  /** who it is on (the company debrief: several, groups too) - the owner alone when it has no list */
+  owners: ProposalOwner[];
   dueDate: string | null;
   /** next cycle: the week or the event it is for */
   target: string;

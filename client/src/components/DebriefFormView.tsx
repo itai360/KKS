@@ -13,7 +13,14 @@ import {
   DEBRIEF_KIND_LABELS,
   formFor,
   GOAL_STATUS_LABELS,
+  groupOf,
+  groupOwner,
   isWeekDebrief,
+  NEXT_CYCLE_GROUPS,
+  OWNER_GROUP_LABELS,
+  OWNER_GROUPS,
+  ownerKey,
+  ownerNames,
   LESSON_HORIZON_LABELS,
   LESSON_REQUIRED,
   needsAPoint,
@@ -125,12 +132,16 @@ interface OwnerChoice {
   owner: ProposalOwner;
 }
 interface OwnerPools {
+  /** סגל, פלוגה, סגל רוחב, ממ"שים, מעבירי התנסויות, מפק"צים */
+  groups: OwnerChoice[];
   staff: OwnerChoice[];
   broadStaff: OwnerChoice[];
   cadets: OwnerChoice[];
 }
-const OwnersContext = createContext<OwnerPools>({ staff: [], broadStaff: [], cadets: [] });
-const ownerKey = (o: Pick<ProposalOwner, 'kind' | 'id'>) => `${o.kind === 'user' ? 'u' : 'c'}:${o.id}`;
+const OwnersContext = createContext<OwnerPools>({ groups: [], staff: [], broadStaff: [], cadets: [] });
+const GROUP_CHOICES: OwnerChoice[] = OWNER_GROUPS.map((g) => ({ key: ownerKey(groupOwner(g)), label: OWNER_GROUP_LABELS[g], owner: groupOwner(g) }));
+/** whom a list offers: a question's pool, or the company debrief's points to handle now / lessons for the next cycle */
+type Pool = OwnerPool | 'now' | 'next';
 
 /**
  * Whom the company debrief can put a topic on: the staff (the commander first), the cadets holding a
@@ -142,7 +153,7 @@ function useOwnerPools(data: DebriefDetail, editable: boolean): OwnerPools {
   const cadets = useApi<Cadet[]>(company && editable ? '/api/cadets' : null, ['cadets']).data;
   const holders = data.broadStaff;
   return useMemo(() => {
-    if (!company) return { staff: [], broadStaff: [], cadets: [] };
+    if (!company) return { groups: [], staff: [], broadStaff: [], cadets: [] };
     const staff = [...users.filter((u) => u.role === 'commander'), ...users.filter((u) => u.role !== 'commander')].map((u) => {
       const title = u.title || (u.role === 'commander' ? ROLE_LABELS.commander : '');
       return { key: ownerKey({ kind: 'user', id: u.id }), label: title ? `${u.displayName} · ${title}` : u.displayName, owner: { kind: 'user' as const, id: u.id, name: u.displayName } };
@@ -163,7 +174,7 @@ function useOwnerPools(data: DebriefDetail, editable: boolean): OwnerPools {
       label: c.teamName ? `${c.fullName} · ${c.teamName}` : c.fullName,
       owner: { kind: 'cadet' as const, id: c.id, name: c.fullName },
     }));
-    return { staff, broadStaff, cadets: rest };
+    return { groups: GROUP_CHOICES, staff, broadStaff, cadets: rest };
   }, [company, users, holders, cadets]);
 }
 
@@ -182,7 +193,7 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
 
   const lessons = data.items.filter((i) => i.kind === 'lesson');
   const ofHorizon = (h: LessonHorizon) => lessons.filter((l) => (l.horizon ?? 'now') === h);
-  const unowned = ofHorizon('now').filter((l) => !l.taskId && (!l.ownerId || !l.dueDate));
+  const unowned = ofHorizon('now').filter((l) => !l.taskId && (!hasOwner(l) || !l.dueDate));
 
   // the same check the server makes before summing up, shown while filling in
   const needLesson = LESSON_REQUIRED[d.kind];
@@ -423,11 +434,12 @@ export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail
             {sections.map((s, i) => (
               <Section key={s.id} section={s} n={i + 1} answers={all} editable={editable} onChange={set} onDone={() => void flush()} />
             ))}
-          </OwnersContext.Provider>
 
-          {(['now', 'next'] as const).map((h, i) => (
-            <LessonsCard key={h} n={sections.length + i + 1} horizon={h} data={data} items={ofHorizon(h)} editable={editable} run={run} />
-          ))}
+            {/* the lessons too: in the company debrief they are on the same people and groups */}
+            {(['now', 'next'] as const).map((h, i) => (
+              <LessonsCard key={h} n={sections.length + i + 1} horizon={h} data={data} items={ofHorizon(h)} editable={editable} run={run} />
+            ))}
+          </OwnersContext.Provider>
 
           <div className="card">
             <div className="card-head">
@@ -687,50 +699,59 @@ function ListInput({ value, editable, onChange, onDone, label }: { value: string
   );
 }
 
-/** the choices of a pool, in groups when it has more than one kind of people */
-function useOwnerGroups(pool: OwnerPool): { label: string; list: OwnerChoice[] }[] {
+/**
+ * The choices of a pool, in its groups: the groups first (סגל, פלוגה...), then the people the section is
+ * about. A lesson for the next cycle: not this cycle's company or its broad staff.
+ */
+function useOwnerGroups(pool: Pool): { label: string; list: OwnerChoice[] }[] {
   const p = useContext(OwnersContext);
-  if (pool === 'staff') return [{ label: 'הסגל', list: p.staff }];
-  if (pool === 'broadStaff') return [{ label: 'סגל רוחב', list: p.broadStaff }];
-  return [
-    { label: 'סגל רוחב', list: p.broadStaff },
-    { label: 'צוערים', list: p.cadets },
-  ];
+  const groups = { label: 'קבוצות', list: pool === 'next' ? p.groups.filter((g) => NEXT_CYCLE_GROUPS.includes(groupOf(g.owner)!)) : p.groups };
+  const staff = { label: 'הסגל', list: p.staff };
+  const broad = { label: 'סגל רוחב - בעלי התפקידים', list: p.broadStaff };
+  if (pool === 'next') return [groups, staff];
+  if (pool === 'now' || pool === 'staff') return [groups, staff, broad];
+  if (pool === 'broadStaff') return [groups, broad, staff];
+  return [groups, broad, { label: 'צוערים', list: p.cadets }, staff];
 }
 
 /** who a topic is on, as the list names them now (with a broad role) - or as it was when chosen */
 function OwnerName({ owner }: { owner: ProposalOwner }) {
   const p = useContext(OwnersContext);
   const key = ownerKey(owner);
-  const found = [...p.staff, ...p.broadStaff, ...p.cadets].find((o) => o.key === key);
+  const found = [...p.groups, ...p.staff, ...p.broadStaff, ...p.cadets].find((o) => o.key === key);
   return <>{found?.label ?? owner.name}</>;
 }
 
-/** who a topic is put on: before the staff - the staff and the commander; before the broad staff - its role holders */
-function OwnerPick({ pool, value, onChange, label }: { pool: OwnerPool; value: ProposalOwner | null | undefined; onChange: (o: ProposalOwner | null) => void; label: string }) {
+/** who it is on - one or more: each a chip, and a list to add another */
+function OwnersPick({ pool, value, onChange, label, required }: { pool: Pool; value: ProposalOwner[]; onChange: (o: ProposalOwner[]) => void; label: string; required?: boolean }) {
   const groups = useOwnerGroups(pool);
   const all = groups.flatMap((g) => g.list);
-  const current = value ? ownerKey(value) : '';
-  // chosen earlier and no longer in the list (a role that ended): kept as it was
-  const gone = value && !all.some((o) => o.key === current);
-  const shown = groups.filter((g) => g.list.length);
+  const chosen = new Set(value.map(ownerKey));
+  const left = groups.map((g) => ({ ...g, list: g.list.filter((o) => !chosen.has(o.key)) })).filter((g) => g.list.length);
   return (
-    <Select
-      className="select dq-owner-pick"
-      value={current}
-      aria-label={label}
-      searchable={all.length > 6}
-      onChange={(e) => onChange(e.target.value ? (all.find((o) => o.key === e.target.value)?.owner ?? value ?? null) : null)}
-    >
-      <option value="">לא נקבע</option>
-      {gone && <option value={current}>{value.name}</option>}
-      {pool === 'broadStaff' && !all.length && (
-        <option value="none" disabled>
-          אין צוערים בהתנסות רוחב בשבוע הזה
-        </option>
-      )}
-      {shown.length > 1
-        ? shown.map((g) => (
+    <div className={`owners-pick${required && !value.length ? ' missing' : ''}`}>
+      {value.map((o) => (
+        <span key={ownerKey(o)} className="owner-chip">
+          <OwnerName owner={o} />
+          <button type="button" className="owner-chip-x" aria-label={`הסרת ${o.name} מהאחראים`} onClick={() => onChange(value.filter((x) => ownerKey(x) !== ownerKey(o)))}>
+            <Icon name="x" size={12} />
+          </button>
+        </span>
+      ))}
+      {left.length > 0 && (
+        <Select
+          className="select owners-add"
+          value=""
+          aria-label={label}
+          aria-invalid={required && !value.length}
+          searchable={all.length > 6}
+          onChange={(e) => {
+            const o = all.find((x) => x.key === e.target.value)?.owner;
+            if (o) onChange([...value, o]);
+          }}
+        >
+          <option value="">{value.length ? '+ עוד אחראי' : required ? 'אחראי...' : 'באחריות...'}</option>
+          {left.map((g) => (
             <optgroup key={g.label} label={g.label}>
               {g.list.map((o) => (
                 <option key={o.key} value={o.key}>
@@ -738,13 +759,10 @@ function OwnerPick({ pool, value, onChange, label }: { pool: OwnerPool; value: P
                 </option>
               ))}
             </optgroup>
-          ))
-        : all.map((o) => (
-            <option key={o.key} value={o.key}>
-              {o.label}
-            </option>
           ))}
-    </Select>
+        </Select>
+      )}
+    </div>
   );
 }
 
@@ -791,7 +809,14 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
             {(r.owner || hasText(r.ownerText)) && (
               <div className="small dq-proposal-read">
                 <span className="strong">באחריות: </span>
-                {r.owner ? <OwnerName owner={r.owner} /> : r.ownerText}
+                {r.owner
+                  ? (r.owners ?? [r.owner]).map((o, k) => (
+                      <span key={ownerKey(o)}>
+                        {k > 0 && ', '}
+                        <OwnerName owner={o} />
+                      </span>
+                    ))
+                  : r.ownerText}
               </div>
             )}
             {hasText(r.progress) && (
@@ -815,7 +840,7 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
     next[i] = { ...rows[i], ...patch };
     onChange(next);
   };
-  const empty = (r: ProposalAnswer) => !hasText(r.topic) && !hasText(r.proposal) && !hasText(r.progress) && !hasText(r.ownerText) && !r.owner;
+  const empty = (r: ProposalAnswer) => !hasText(r.topic) && !hasText(r.proposal) && !hasText(r.progress) && !hasText(r.ownerText) && !r.owner && !r.owners?.length;
   const tidy = () => {
     if (value.some(empty)) onChange(value.filter((r) => !empty(r)));
     onDone();
@@ -877,7 +902,12 @@ function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { va
                 <span className="dq-proposal-tag" aria-hidden="true">
                   באחריות
                 </span>
-                <OwnerPick pool={pool} value={r.owner} label={`${label} - באחריות מי, נושא ${i + 1}`} onChange={(o) => (set(i, { owner: o, ...(o ? { ownerText: undefined } : {}) }), onDone())} />
+                <OwnersPick
+                  pool={pool}
+                  value={r.owners ?? (r.owner ? [r.owner] : [])}
+                  label={`${label} - באחריות מי, נושא ${i + 1}`}
+                  onChange={(list) => (set(i, { owner: list[0] ?? null, owners: list, ...(list.length ? { ownerText: undefined } : {}) }), onDone())}
+                />
                 {!hasText(r.progress) && !progressOpen.has(i) && (
                   <button
                     type="button"
@@ -1021,6 +1051,8 @@ function LessonsCard({
   const d = data.debrief;
   const { title, hint } = LESSON_HORIZON_LABELS[d.kind][horizon];
   const now = horizon === 'now';
+  // the company debrief: several owners, groups too (for the next cycle - not the company or its broad staff)
+  const pool: Pool | null = d.kind === 'company' ? horizon : null;
   return (
     <section id={ANCHOR(horizon)} className={`card dsec dsec-lessons ${now ? 't-orange' : 't-blue'}`} aria-labelledby={`${ANCHOR(horizon)}-h`}>
       <div className="card-head">
@@ -1033,10 +1065,10 @@ function LessonsCard({
       <div className="card-body col lessons-body">
         {hint && <p className="small muted">{hint}</p>}
         {items.map((l) => (
-          <LessonRow key={l.id} lesson={l} now={now} editable={editable} run={run} />
+          <LessonRow key={l.id} lesson={l} now={now} pool={pool} editable={editable} run={run} />
         ))}
         {!items.length && !editable && <p className="muted">-</p>}
-        {editable && <AddLesson debriefId={d.id} horizon={horizon} run={run} first={!items.length} />}
+        {editable && <AddLesson debriefId={d.id} horizon={horizon} pool={pool} run={run} first={!items.length} />}
       </div>
     </section>
   );
@@ -1056,7 +1088,22 @@ function OwnerSelect({ value, onChange, required, label }: { value: number | nul
   );
 }
 
-function LessonRow({ lesson: l, now, editable, run }: { lesson: DebriefItem; now: boolean; editable: boolean; run: (fn: () => Promise<DebriefDetail>, ok?: string) => Promise<boolean> }) {
+/** someone is on it: its owner, or (the company debrief) one of its owners */
+const hasOwner = (l: DebriefItem) => !!l.ownerId || l.owners.length > 0;
+
+function LessonRow({
+  lesson: l,
+  now,
+  pool,
+  editable,
+  run,
+}: {
+  lesson: DebriefItem;
+  now: boolean;
+  pool: Pool | null;
+  editable: boolean;
+  run: (fn: () => Promise<DebriefDetail>, ok?: string) => Promise<boolean>;
+}) {
   const [body, setBody] = useState(l.body);
   // someone else edited it: show theirs unless this one is being typed
   const typing = useRef(false);
@@ -1066,7 +1113,7 @@ function LessonRow({ lesson: l, now, editable, run }: { lesson: DebriefItem; now
   const patch = (p: Record<string, unknown>) => run(() => api.patch<DebriefDetail>(`/api/debrief-items/${l.id}`, p));
   const locked = !editable || !!l.taskId;
   return (
-    <div className={`lesson-row${now && !l.taskId && (!l.ownerId || !l.dueDate) ? ' incomplete' : ''}`}>
+    <div className={`lesson-row${now && !l.taskId && (!hasOwner(l) || !l.dueDate) ? ' incomplete' : ''}`}>
       {locked ? (
         <div className="lesson-body prewrap">{l.body}</div>
       ) : (
@@ -1090,11 +1137,17 @@ function LessonRow({ lesson: l, now, editable, run }: { lesson: DebriefItem; now
           </Link>
         ) : locked ? (
           <span className="tiny muted">
-            {[l.ownerName && `אחראי: ${l.ownerName}`, l.dueDate && `עד ${shortDate(l.dueDate)}`, !now && l.target && `יוצג ב: ${l.target}`].filter(Boolean).join(' · ')}
+            {[(l.owners.length || l.ownerName) && `באחריות: ${l.owners.length ? ownerNames(l.owners) : l.ownerName}`, l.dueDate && `עד ${shortDate(l.dueDate)}`, !now && l.target && `יוצג ב: ${l.target}`]
+              .filter(Boolean)
+              .join(' · ')}
           </span>
         ) : (
           <>
-            <OwnerSelect value={l.ownerId} onChange={(v) => void patch({ ownerId: v })} required={now} label="אחראי ללקח" />
+            {pool ? (
+              <OwnersPick pool={pool} value={l.owners} onChange={(list) => void patch({ owners: list })} required={now} label="אחראי ללקח" />
+            ) : (
+              <OwnerSelect value={l.ownerId} onChange={(v) => void patch({ ownerId: v })} required={now} label="אחראי ללקח" />
+            )}
             {now && (
               <DateInput
                 className={`input mono${l.dueDate ? '' : ' missing'}`}
@@ -1118,20 +1171,35 @@ function LessonRow({ lesson: l, now, editable, run }: { lesson: DebriefItem; now
   );
 }
 
-function AddLesson({ debriefId, horizon, run, first }: { debriefId: number; horizon: LessonHorizon; run: (fn: () => Promise<DebriefDetail>, ok?: string) => Promise<boolean>; first: boolean }) {
+function AddLesson({
+  debriefId,
+  horizon,
+  pool,
+  run,
+  first,
+}: {
+  debriefId: number;
+  horizon: LessonHorizon;
+  pool: Pool | null;
+  run: (fn: () => Promise<DebriefDetail>, ok?: string) => Promise<boolean>;
+  first: boolean;
+}) {
   const now = horizon === 'now';
   const [body, setBody] = useState('');
   const [owner, setOwner] = useState<number | null>(null);
+  const [owners, setOwners] = useState<ProposalOwner[]>([]);
   const [due, setDue] = useState(addDays(todayKey(), 7));
   const [busy, setBusy] = useState(false);
   const add = async () => {
     if (!body.trim() || busy) return;
     setBusy(true);
-    const ok = await run(() => api.post<DebriefDetail>(`/api/debriefs/${debriefId}/items`, { kind: 'lesson', horizon, body: body.trim(), ownerId: owner, dueDate: now ? due || null : null }));
+    const who = pool ? { owners } : { ownerId: owner };
+    const ok = await run(() => api.post<DebriefDetail>(`/api/debriefs/${debriefId}/items`, { kind: 'lesson', horizon, body: body.trim(), ...who, dueDate: now ? due || null : null }));
     setBusy(false);
     if (ok) {
       setBody('');
       setOwner(null);
+      setOwners([]);
     }
   };
   return (
@@ -1157,7 +1225,11 @@ function AddLesson({ debriefId, horizon, run, first }: { debriefId: number; hori
         data-transient
       />
       <div className="lesson-meta">
-        <OwnerSelect value={owner} onChange={setOwner} required={false} label="אחראי ללקח החדש" />
+        {pool ? (
+          <OwnersPick pool={pool} value={owners} onChange={setOwners} label="אחראי ללקח החדש" />
+        ) : (
+          <OwnerSelect value={owner} onChange={setOwner} required={false} label="אחראי ללקח החדש" />
+        )}
         {now && <DateInput value={due} min={todayKey()} onChange={(v) => setDue(v)} aria-label="עד מתי" />}
         <button className="btn btn-sm" disabled={!body.trim() || busy}>
           <Icon name="plus" /> הוספה

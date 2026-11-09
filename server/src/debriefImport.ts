@@ -10,7 +10,7 @@
 // A section's title is found by its words, as a heading or a short line of its own (an export of Google
 // Docs writes a title as a plain paragraph). The form is filled by the screen, added to what is in it.
 
-import type { DebriefImport, ProposalAnswer, ProposalOwner } from '../../shared/debriefForms';
+import { groupOwner, type DebriefImport, type OwnerGroup, type ProposalAnswer, type ProposalOwner } from '../../shared/debriefForms';
 import type { BroadHolder } from '../../shared/types';
 import type { UserRow } from './auth';
 import { badRequest } from './core';
@@ -124,6 +124,43 @@ export function personNamed(text: string, all: Person[], broad: BroadHolder[]): 
   return null;
 }
 
+/** a group by the words that name it - with or without its quotes or a leading ה */
+const GROUP_WORDS: [OwnerGroup, RegExp][] = [
+  ['broadStaff', /^(ה)?סגל (ה)?רוחב$|^(ה)?רוחב$/],
+  ['staff', /^(ה)?סגל$|^(כל )?(ה)?סגל (ה)?קורס$/],
+  ['company', /^(ה)?פלוגה$|^(כל )?(ה)?צוערים$/],
+  ['mamash', /^(ה)?ממשי?ם?$/],
+  ['instructors', /^(ה)?מעבירי (ה)?התנסויות$|^(ה)?מעבירי התנסות$/],
+  ['teamCommanders', /^(ה)?מפקצי?ם?$|^(ה)?מפקדי (ה)?צוותים$/],
+];
+
+export function groupNamed(text: string): ProposalOwner | null {
+  const t = norm(text).replace(/["']/g, '').replace(/\s+/g, ' ').trim();
+  const g = GROUP_WORDS.find(([, re]) => re.test(t))?.[0];
+  return g ? groupOwner(g) : null;
+}
+
+/**
+ * Who a topic is on, by the words of a document: one or more - people, broad roles, groups ("סגל + פלוגה",
+ * "מפק"צים, ממ"שים") - when every one named is found; null when one is not (kept as written).
+ */
+export function ownersNamed(text: string, all: Person[], broad: BroadHolder[]): ProposalOwner[] | null {
+  const whole = groupNamed(text) ?? personNamed(text, all, broad);
+  if (whole) return [whole];
+  const parts = norm(text)
+    .split(/\s*(?:[,+/\n&]|\s-\s)\s*|\s+ו(?=(?:ה)?(?:סגל|פלוגה|ממ|מפק|מעבירי|רוחב))/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return null;
+  const out: ProposalOwner[] = [];
+  for (const p of parts) {
+    const o = groupNamed(p) ?? personNamed(p, all, broad);
+    if (!o) return null;
+    if (!out.some((x) => x.kind === o.kind && x.id === o.id)) out.push(o);
+  }
+  return out;
+}
+
 // ---------------- the lessons table ----------------
 
 type Column = 'topic' | 'proposal' | 'owner' | 'progress';
@@ -161,9 +198,10 @@ function lessonRows(grid: string[][], all: Person[], broad: BroadHolder[], owner
     const r: ProposalAnswer = { topic: cell('topic'), proposal: cell('proposal'), owner: null };
     const who = cell('owner');
     if (who) {
-      const found = personNamed(who, all, broad);
+      const found = ownersNamed(who, all, broad);
       if (found) {
-        r.owner = found;
+        r.owner = found[0];
+        r.owners = found;
         owners.named++;
       } else {
         r.ownerText = who;
