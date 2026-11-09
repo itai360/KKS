@@ -16394,3 +16394,29 @@ html:has(.subtask-fold) {
 .staffx-created bdi {
   white-space: nowrap;
 }
+
+/* tracks without a lead: a look in the backups (TracksPage.tsx) */
+.track-lead-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.check.track-lead-found {
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.check.track-lead-found.is-none {
+  opacity: 0.7;
+}
+.track-lead-log {
+  margin: 8px 0 0;
+  padding-inline-start: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

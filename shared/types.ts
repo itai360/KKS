@@ -691,6 +691,22 @@ export interface CourseStaffPerson {
   recurring: number;
 }
 
+/** tracks without a lead now: who led each, as the automatic backups kept it (trackLeads.ts) */
+export interface TrackLeadHistory {
+  missing: {
+    trackId: number;
+    name: string;
+    /** the lead in the most recent backup that had one: when that was, and the backup after it that no longer did */
+    lead: { id: number; name: string; active: boolean; at: string; goneBy: string | null } | null;
+  }[];
+  /** how many backups were looked at */
+  checked: number;
+  /** what the activity log says of the tracks and the staff, the latest first */
+  activity: { at: string; text: string }[];
+  /** in a course beside the current one: the backups are the current course's */
+  beside?: boolean;
+}
+
 /** what moved to whoever took someone's place */
 export interface StaffMoved {
   teams: number;

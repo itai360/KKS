@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { addDays } from '@shared/dates';
-import type { Task, Track, TrackDetail } from '@shared/types';
+import type { Task, Track, TrackDetail, TrackLeadHistory } from '@shared/types';
 import { BulkToggle } from '../components/Bulk';
 import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
@@ -14,19 +14,22 @@ import { byOpenStatus, GroupedTaskList, TaskBulkScope, TaskRowsAround } from '..
 import { useToast } from '../components/Toasts';
 import { Bar, Empty, ErrorBox, Field, Loading, Modal, openable, PageError, PageHead, Ring, Seg, Select } from '../components/ui';
 import { api, changedFields } from '../lib/api';
-import { fmtDeadline, isoAt, todayKey } from '../lib/format';
+import { fmtDateTime, fmtDeadline, isoAt, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 
 export function TracksPage() {
-  const { tracks, can } = useSession();
+  const { tracks, can, parallel } = useSession();
   const isCommander = can('tracks');
   const { data, loading } = useApi<Track[]>('/api/tracks', ['weeks', 'tasks']);
   const list = data ?? tracks;
   const [creating, setCreating] = useState(false);
   const [leads, setLeads] = useState(false);
+  const [history, setHistory] = useState(false);
   const noLead = list.filter((t) => !t.leadId).length;
+  // the backups are the current course's
+  const inCurrent = !parallel?.slot;
   return (
     <div className="page">
       <PageHead
@@ -35,7 +38,8 @@ export function TracksPage() {
         actions={
           isCommander && (
             <>
-              {list.length > 0 && (
+              {/* only this course's own list, as it is now - never one kept from before or from another course */}
+              {!!data?.length && (
                 <button className="btn" onClick={() => setLeads(true)}>
                   <Icon name="users" /> קביעת אחראים{noLead > 0 && <span className="count-pill">{noLead}</span>}
                 </button>
@@ -47,6 +51,17 @@ export function TracksPage() {
           )
         }
       />
+      {isCommander && inCurrent && !!data && noLead > 0 && (
+        <div className="card track-lead-check no-print" role="status">
+          <Icon name="history" size={18} />
+          <span className="grow small">
+            {noLead === 1 ? 'לציר אחד אין אחראי.' : `ל-${noLead} צירים אין אחראי.`} אם היה להם אחראי קודם - אפשר למצוא אותו בגיבויים האוטומטיים ולהחזיר.
+          </span>
+          <button className="btn btn-sm" onClick={() => setHistory(true)}>
+            בדיקה בגיבויים
+          </button>
+        </div>
+      )}
       {loading && !list.length ? (
         <Loading rows={3} />
       ) : !list.length ? (
@@ -59,7 +74,8 @@ export function TracksPage() {
         </div>
       )}
       {creating && <TrackForm onClose={() => setCreating(false)} />}
-      {leads && <LeadsDialog tracks={list} onClose={() => setLeads(false)} />}
+      {leads && data && <LeadsDialog tracks={data} onClose={() => setLeads(false)} />}
+      {history && <LeadHistory onClose={() => setHistory(false)} />}
     </div>
   );
 }
@@ -109,15 +125,114 @@ function TrackCard({ t }: { t: Track }) {
   );
 }
 
+/** Tracks without a lead: who led each, as the automatic backups kept it - put back in a tap. */
+function LeadHistory({ onClose }: { onClose: () => void }) {
+  const { data, error, loading } = useApi<TrackLeadHistory>('/api/tracks/lead-history', []);
+  const toast = useToast();
+  const [picked, setPicked] = useState<Set<number> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const back = (data?.missing ?? []).filter((m) => m.lead?.active);
+  const chosen = picked ?? new Set(back.map((m) => m.trackId));
+  const restore = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const list = back.filter((m) => chosen.has(m.trackId));
+      for (const m of list) await api.patch(`/api/tracks/${m.trackId}`, { leadId: m.lead!.id });
+      emitLocalChange('weeks');
+      toast({ title: list.length === 1 ? 'האחראי הוחזר' : `הוחזרו ${list.length} אחראים`, tone: 'green' });
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="אחראים על הצירים - בגיבויים"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" disabled={busy || !back.some((m) => chosen.has(m.trackId))} onClick={() => void restore()}>
+            {busy ? 'מחזיר...' : 'החזרת האחראים שסומנו'}
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            סגירה
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {loading && !data ? (
+          <>
+            <p className="small muted">בודק בגיבויים האוטומטיים - זה לוקח כמה שניות...</p>
+            <Loading rows={3} />
+          </>
+        ) : (
+          <>
+            <ErrorBox error={error ?? err} />
+            {data && (
+              <p className="small muted">
+                נבדקו {data.checked} גיבויים - האחרונים, ואז אחד לכל יום אחורה. מה שנמצא מסומן להחזרה.
+              </p>
+            )}
+            <div className="col gap-6">
+              {[...(data?.missing ?? [])].sort((a, b) => Number(!!b.lead) - Number(!!a.lead)).map((m) => (
+                <label key={m.trackId} className={`check track-lead-found${m.lead?.active ? '' : ' is-none'}`}>
+                  <input
+                    type="checkbox"
+                    disabled={!m.lead?.active}
+                    checked={!!m.lead?.active && chosen.has(m.trackId)}
+                    onChange={() => {
+                      const n = new Set(chosen);
+                      if (n.has(m.trackId)) n.delete(m.trackId);
+                      else n.add(m.trackId);
+                      setPicked(n);
+                    }}
+                  />
+                  <span className="grow col">
+                    <b>{m.name}</b>
+                    <span className="small muted">
+                      {!m.lead
+                        ? 'לא נמצא אחראי בגיבויים'
+                        : `${m.lead.name || 'איש סגל'} - בגיבוי מ-${fmtDateTime(m.lead.at)}${m.lead.goneBy ? `, כבר לא ב-${fmtDateTime(m.lead.goneBy)}` : ''}${m.lead.active ? '' : ' (כבר לא בסגל)'}`}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {!!data?.activity.length && (
+              <details className="small">
+                <summary className="muted">מה נרשם ביומן הפעילות על הצירים והסגל</summary>
+                <ul className="track-lead-log">
+                  {data.activity.map((a, i) => (
+                    <li key={i}>
+                      <span className="mono tiny muted">{fmtDateTime(a.at)}</span> {a.text}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 /** Every track's lead, set in one place. */
 function LeadsDialog({ tracks, onClose }: { tracks: Track[]; onClose: () => void }) {
   const { staff, users } = useSession();
   const toast = useToast();
-  const [chosen, setChosen] = useState<Record<number, string>>(() => Object.fromEntries(tracks.map((t) => [t.id, t.leadId ? String(t.leadId) : ''])));
+  // the leads as the dialog opened: only what is changed here is saved (a lead changed meanwhile elsewhere stays)
+  const [opened] = useState<Record<number, string>>(() => Object.fromEntries(tracks.map((t) => [t.id, t.leadId ? String(t.leadId) : ''])));
+  const [chosen, setChosen] = useState<Record<number, string>>(opened);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const people = staff.length ? [...users.filter((u) => u.role === 'commander'), ...staff] : users;
-  const changes = tracks.filter((t) => (chosen[t.id] || '') !== (t.leadId ? String(t.leadId) : ''));
+  // a track that came after the dialog opened is not touched: only what was chosen here changes
+  const changes = tracks.filter((t) => t.id in opened && (chosen[t.id] || '') !== opened[t.id]);
   const save = async () => {
     setBusy(true);
     setError(null);
