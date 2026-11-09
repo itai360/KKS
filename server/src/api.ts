@@ -26,6 +26,7 @@ import {
   NAME_LIMIT,
   CODE_LIMIT,
   type UserRow,
+  SIGNS_IN,
 } from './auth';
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { db } from './db';
@@ -42,7 +43,7 @@ import { newPassword } from './netguard';
 import { completeSignIn, disable, enable, issueTicket, recoveryLeft, regenerateRecovery, startSetup, turnOff } from './twofactor';
 import { shareTarget } from './alignment';
 import { setCourseCookie, viewingName } from './courses';
-import { coursesFor, inSlot } from './parallel';
+import { coursesFor, inSlot, newcomerIds } from './parallel';
 import {
   addCalendarSource,
   addPlanCalendar,
@@ -249,7 +250,7 @@ export function apiRouter(): Router {
     const nameKey = `name|${username.toLowerCase()}`; // the same name tried from many addresses
     loginThrottle(key);
     loginThrottle(nameKey, NAME_LIMIT);
-    const u = db().get<UserRow>('SELECT * FROM users WHERE username = ? AND active = 1', username);
+    const u = db().get<UserRow>(`SELECT * FROM users WHERE username = ? AND ${SIGNS_IN}`, username);
     let valid = false;
     if (u) valid = verifyPassword(password, u.password_hash);
     else verifyPassword(password, dummyHash()); // a name that does not exist takes as long as a wrong password
@@ -280,7 +281,7 @@ export function apiRouter(): Router {
       loginFailed(key);
       throw e;
     }
-    const u = db().get<UserRow>('SELECT * FROM users WHERE email = ? AND active = 1', identity.email);
+    const u = db().get<UserRow>(`SELECT * FROM users WHERE email = ? AND ${SIGNS_IN}`, identity.email);
     if (!u) {
       loginFailed(key);
       // not in the list yet: the commander sees the request in the settings and adds them in a tap
@@ -439,7 +440,8 @@ export function apiRouter(): Router {
     // who has two-step sign-in, and on how many devices phone notifications: the commander's business only
     if (!isCommander(me(req))) return void res.json(rows.map(toUser));
     const devices = subscriptionCounts();
-    res.json(rows.map((r) => ({ ...toUser(r), twoFactor: !!r.totp_secret, pushDevices: devices.get(r.id) ?? 0, googleAt: r.google_at ?? null })));
+    const waiting = new Set(newcomerIds());
+    res.json(rows.map((r) => ({ ...toUser(r), ...(waiting.has(r.id) ? { nextCourse: true } : {}), twoFactor: !!r.totp_secret, pushDevices: devices.get(r.id) ?? 0, googleAt: r.google_at ?? null })));
   });
 
   // Google accounts that tried to sign in and are not in the list yet
@@ -536,6 +538,7 @@ export function apiRouter(): Router {
       db().run('DELETE FROM sessions WHERE user_id = ? ', uid);
     }
     if (p.active === false) db().run('DELETE FROM sessions WHERE user_id = ?', uid);
+    if (p.active !== undefined) db().run('DELETE FROM course_staff_out WHERE user_id = ?', uid);
     // a lost phone: two-step sign-in off, to be set up again (not for oneself - that needs the code).
     // The person is told, so a reset they did not ask for does not go unnoticed.
     if (p.resetTwoFactor && cur.totp_secret) {

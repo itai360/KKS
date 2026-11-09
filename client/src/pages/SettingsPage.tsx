@@ -387,8 +387,9 @@ function StaffCard() {
   const { data } = useApi<User[]>('/api/users?all=1', ['users']);
   const [editing, setEditing] = useState<User | 'new' | GoogleRequest | null>(null);
   // the ones who can sign in; the ones turned off are out of the way, in a drawer under them
-  const active = (data ?? []).filter((u) => u.active);
-  const inactive = (data ?? []).filter((u) => !u.active);
+  // those waiting for the next course are of the staff too (they sign in, and work in it)
+  const active = (data ?? []).filter((u) => u.active || u.nextCourse);
+  const inactive = (data ?? []).filter((u) => !u.active && !u.nextCourse);
   const table = (list: User[]) => (
     <div style={{ overflowX: 'auto' }}>
       <table className="table">
@@ -432,10 +433,16 @@ function StaffCard() {
               </td>
               <td>
                 <span className={`badge${u.role === 'commander' ? ' t-blue' : ''}`}>{ROLE_LABELS[u.role]}</span>
-                {!u.active && (
-                  <span className="badge t-red" style={{ marginInlineStart: 4 }}>
-                    לא פעיל
+                {u.nextCourse ? (
+                  <span className="badge t-purple" style={{ marginInlineStart: 4 }} title="בסגל של הקורס הבא - עוד לא בקורס הנוכחי">
+                    לקורס הבא
                   </span>
+                ) : (
+                  !u.active && (
+                    <span className="badge t-red" style={{ marginInlineStart: 4 }}>
+                      לא פעיל
+                    </span>
+                  )
                 )}
               </td>
               <td className="mono small">{u.phone}</td>

@@ -111,7 +111,8 @@ import {
   updatePoint as updateDiscussionPoint,
 } from './discussions';
 import { createWeaponForm, decideWeaponForm, deleteWeaponForm, updateWeaponForm, weaponForm } from './weaponForms';
-import { COPY_AREAS, copyIntoSlot, copySource, deleteSlot, openParallelCourse, parallelCourses, slotOf, switchSlot } from './parallel';
+import { COPY_AREAS, copyIntoSlot, copySource, deleteSlot, inSlot, openParallelCourse, parallelCourses, slotOf, switchSlot } from './parallel';
+import { addNewcomer, applyStaffChanges, courseStaff } from './courseStaff';
 import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
@@ -712,7 +713,7 @@ export function v3Router(): Router {
   // moving between the courses: everyone works in the one they chose (null: the current course)
   r.post('/courses/switch', (req, res) => {
     const { id } = z.object({ id: z.number().int().positive().nullable() }).parse(req.body);
-    switchSlot(res, id);
+    switchSlot(res, id, me(req).id);
     res.json({ ok: true });
   });
   // a link from a notification: into the course it is about, then the screen
@@ -721,7 +722,7 @@ export function v3Router(): Router {
     const to = String(req.query.to ?? '/');
     const m = /^s(\d+)$/.exec(c);
     try {
-      switchSlot(res, m ? Number(m[1]) : null);
+      switchSlot(res, m ? Number(m[1]) : null, me(req).id);
     } catch {
       switchSlot(res, null); // a course since deleted, or become the current one
     }
@@ -737,6 +738,26 @@ export function v3Router(): Router {
     const archive = await promoteParallelCourse(me(req), id(req.params.id), req.body);
     switchSlot(res, null);
     res.json(archive);
+  });
+  // the staff, from cycle to cycle (courseStaff.ts): in a course beside the current one, and in the current one
+  r.get('/courses/parallel/:id/staff', requireCommander, (req, res) => res.json(inSlot(id(req.params.id), courseStaff)));
+  r.post('/courses/parallel/:id/staff', requireCommander, (req, res) => {
+    const moved = inSlot(id(req.params.id), () => applyStaffChanges(me(req), req.body));
+    res.json({ moved, staff: inSlot(id(req.params.id), courseStaff) });
+  });
+  r.post('/courses/parallel/:id/staff/new', requireCommander, (req, res) => {
+    inSlot(id(req.params.id), () => null); // the course is there
+    const userId = addNewcomer(me(req), req.body, true);
+    res.json({ id: userId, staff: inSlot(id(req.params.id), courseStaff) });
+  });
+  r.get('/courses/staff', requireCommander, (_req, res) => res.json(courseStaff()));
+  r.post('/courses/staff', requireCommander, (req, res) => {
+    const moved = applyStaffChanges(me(req), req.body);
+    res.json({ moved, staff: courseStaff() });
+  });
+  r.post('/courses/staff/new', requireCommander, (req, res) => {
+    const userId = addNewcomer(me(req), req.body, false);
+    res.json({ id: userId, staff: courseStaff() });
   });
   r.delete('/courses/parallel/:id', requireCommander, (req, res) => {
     deleteSlot(id(req.params.id));

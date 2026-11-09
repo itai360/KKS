@@ -117,10 +117,22 @@ export function closeSlots(): void {
 /** the course's own: what of its own WhatsApp group each one has read */
 const OWN_USER_COLUMNS = new Set(['alignment_seen_id']);
 
-/** the accounts as they are in the current course, into the other - when they changed since */
+/** the staff new to the next course: out of the current one (their accounts wait for it), in the courses beside it */
+export function newcomerIds(): number[] {
+  return homeDb()
+    .all<{ user_id: number }>('SELECT user_id FROM course_staff_out ORDER BY user_id')
+    .map((r) => r.user_id);
+}
+
+/**
+ * The accounts as they are in the current course, into the other - when they changed since. Who is in it is
+ * its own: the staff new to it are, those who do not go on in it are not (courseStaff.ts).
+ */
 function syncUsers(d: Db): void {
   const rows = homeDb().all<Record<string, unknown>>('SELECT * FROM users ORDER BY id');
-  const mark = createHash('sha1').update(JSON.stringify(rows)).digest('hex');
+  const fresh = newcomerIds();
+  const out = d.all<{ user_id: number }>('SELECT user_id FROM course_staff_out ORDER BY user_id').map((r) => r.user_id);
+  const mark = createHash('sha1').update(JSON.stringify([rows, fresh, out])).digest('hex');
   if (d.get<{ value: string }>("SELECT value FROM meta WHERE key = 'users_mark'")?.value === mark) return;
   const have = new Set(d.all<{ name: string }>('PRAGMA table_info(users)').map((c) => c.name));
   const cols = rows.length ? Object.keys(rows[0]).filter((c) => have.has(c)) : [];
@@ -131,8 +143,48 @@ function syncUsers(d: Db): void {
         ON CONFLICT(id) DO UPDATE SET ${set.map((c) => `${q(c)} = excluded.${q(c)}`).join(', ')}`;
       for (const r of rows) d.run(sql, ...cols.map((c) => r[c] as never));
     }
+    for (const id of fresh) d.run('UPDATE users SET active = 1 WHERE id = ?', id);
+    d.run('UPDATE users SET active = 0 WHERE id IN (SELECT user_id FROM course_staff_out)');
     d.run("INSERT INTO meta(key, value) VALUES ('users_mark', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", mark);
   });
+}
+
+/** in a course beside the current one: its people as they are now (after a change of who is in it) */
+export function syncCourseUsers(): void {
+  const s = currentSlot();
+  if (s) syncUsers(s.db);
+}
+
+/** whether the person is out of that course beside the current one */
+function outOfSlot(id: number, userId: number): boolean {
+  return !!slotDb(id).get('SELECT 1 FROM course_staff_out WHERE user_id = ?', userId);
+}
+
+/** the courses beside the current one the person is in */
+function slotsOf(userId: number): { id: number; name: string }[] {
+  return listSlots().filter((s) => {
+    try {
+      return !outOfSlot(s.id, userId);
+    } catch (e) {
+      console.error('[parallel] could not open the course', s.id, e);
+      return false;
+    }
+  });
+}
+
+/**
+ * The course beside the current one a request works in: the one chosen - when the person is in it. Someone new
+ * to the staff of the next course works in it (they are not in the current one yet); a previous course being
+ * looked at stays as it is.
+ */
+function courseOf(req: Request): number | null {
+  const chosen = slotOf(req);
+  const user = req.user;
+  if (!user) return chosen;
+  if (chosen !== null && slotRow(chosen) && !outOfSlot(chosen, user.id)) return chosen;
+  const viewingArchive = chosen === null && !!parseCookies(req.headers.cookie)[SLOT_COOKIE];
+  if (!viewingArchive && newcomerIds().includes(user.id)) return slotsOf(user.id)[0]?.id ?? null;
+  return null;
 }
 
 const q = (name: string) => `"${name.replace(/"/g, '""')}"`;
@@ -165,33 +217,39 @@ const ACCOUNT_WRITES = [/^\/users(\/|$)/, /^\/me\//];
  * changed is kept before the answer goes out. A course that no longer is drops the choice.
  */
 export function slotScope(req: Request, res: Response, next: NextFunction): void {
-  const id = slotOf(req);
-  if (id === null || !req.user) return next();
-  const row = slotRow(id);
-  if (!row) {
+  const chosen = slotOf(req);
+  if (!req.user) return next();
+  if (chosen !== null && !slotRow(chosen)) {
     setSlotCookie(res, null);
-    return next();
+    if (!newcomerIds().includes(req.user.id)) return next();
   }
   if (LIVE.some((r) => r.test(req.path))) return next();
   const body = req.body as { entity?: unknown } | undefined;
   if (req.method !== 'GET' && (ACCOUNT_WRITES.some((r) => r.test(req.path)) || (req.path === '/bulk' && body?.entity === 'users'))) return next();
-  let d: Db;
-  let before: number;
+  let picked: { id: number; name: string; d: Db; before: number } | null;
   try {
-    d = slotDb(id);
-    before = changesOf(d);
-    syncUsers(d);
+    const id = courseOf(req);
+    // a course they are not in (any more): the current course
+    if (chosen !== null && id !== chosen && slotRow(chosen)) setSlotCookie(res, null);
+    if (id === null) picked = null;
+    else {
+      const d = slotDb(id);
+      picked = { id, name: slotRow(id)!.name, d, before: changesOf(d) };
+      syncUsers(d);
+    }
   } catch (e) {
-    console.error('[parallel] could not open the course', id, e);
+    console.error('[parallel] could not open the course', chosen, e);
     return next(new HttpError(503, 'לא הצלחנו לפתוח את הקורס. נסו שוב בעוד רגע.'));
   }
+  if (!picked) return next();
+  const { id: slotId, name, d, before } = picked;
   // what changed is written back before the answer leaves (the deployment saves it with the answer)
   const end = res.end.bind(res) as (...a: unknown[]) => Response;
   res.end = ((...args: unknown[]) => {
     try {
-      if (changesOf(d) !== before) persistSlot(id);
+      if (changesOf(d) !== before) persistSlot(slotId);
     } catch (e) {
-      console.error('[parallel] could not keep the change', id, e);
+      console.error('[parallel] could not keep the change', slotId, e);
       if (!res.headersSent) {
         res.statusCode = 503;
         res.setHeader('content-type', 'application/json; charset=utf-8');
@@ -200,7 +258,7 @@ export function slotScope(req: Request, res: Response, next: NextFunction): void
     }
     return end(...args);
   }) as Response['end'];
-  withSlot({ id, name: row.name, db: d }, () => next());
+  withSlot({ id: slotId, name, db: d }, () => next());
 }
 
 /** runs fn against that course's database (reads; a change is kept) - from the current course's routes */
@@ -229,10 +287,18 @@ export function forEachSlot(fn: () => void): void {
 // ---------------- what the app shows ----------------
 
 /** the courses the app offers to move between: the current one, and those beside it */
-export function coursesFor(req: Request): { main: string; slot: { id: number; name: string } | null; slots: { id: number; name: string }[] } {
-  const slots = listSlots();
-  const id = slotOf(req);
-  return { main: String(settingOf(homeDb(), 'courseName') ?? '') || 'הקורס הנוכחי', slot: slots.find((s) => s.id === id) ?? null, slots };
+export function coursesFor(req: Request): { main: string; slot: { id: number; name: string } | null; slots: { id: number; name: string }[]; away?: boolean } {
+  const user = req.user;
+  const slots = user ? slotsOf(user.id) : listSlots();
+  let id: number | null = null;
+  try {
+    id = courseOf(req);
+  } catch (e) {
+    console.error('[parallel] could not open the course', slotOf(req), e);
+  }
+  // someone new to the staff of the next course is not in the current one yet
+  const away = !!user && newcomerIds().includes(user.id) && slots.length > 0;
+  return { main: String(settingOf(homeDb(), 'courseName') ?? '') || 'הקורס הנוכחי', slot: slots.find((s) => s.id === id) ?? null, slots, ...(away ? { away } : {}) };
 }
 
 export function parallelCourses(): ParallelCourse[] {
@@ -258,8 +324,9 @@ const n = (sql: string) => db().get<{ n: number }>(sql)!.n;
 const quickStats = () => ({ tasks: n('SELECT count(*) AS n FROM tasks WHERE parent_id IS NULL'), weeks: n('SELECT count(*) AS n FROM weeks'), events: n('SELECT count(*) AS n FROM events WHERE deleted_at IS NULL') });
 
 /** moves to a course: one beside the current one, or (null) the current one */
-export function switchSlot(res: Response, id: number | null): void {
+export function switchSlot(res: Response, id: number | null, userId?: number): void {
   if (id !== null && !slotRow(id)) throw notFound('הקורס לא נמצא');
+  if (id !== null && userId !== undefined && outOfSlot(id, userId)) throw forbidden('אינך בסגל של הקורס הזה');
   setSlotCookie(res, id);
 }
 
@@ -641,6 +708,7 @@ export function takeSlotIn(id: number): void {
   const from = slotDb(id);
   syncUsers(from);
   const home = homeDb();
+  const fresh = newcomerIds();
   const tables = home
     .all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
     .map((t) => t.name)
@@ -658,6 +726,11 @@ export function takeSlotIn(id: number): void {
     }
     home.run('UPDATE notifications SET task_id = (SELECT t.id FROM tasks t WHERE t.id = notifications.slot_task_id), course_slot = NULL WHERE course_slot = ?', id);
     home.run('DELETE FROM course_slots WHERE id = ?', id);
+    // the staff: whoever waited for this course works in it; whoever does not go on in it leaves - the account closes
+    for (const u of fresh) home.run('UPDATE users SET active = 1 WHERE id = ?', u);
+    home.run('UPDATE users SET active = 0 WHERE id IN (SELECT user_id FROM course_staff_out)');
+    home.run('DELETE FROM sessions WHERE user_id IN (SELECT user_id FROM course_staff_out)');
+    home.run('DELETE FROM course_staff_out');
   });
   forget(id);
   resetSettingsCache();

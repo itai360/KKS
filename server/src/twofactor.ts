@@ -8,7 +8,7 @@
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { createSession, getUserRow, loginFailed, loginSucceeded, loginThrottle, NAME_LIMIT, verifyPassword, type UserRow } from './auth';
+import { createSession, loginFailed, loginSucceeded, loginThrottle, NAME_LIMIT, SIGNS_IN, verifyPassword, type UserRow } from './auth';
 import { badRequest, clock, getSettings, HttpError, nowIso } from './core';
 import { db } from './db';
 import { notify } from './journal';
@@ -221,8 +221,8 @@ export function completeSignIn(raw: unknown): { user: UserRow; token: string } {
     if (c) db().run('DELETE FROM login_challenges WHERE token_hash = ?', sha256(ticket));
     throw new HttpError(401, 'פג תוקף הכניסה. התחברו שוב עם הסיסמה.');
   }
-  const user = getUserRow(c.user_id);
-  if (!user || !user.active) throw new HttpError(401, 'פג תוקף הכניסה. התחברו שוב עם הסיסמה.');
+  const user = db().get<UserRow>(`SELECT * FROM users WHERE id = ? AND ${SIGNS_IN}`, c.user_id);
+  if (!user) throw new HttpError(401, 'פג תוקף הכניסה. התחברו שוב עם הסיסמה.');
   // whoever has the password can ask for new tickets: the misses are counted for the person too
   const key = codeKey(user.id);
   loginThrottle(key, NAME_LIMIT);

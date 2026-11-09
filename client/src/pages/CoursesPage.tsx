@@ -3,8 +3,10 @@
 // with the people and the way the course works (server/src/courses.ts).
 
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import type { CourseArchive, CoursesOverview, CourseStats } from '@shared/types';
 import { Icon } from '../components/Icon';
+import { StaffChanges } from '../components/StaffChanges';
 import { useToast } from '../components/Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui';
 import { api } from '../lib/api';
@@ -51,6 +53,8 @@ export function CoursesPage() {
   const { isCommander } = useSession();
   const { data, error, loading } = useApi<CoursesOverview>(isCommander ? '/api/courses' : null, ['settings']);
   const [ending, setEnding] = useState(false);
+  // right after a new course started: who of the staff goes on in it
+  const [params, setParams] = useSearchParams();
   const toast = useToast();
 
   if (!isCommander) return <Empty icon="lock" title="המסך שמור למפקד הקורס" />;
@@ -110,6 +114,21 @@ export function CoursesPage() {
         </div>
       ) : null}
       {ending && data && <EndCourse current={data.current.name} onClose={() => setEnding(false)} />}
+      {params.get('staff') === '1' && data && (
+        <StaffChanges
+          courseId={null}
+          courseName={data.current.name}
+          onClose={() =>
+            setParams(
+              (p) => {
+                p.delete('staff');
+                return p;
+              },
+              { replace: true },
+            )
+          }
+        />
+      )}
     </div>
   );
 }
@@ -150,6 +169,7 @@ function EndCourse({ current, onClose }: { current: string; onClose: () => void 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sure, setSure] = useState(false);
+  const [staffNext, setStaffNext] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -158,7 +178,7 @@ function EndCourse({ current, onClose }: { current: string; onClose: () => void 
     setError(null);
     try {
       await api.post('/api/courses/new', { archiveName, name, startDate: startDate || null, endDate: endDate || null });
-      reloadAt('/courses');
+      reloadAt(staffNext ? '/courses?staff=1' : '/courses');
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -208,6 +228,10 @@ function EndCourse({ current, onClose }: { current: string; onClose: () => void 
         <label className="check course-sure">
           <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} />
           <span className="small">הבנתי: הקורס הנוכחי נשמר כאן ואפשר לפתוח אותו לקריאה, והקורס החדש מתחיל בלי משימות, שבועות וצוערים.</span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={staffNext} onChange={(e) => setStaffNext(e.target.checked)} />
+          <span className="small">אחרי הפתיחה - לעבור על הסגל: מי ממשיך, מי לא ומי נכנס במקומו</span>
         </label>
         <ErrorBox error={error} />
       </div>

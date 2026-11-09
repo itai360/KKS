@@ -138,6 +138,8 @@ const OPS: Record<string, Record<string, Op>> = {
         }
         db().run('UPDATE users SET active = ? WHERE id = ?', v ? 1 : 0, id);
         if (!v) db().run('DELETE FROM sessions WHERE user_id = ?', id);
+        // turned on or off by hand: in the current course now, or not at all (not waiting for the next one)
+        db().run('DELETE FROM course_staff_out WHERE user_id = ?', id);
         changed('users');
       },
     },

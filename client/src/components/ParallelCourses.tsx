@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { Link } from 'react-router';
-import type { CopyArea, CopySource, ParallelCourse } from '@shared/types';
+import type { CopyArea, CopySource, CourseStaffPerson, ParallelCourse } from '@shared/types';
 import { api } from '../lib/api';
 import { enterCourse, reloadAt } from '../lib/courses';
 import { useSession } from '../lib/session';
@@ -14,6 +14,7 @@ import { useHashScroll } from '../lib/hashScroll';
 import { nextCourseName } from '../pages/CoursesPage';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
+import { StaffChanges } from './StaffChanges';
 import { useToast } from './Toasts';
 import { DateInput, Empty, ErrorBox, Field, Loading, Modal, Select } from './ui';
 
@@ -49,6 +50,8 @@ export function ParallelCoursesCard() {
   const [opening, setOpening] = useState(false);
   const [copying, setCopying] = useState<ParallelCourse | null>(null);
   const [promoting, setPromoting] = useState<ParallelCourse | null>(null);
+  // the staff of a course (null: the current one); after opening a course - then into it, if asked
+  const [staffing, setStaffing] = useState<{ id: number | null; name: string; thenEnter?: boolean } | null>(null);
   // the current course's name - while working in the one beside it, the settings shown are that one's
   const main = parallel?.main ?? settings.courseName;
   const here = data?.in ?? parallel?.slot?.id ?? null;
@@ -103,13 +106,18 @@ export function ParallelCoursesCard() {
                 <b>{main}</b>
                 <span className="tiny muted">הקורס הנוכחי</span>
               </div>
-              {here === null ? (
-                <span className="badge t-green">אתם כאן</span>
-              ) : (
-                <button className="btn btn-sm" onClick={() => void go(null)}>
-                  מעבר
+              <div className="row wrap gap-6 pcourse-actions">
+                {here === null ? (
+                  <span className="badge t-green">אתם כאן</span>
+                ) : (
+                  <button className="btn btn-sm" onClick={() => void go(null)}>
+                    מעבר
+                  </button>
+                )}
+                <button className="btn btn-sm" onClick={() => setStaffing({ id: null, name: main })}>
+                  <Icon name="users" size={15} /> הסגל
                 </button>
-              )}
+              </div>
             </div>
             {data?.courses.map((c) => (
               <div key={c.id} className={`pcourse${here === c.id ? ' is-here' : ''}`}>
@@ -128,6 +136,9 @@ export function ParallelCoursesCard() {
                       מעבר
                     </button>
                   )}
+                  <button className="btn btn-sm" onClick={() => setStaffing({ id: c.id, name: c.name })}>
+                    <Icon name="users" size={15} /> הסגל - מי ממשיך
+                  </button>
                   <button className="btn btn-sm" onClick={() => setCopying(c)}>
                     <Icon name="copy" size={15} /> העתקה מ{main}
                   </button>
@@ -150,19 +161,51 @@ export function ParallelCoursesCard() {
           </div>
         )}
       </div>
-      {opening && <OpenCourse main={main} onClose={() => setOpening(false)} onDone={() => void reload()} />}
+      {opening && (
+        <OpenCourse
+          main={main}
+          onClose={() => setOpening(false)}
+          onDone={() => void reload()}
+          onStaff={(c, thenEnter) => {
+            setOpening(false);
+            void reload();
+            setStaffing({ id: c.id, name: c.name, thenEnter });
+          }}
+        />
+      )}
+      {staffing && (
+        <StaffChanges
+          courseId={staffing.id}
+          courseName={staffing.name}
+          onClose={() => {
+            setStaffing(null);
+            if (staffing.thenEnter && staffing.id !== null) void go(staffing.id);
+          }}
+        />
+      )}
       {copying && <CopyIntoCourse course={copying} main={main} onClose={() => setCopying(null)} onDone={() => void reload()} />}
-      {promoting && <PromoteCourse course={promoting} main={main} onClose={() => setPromoting(null)} />}
+      {promoting && (
+        <PromoteCourse
+          course={promoting}
+          main={main}
+          onClose={() => setPromoting(null)}
+          onStaff={() => {
+            setPromoting(null);
+            setStaffing({ id: promoting.id, name: promoting.name });
+          }}
+        />
+      )}
     </section>
   );
 }
 
-function OpenCourse({ main, onClose, onDone }: { main: string; onClose: () => void; onDone: () => void }) {
+function OpenCourse({ main, onClose, onDone, onStaff }: { main: string; onClose: () => void; onDone: () => void; onStaff: (c: ParallelCourse, thenEnter: boolean) => void }) {
   const [name, setName] = useState(nextCourseName(main));
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [take, setTake] = useState<Set<CopyArea>>(() => new Set(AREAS.map((a) => a.key)));
   const [moveIn, setMoveIn] = useState(true);
+  const [staffNext, setStaffNext] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -180,7 +223,8 @@ function OpenCourse({ main, onClose, onDone }: { main: string; onClose: () => vo
     setError(null);
     try {
       const c = await api.post<ParallelCourse>('/api/courses/parallel', { name, startDate: startDate || null, endDate: endDate || null, take: [...take] });
-      if (moveIn) await enterCourse(c.id);
+      if (staffNext) onStaff(c, moveIn);
+      else if (moveIn) await enterCourse(c.id);
       else {
         toast({ title: `${c.name} נפתח לצד ${main}`, tone: 'green' });
         onDone();
@@ -235,8 +279,12 @@ function OpenCourse({ main, onClose, onDone }: { main: string; onClose: () => vo
           ))}
         </fieldset>
         <label className="check">
+          <input type="checkbox" checked={staffNext} onChange={(e) => setStaffNext(e.target.checked)} />
+          <span className="small">אחרי הפתיחה - לעבור על הסגל: מי ממשיך, מי לא ומי נכנס במקומו</span>
+        </label>
+        <label className="check">
           <input type="checkbox" checked={moveIn} onChange={(e) => setMoveIn(e.target.checked)} />
-          <span className="small">לעבור לקורס החדש מיד</span>
+          <span className="small">לעבור לקורס החדש {staffNext ? 'אחר כך' : 'מיד'}</span>
         </label>
         <ErrorBox error={error} />
       </div>
@@ -345,7 +393,10 @@ function CopyIntoCourse({ course, main, onClose, onDone }: { course: ParallelCou
   );
 }
 
-function PromoteCourse({ course, main, onClose }: { course: ParallelCourse; main: string; onClose: () => void }) {
+function PromoteCourse({ course, main, onClose, onStaff }: { course: ParallelCourse; main: string; onClose: () => void; onStaff: () => void }) {
+  const { data: staff } = useApi<CourseStaffPerson[]>(`/api/courses/parallel/${course.id}/staff`, ['users']);
+  const leaving = (staff ?? []).filter((p) => !p.inCourse);
+  const joining = (staff ?? []).filter((p) => p.inCourse && p.newcomer);
   const [archiveName, setArchiveName] = useState(main);
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -388,6 +439,35 @@ function PromoteCourse({ course, main, onClose }: { course: ParallelCourse; main
             <div className="strong small">{course.name} הופך לקורס הנוכחי</div>
             <p className="small muted">לכל הסגל, עם כל מה שנעשה בו עד עכשיו.</p>
           </div>
+        </div>
+        <div className="course-staff-note small">
+          <div className="row gap-6">
+            <Icon name="users" size={16} />
+            <b className="grow">הסגל</b>
+            <button className="btn btn-ghost btn-sm" onClick={onStaff}>
+              עדכון הסגל
+            </button>
+          </div>
+          {!staff ? (
+            <span className="muted">טוען...</span>
+          ) : !leaving.length && !joining.length ? (
+            <span className="muted">כל הסגל ממשיך - אין שינויים.</span>
+          ) : (
+            <>
+              {leaving.length > 0 && (
+                <div>
+                  <span className="strong">לא ממשיכים - החשבונות ייסגרו: </span>
+                  {leaving.map((p) => p.name).join(', ')}
+                </div>
+              )}
+              {joining.length > 0 && (
+                <div>
+                  <span className="strong">מצטרפים לסגל: </span>
+                  {joining.map((p) => p.name).join(', ')}
+                </div>
+              )}
+            </>
+          )}
         </div>
         <Field label="השם שבו הקורס שמסתיים יישמר" required>
           <input className="input" value={archiveName} onChange={(e) => setArchiveName(e.target.value)} maxLength={120} />

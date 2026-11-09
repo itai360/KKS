@@ -32,6 +32,8 @@ export interface Parallel {
   main: string;
   slot: { id: number; name: string } | null;
   slots: { id: number; name: string }[];
+  /** new to the staff of the next course: not in the current one until it becomes it */
+  away?: boolean;
 }
 
 export interface Session {

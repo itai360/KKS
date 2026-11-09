@@ -229,6 +229,8 @@ function clearCourse(): void {
   d.run("DELETE FROM debrief_items WHERE NOT (kind = 'lesson' AND horizon = 'next')");
   d.run('UPDATE debrief_items SET task_id = NULL');
   d.run('DELETE FROM absences WHERE end_date < ?', today);
+  // the staff that waited for the next course: it is this one now
+  d.run('UPDATE users SET active = 1 WHERE id IN (SELECT user_id FROM course_staff_out)');
   const tables = d
     .all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
     .map((t) => t.name)

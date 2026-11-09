@@ -34,6 +34,9 @@ declare global {
 
 export const COOKIE = 'kks_session';
 
+/** SQL: may sign in - an open account, or one of the staff waiting for the next course (courseStaff.ts) */
+export const SIGNS_IN = '(active = 1 OR id IN (SELECT user_id FROM course_staff_out))';
+
 export function toUser(r: UserRow): User {
   return {
     id: r.id,
@@ -88,7 +91,7 @@ export function userForToken(token: string | undefined): UserRow | undefined {
   if (!token) return undefined;
   return db().get<UserRow>(
     `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1`,
+     WHERE s.token_hash = ? AND s.expires_at > ? AND (u.active = 1 OR u.id IN (SELECT user_id FROM course_staff_out))`,
     sha256(token),
     nowIso(),
   );

@@ -46,6 +46,8 @@ export interface User {
   pushDevices?: number;
   /** gives tasks to the staff without their taking them on first (the commander sets it) */
   assignsFreely?: boolean;
+  /** new to the staff of the next course: waits for it (the commander's list of users) */
+  nextCourse?: boolean;
   /** when they last signed in with Google (the commander's list of users) */
   googleAt?: string | null;
 }
@@ -664,6 +666,39 @@ export interface ParallelCourse {
   stats: { tasks: number; weeks: number; events: number };
   createdAt: string;
   updatedAt: string;
+}
+
+/** one of the staff, in a course: whether they go on in it, who took their place, and what is theirs in it */
+export interface CourseStaffPerson {
+  id: number;
+  name: string;
+  title: string;
+  role: 'commander' | 'staff';
+  inCourse: boolean;
+  /** who took their place in the course (when they do not go on in it) */
+  replacedBy: number | null;
+  /** new to the staff of the next course: not in the current one until the next becomes it */
+  newcomer: boolean;
+  /** the teams they command */
+  teams: string[];
+  /** the weeks still ahead they lead */
+  weeks: number;
+  /** the tracks they lead */
+  tracks: string[];
+  /** their open tasks */
+  tasks: number;
+  /** recurring tasks given to them */
+  recurring: number;
+}
+
+/** what moved to whoever took someone's place */
+export interface StaffMoved {
+  teams: number;
+  weeks: number;
+  tracks: number;
+  tasks: number;
+  recurring: number;
+  templates: number;
 }
 
 /** what the current course has of an area, to take into the course beside it */

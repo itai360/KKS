@@ -12,7 +12,9 @@ export function CourseMenuItems({ itemClass, iconSize, close }: { itemClass: str
   const toast = useToast();
   if (!parallel) return null;
   const here = parallel.slot?.id ?? null;
-  const courses = [{ id: null as number | null, name: parallel.main }, ...parallel.slots];
+  // someone new to the staff of the next course is not in the current one yet
+  const courses = [...(parallel.away ? [] : [{ id: null as number | null, name: parallel.main }]), ...parallel.slots];
+  if (courses.length < 2) return null;
   return (
     <div role="group" aria-label="קורסים" className="course-menu">
       <div className="course-menu-label">קורסים</div>
@@ -45,6 +47,15 @@ export function CourseBesideBar() {
   const { parallel } = useSession();
   const toast = useToast();
   if (!parallel?.slot) return null;
+  if (parallel.away)
+    return (
+      <div className="update-bar course-bar is-beside no-print" role="status">
+        <Icon name="layers" size={16} />
+        <span className="grow">
+          את/ה בסגל של <b>{parallel.slot.name}</b> - הקורס הבא. כשיתחיל, הוא יהפוך לקורס הנוכחי.
+        </span>
+      </div>
+    );
   return (
     <div className="update-bar course-bar is-beside no-print" role="status">
       <Icon name="layers" size={16} />
