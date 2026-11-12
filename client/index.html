@@ -29,7 +29,7 @@
     <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/828x1792.png" />
     <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/750x1334.png" />
     <title>ניהול קורס קק"ס</title>
-    <!-- the opening screen, before the app's code is here: קק״ס, its ס turning while the app loads (lib/session.tsx
+    <!-- the opening screen, before the app's code is here: קק״ס, its ס turning (counterclockwise) while the app loads (lib/session.tsx
          takes it away once there is something to show; the iPhone's launch images draw it still, public/splash) -->
     <style>
       #boot {
@@ -58,10 +58,11 @@
         transform-origin: 684px 1243.5px;
         animation: kks-turn 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
       }
+      /* counterclockwise */
       @keyframes kks-turn {
         62%,
         100% {
-          transform: rotate(360deg);
+          transform: rotate(-360deg);
         }
       }
       @media (prefers-color-scheme: dark) {
