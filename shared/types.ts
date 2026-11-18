@@ -318,6 +318,27 @@ export interface TrackDetail {
   byDomain: DomainReadiness[];
   byWeek: { weekId: number | null; name: string; number: number | null; startDate: string | null; total: number; done: number; readiness: number }[];
   tasks: Task[];
+  /** the lessons of the course's debriefs given this track */
+  lessons: TrackLesson[];
+  /** the lessons the previous cycle gave the track of the same name (none: no previous course, or not looked at) */
+  previous: { courseName: string; lessons: TrackLesson[] } | null;
+}
+
+/** a lesson of a debrief, in its training track */
+export interface TrackLesson {
+  id: number;
+  body: string;
+  /** this cycle (a task) or the next one (the lessons bank) */
+  horizon: 'now' | 'next' | null;
+  /** its debrief - to open it (null: a previous course's) */
+  debriefId: number | null;
+  debriefTitle: string;
+  debriefKind: string;
+  occurredOn: string;
+  owner: string;
+  dueDate: string | null;
+  taskId: number | null;
+  taskStatus: TaskStatus | null;
 }
 
 export interface DomainReadiness {
@@ -1422,6 +1443,9 @@ export interface DebriefItem {
   ownerName: string | null;
   /** who it is on (the company debrief: several, groups too) - the owner alone when it has no list */
   owners: ProposalOwner[];
+  /** its training track: the lesson shows in the track, and in the same track of the next cycle */
+  trackId: number | null;
+  trackName: string | null;
   dueDate: string | null;
   /** next cycle: the week or the event it is for */
   target: string;

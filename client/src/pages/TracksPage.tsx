@@ -3,8 +3,10 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { addDays } from '@shared/dates';
-import type { Task, Track, TrackDetail, TrackLeadHistory } from '@shared/types';
+import { addDays, shortDate } from '@shared/dates';
+import { STATUS_LABELS } from '@shared/constants';
+import { DEBRIEF_KIND_LABELS, type DebriefKind } from '@shared/debriefForms';
+import type { Task, Track, TrackDetail, TrackLeadHistory, TrackLesson } from '@shared/types';
 import { BulkToggle } from '../components/Bulk';
 import { ask } from '../components/Confirm';
 import { Icon } from '../components/Icon';
@@ -511,9 +513,67 @@ export function TrackPage() {
             )}
           </div>
         </div>
+        <TrackLessons data={data} />
         {editing && <TrackForm track={t} onClose={() => setEditing(false)} />}
       </div>
     </TaskBulkScope>
+  );
+}
+
+/** the lessons debriefs gave the track: this course's, and the previous cycle's in the track of the same name */
+function TrackLessons({ data }: { data: TrackDetail }) {
+  const prev = data.previous;
+  return (
+    <div className="track-lessons mt-16" id="lessons">
+      <section className="card card-pad" aria-labelledby="track-lessons-h">
+        <div className="section-title" style={{ margin: 0 }}>
+          <h2 id="track-lessons-h">לקחים בציר</h2>
+          <span className="count-pill">{data.lessons.length}</span>
+        </div>
+        {data.lessons.length ? (
+          <LessonList lessons={data.lessons} />
+        ) : (
+          <p className="small muted mt-8">עוד אין. בכל לקח בתחקיר אפשר לבחור "ציר הכשרה" - והוא יופיע כאן, ובציר הזה במחזור הבא.</p>
+        )}
+      </section>
+      {prev && (
+        <section className="card card-pad" aria-labelledby="track-prev-h">
+          <div className="section-title" style={{ margin: 0 }}>
+            <h2 id="track-prev-h">לקחים מהמחזור הקודם</h2>
+            <span className="count-pill">{prev.lessons.length}</span>
+          </div>
+          <p className="tiny muted">{prev.courseName} - הציר באותו שם</p>
+          {prev.lessons.length ? <LessonList lessons={prev.lessons} /> : <p className="small muted mt-8">במחזור הקודם לא נרשמו לקחים בציר הזה.</p>}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function LessonList({ lessons }: { lessons: TrackLesson[] }) {
+  return (
+    <ul className="track-lesson-list">
+      {lessons.map((l) => (
+        <li key={l.id} className="track-lesson">
+          <div className="prewrap">{l.body}</div>
+          <div className="tiny muted row wrap gap-6">
+            {l.horizon && <span className={`badge ${l.horizon === 'next' ? 't-blue' : 't-orange'}`}>{l.horizon === 'next' ? 'למחזור הבא' : 'להמשך המחזור'}</span>}
+            <span>
+              {l.debriefId ? <Link to={`/debriefs/${l.debriefId}`}>{l.debriefTitle}</Link> : l.debriefTitle} · {DEBRIEF_KIND_LABELS[l.debriefKind as DebriefKind] ?? 'תחקיר'} ·{' '}
+              {shortDate(l.occurredOn)}
+            </span>
+            {l.owner && <span>באחריות: {l.owner}</span>}
+            {l.taskId ? (
+              <Link to={`/tasks/${l.taskId}`} className="badge">
+                <Icon name="tasks" size={11} /> משימה{l.taskStatus ? ` · ${STATUS_LABELS[l.taskStatus]}` : ''}
+              </Link>
+            ) : (
+              l.taskStatus && <span>משימה · {STATUS_LABELS[l.taskStatus]}</span>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

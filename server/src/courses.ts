@@ -422,7 +422,7 @@ const timing = (r: PrevTaskRow, startDate: string) => ({ dayOffset: diffDays(loc
 
 /** the course before this one: the most recent that ended (or the one asked for) - and, for a course opened
  * beside the current one (parallel.ts), the current course itself (id 0) */
-async function previousCourse(id?: number): Promise<{ id: number; name: string; d: Db } | null> {
+export async function previousCourse(id?: number): Promise<{ id: number; name: string; d: Db } | null> {
   if (currentSlot()) {
     if (id !== undefined && id !== 0) return null;
     const v = homeDb().get<{ value: string }>("SELECT value FROM settings WHERE key = 'courseName'")?.value;

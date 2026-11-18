@@ -1088,6 +1088,22 @@ function OwnerSelect({ value, onChange, required, label }: { value: number | nul
   );
 }
 
+/** a lesson's training track: it shows in the track, and in the same track of the next cycle */
+function TrackSelect({ value, onChange, label }: { value: number | null; onChange: (v: number | null) => void; label: string }) {
+  const { tracks } = useSession();
+  if (!tracks.length) return null;
+  return (
+    <Select className="select lesson-track" value={value ?? ''} aria-label={label} title="ציר הכשרה - הלקח יופיע בציר, ובציר הזה במחזור הבא" onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <option value="">ציר הכשרה...</option>
+      {tracks.map((t) => (
+        <option key={t.id} value={t.id}>
+          ציר {t.name}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
 /** someone is on it: its owner, or (the company debrief) one of its owners */
 const hasOwner = (l: DebriefItem) => !!l.ownerId || l.owners.length > 0;
 
@@ -1137,7 +1153,7 @@ function LessonRow({
           </Link>
         ) : locked ? (
           <span className="tiny muted">
-            {[(l.owners.length || l.ownerName) && `באחריות: ${l.owners.length ? ownerNames(l.owners) : l.ownerName}`, l.dueDate && `עד ${shortDate(l.dueDate)}`, !now && l.target && `יוצג ב: ${l.target}`]
+            {[(l.owners.length || l.ownerName) && `באחריות: ${l.owners.length ? ownerNames(l.owners) : l.ownerName}`, l.dueDate && `עד ${shortDate(l.dueDate)}`, l.trackName && `ציר ${l.trackName}`, !now && l.target && `יוצג ב: ${l.target}`]
               .filter(Boolean)
               .join(' · ')}
           </span>
@@ -1158,6 +1174,7 @@ function LessonRow({
                 onChange={(v) => void patch({ dueDate: v || null })}
               />
             )}
+            <TrackSelect value={l.trackId} onChange={(v) => void patch({ trackId: v })} label="ציר הכשרה ללקח" />
             {!now && l.target && <span className="tiny muted">יוצג ב: {l.target}</span>}
           </>
         )}
@@ -1188,18 +1205,20 @@ function AddLesson({
   const [body, setBody] = useState('');
   const [owner, setOwner] = useState<number | null>(null);
   const [owners, setOwners] = useState<ProposalOwner[]>([]);
+  const [track, setTrack] = useState<number | null>(null);
   const [due, setDue] = useState(addDays(todayKey(), 7));
   const [busy, setBusy] = useState(false);
   const add = async () => {
     if (!body.trim() || busy) return;
     setBusy(true);
     const who = pool ? { owners } : { ownerId: owner };
-    const ok = await run(() => api.post<DebriefDetail>(`/api/debriefs/${debriefId}/items`, { kind: 'lesson', horizon, body: body.trim(), ...who, dueDate: now ? due || null : null }));
+    const ok = await run(() => api.post<DebriefDetail>(`/api/debriefs/${debriefId}/items`, { kind: 'lesson', horizon, body: body.trim(), ...who, trackId: track, dueDate: now ? due || null : null }));
     setBusy(false);
     if (ok) {
       setBody('');
       setOwner(null);
       setOwners([]);
+      setTrack(null);
     }
   };
   return (
@@ -1231,6 +1250,7 @@ function AddLesson({
           <OwnerSelect value={owner} onChange={setOwner} required={false} label="אחראי ללקח החדש" />
         )}
         {now && <DateInput value={due} min={todayKey()} onChange={(v) => setDue(v)} aria-label="עד מתי" />}
+        <TrackSelect value={track} onChange={setTrack} label="ציר הכשרה ללקח החדש" />
         <button className="btn btn-sm" disabled={!body.trim() || busy}>
           <Icon name="plus" /> הוספה
         </button>

@@ -497,6 +497,7 @@ function copyWhole(area: CopyArea, from: Db, to: Db, shift: number, take: CopyAr
       copyRows(from, to, 'debriefs', inList, (r) => ({ ...r, event_id: null, week_id: null, status: 'final' }));
       copyRows(from, to, 'debrief_items', `kind = 'lesson' AND horizon = 'next' AND debrief_id IN (${ids.join(',')})`, (r) => ({
         ...r,
+        track_id: trackThere(from, to, r.track_id),
         task_id: null,
         recurring_rule_id: take.includes('recurring') ? r.recurring_rule_id : null,
         target_week: take.includes('weeks') ? r.target_week : null,
@@ -589,6 +590,15 @@ function insertNew(from: Db, to: Db, table: string, r: Record<string, unknown>):
   return to.run(`INSERT INTO ${q(table)}(${cols.map(q).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, ...cols.map((c) => r[c] as never)).id;
 }
 
+/** the track there named as that one here (a lesson's training track) */
+function trackThere(from: Db, to: Db, trackId: unknown): number | null {
+  if (typeof trackId !== 'number') return null;
+  const name = from.get<{ name: string }>('SELECT name FROM tracks WHERE id = ?', trackId)?.name;
+  if (!name) return null;
+  const key = searchKey(name);
+  return to.all<{ id: number; name: string }>('SELECT id, name FROM tracks').find((t) => searchKey(t.name) === key)?.id ?? null;
+}
+
 /** the week there named as that one here */
 function weekThere(from: Db, to: Db, weekId: unknown): number | null {
   if (weekId === null || weekId === undefined) return null;
@@ -646,7 +656,7 @@ function insertOne(area: CopyArea, from: Db, to: Db, r: Record<string, unknown>,
     case 'lessons': {
       const id = insertNew(from, to, 'debriefs', { ...r, event_id: null, week_id: null, status: 'final' });
       for (const it of from.all<Record<string, unknown>>("SELECT * FROM debrief_items WHERE debrief_id = ? AND kind = 'lesson' AND horizon = 'next'", r.id as number)) {
-        insertNew(from, to, 'debrief_items', { ...it, debrief_id: id, task_id: null, recurring_rule_id: null, target_week: weekThere(from, to, it.target_week) });
+        insertNew(from, to, 'debrief_items', { ...it, debrief_id: id, task_id: null, recurring_rule_id: null, target_week: weekThere(from, to, it.target_week), track_id: trackThere(from, to, it.track_id) });
       }
       return;
     }

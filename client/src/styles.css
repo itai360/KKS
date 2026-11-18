@@ -16467,3 +16467,27 @@ html:has(.subtask-fold) {
 .dq-proposal > .owners-pick {
   flex: 1 1 auto;
 }
+
+/* a track's lessons: this course's, and the previous cycle's (TracksPage.tsx) */
+.track-lessons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.track-lesson-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.track-lesson {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+}
+.track-lesson + .track-lesson {
+  border-top: 1px solid var(--line);
+}

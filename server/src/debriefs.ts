@@ -391,8 +391,8 @@ function checkReady(d: DebriefRow, answers: DebriefAnswers): void {
  */
 function lessonsToTasks(actor: UserRow, d: DebriefRow): number {
   const rows = db()
-    .all<{ id: number; body: string; owner_id: number | null; owner_name: string | null; owners: string; due_date: string }>(
-      "SELECT i.id, i.body, i.owner_id, o.display_name AS owner_name, i.owners, i.due_date FROM debrief_items i LEFT JOIN users o ON o.id = i.owner_id WHERE i.debrief_id = ? AND i.kind = 'lesson' AND i.horizon = 'now' AND i.task_id IS NULL AND i.due_date IS NOT NULL",
+    .all<{ id: number; body: string; owner_id: number | null; owner_name: string | null; owners: string; due_date: string; track_id: number | null }>(
+      "SELECT i.id, i.body, i.owner_id, o.display_name AS owner_name, i.owners, i.due_date, i.track_id FROM debrief_items i LEFT JOIN users o ON o.id = i.owner_id WHERE i.debrief_id = ? AND i.kind = 'lesson' AND i.horizon = 'now' AND i.task_id IS NULL AND i.due_date IS NOT NULL",
       d.id,
     )
     .map((l) => ({ ...l, list: itemOwners(l) }))
@@ -411,6 +411,8 @@ function lessonsToTasks(actor: UserRow, d: DebriefRow): number {
         deadline: zonedIso(l.due_date, time, tz()),
         domain: 'הערכה',
         debriefId: d.id,
+        // in the lesson's training track (none chosen: the evaluation's, as before)
+        ...(l.track_id ? { trackId: l.track_id } : {}),
       },
       { system: true },
     );
@@ -446,6 +448,8 @@ interface ItemRow {
   owners: string;
   due_date: string | null;
   target: string;
+  track_id: number | null;
+  track_name: string | null;
 }
 
 /** the owners kept with a lesson (a list, as JSON; none before there could be several) */
@@ -465,9 +469,9 @@ const itemOwners = (i: Pick<ItemRow, 'owners' | 'owner_id' | 'owner_name'>): Pro
 };
 
 const ITEM_BASE = `
-SELECT i.*, t.title AS task_title, t.status AS task_status, r.title AS recurring_title, o.display_name AS owner_name
+SELECT i.*, t.title AS task_title, t.status AS task_status, r.title AS recurring_title, o.display_name AS owner_name, tr.name AS track_name
 FROM debrief_items i LEFT JOIN tasks t ON t.id = i.task_id LEFT JOIN recurring_rules r ON r.id = i.recurring_rule_id
-LEFT JOIN users o ON o.id = i.owner_id
+LEFT JOIN users o ON o.id = i.owner_id LEFT JOIN tracks tr ON tr.id = i.track_id
 `;
 
 function toItem(i: ItemRow): DebriefItem {
@@ -487,6 +491,8 @@ function toItem(i: ItemRow): DebriefItem {
     ownerId: i.owner_id,
     ownerName: i.owner_name,
     owners: itemOwners(i),
+    trackId: i.track_id ?? null,
+    trackName: i.track_name ?? null,
     dueDate: i.due_date,
     target: i.target,
   };
@@ -506,7 +512,13 @@ export const itemSchema = z.object({
   /** several (the company debrief): people, cadets, groups */
   owners: z.array(z.unknown()).max(12).optional(),
   dueDate: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional().default(null),
+  /** a lesson's training track */
+  trackId: z.number().int().positive().nullable().optional().default(null),
 });
+
+const checkTrack = (id: number | null | undefined) => {
+  if (id && !db().get('SELECT 1 FROM tracks WHERE id = ?', id)) throw badRequest('הציר לא נמצא');
+};
 
 /**
  * A lesson's owners as kept: each one there (an active staff member, a cadet of the course, a group) under
@@ -547,6 +559,7 @@ export function addItem(actor: UserRow, debriefId: number, raw: z.input<typeof i
   if (!canEditDebrief(actor, d)) throw forbidden();
   const it = itemSchema.parse(raw);
   if (it.ownerId && !getUserRow(it.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
+  checkTrack(it.trackId);
   let owners: ProposalOwner[] = [];
   if (it.owners) {
     const s = settleOwners(it.horizon, it.owners);
@@ -559,11 +572,11 @@ export function addItem(actor: UserRow, debriefId: number, raw: z.input<typeof i
 }
 
 /** an item at the end of the debrief, written by `by` (a lesson for the next cycle keeps what it is for) */
-function insertItem(d: DebriefRow, it: Pick<DebriefItem, 'kind' | 'body' | 'horizon' | 'ownerId' | 'dueDate'> & { owners?: ProposalOwner[] }, by: number | null, at = nowIso()): number {
+function insertItem(d: DebriefRow, it: Pick<DebriefItem, 'kind' | 'body' | 'horizon' | 'ownerId' | 'dueDate'> & { owners?: ProposalOwner[]; trackId?: number | null }, by: number | null, at = nowIso()): number {
   const t = it.horizon === 'next' ? lessonTarget(d) : { target: '', key: '', week: null };
   const sort = (db().get<{ n: number | null }>('SELECT max(sort) AS n FROM debrief_items WHERE debrief_id = ?', d.id)?.n ?? 0) + 1;
   const id = db().run(
-    'INSERT INTO debrief_items(debrief_id, kind, body, sort, created_by, created_at, horizon, owner_id, due_date, target, target_key, target_week, owners) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO debrief_items(debrief_id, kind, body, sort, created_by, created_at, horizon, owner_id, due_date, target, target_key, target_week, owners, track_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     d.id,
     it.kind,
     it.body,
@@ -577,6 +590,7 @@ function insertItem(d: DebriefRow, it: Pick<DebriefItem, 'kind' | 'body' | 'hori
     t.key,
     t.week,
     it.owners?.length ? JSON.stringify(it.owners) : '',
+    it.kind === 'lesson' ? (it.trackId ?? null) : null,
   ).id;
   db().run('UPDATE debriefs SET updated_at = ? WHERE id = ?', nowIso(), d.id);
   return id;
@@ -682,6 +696,7 @@ export const itemPatchSchema = z.object({
   ownerId: z.number().int().positive().nullable().optional(),
   owners: z.array(z.unknown()).max(12).optional(),
   dueDate: z.string().refine(isDateKey, 'תאריך לא תקין').nullable().optional(),
+  trackId: z.number().int().positive().nullable().optional(),
 });
 
 export function updateItem(actor: UserRow, id: number, raw: z.input<typeof itemPatchSchema>): void {
@@ -693,14 +708,19 @@ export function updateItem(actor: UserRow, id: number, raw: z.input<typeof itemP
   if (p.ownerId && !getUserRow(p.ownerId)?.active) throw badRequest('האחראי שנבחר אינו פעיל');
   // several (the company debrief) - or one staff member, the list going with it
   const settled = p.owners ? settleOwners(i.horizon, p.owners) : null;
+  checkTrack(p.trackId);
+  const trackId = p.trackId !== undefined ? p.trackId : i.track_id;
   db().run(
-    'UPDATE debrief_items SET body = ?, owner_id = ?, owners = ?, due_date = ? WHERE id = ?',
+    'UPDATE debrief_items SET body = ?, owner_id = ?, owners = ?, due_date = ?, track_id = ? WHERE id = ?',
     text,
     settled ? settled.ownerId : p.ownerId !== undefined ? p.ownerId : i.owner_id,
     settled ? (settled.list.length ? JSON.stringify(settled.list) : '') : p.ownerId !== undefined ? '' : i.owners,
     p.dueDate !== undefined ? p.dueDate : i.due_date,
+    i.kind === 'lesson' ? trackId : null,
     id,
   );
+  // the task the lesson became goes in its track too
+  if (p.trackId !== undefined && i.task_id) db().run('UPDATE tasks SET track_id = ? WHERE id = ?', trackId, i.task_id);
   changed('debriefs');
 }
 

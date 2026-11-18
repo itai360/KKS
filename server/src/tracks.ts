@@ -6,10 +6,14 @@
 import { z } from 'zod';
 import { readinessPct } from '../../shared/taskLogic';
 import { byHe } from '../../shared/sort';
-import type { Track, TrackDetail } from '../../shared/types';
+import { ownerNames, ownersOf } from '../../shared/debriefForms';
+import { searchKey } from '../../shared/search';
+import type { TaskStatus } from '../../shared/constants';
+import type { Track, TrackDetail, TrackLesson } from '../../shared/types';
 import { getUserRow, type UserRow } from './auth';
 import { badRequest, forbidden, notFound, nowIso, patchSchema } from './core';
-import { db } from './db';
+import { currentSlot, db, homeDb, type Db } from './db';
+import { previousCourse } from './courses';
 import { changed, logActivity, notify } from './journal';
 import { visibleTasks } from './taskRepo';
 import { domainReadiness } from './weeks';
@@ -148,5 +152,66 @@ export function trackDetail(actor: UserRow, id: number): TrackDetail {
     byDomain: domainReadiness('t.track_id = ?', id),
     byWeek,
     tasks: visibleTasks(actor, 't.track_id = ?', id),
+    lessons: lessonsOf(db(), id, true),
+    previous: null,
   };
+}
+
+/** the lessons of a course's debriefs in a track, the latest debrief first (`own`: this course's - they open) */
+function lessonsOf(d: Db, trackId: number, own: boolean): TrackLesson[] {
+  const has = d.get<{ n: number }>("SELECT count(*) AS n FROM pragma_table_info('debrief_items') WHERE name = 'track_id'")!.n;
+  if (!has) return [];
+  return d
+    .all<{ id: number; body: string; horizon: 'now' | 'next' | null; debrief_id: number; title: string; kind: string; occurred_on: string; owners: string | null; owner_name: string | null; due_date: string | null; task_id: number | null; task_status: TaskStatus | null }>(
+      `SELECT i.id, i.body, i.horizon, d.id AS debrief_id, d.title, d.kind, d.occurred_on, i.owners, o.display_name AS owner_name, i.due_date, i.task_id, t.status AS task_status
+       FROM debrief_items i JOIN debriefs d ON d.id = i.debrief_id LEFT JOIN users o ON o.id = i.owner_id LEFT JOIN tasks t ON t.id = i.task_id
+       WHERE i.kind = 'lesson' AND i.track_id = ?
+       ORDER BY d.occurred_on DESC, d.id DESC, i.sort, i.id`,
+      trackId,
+    )
+    .map((r) => {
+      let owners: ReturnType<typeof ownersOf> = [];
+      try {
+        owners = r.owners ? ownersOf(JSON.parse(r.owners)) : [];
+      } catch {
+        /* none */
+      }
+      return {
+        id: r.id,
+        body: r.body,
+        horizon: r.horizon,
+        debriefId: own ? r.debrief_id : null,
+        debriefTitle: r.title,
+        debriefKind: r.kind,
+        occurredOn: r.occurred_on,
+        owner: owners.length ? ownerNames(owners) : (r.owner_name ?? ''),
+        dueDate: r.due_date,
+        taskId: own ? r.task_id : null,
+        taskStatus: r.task_status,
+      };
+    });
+}
+
+/**
+ * The track with what the previous cycle learned in it: the lessons the previous course's debriefs gave the track
+ * of the same name - the current course's, for a course opened beside it; the last that ended, for the current
+ * one. A lesson already here (taken along in the lessons bank) is not shown twice. Not while a previous course
+ * is the one open.
+ */
+export async function trackWithPrevious(actor: UserRow, id: number): Promise<TrackDetail> {
+  const detail = trackDetail(actor, id);
+  if (!currentSlot() && db() !== homeDb()) return detail;
+  let prev: Awaited<ReturnType<typeof previousCourse>>;
+  try {
+    prev = await previousCourse();
+  } catch (e) {
+    console.error('[tracks] could not open the previous course', e);
+    return detail;
+  }
+  if (!prev) return detail;
+  const key = searchKey(detail.track.name);
+  const there = prev.d.all<{ id: number; name: string }>('SELECT id, name FROM tracks').find((t) => searchKey(t.name) === key);
+  const mine = new Set(detail.lessons.map((l) => searchKey(l.body)));
+  const lessons = there ? lessonsOf(prev.d, there.id, false).filter((l) => !mine.has(searchKey(l.body))) : [];
+  return { ...detail, previous: { courseName: prev.name, lessons } };
 }

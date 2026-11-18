@@ -132,7 +132,7 @@ import {
   updateWeek,
   weekDetail,
 } from './weeks';
-import { createTrack, deleteTrack, getTrack, listTracks, trackDetail, updateTrack } from './tracks';
+import { createTrack, deleteTrack, getTrack, listTracks, trackWithPrevious, updateTrack } from './tracks';
 import { trackLeadHistory } from './trackLeads';
 
 /** The address the app is reached at, for links that leave it (calendar feeds). */
@@ -952,7 +952,7 @@ export function apiRouter(): Router {
   r.post('/tracks', requireAbility('tracks'), (req, res) => res.json(getTrack(createTrack(me(req), req.body))));
   // tracks that lost their lead: who led them, as the backups kept it
   r.get('/tracks/lead-history', requireAbility('tracks'), async (_req, res) => res.json(await trackLeadHistory()));
-  r.get('/tracks/:id', (req, res) => res.json(trackDetail(me(req), id(req.params.id))));
+  r.get('/tracks/:id', async (req, res) => res.json(await trackWithPrevious(me(req), id(req.params.id))));
   r.patch('/tracks/:id', (req, res) => {
     updateTrack(me(req), id(req.params.id), req.body);
     res.json(getTrack(id(req.params.id)));
