@@ -16532,22 +16532,29 @@ html:has(.subtask-fold) {
 }
 .staff-checks-scroll {
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
+/* the names stay in place while the squares scroll sideways. On an iPhone a pinned column in a table of collapsed
+   borders, or in a scroller of the old touch scrolling, is not painted at all - so each cell draws its own lines
+   (its end and its bottom; the table's first row and column their outer ones), and the pinned cells are a layer of
+   their own */
 .staff-checks {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   min-width: 860px;
   font-size: 13px;
 }
 .staff-checks th,
 .staff-checks td {
-  border: 1px solid var(--line);
+  border: 0;
+  border-inline-end: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   padding: 6px 8px;
   text-align: center;
   vertical-align: middle;
 }
 .staff-checks thead th {
+  border-top: 1px solid var(--line);
   font-weight: 600;
   line-height: 1.25;
   min-width: 72px;
@@ -16559,8 +16566,10 @@ html:has(.subtask-fold) {
   position: sticky;
   inset-inline-start: 0;
   background: var(--card);
-  z-index: 1;
+  z-index: 2;
   font-weight: 600;
+  border-inline-start: 1px solid var(--line);
+  transform: translateZ(0);
 }
 .staff-checks thead .sc-name {
   background: var(--card-2);
