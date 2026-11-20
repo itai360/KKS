@@ -1,8 +1,9 @@
 /*
- * The app's colours, over apple.css: the same layout and controls, a quieter palette - a warm off-white ground,
- * white cards, near-black words, black for what is pressed (a button, the chosen screen), and one coral for what
- * is chosen and for today, used sparingly. Night turns it over: a warm near-black, the words light, coral for
- * what is chosen and pressed. Every colour that words sit on reads at 4.5:1 or more.
+ * The app's colours, over apple.css: the same layout and controls, a quiet palette in black, white and warm
+ * greys - a warm off-white ground, white cards, near-black words, black for what is pressed and what is chosen
+ * (a button, the chosen screen, today). Night turns it over: a warm near-black, the words light, a graphite for
+ * what is pressed, today in light. Colour is left to what it means - late, done, at risk. Every colour that words
+ * sit on reads at 4.5:1 or more.
  */
 
 :root {
@@ -17,19 +18,19 @@
   --line: #e7e5e0;
   --line-2: #d8d5cf;
 
-  /* the one accent: coral - as a mark (today, a highlight), and deep enough for words */
-  --accent: #e0562f;
-  --accent-fill: #c94a28;
+  /* today, wherever a calendar marks it */
+  --today-fill: #161511;
+  --today-ink: #ffffff;
 
   --rail: rgba(246, 245, 242, 0.92);
   --rail-2: rgba(120, 113, 100, 0.1);
   --rail-ink: #141413;
   --rail-muted: #6b6862;
-  --focus: #e0562f;
-  --tint: #b8462a;
+  --focus: #141413;
+  --tint: #141413;
   --tint-fill: #161511;
   --tint-press: #000000;
-  --tint-bg: rgba(224, 86, 47, 0.1);
+  --tint-bg: rgba(20, 20, 19, 0.07);
   --fill: rgba(120, 113, 100, 0.1);
   --fill-2: rgba(120, 113, 100, 0.18);
   --thumb: #ffffff;
@@ -46,10 +47,10 @@
   --hover: rgba(20, 20, 19, 0.04);
   --hover-2: rgba(20, 20, 19, 0.08);
   --field: rgba(120, 113, 100, 0.1);
-  --field-ring: rgba(224, 86, 47, 0.25);
+  --field-ring: rgba(20, 20, 19, 0.16);
   --board-col: rgba(232, 230, 225, 0.6);
-  --event-bg: #f7e4dc;
-  --event-ink: #8c3920;
+  --event-bg: #ebe9e4;
+  --event-ink: #3b3a36;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
@@ -66,18 +67,18 @@
     --line: #2a2926;
     --line-2: #36342f;
 
-    --accent: #ff7a52;
-    --accent-fill: #c4482a;
+    --today-fill: #f3f2ef;
+    --today-ink: #141413;
 
     --rail: rgba(18, 18, 17, 0.92);
-    --rail-2: rgba(255, 138, 102, 0.12);
+    --rail-2: rgba(255, 255, 255, 0.08);
     --rail-ink: #f3f2ef;
     --rail-muted: #9a968e;
-    --focus: #ff8a66;
-    --tint: #ff8f6b;
-    --tint-fill: #c4482a;
-    --tint-press: #a93c22;
-    --tint-bg: rgba(255, 128, 92, 0.14);
+    --focus: #f3f2ef;
+    --tint: #f3f2ef;
+    --tint-fill: #57544f;
+    --tint-press: #4a4743;
+    --tint-bg: rgba(255, 255, 255, 0.09);
     --fill: rgba(200, 190, 175, 0.12);
     --fill-2: rgba(200, 190, 175, 0.2);
     --thumb: #34322e;
@@ -87,7 +88,7 @@
     --bar-glass: rgba(24, 24, 22, 0.84);
     --bar-mark: #34322e;
     --bar-ink: rgba(243, 242, 239, 0.72);
-    --bar-on: #ff8f6b;
+    --bar-on: #f3f2ef;
     --bar-plus: #f3f2ef;
     --bar-plus-ink: #141413;
     --bar-plus-shadow: rgba(0, 0, 0, 0.45);
@@ -95,14 +96,14 @@
     --blue: #7aa7d9;
     --blue-bg: #1b2836;
 
-    --primary-hover: #d4552f;
+    --primary-hover: #66625c;
     --hover: rgba(255, 255, 255, 0.05);
     --hover-2: rgba(255, 255, 255, 0.09);
     --field: rgba(200, 190, 175, 0.12);
-    --field-ring: rgba(255, 138, 102, 0.38);
+    --field-ring: rgba(255, 255, 255, 0.24);
     --board-col: rgba(26, 26, 24, 0.8);
-    --event-bg: #3a2119;
-    --event-ink: #ffb59c;
+    --event-bg: #2a2926;
+    --event-ink: #e0ddd6;
   }
 }
 
@@ -119,18 +120,18 @@
     --line: #2a2926;
     --line-2: #36342f;
 
-    --accent: #ff7a52;
-    --accent-fill: #c4482a;
+    --today-fill: #f3f2ef;
+    --today-ink: #141413;
 
     --rail: rgba(18, 18, 17, 0.92);
-    --rail-2: rgba(255, 138, 102, 0.12);
+    --rail-2: rgba(255, 255, 255, 0.08);
     --rail-ink: #f3f2ef;
     --rail-muted: #9a968e;
-    --focus: #ff8a66;
-    --tint: #ff8f6b;
-    --tint-fill: #c4482a;
-    --tint-press: #a93c22;
-    --tint-bg: rgba(255, 128, 92, 0.14);
+    --focus: #f3f2ef;
+    --tint: #f3f2ef;
+    --tint-fill: #57544f;
+    --tint-press: #4a4743;
+    --tint-bg: rgba(255, 255, 255, 0.09);
     --fill: rgba(200, 190, 175, 0.12);
     --fill-2: rgba(200, 190, 175, 0.2);
     --thumb: #34322e;
@@ -140,7 +141,7 @@
     --bar-glass: rgba(24, 24, 22, 0.84);
     --bar-mark: #34322e;
     --bar-ink: rgba(243, 242, 239, 0.72);
-    --bar-on: #ff8f6b;
+    --bar-on: #f3f2ef;
     --bar-plus: #f3f2ef;
     --bar-plus-ink: #141413;
     --bar-plus-shadow: rgba(0, 0, 0, 0.45);
@@ -148,14 +149,14 @@
     --blue: #7aa7d9;
     --blue-bg: #1b2836;
 
-    --primary-hover: #d4552f;
+    --primary-hover: #66625c;
     --hover: rgba(255, 255, 255, 0.05);
     --hover-2: rgba(255, 255, 255, 0.09);
     --field: rgba(200, 190, 175, 0.12);
-    --field-ring: rgba(255, 138, 102, 0.38);
+    --field-ring: rgba(255, 255, 255, 0.24);
     --board-col: rgba(26, 26, 24, 0.8);
-    --event-bg: #3a2119;
-    --event-ink: #ffb59c;
+    --event-bg: #2a2926;
+    --event-ink: #e0ddd6;
   }
 }
 
@@ -205,7 +206,7 @@
   fill: #fff;
 }
 .brand-word-s {
-  fill: #e0562f;
+  fill: #b3afa7;
 }
 @media (forced-colors: active) {
   .brand-word-k,
@@ -214,15 +215,15 @@
   }
 }
 
-/* ---------------- today: the coral circle, wherever a calendar shows it ---------------- */
+/* ---------------- today: a black circle (a light one at night), wherever a calendar shows it ---------------- */
 
 .mini-month-day.today > span,
 .gc-dayhead.is-today .gc-dn,
 .gc-daynum.is-today,
 .gc-ym-day.is-today,
 .cal-page .gs-day.is-today .gs-num {
-  background: var(--accent-fill);
-  color: #fff;
+  background: var(--today-fill);
+  color: var(--today-ink);
 }
 
 /* ---------------- data in a monospace: counts, dates, scores ---------------- */
@@ -236,7 +237,7 @@
   letter-spacing: 0;
 }
 
-/* ---------------- what is chosen: its symbol in the coral ---------------- */
+/* ---------------- what is chosen: its symbol in the ink ---------------- */
 
 .section-tab.on svg {
   color: var(--tint);
@@ -251,7 +252,7 @@
   background: var(--thumb);
 }
 
-/* what the keyboard is on: a coral ring */
+/* what the keyboard is on: a ring in the ink */
 :focus-visible {
   outline-color: var(--focus);
 }

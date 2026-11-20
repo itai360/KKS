@@ -1,6 +1,6 @@
 // Draws the app's icons (client/public) from the קק״ס of the opening screen in client/index.html, in the look of
 // the course's mark at the top of every screen (look.css .brand-mark): a warm near-black, קק״ in white and the
-// ס in the app's coral - the home screen's icon (iPhone and Android), the browser tab's,
+// ס in a warm grey - the home screen's icon (iPhone and Android), the browser tab's,
 // the small one an Android phone shows in its status bar, and the shortcuts' (a long press on the icon), whose
 // symbols are the app's own (client/src/components/Icon.tsx).
 // Needs Playwright with its Chromium: NODE_PATH=<where playwright is> node scripts/icons.mjs
@@ -23,12 +23,12 @@ const FROM = '#2a2824';
 const TO = '#121110';
 const GROUND = `linear-gradient(150deg, ${FROM} 0%, ${TO} 100%)`;
 const WHITE = '#fff';
-const CORAL = '#e0562f';
+const GREY = '#b3afa7';
 
-/** the word as wide as asked: קק״ white and the ס coral - or all of it white (the status bar's reads only shape) */
+/** the word as wide as asked: קק״ white and the ס grey - or all of it white (the status bar's reads only shape) */
 const word = (width, plain = false) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${width}" height="${(width * boxH) / boxW}">${paths
-    .map((d, i) => `<path d="${d}" fill="${plain || i === 0 ? WHITE : CORAL}"/>`)
+    .map((d, i) => `<path d="${d}" fill="${plain || i === 0 ? WHITE : GREY}"/>`)
     .join('')}</svg>`;
 
 // [file, size, the word's width as a share of it, on the ground (or clear, for the status bar's)]
@@ -82,7 +82,7 @@ writeFileSync(
   <defs><linearGradient id="g" x1="0.158" y1="-0.092" x2="0.842" y2="1.092"><stop offset="0" stop-color="${FROM}"/><stop offset="1" stop-color="${TO}"/></linearGradient></defs>
   <rect width="64" height="64" rx="14" fill="url(#g)"/>
   <svg x="${((64 - w) / 2).toFixed(2)}" y="${((64 - h) / 2).toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" viewBox="${viewBox}">${paths
-    .map((d, i) => `<path d="${d}" fill="${i === 0 ? WHITE : CORAL}"/>`)
+    .map((d, i) => `<path d="${d}" fill="${i === 0 ? WHITE : GREY}"/>`)
     .join('')}</svg>
 </svg>
 `,
