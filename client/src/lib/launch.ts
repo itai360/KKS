@@ -32,7 +32,7 @@ export function openAtSnapshot(): void {
 }
 
 /** the app installed on the phone (or the computer) - not a browser's tab, where moving between tabs is routine */
-function installedApp(): boolean {
+export function installedApp(): boolean {
   return (
     window.matchMedia?.('(display-mode: standalone)').matches ||
     window.matchMedia?.('(display-mode: fullscreen)').matches ||

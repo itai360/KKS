@@ -12,6 +12,7 @@ import { ReauthDialog } from '../components/Reauth';
 import { FirstPasswordDialog } from '../components/FirstPassword';
 import { clearDrafts } from './draft';
 import { setCourseHere } from './courses';
+import { hideSplash } from './splash';
 
 interface MeResponse {
   user: User;
@@ -97,14 +98,10 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
     });
   }, [refresh]);
 
-  // the opening screen (index.html: קק״ס coming together, its ס jumping) gives way once there is something to show: the app, or signing in
+  // the opening screen (index.html: קק״ס coming together, its ס jumping) gives way once there is something to show:
+  // the app, or signing in - in the installed app after its three seconds (lib/splash.ts)
   useEffect(() => {
-    if (state.status === 'loading') return;
-    const boot = document.getElementById('boot');
-    if (!boot) return;
-    boot.classList.add('is-done');
-    const t = window.setTimeout(() => boot.remove(), 320);
-    return () => window.clearTimeout(t);
+    if (state.status !== 'loading') hideSplash();
   }, [state.status]);
 
   if (state.status === 'loading') return <div className="boot" aria-busy="true" />;
