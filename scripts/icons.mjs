@@ -16,7 +16,9 @@ const html = readFileSync(`${root}client/index.html`, 'utf8');
 const logo = /<svg class="kks-logo"[\s\S]*?<\/svg>/.exec(html)[0];
 const viewBox = /viewBox="([^"]+)"/.exec(logo)[1];
 const [, , boxW, boxH] = viewBox.split(/\s+/).map(Number);
-const paths = [...logo.matchAll(/ d="([^"]+)"/g)].map((m) => m[1]);
+// the word in its pieces (the opening screen moves them one by one): קק״, then the ס
+const pieces = [...logo.matchAll(/<path class="([^"]+)" d="([^"]+)"/g)];
+const paths = [pieces.filter((m) => !m[1].includes('kks-s')).map((m) => m[2]).join(''), pieces.find((m) => m[1].includes('kks-s'))[2]];
 
 // the mark's ground (look.css .brand-mark): a little lighter at the top, at 150°
 const FROM = '#2a2824';

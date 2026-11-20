@@ -6,11 +6,13 @@ import { isKksSymbol, KKS_WORD } from '../src/components/BrandMark';
 const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
 
 describe("the course's mark", () => {
-  it('is drawn with the same shapes as the opening screen', () => {
+  it('is drawn with the same shapes as the opening screen (which moves קק״ in its pieces)', () => {
     const logo = /<svg class="kks-logo"[\s\S]*?<\/svg>/.exec(html)?.[0] ?? '';
     expect(/viewBox="([^"]+)"/.exec(logo)?.[1]).toBe(KKS_WORD.viewBox);
-    expect(/class="kks-k" d="([^"]+)"/.exec(logo)?.[1]).toBe(KKS_WORD.k);
-    expect(/class="kks-s" d="([^"]+)"/.exec(logo)?.[1]).toBe(KKS_WORD.s);
+    const pieces = [...logo.matchAll(/<path class="([^"]+)" d="([^"]+)"/g)];
+    const shapes = (d: string) => d.split('M').filter(Boolean).sort();
+    expect(shapes(pieces.filter((m) => m[1].includes('kks-q') || m[1].includes('kks-g')).map((m) => m[2]).join(''))).toEqual(shapes(KKS_WORD.k));
+    expect(pieces.find((m) => m[1].includes('kks-s'))?.[2]).toBe(KKS_WORD.s);
   });
 
   it('knows קק"ס however it was typed, and leaves another course its letters', () => {

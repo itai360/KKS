@@ -97,7 +97,7 @@ export function SessionGate({ anon, children }: { anon: (onLogin: () => void) =>
     });
   }, [refresh]);
 
-  // the opening screen (index.html, its ס turning) gives way once there is something to show: the app, or signing in
+  // the opening screen (index.html: קק״ס coming together, its ס jumping) gives way once there is something to show: the app, or signing in
   useEffect(() => {
     if (state.status === 'loading') return;
     const boot = document.getElementById('boot');
