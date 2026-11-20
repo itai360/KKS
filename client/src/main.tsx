@@ -5,8 +5,8 @@ import './apple.css';
 import './gcal.css';
 import './smart.css';
 import './takpatz.css';
-// the look of a cyber officers' course, over all of the above
-import './cyber.css';
+// the app's colours, over all of the above: warm and quiet, black for what is pressed, coral for what is chosen
+import './look.css';
 import { App } from './App';
 import { reportIssue } from './lib/api';
 import { watchInstall } from './lib/install';

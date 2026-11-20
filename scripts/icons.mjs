@@ -1,6 +1,6 @@
 // Draws the app's icons (client/public) from the קק״ס of the opening screen in client/index.html, in the look of
-// the course's mark at the top of every screen (cyber.css .brand-mark): a deep navy that lightens toward the
-// course's teal, קק״ in white and the ס in cyan - the home screen's icon (iPhone and Android), the browser tab's,
+// the course's mark at the top of every screen (look.css .brand-mark): a warm near-black, קק״ in white and the
+// ס in the app's coral - the home screen's icon (iPhone and Android), the browser tab's,
 // the small one an Android phone shows in its status bar, and the shortcuts' (a long press on the icon), whose
 // symbols are the app's own (client/src/components/Icon.tsx).
 // Needs Playwright with its Chromium: NODE_PATH=<where playwright is> node scripts/icons.mjs
@@ -18,17 +18,17 @@ const viewBox = /viewBox="([^"]+)"/.exec(logo)[1];
 const [, , boxW, boxH] = viewBox.split(/\s+/).map(Number);
 const paths = [...logo.matchAll(/ d="([^"]+)"/g)].map((m) => m[1]);
 
-// the mark's ground (cyber.css .brand-mark): navy at the top, toward teal below, at 150°
-const FROM = '#0b2740';
-const TO = '#0e6178';
+// the mark's ground (look.css .brand-mark): a little lighter at the top, at 150°
+const FROM = '#2a2824';
+const TO = '#121110';
 const GROUND = `linear-gradient(150deg, ${FROM} 0%, ${TO} 100%)`;
 const WHITE = '#fff';
-const CYAN = '#22d3ee';
+const CORAL = '#e0562f';
 
-/** the word as wide as asked: קק״ white and the ס cyan - or all of it white (the status bar's reads only shape) */
+/** the word as wide as asked: קק״ white and the ס coral - or all of it white (the status bar's reads only shape) */
 const word = (width, plain = false) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${width}" height="${(width * boxH) / boxW}">${paths
-    .map((d, i) => `<path d="${d}" fill="${plain || i === 0 ? WHITE : CYAN}"/>`)
+    .map((d, i) => `<path d="${d}" fill="${plain || i === 0 ? WHITE : CORAL}"/>`)
     .join('')}</svg>`;
 
 // [file, size, the word's width as a share of it, on the ground (or clear, for the status bar's)]
@@ -72,7 +72,7 @@ for (const [file, name] of SHORTCUTS) await draw(`shortcuts/${file}.png`, 96, sy
 await browser.close();
 
 // the browser tab's: drawn as it is, its corners rounded as the mark's - the same 150° light as the CSS
-// (on a square, the gradient's line runs from (0.158, -0.092) to (0.842, 1.092)), a hairline of cyan inside
+// (on a square, the gradient's line runs from (0.158, -0.092) to (0.842, 1.092))
 const share = 0.84;
 const w = 64 * share;
 const h = (w * boxH) / boxW;
@@ -81,9 +81,8 @@ writeFileSync(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs><linearGradient id="g" x1="0.158" y1="-0.092" x2="0.842" y2="1.092"><stop offset="0" stop-color="${FROM}"/><stop offset="1" stop-color="${TO}"/></linearGradient></defs>
   <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="${CYAN}" stroke-opacity="0.45" stroke-width="2"/>
   <svg x="${((64 - w) / 2).toFixed(2)}" y="${((64 - h) / 2).toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" viewBox="${viewBox}">${paths
-    .map((d, i) => `<path d="${d}" fill="${i === 0 ? WHITE : CYAN}"/>`)
+    .map((d, i) => `<path d="${d}" fill="${i === 0 ? WHITE : CORAL}"/>`)
     .join('')}</svg>
 </svg>
 `,

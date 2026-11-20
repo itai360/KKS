@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- the phone's bars in the page's paper until the app sets them (lib/theme.ts) -->
-    <meta name="theme-color" content="#eef2f6" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#05090f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f3f2ef" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f0f0e" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="מערכת ניהול קורס - משימות, אחריות, דד-ליינים ותמונת מצב" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- an app on the phone's home screen (manifest.webmanifest; on an iPhone, Share - "הוספה למסך הבית") -->
@@ -38,7 +38,7 @@
         z-index: 10000;
         display: grid;
         place-items: center;
-        background: #eef2f6;
+        background: #f3f2ef;
         transition: opacity 0.28s ease;
       }
       #boot.is-done {
@@ -51,10 +51,10 @@
         overflow: visible;
       }
       #boot .kks-k {
-        fill: #0b2740;
+        fill: #141413;
       }
       #boot .kks-s {
-        fill: #0e7490;
+        fill: #e0562f;
         transform-origin: 684px 1243.5px;
         animation: kks-turn 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
       }
@@ -67,23 +67,23 @@
       }
       @media (prefers-color-scheme: dark) {
         html:not([data-theme='light']) #boot {
-          background: #05090f;
+          background: #0f0f0e;
         }
         html:not([data-theme='light']) #boot .kks-k {
-          fill: #e6f0fa;
+          fill: #f3f2ef;
         }
         html:not([data-theme='light']) #boot .kks-s {
-          fill: #22d3ee;
+          fill: #ff7a52;
         }
       }
       html[data-theme='dark'] #boot {
-        background: #05090f;
+        background: #0f0f0e;
       }
       html[data-theme='dark'] #boot .kks-k {
-        fill: #e6f0fa;
+        fill: #f3f2ef;
       }
       html[data-theme='dark'] #boot .kks-s {
-        fill: #22d3ee;
+        fill: #ff7a52;
       }
       /* less motion: the ס breathes instead of turning */
       @media (prefers-reduced-motion: reduce) {

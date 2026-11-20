@@ -16568,8 +16568,8 @@ html:has(.subtask-fold) {
   transform: scale(0.92);
 }
 .sc-box.on {
-  background: var(--blue, #2f5bd3);
-  border-color: var(--blue, #2f5bd3);
+  background: var(--tint-fill, #161511);
+  border-color: var(--tint-fill, #161511);
 }
 .sc-box:disabled {
   cursor: default;
