@@ -1,0 +1,293 @@
+/*
+ * The look of a cyber officers' course, over apple.css: the same layout and controls, so nothing is harder to
+ * use - a cool navy ground and an electric cyan for what is chosen and what can be pressed, a faint grid on the
+ * ground (still, never moving), numbers and data in a monospace, and a thin cyan line where the eye should go.
+ * Night is the signature: near-black navy with cyan; day is a cool, light console. Every colour that words sit
+ * on reads at 4.5:1 or more.
+ */
+
+:root {
+  --paper: #eef2f6;
+  --paper-2: #e2e8f0;
+  --card: #ffffff;
+  --card-2: #f3f6fa;
+  --ink: #0b1524;
+  --ink-2: #2b3a52;
+  --muted: #56677d;
+  --faint: #b6c2d0;
+  --line: #dde5ee;
+  --line-2: #cbd6e2;
+  --grid: rgba(14, 116, 144, 0.07);
+  --glow: rgba(14, 116, 144, 0.1);
+  --signal: #06b6d4;
+
+  --rail: rgba(243, 247, 250, 0.92);
+  --rail-ink: #0b1524;
+  --rail-muted: #56677d;
+  --focus: #0e7490;
+  --tint: #0e7490;
+  --tint-fill: #0e6178;
+  --tint-press: #164e63;
+  --tint-bg: rgba(14, 116, 144, 0.11);
+  --material: rgba(246, 249, 252, 0.82);
+  --material-strong: rgba(250, 252, 254, 0.95);
+  --bar-glass: rgba(255, 255, 255, 0.84);
+  --bar-mark: #dceef3;
+  --bar-ink: #3d4b60;
+
+  --blue: #0e6178;
+  --blue-bg: #def1f6;
+  --purple: #6d4ae0;
+  --purple-bg: #ece7fd;
+  --green: #12a578;
+  --green-bg: #dcf5ec;
+  --green-ink: #0b7a57;
+
+  --primary-hover: #164e63;
+  --field-ring: rgba(14, 116, 144, 0.28);
+  --event-bg: #def1f6;
+  --event-ink: #0e5269;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #05090f;
+    --paper-2: #0b1220;
+    --card: #0c1420;
+    --card-2: #121c2b;
+    --ink: #e6f0fa;
+    --ink-2: #b9c7d8;
+    --muted: #8597ae;
+    --faint: #3b4a5e;
+    --line: #1a2636;
+    --line-2: #263548;
+    --grid: rgba(34, 211, 238, 0.05);
+    --glow: rgba(34, 211, 238, 0.09);
+    --signal: #22d3ee;
+
+    --rail: rgba(8, 13, 21, 0.92);
+    --rail-2: rgba(34, 211, 238, 0.1);
+    --rail-ink: #e6f0fa;
+    --rail-muted: #8597ae;
+    --focus: #22d3ee;
+    --tint: #22d3ee;
+    --tint-fill: #0e7490;
+    --tint-press: #67e8f9;
+    --tint-bg: rgba(34, 211, 238, 0.13);
+    --fill: rgba(148, 163, 184, 0.12);
+    --fill-2: rgba(148, 163, 184, 0.2);
+    --thumb: #17324a;
+    --material: rgba(7, 12, 20, 0.8);
+    --material-strong: rgba(12, 20, 32, 0.95);
+    --hud: rgba(14, 24, 38, 0.95);
+    --bar-glass: rgba(10, 17, 28, 0.84);
+    --bar-mark: #133047;
+    --bar-ink: rgba(214, 228, 244, 0.72);
+    --bar-on: #22d3ee;
+    --bar-plus: #22d3ee;
+    --bar-plus-ink: #04121a;
+    --bar-plus-shadow: rgba(34, 211, 238, 0.35);
+
+    --blue: #38bdf8;
+    --blue-bg: #0b2a3a;
+    --purple: #a78bfa;
+    --purple-bg: #221a40;
+    --green: #34d399;
+    --green-bg: #0b2e24;
+    --green-ink: #4ade9f;
+
+    --primary-hover: #0891b2;
+    --field: rgba(148, 163, 184, 0.12);
+    --field-ring: rgba(34, 211, 238, 0.38);
+    --board-col: rgba(12, 20, 32, 0.8);
+    --event-bg: #0b2a3a;
+    --event-ink: #7dd3fc;
+  }
+}
+
+@media screen {
+  :root[data-theme='dark'] {
+    --paper: #05090f;
+    --paper-2: #0b1220;
+    --card: #0c1420;
+    --card-2: #121c2b;
+    --ink: #e6f0fa;
+    --ink-2: #b9c7d8;
+    --muted: #8597ae;
+    --faint: #3b4a5e;
+    --line: #1a2636;
+    --line-2: #263548;
+    --grid: rgba(34, 211, 238, 0.05);
+    --glow: rgba(34, 211, 238, 0.09);
+    --signal: #22d3ee;
+
+    --rail: rgba(8, 13, 21, 0.92);
+    --rail-2: rgba(34, 211, 238, 0.1);
+    --rail-ink: #e6f0fa;
+    --rail-muted: #8597ae;
+    --focus: #22d3ee;
+    --tint: #22d3ee;
+    --tint-fill: #0e7490;
+    --tint-press: #67e8f9;
+    --tint-bg: rgba(34, 211, 238, 0.13);
+    --fill: rgba(148, 163, 184, 0.12);
+    --fill-2: rgba(148, 163, 184, 0.2);
+    --thumb: #17324a;
+    --material: rgba(7, 12, 20, 0.8);
+    --material-strong: rgba(12, 20, 32, 0.95);
+    --hud: rgba(14, 24, 38, 0.95);
+    --bar-glass: rgba(10, 17, 28, 0.84);
+    --bar-mark: #133047;
+    --bar-ink: rgba(214, 228, 244, 0.72);
+    --bar-on: #22d3ee;
+    --bar-plus: #22d3ee;
+    --bar-plus-ink: #04121a;
+    --bar-plus-shadow: rgba(34, 211, 238, 0.35);
+
+    --blue: #38bdf8;
+    --blue-bg: #0b2a3a;
+    --purple: #a78bfa;
+    --purple-bg: #221a40;
+    --green: #34d399;
+    --green-bg: #0b2e24;
+    --green-ink: #4ade9f;
+
+    --primary-hover: #0891b2;
+    --field: rgba(148, 163, 184, 0.12);
+    --field-ring: rgba(34, 211, 238, 0.38);
+    --board-col: rgba(12, 20, 32, 0.8);
+    --event-bg: #0b2a3a;
+    --event-ink: #7dd3fc;
+  }
+}
+
+/* ---------------- the ground: a faint grid, a glow where the page starts ---------------- */
+
+@media screen {
+  body {
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(1100px 420px at 75% -120px, var(--glow), transparent 70%),
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:
+      100% 100%,
+      28px 28px,
+      28px 28px;
+    background-repeat: no-repeat, repeat, repeat;
+  }
+}
+
+/* ---------------- the course's mark ---------------- */
+
+.brand-mark {
+  background: linear-gradient(150deg, #0b2740 0%, #0e6178 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(34, 211, 238, 0.45),
+    0 0 14px -4px rgba(6, 182, 212, 0.55);
+}
+
+/* ---------------- headings: a cyan line where the screen begins ---------------- */
+
+.page-head .titles {
+  position: relative;
+}
+.page-title::after {
+  content: '';
+  display: block;
+  width: 44px;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: linear-gradient(to left, var(--signal), transparent);
+}
+.label-caps,
+.group-title {
+  letter-spacing: 0.02em;
+}
+
+/* ---------------- data in a monospace: counts, dates, scores ---------------- */
+
+.mono,
+.stat-num,
+.count-pill,
+.sc-grade,
+.deadline {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+
+/* ---------------- surfaces: a hairline edge, cyan where it is chosen ---------------- */
+
+.card {
+  box-shadow: 0 0 0 1px var(--line);
+}
+.section-tab.on svg {
+  color: var(--tint);
+}
+.section-tab-thumb {
+  box-shadow:
+    0 1px 2px rgba(11, 21, 36, 0.08),
+    0 3px 10px -3px rgba(11, 21, 36, 0.16),
+    inset 0 -2px 0 var(--signal);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .section-tab-thumb {
+    background: var(--thumb);
+    box-shadow:
+      0 2px 8px -2px rgba(0, 0, 0, 0.6),
+      inset 0 -2px 0 var(--signal);
+  }
+  :root:not([data-theme='light']) .card {
+    box-shadow:
+      0 0 0 1px var(--line),
+      0 1px 0 0 rgba(34, 211, 238, 0.05) inset;
+  }
+}
+:root[data-theme='dark'] .section-tab-thumb {
+  background: var(--thumb);
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.6),
+    inset 0 -2px 0 var(--signal);
+}
+:root[data-theme='dark'] .card {
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 1px 0 0 rgba(34, 211, 238, 0.05) inset;
+}
+/* the sub-bar's chosen screen: tinted, no line under it */
+.section-tabs.is-sub .section-tab-thumb {
+  box-shadow: none !important;
+}
+
+/* what the keyboard is on: a cyan ring */
+:focus-visible {
+  outline-color: var(--focus);
+}
+
+/* ---------------- less of it, for whoever asks ---------------- */
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --material: var(--card);
+    --material-strong: var(--card);
+    --bar-glass: var(--card);
+  }
+}
+@media (prefers-contrast: more) {
+  body {
+    background-image: none;
+  }
+  .page-title::after {
+    background: var(--tint);
+  }
+}
+@media print {
+  body {
+    background: #fff;
+  }
+  .page-title::after {
+    display: none;
+  }
+}

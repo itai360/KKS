@@ -34,7 +34,7 @@ for (const [name, w, h, scale, bar] of SCREENS) {
   const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: scale, colorScheme: 'light' });
   await page.setContent(
     `<!doctype html><html lang="he" dir="rtl"><head><style>${style}
-      #boot { top: ${bar}px; } #boot .kks-s { animation: none; }</style></head><body style="margin:0;background:#f2f2f7">${boot}</body></html>`,
+      #boot { top: ${bar}px; } #boot .kks-s { animation: none; }</style></head><body style="margin:0;background:#eef2f6">${boot}</body></html>`,
   );
   await page.screenshot({ path: `${root}client/public/splash/${name}.png` });
   await page.close();
