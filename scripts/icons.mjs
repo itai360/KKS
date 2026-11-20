@@ -1,6 +1,8 @@
-// Draws the app's icons (client/public) from the קק״ס of the opening screen in client/index.html: the word in
-// white on the blue of the course's mark at the top of every screen - the home screen's icon (iPhone and
-// Android), the browser tab's, and the small one an Android phone shows in its status bar.
+// Draws the app's icons (client/public) from the קק״ס of the opening screen in client/index.html, in the look of
+// the course's mark at the top of every screen (cyber.css .brand-mark): a deep navy that lightens toward the
+// course's teal, קק״ in white and the ס in cyan - the home screen's icon (iPhone and Android), the browser tab's,
+// the small one an Android phone shows in its status bar, and the shortcuts' (a long press on the icon), whose
+// symbols are the app's own (client/src/components/Icon.tsx).
 // Needs Playwright with its Chromium: NODE_PATH=<where playwright is> node scripts/icons.mjs
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -16,16 +18,20 @@ const viewBox = /viewBox="([^"]+)"/.exec(logo)[1];
 const [, , boxW, boxH] = viewBox.split(/\s+/).map(Number);
 const paths = [...logo.matchAll(/ d="([^"]+)"/g)].map((m) => m[1]);
 
-// the mark's blue (apple.css .brand-mark): lighter at the top, as light falls on it
-const FROM = '#496595'; // color-mix(in srgb, #1c3f7a 80%, #fff)
-const TO = '#1c3f7a';
-const BLUE = `linear-gradient(160deg, ${FROM} 0%, ${TO} 100%)`;
+// the mark's ground (cyber.css .brand-mark): navy at the top, toward teal below, at 150°
+const FROM = '#0b2740';
+const TO = '#0e6178';
+const GROUND = `linear-gradient(150deg, ${FROM} 0%, ${TO} 100%)`;
+const WHITE = '#fff';
+const CYAN = '#22d3ee';
 
-/** the word, white, as wide as asked */
-const word = (width) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${width}" height="${(width * boxH) / boxW}">${paths.map((d) => `<path d="${d}" fill="#fff"/>`).join('')}</svg>`;
+/** the word as wide as asked: קק״ white and the ס cyan - or all of it white (the status bar's reads only shape) */
+const word = (width, plain = false) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${width}" height="${(width * boxH) / boxW}">${paths
+    .map((d, i) => `<path d="${d}" fill="${plain || i === 0 ? WHITE : CYAN}"/>`)
+    .join('')}</svg>`;
 
-// [file, size, the word's width as a share of it, on the blue (or clear, for the status bar's)]
+// [file, size, the word's width as a share of it, on the ground (or clear, for the status bar's)]
 // The home screen's icons fill their square - the phone rounds the corners, and Android cuts its own shape
 // out of the middle: the word stays inside the circle that every shape keeps (80% across).
 const PNGS = [
@@ -35,29 +41,50 @@ const PNGS = [
   ['badge-96.png', 96, 0.9, false],
 ];
 
+// the shortcuts (manifest.webmanifest): a symbol of the app's, white on the same ground
+const icons = readFileSync(`${root}client/src/components/Icon.tsx`, 'utf8');
+const glyph = (name) => {
+  const m = new RegExp(`\\n  ${name}: '([^']+)'`).exec(icons);
+  if (!m) throw new Error(`no icon named ${name} in Icon.tsx`);
+  return m[1];
+};
+const SHORTCUTS = [
+  ['task', 'plus'],
+  ['weeknote', 'lightbulb'],
+  ['my', 'my'],
+  ['schedule', 'calendar'],
+];
+const symbol = (name, width) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${width}" height="${width}" fill="none" stroke="${WHITE}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${glyph(name)}"/></svg>`;
+
 const browser = await chromium.launch();
-for (const [name, size, share, blue] of PNGS) {
+const draw = async (file, size, inner, ground) => {
   const page = await browser.newPage({ viewport: { width: size, height: size }, deviceScaleFactor: 1 });
   await page.setContent(
-    `<!doctype html><html><body style="margin:0;width:${size}px;height:${size}px;display:grid;place-items:center;background:${blue ? BLUE : 'transparent'}">${word(Math.round(size * share))}</body></html>`,
+    `<!doctype html><html><body style="margin:0;width:${size}px;height:${size}px;display:grid;place-items:center;background:${ground ? GROUND : 'transparent'}">${inner}</body></html>`,
   );
-  await page.screenshot({ path: `${root}client/public/${name}`, omitBackground: !blue });
+  await page.screenshot({ path: `${root}client/public/${file}`, omitBackground: !ground });
   await page.close();
-  console.log('drawn', name);
-}
+  console.log('drawn', file);
+};
+for (const [name, size, share, ground] of PNGS) await draw(name, size, word(Math.round(size * share), !ground), ground);
+for (const [file, name] of SHORTCUTS) await draw(`shortcuts/${file}.png`, 96, symbol(name, 48), true);
 await browser.close();
 
-// the browser tab's: drawn as it is, its corners rounded as the mark's - the same 160° light as the CSS
-// (on a square, the gradient's line runs from (0.28, -0.10) to (0.72, 1.10))
+// the browser tab's: drawn as it is, its corners rounded as the mark's - the same 150° light as the CSS
+// (on a square, the gradient's line runs from (0.158, -0.092) to (0.842, 1.092)), a hairline of cyan inside
 const share = 0.84;
 const w = 64 * share;
 const h = (w * boxH) / boxW;
 writeFileSync(
   `${root}client/public/favicon.svg`,
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs><linearGradient id="g" x1="0.281" y1="-0.102" x2="0.719" y2="1.102"><stop offset="0" stop-color="${FROM}"/><stop offset="1" stop-color="${TO}"/></linearGradient></defs>
+  <defs><linearGradient id="g" x1="0.158" y1="-0.092" x2="0.842" y2="1.092"><stop offset="0" stop-color="${FROM}"/><stop offset="1" stop-color="${TO}"/></linearGradient></defs>
   <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <svg x="${((64 - w) / 2).toFixed(2)}" y="${((64 - h) / 2).toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" viewBox="${viewBox}">${paths.map((d) => `<path d="${d}" fill="#fff"/>`).join('')}</svg>
+  <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="${CYAN}" stroke-opacity="0.45" stroke-width="2"/>
+  <svg x="${((64 - w) / 2).toFixed(2)}" y="${((64 - h) / 2).toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" viewBox="${viewBox}">${paths
+    .map((d, i) => `<path d="${d}" fill="${i === 0 ? WHITE : CYAN}"/>`)
+    .join('')}</svg>
 </svg>
 `,
 );

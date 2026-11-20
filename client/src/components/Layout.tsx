@@ -10,6 +10,7 @@ import { usePresence } from '../lib/presence';
 import { slideTabIndicators } from '../lib/tabIndicator';
 import { Count } from './Count';
 import { Icon } from './Icon';
+import { BrandMark } from './BrandMark';
 import { TabIcon } from './TabIcon';
 import { useNewTask } from './NewTask';
 import { addToWeekDebrief } from './WeekDebriefAdd';
@@ -971,7 +972,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Icon name={phone ? 'x' : 'sidebar'} />
           </button>
           <NavLink to={homeScreen.to} end className="gside-brand" title={homeScreen.label}>
-            <span className="brand-mark">{symbol.slice(0, 4)}</span>
+            <BrandMark symbol={symbol} className="brand-mark" />
             <span className="brand-text">
               <span className="brand-name">{courseCycle(settings.courseName)}</span>
               <span className="brand-sub">{homeScreen.label}</span>
@@ -1037,7 +1038,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
             {/* the course's mark: home - the commander's overview (תמונת מצב), the staff's own tasks */}
             <NavLink to={homeScreen.to} end className="top-brand-home" aria-label={homeScreen.label} title={homeScreen.label}>
-              <span className="brand-mark">{symbol.slice(0, 4)}</span>
+              <BrandMark symbol={symbol} className="brand-mark" />
             </NavLink>
             {/* scrolled past the screen's big title: its name comes in beside the mark, as an iPhone's large titles do */}
             <span className={`top-brand-title${barTitle ? ' is-on' : ''}`} aria-hidden="true">

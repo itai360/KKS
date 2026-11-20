@@ -9,6 +9,7 @@ import { ErrorBox, Field } from '../components/ui';
 import { CodeStep, ticketOf } from '../components/TwoFactor';
 import type { LoginResult } from '@shared/types';
 import { Icon } from '../components/Icon';
+import { BrandMark } from '../components/BrandMark';
 
 interface Info {
   courseName: string;
@@ -156,7 +157,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="login">
       <div className="login-art">
-        <div className="login-symbol">{symbol}</div>
+        <BrandMark symbol={symbol} className="login-symbol" />
         <p className="login-tag">
           {info?.courseName ?? ''}
           <br />

@@ -8,8 +8,8 @@
   "start_url": "/overview",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f2f2f7",
-  "theme_color": "#f2f2f7",
+  "background_color": "#eef2f6",
+  "theme_color": "#eef2f6",
   "categories": ["productivity", "education"],
   "launch_handler": {
     "client_mode": ["navigate-existing", "auto"]

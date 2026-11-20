@@ -181,11 +181,49 @@
 
 /* ---------------- the course's mark ---------------- */
 
-.brand-mark {
+.brand-mark,
+.top-brand .brand-mark,
+.login-symbol {
   background: linear-gradient(150deg, #0b2740 0%, #0e6178 100%);
+  color: #fff;
   box-shadow:
     inset 0 0 0 1px rgba(34, 211, 238, 0.45),
     0 0 14px -4px rgba(6, 182, 212, 0.55);
+}
+/* the word drawn (BrandMark.tsx), in the middle of its square: no room left for a font's line, none for its
+   spacing - as wide as the word and an even margin on each side */
+.brand-mark.is-word,
+.top-brand .brand-mark.is-word,
+.gside-brand .brand-mark.is-word {
+  padding: 0 8px;
+  letter-spacing: 0;
+}
+.top-brand .brand-mark.is-word {
+  padding: 0 7px;
+}
+.brand-word {
+  display: block;
+  width: 38px;
+  height: auto;
+  flex-shrink: 0;
+}
+.top-brand .brand-word {
+  width: 34px;
+}
+.login-symbol .brand-word {
+  width: 68px;
+}
+.brand-word-k {
+  fill: #fff;
+}
+.brand-word-s {
+  fill: #22d3ee;
+}
+@media (forced-colors: active) {
+  .brand-word-k,
+  .brand-word-s {
+    fill: CanvasText;
+  }
 }
 
 /* ---------------- headings: a cyan line where the screen begins ---------------- */
