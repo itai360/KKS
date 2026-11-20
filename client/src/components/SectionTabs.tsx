@@ -19,8 +19,23 @@ export interface SectionTab {
 
 const still = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function SectionTabs({ title, items, path }: { title: string; items: SectionTab[]; path: string }) {
-  const current = screenAt(path, items);
+/**
+ * A topic in parts (סגל, צוערים): the parts above - each part's tab its main screen, the part of the screen on
+ * show chosen - and under it the part's other screens.
+ */
+export function SectionParts({ title, parts, path }: { title: string; parts: { label: string; icon: string; main: SectionTab; items: SectionTab[] }[]; path: string }) {
+  const here = parts.find((p) => screenAt(path, [p.main, ...p.items])) ?? parts[0];
+  const top = parts.map((p) => ({ to: p.main.to, label: p.label, icon: p.icon, end: p.main.end }));
+  return (
+    <div className="section-parts no-print">
+      <SectionTabs title={title} items={top} path={path} activeTo={here.main.to} />
+      {here.items.length > 0 && <SectionTabs title={here.label} items={here.items} path={path} sub />}
+    </div>
+  );
+}
+
+export function SectionTabs({ title, items, path, activeTo, sub }: { title: string; items: SectionTab[]; path: string; activeTo?: string; sub?: boolean }) {
+  const current = activeTo !== undefined ? items.find((i) => i.to === activeTo) : screenAt(path, items);
   const track = useRef<HTMLDivElement>(null);
   const thumb = useRef<HTMLSpanElement>(null);
   // where the thumb was a moment ago (as a tab is pressed): it slides from there
@@ -84,7 +99,7 @@ export function SectionTabs({ title, items, path }: { title: string; items: Sect
   };
 
   return (
-    <nav className="section-tabs no-print" aria-label={`המסכים של ${title}`}>
+    <nav className={`section-tabs no-print${sub ? ' is-sub' : ''}`} aria-label={`המסכים של ${title}`}>
       <div
         ref={track}
         className={`section-tabs-track${fade.start ? ' fade-start' : ''}${fade.end ? ' fade-end' : ''}`}

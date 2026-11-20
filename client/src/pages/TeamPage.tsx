@@ -232,7 +232,7 @@ function StaffExperiences({ data }: { data: StaffPageData }) {
       {data.teams.length > 0 && (
         <Link to="/staff-checks" className="row small staff-checks-link">
           <Icon name="checks" size={15} />
-          <span className="grow">מעקב סגל - {data.teams.map((t) => t.name).join(', ')}</span>
+          <span className="grow">מעקב על צוערים - {data.teams.map((t) => t.name).join(', ')}</span>
         </Link>
       )}
       {!data.experiences.length ? (

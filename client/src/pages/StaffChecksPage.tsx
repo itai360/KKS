@@ -113,7 +113,7 @@ export function StaffChecksPage() {
 
   return (
     <div className="page">
-      <PageHead title="מעקב סגל" sub="לכל צוער - מה הסגל כבר עשה איתו. לוחצים על ריבוע כשהמשימה קרתה." />
+      <PageHead title="מעקב על צוערים" sub="לכל צוער - מה הסגל כבר עשה איתו. לוחצים על ריבוע כשהמשימה קרתה." />
       <ErrorBox error={error} />
       {loading && !shown ? (
         <Loading rows={4} />

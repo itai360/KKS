@@ -33,7 +33,7 @@ import { SETTINGS_ITEM } from './NavMenu';
 import { NotificationsPanel } from './Notifications';
 import { noteScreen, screenOf } from '../lib/frequent';
 import { noteTopicScreen, screenAt, topicTarget } from '../lib/topics';
-import { SectionTabs } from './SectionTabs';
+import { SectionParts, SectionTabs } from './SectionTabs';
 import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
 import { shortDate, weekdayName } from '@shared/dates';
 import { useDrawerSwipe } from '../lib/drawerSwipe';
@@ -59,7 +59,7 @@ interface NavItem {
 /** the menu's last group: the course's calendar and, on it, which calendars it shows */
 const CAL_GROUP = 'יומן';
 /** each topic of the menu, by its title - its mark beside it, and alone when the menu is folded to icons */
-const GROUP_ICONS: Record<string, string> = { 'ניהול משימות': 'tasks', 'תכנון הקורס': 'plan', 'פיקוד ובקרה': 'pulse', 'צוערים וסגל': 'cap', 'תחקירים ולמידה': 'lightbulb', 'סגל וכלים': 'wrench', [CAL_GROUP]: 'calendar' };
+const GROUP_ICONS: Record<string, string> = { 'ניהול משימות': 'tasks', 'תכנון הקורס': 'plan', 'פיקוד ובקרה': 'pulse', 'סגל וצוערים': 'cap', 'תחקירים ולמידה': 'lightbulb', 'סגל וכלים': 'wrench', [CAL_GROUP]: 'calendar' };
 
 /** the bell: how many are new, a short ring as one arrives, and a tap opens them over the screen (Notifications.tsx) */
 function Bell({ unread }: { unread: number }) {
@@ -137,6 +137,16 @@ export type NavTab = 'home' | 'cadets' | 'weeks' | 'tasks' | 'more';
 export interface NavSection {
   title?: string;
   tab: NavTab;
+  /** every screen of the topic (with its parts, the screens of all of them: the menu's search, the tab it is in) */
+  items: NavItem[];
+  /** a topic in parts (סגל, צוערים): a bar of the parts above the bar of the screens - each part's main screen
+   *  is its tab there, its other screens under it */
+  parts?: NavPart[];
+}
+export interface NavPart {
+  label: string;
+  icon: string;
+  main: NavItem;
   items: NavItem[];
 }
 /** the phone bar's place of each tab (the "+" is the middle one); "more" marks none */
@@ -194,22 +204,32 @@ export function useNavSections(): NavSection[] {
   // the same modules for everyone, around the calendar: the tasks, planning the course, command and control,
   // the cadets, debriefs and learning, the staff and the tools
   const procedures = { to: '/procedures', label: 'אי עמידה בנהלים', icon: 'shield', keywords: 'נהלים הפקרת נשק נשק מאחורה טלפון דיגום כומתה שרוך גומיות תג שם משמעת' };
-  const cadets: NavSection = {
-    title: 'צוערים וסגל',
-    tab: 'cadets',
+  // the staff and the cadets: two parts, each its main screen and the screens under it
+  const staffPart: NavPart = {
+    label: 'סגל',
+    icon: 'users',
+    main: isCommander
+      ? { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס משימות התנסויות' }
+      : { to: `/team/${user.id}`, label: 'הדף שלי', icon: 'users', keywords: 'הסגל המשימות שלי התנסויות שאני מעביר' },
     items: [
-      { to: '/cadets', label: 'צוערים', icon: 'cap', keywords: 'צוותים פטורים משמעת שיחות אישיות' },
-      // the staff: what each does with each cadet, and each one's tasks and the experiences they run
-      { to: '/staff-checks', label: 'מעקב סגל', icon: 'checks', keywords: 'שיחת פתיחה משוב התנסות ספרא וסייפא מטלה ציון סוציומטרי הורדה' },
-      isCommander
-        ? { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס משימות התנסויות' }
-        : { to: `/team/${user.id}`, label: 'הדף שלי', icon: 'users', keywords: 'המשימות שלי התנסויות שאני מעביר' },
-      { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder', keywords: 'ציונים מבחנים ועדה' },
-      { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
-      { to: '/experiences', label: 'התנסויות', icon: 'target', keywords: 'משובים חונך' },
       { to: '/takpatz', label: 'תקפ״צ', icon: 'board', keywords: 'תקפצ תקפ"צ יעדים אישיים תכנון התנסויות שלישים' },
-      procedures,
+      // what each staff member did with each cadet
+      { to: '/staff-checks', label: 'מעקב על צוערים', icon: 'checks', keywords: 'מעקב סגל שיחת פתיחה משוב התנסות ספרא וסייפא מטלה ציון סוציומטרי הורדה' },
+      { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder', keywords: 'ציונים מבחנים ועדה' },
+      { to: '/experiences', label: 'התנסויות', icon: 'target', keywords: 'משובים חונך' },
     ],
+  };
+  const cadetsPart: NavPart = {
+    label: 'צוערים',
+    icon: 'cap',
+    main: { to: '/cadets', label: 'צוערים', icon: 'cap', keywords: 'צוותים פטורים משמעת שיחות אישיות' },
+    items: [{ to: '/sociometric', label: 'סוציומטרי', icon: 'socio' }, procedures],
+  };
+  const cadets: NavSection = {
+    title: 'סגל וצוערים',
+    tab: 'cadets',
+    parts: [staffPart, cadetsPart],
+    items: [staffPart.main, ...staffPart.items, cadetsPart.main, ...cadetsPart.items],
   };
   const learning: NavSection = { title: 'תחקירים ולמידה', tab: 'weeks', items: [{ to: '/debriefs', label: 'תחקירים ולקחים', icon: 'lightbulb', keywords: 'תחקיר שבועי פעילות עצימה תחק"ש פלוגתי לקחים בנק לקחים' }] };
   const discussions = { to: '/discussions', label: 'דיונים', icon: 'clipboard', keywords: 'דיון תכנוני תחקירי הערכת מצב החלטה תיאום בטיחות סיכום דיון פעולות להמשך' };
@@ -1105,7 +1125,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
         <main id="main" tabIndex={-1} ref={mainRef}>
           {/* the topic's screens, as tabs above the page (the menu holds the topics alone) */}
-          {hereSection && hereSection.items.length > 1 && !focusPage && <SectionTabs title={hereSection.title!} items={hereSection.items} path={path} />}
+          {hereSection && hereSection.items.length > 1 && !focusPage && (hereSection.parts ? <SectionParts title={hereSection.title!} parts={hereSection.parts} path={path} /> : <SectionTabs title={hereSection.title!} items={hereSection.items} path={path} />)}
           <BackContext.Provider value={phone ? null : back}>
             <ScreenBoundary key={location.pathname}>{children}</ScreenBoundary>
           </BackContext.Provider>
@@ -1137,7 +1157,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </NavLink>
         <NavLink to="/cadets" className={() => (barIdx === 1 ? 'active' : '')} aria-current={barIdx === 1 ? 'page' : undefined}>
           <TabIcon name="cadets" filled={barIdx === 1} />
-          <span className="nav-label">צוערים וסגל</span>
+          <span className="nav-label">סגל וצוערים</span>
         </NavLink>
         <button
           id="plus-button"

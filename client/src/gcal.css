@@ -5075,3 +5075,49 @@ html[data-kb] .peek-foot {
   flex: 1;
   min-height: 0;
 }
+
+/* a topic in parts (סגל, צוערים): the parts' bar, and under it the lighter bar of the part's other screens */
+.section-parts .section-tabs.is-sub {
+  padding-top: 8px;
+}
+.section-parts + .page {
+  padding-top: 16px;
+}
+.section-tabs.is-sub .section-tabs-track {
+  background: transparent;
+  padding: 0;
+  gap: 6px;
+}
+.section-tabs.is-sub .section-tab {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.section-tabs.is-sub .section-tab.on {
+  border-color: transparent;
+  color: var(--tint);
+  font-weight: 600;
+}
+.section-tabs.is-sub .section-tab-thumb,
+:root[data-theme='dark'] .section-tabs.is-sub .section-tab-thumb {
+  border-radius: 999px;
+  background: var(--tint-bg);
+  box-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .section-tabs.is-sub .section-tab-thumb {
+    background: var(--tint-bg);
+    box-shadow: none;
+  }
+}
+@media (max-width: 860px) {
+  .section-parts .section-tabs.is-sub {
+    padding-top: 6px;
+  }
+  .section-parts + .page {
+    padding-top: 10px;
+  }
+}
