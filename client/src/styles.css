@@ -16650,3 +16650,57 @@ html:has(.subtask-fold) {
   color: inherit;
   gap: 8px;
 }
+
+/* the teams' dialog: a team's number before its name - what the teams and their commanders are listed by.
+   On a phone, two lines: the number, the name and the bin; under them the commander and the cadets */
+.team-edit-row {
+  display: grid;
+  grid-template-columns: auto 64px minmax(0, 1fr) 180px 40px 38px;
+  grid-template-areas: 'chk num name cmd count del';
+  align-items: center;
+  gap: 8px;
+}
+.team-edit-row .te-chk {
+  grid-area: chk;
+  display: flex;
+}
+.team-edit-row .te-num {
+  grid-area: num;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.team-edit-row .input.te-num {
+  width: 100%;
+}
+.team-edit-row .te-name {
+  grid-area: name;
+  min-width: 0;
+}
+.team-edit-row .te-cmd {
+  grid-area: cmd;
+  min-width: 0;
+}
+.team-edit-row .te-count {
+  grid-area: count;
+  text-align: center;
+}
+.team-edit-row .te-del {
+  grid-area: del;
+}
+.team-edit-row.teams-head {
+  min-height: 0;
+}
+@media (max-width: 560px) {
+  .team-edit-row {
+    grid-template-columns: auto 56px minmax(0, 1fr) 38px;
+    grid-template-areas:
+      'chk num name del'
+      'chk cmd cmd count';
+    row-gap: 6px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .team-edit-row.teams-head {
+    display: none;
+  }
+}

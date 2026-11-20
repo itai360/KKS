@@ -56,7 +56,7 @@ export function listTeams(): Team[] {
        FROM teams t LEFT JOIN users u ON u.id = t.commander_id`,
     )
     .map((r) => ({ id: r.id, name: r.name, commanderId: r.commander_id, commanderName: r.commander_name, sort: r.sort, cadetCount: r.cadet_count }))
-    .sort((a, b) => byHe(a.name, b.name)); // teams are listed and offered alphabetically
+    .sort((a, b) => a.sort - b.sort || byHe(a.name, b.name)); // teams are listed and offered by their number (1, 2, 3...)
 }
 
 export const teamSchema = z.object({
@@ -65,6 +65,13 @@ export const teamSchema = z.object({
   sort: z.number().int().min(0).max(100).optional(),
 });
 
+/** a new team's number: the one in its name ("צוות 3 - אלון") if no team has it yet, else after the last */
+function newTeamNumber(name: string): number {
+  const used = new Set(db().all<{ sort: number }>('SELECT sort FROM teams').map((r) => r.sort));
+  const n = Number(/\d+/.exec(name)?.[0] ?? NaN);
+  return Number.isInteger(n) && n >= 1 && n <= 100 && !used.has(n) ? n : Math.max(0, ...used) + 1;
+}
+
 export function saveTeam(actor: UserRow, raw: z.input<typeof teamSchema>, id?: number): number {
   const t = teamSchema.parse(raw);
   if (t.commanderId && !getUserRow(t.commanderId)?.active) throw badRequest('המפקד שנבחר אינו פעיל');
@@ -72,7 +79,7 @@ export function saveTeam(actor: UserRow, raw: z.input<typeof teamSchema>, id?: n
     if (!db().get('SELECT 1 FROM teams WHERE id = ?', id)) throw notFound('הצוות לא נמצא');
     db().run('UPDATE teams SET name = ?, commander_id = ?, sort = coalesce(?, sort) WHERE id = ?', t.name, t.commanderId, t.sort ?? null, id);
   } else {
-    const sort = t.sort ?? (db().get<{ n: number | null }>('SELECT max(sort) AS n FROM teams')?.n ?? 0) + 1;
+    const sort = t.sort ?? newTeamNumber(t.name);
     id = db().run('INSERT INTO teams(name, commander_id, sort, created_at) VALUES (?, ?, ?, ?)', t.name, t.commanderId, sort, nowIso()).id;
   }
   logActivity({ userId: actor.id, action: 'team', text: `${actor.display_name} עדכן את הצוות "${t.name}"` });
@@ -454,7 +461,7 @@ export function importCadets(actor: UserRow, raw: z.input<typeof importSchema>):
       if (!team && teamName) {
         team = findTeam(teams, teamName);
         if (!team) {
-          team = db().run('INSERT INTO teams(name, sort, created_at) VALUES (?, ?, ?)', teamName, teams.size + 1, nowIso()).id;
+          team = db().run('INSERT INTO teams(name, sort, created_at) VALUES (?, ?, ?)', teamName, newTeamNumber(teamName), nowIso()).id;
           teams.set(teamName, team);
         }
       }

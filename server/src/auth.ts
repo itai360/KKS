@@ -204,8 +204,14 @@ export function getUserRow(id: number): UserRow | undefined {
   return db().get<UserRow>('SELECT * FROM users WHERE id = ?', id);
 }
 
+/** the team a person commands, by its number (teams.sort) - none: null */
+const TEAM_NUMBER = '(SELECT min(t.sort) FROM teams t WHERE t.commander_id = users.id)';
+/** how people are listed: the commander first, then the team commanders by their team's number (1, 2, 3...), then
+ *  everyone else by name */
+export const PEOPLE_ORDER = `role, ${TEAM_NUMBER} IS NULL, ${TEAM_NUMBER}, display_name`;
+
 export function activeUsers(): UserRow[] {
-  return db().all<UserRow>('SELECT * FROM users WHERE active = 1 ORDER BY role, display_name');
+  return db().all<UserRow>(`SELECT * FROM users WHERE active = 1 ORDER BY ${PEOPLE_ORDER}`);
 }
 
 export function commanderIds(): number[] {
@@ -216,7 +222,7 @@ export function commanderIds(): number[] {
 
 export function staffIds(): number[] {
   return db()
-    .all<{ id: number }>("SELECT id FROM users WHERE role = 'staff' AND active = 1 ORDER BY display_name")
+    .all<{ id: number }>(`SELECT id FROM users WHERE role = 'staff' AND active = 1 ORDER BY ${PEOPLE_ORDER}`)
     .map((r) => r.id);
 }
 

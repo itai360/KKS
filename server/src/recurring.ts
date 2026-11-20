@@ -157,7 +157,7 @@ export function generateRecurring(dateKey: string): number {
       else if (rule.assignee === 'team_commanders') {
         // each team commander a task of their own
         ownerIds = db()
-          .all<{ id: number }>('SELECT DISTINCT u.id FROM teams t JOIN users u ON u.id = t.commander_id WHERE u.active = 1 ORDER BY u.id')
+          .all<{ id: number }>('SELECT u.id FROM teams t JOIN users u ON u.id = t.commander_id WHERE u.active = 1 GROUP BY u.id ORDER BY min(t.sort), u.id')
           .map((u) => u.id);
         if (!ownerIds.length) return;
         assignMode = 'copies';

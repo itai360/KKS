@@ -131,6 +131,10 @@ describe('importing cadets from a spreadsheet', () => {
     expect(cadets.find((x) => x.fullName === 'יהב גור אריה')).toMatchObject({ teamId: team1 });
     expect(cadets.find((x) => x.fullName === 'עמית שמש')).toMatchObject({ personalNumber: '9198271' });
     expect(cadets.find((x) => x.fullName === 'סתיו שגב')).toMatchObject({ teamId: team1 });
-    expect((await c.cmd.get('/api/teams')).body.map((t: { name: string }) => t.name)).toEqual(['גיורא', 'צוות 1 - אלון']); // alphabetical
+    // by number: "צוות 1 - אלון" is 1 (the number in its name), the new one comes after it
+    expect((await c.cmd.get('/api/teams')).body.map((t: { name: string; sort: number }) => [t.sort, t.name])).toEqual([
+      [1, 'צוות 1 - אלון'],
+      [2, 'גיורא'],
+    ]);
   });
 });

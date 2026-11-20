@@ -3,6 +3,7 @@ import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlit
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { ADDED_DOMAINS, ADDED_TRACKS, COURSE_TRACKS } from '../../shared/constants';
+import { byHe } from '../../shared/sort';
 import { DEFAULT_TAKPATZ_CATALOG } from '../../shared/takpatzCatalog';
 
 export type Param = SQLInputValue | boolean | undefined;
@@ -1651,6 +1652,14 @@ CREATE INDEX debrief_items_track ON debrief_items(track_id);
  * in Google (gradeSheet.ts, its link here). And the team commanders' weekly ממ"ש tasks, in a course that has a
  * staff already: on Tuesday the ממ"ש experience to go over with the cadet, on Thursday the ממ"ש plans to approve.
  */
+// A team's number (teams.sort) is now set in the teams' dialog, and the teams - and their commanders - are listed
+// by it everywhere. Each course's teams take the numbers of the order they were shown in until now: by name, the
+// numbers in it in their order ("צוות 2" before "צוות 10") - so nothing moves.
+function V65_TEAM_NUMBERS(db: Db): void {
+  const teams = db.all<{ id: number; name: string }>('SELECT id, name FROM teams').sort((a, b) => byHe(a.name, b.name) || a.id - b.id);
+  teams.forEach((t, i) => db.run('UPDATE teams SET sort = ? WHERE id = ?', i + 1, t.id));
+}
+
 function V64_STAFF_CHECKS(db: Db): void {
   db.exec(`
 CREATE TABLE staff_checks (
@@ -1702,7 +1711,7 @@ CREATE TABLE grade_sheet_requests (
   }
 }
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50, V51_GOOGLE_EVENTS, SCHEMA_V52, SCHEMA_V53, SCHEMA_V54, SCHEMA_V55, SCHEMA_V56, SCHEMA_V57, SCHEMA_V58, SCHEMA_V59, SCHEMA_V60, SCHEMA_V61, SCHEMA_V62, SCHEMA_V63, V64_STAFF_CHECKS];
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50, V51_GOOGLE_EVENTS, SCHEMA_V52, SCHEMA_V53, SCHEMA_V54, SCHEMA_V55, SCHEMA_V56, SCHEMA_V57, SCHEMA_V58, SCHEMA_V59, SCHEMA_V60, SCHEMA_V61, SCHEMA_V62, SCHEMA_V63, V64_STAFF_CHECKS, V65_TEAM_NUMBERS];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

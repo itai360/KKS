@@ -522,18 +522,47 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
             <BulkToggle label="בחירת צוותים" />
           </div>
         )}
+        {teams.length > 0 && (
+          <div className="team-edit-row teams-head tiny muted" aria-hidden="true">
+            <span className="te-chk" />
+            <span className="te-num">מס׳</span>
+            <span className="te-name">שם הצוות</span>
+            <span className="te-cmd">מפקד הצוות</span>
+            <span className="te-count">צוערים</span>
+            <span className="te-del" />
+          </div>
+        )}
         {teams.map((t) => (
-          <div key={t.id} className="row wrap">
-            <BulkCheck id={t.id} />
+          <div key={t.id} className="team-edit-row">
+            <span className="te-chk">
+              <BulkCheck id={t.id} />
+            </span>
+            {/* the team's number: the teams and their commanders are listed by it, everywhere (1, 2, 3...) */}
             <input
-              className="input grow"
+              key={`n${t.sort}`}
+              className="input te-num"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={100}
+              defaultValue={t.sort}
+              onBlur={(e) => {
+                const n = Number(e.target.value);
+                if (Number.isInteger(n) && n >= 1 && n <= 100 && n !== t.sort) void run(() => api.put(`/api/teams/${t.id}`, { name: t.name, commanderId: t.commanderId, sort: n }));
+                else e.target.value = String(t.sort);
+              }}
+              placeholder="מס׳"
+              aria-label={`מספר הצוות ${t.name}`}
+              title="מספר הצוות - הצוותים ומפקדיהם מסודרים לפיו"
+            />
+            <input
+              className="input te-name"
               defaultValue={t.name}
               onBlur={(e) => e.target.value.trim() && e.target.value !== t.name && void run(() => api.put(`/api/teams/${t.id}`, { name: e.target.value.trim(), commanderId: t.commanderId }))}
               aria-label="שם הצוות"
             />
             <Select
-              className="select"
-              style={{ width: 180 }}
+              className="select te-cmd"
               value={t.commanderId ?? ''}
               onChange={(e) => void run(() => api.put(`/api/teams/${t.id}`, { name: t.name, commanderId: e.target.value ? Number(e.target.value) : null }))}
               aria-label="מפקד הצוות"
@@ -545,9 +574,11 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
                 </option>
               ))}
             </Select>
-            <span className="tiny muted mono">{t.cadetCount}</span>
+            <span className="tiny muted mono te-count" title="צוערים בצוות">
+              {t.cadetCount}
+            </span>
             <button
-              className="icon-btn"
+              className="icon-btn te-del"
               aria-label="מחיקת צוות"
               onClick={async () => (await ask({ title: `למחוק את ${t.name}?`, body: 'הצוערים שבו יישארו ללא צוות.', confirm: 'מחיקה', danger: true })) && void run(() => api.del(`/api/teams/${t.id}`))}
             >
@@ -570,7 +601,9 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
             <Icon name="plus" /> הוסף
           </button>
         </form>
-        <p className="tiny muted">מפקד הצוות רואה ומנהל את הצוערים בצוות שלו, כולל שיחות אישיות ומשמעת.</p>
+        <p className="tiny muted">
+          מפקד הצוות רואה ומנהל את הצוערים בצוות שלו, כולל שיחות אישיות ומשמעת. הצוותים ומפקדי הצוותים מסודרים בכל המסכים לפי מספר הצוות.
+        </p>
         <ErrorBox error={error} />
       </div>
     </Modal>

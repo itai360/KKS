@@ -46,7 +46,7 @@ const marksOf = (cadetIds: number[]) => {
   return out;
 };
 
-/** every team's table - the one looking at it's own team first */
+/** every team's table, by the teams' numbers (1, 2, 3...) */
 export function staffChecksBoard(actor: UserRow): StaffChecksBoard {
   const teams = db().all<{ id: number; name: string; commander_id: number | null; commander_name: string | null }>(
     'SELECT t.id, t.name, t.commander_id, u.display_name AS commander_name FROM teams t LEFT JOIN users u ON u.id = t.commander_id ORDER BY t.sort, t.name',
@@ -66,7 +66,7 @@ export function staffChecksBoard(actor: UserRow): StaffChecksBoard {
   }));
   const loose = cadets.filter((c) => c.team_id === null || !teams.some((t) => t.id === c.team_id));
   if (loose.length) out.push({ id: null, name: 'ללא צוות', commanderName: null, canMark: canMark(actor, null), mine: false, cadets: loose.map(row) });
-  return { teams: [...out.filter((t) => t.mine), ...out.filter((t) => !t.mine)], sheet: gradeSheetStatus(actor) };
+  return { teams: out, sheet: gradeSheetStatus(actor) };
 }
 
 export const markSchema = z.object({

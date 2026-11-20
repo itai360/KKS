@@ -2,16 +2,17 @@
 // staff, the active commanders of the teams, or the people the commander chose who are still active.
 
 import { groupOf, type StaffGroup } from '../../shared/staffGroups';
+import { PEOPLE_ORDER } from './auth';
 import { getSettings } from './core';
 import { db } from './db';
 
 function resolve(): StaffGroup[] {
   const active = new Set(db().all<{ id: number }>('SELECT id FROM users WHERE active = 1').map((r) => r.id));
   const staff = db()
-    .all<{ id: number }>("SELECT id FROM users WHERE role = 'staff' AND active = 1 ORDER BY display_name")
+    .all<{ id: number }>(`SELECT id FROM users WHERE role = 'staff' AND active = 1 ORDER BY ${PEOPLE_ORDER}`)
     .map((r) => r.id);
   const teamCommanders = db()
-    .all<{ id: number }>('SELECT DISTINCT u.id FROM teams t JOIN users u ON u.id = t.commander_id WHERE u.active = 1 ORDER BY u.display_name')
+    .all<{ id: number }>('SELECT u.id FROM teams t JOIN users u ON u.id = t.commander_id WHERE u.active = 1 GROUP BY u.id ORDER BY min(t.sort), u.display_name')
     .map((r) => r.id);
   return getSettings().staffGroups.map((g) => ({
     id: g.id,

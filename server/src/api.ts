@@ -27,6 +27,7 @@ import {
   CODE_LIMIT,
   type UserRow,
   SIGNS_IN,
+  PEOPLE_ORDER,
 } from './auth';
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
 import { currentSlot, db } from './db';
@@ -455,7 +456,7 @@ export function apiRouter(): Router {
 
   r.get('/users', (req, res) => {
     const all = req.query.all === '1' && isCommander(me(req));
-    const rows = db().all<UserRow>(`SELECT * FROM users ${all ? '' : 'WHERE active = 1'} ORDER BY role, display_name`);
+    const rows = db().all<UserRow>(`SELECT * FROM users ${all ? '' : 'WHERE active = 1'} ORDER BY ${PEOPLE_ORDER}`);
     // who has two-step sign-in, and on how many devices phone notifications: the commander's business only
     if (!isCommander(me(req))) return void res.json(rows.map(toUser));
     const devices = subscriptionCounts();

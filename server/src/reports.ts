@@ -18,7 +18,7 @@ import type {
   Task,
   WeeklyReport,
 } from '../../shared/types';
-import { getUserRow, toUser, type UserRow } from './auth';
+import { getUserRow, PEOPLE_ORDER, toUser, type UserRow } from './auth';
 import { clock, forbidden, getSettings, notFound, tz } from './core';
 import { db } from './db';
 import { disciplineSummary } from './discipline';
@@ -50,7 +50,7 @@ function ctx() {
 }
 
 function staffRows(): UserRow[] {
-  return db().all<UserRow>("SELECT * FROM users WHERE role = 'staff' AND active = 1 ORDER BY display_name");
+  return db().all<UserRow>(`SELECT * FROM users WHERE role = 'staff' AND active = 1 ORDER BY ${PEOPLE_ORDER}`);
 }
 
 function staffStatus(u: UserRow, tasks: Task[], c: ReturnType<typeof ctx>): StaffStatus {
