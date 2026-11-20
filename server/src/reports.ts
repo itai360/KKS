@@ -1,6 +1,7 @@
 // Read-side views: dashboard (4, 5, 32), my tasks (10, 48), team (11, 12),
 // briefing (50), weekly snapshot (24), look-ahead (25), end of day (52), search (19).
 
+import { listExperiences } from './cadets';
 import { ABSENCE_REASON_LABELS, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_RANK } from '../../shared/constants';
 import { addDays, DAY, dayRange, daysSince, diffDays, localDateKey, shortDate, startOfWeek, zonedToUtc } from '../../shared/dates';
 import { readinessPct } from '../../shared/taskLogic';
@@ -352,6 +353,9 @@ export function staffPage(actor: UserRow, userId: number): StaffPageData {
     fromCommander: own.filter((t) => t.creatorRole === 'commander' && isOpenStatus(t.status)),
     upcoming: open.filter((t) => !t.overdue).slice(0, 8),
     weeks: listWeeks('w.lead_id = ?', userId),
+    // the cadets' experiences they run (the mentor of), the nearest first
+    experiences: listExperiences(actor, { mentorId: userId }).sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done') || a.startDate.localeCompare(b.startDate)),
+    teams: db().all<{ id: number; name: string }>('SELECT id, name FROM teams WHERE commander_id = ? ORDER BY sort, name', userId),
   };
 }
 

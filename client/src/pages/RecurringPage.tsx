@@ -34,6 +34,8 @@ const PRESETS: Omit<RecurringRule, 'id' | 'createdAt' | 'lastGeneratedDate' | 'a
   { title: "ח' ערכים", description: '', frequency: 'daily', weekdays: [], time: '20:00', assignee: 'week_lead', priority: 'normal', domain: 'צוערים' },
   { title: 'פתיחת שבוע', description: '', frequency: 'weekly', weekdays: [0], time: '08:00', assignee: 'week_lead', priority: 'high', domain: 'לו"ז' },
   { title: 'אימון גופני', description: '', frequency: 'weekly', weekdays: [0], time: '06:30', assignee: 'week_lead', priority: 'normal', domain: 'הדרכה' },
+  { title: 'הורדת התנסות ממ״ש', description: '', frequency: 'weekly', weekdays: [2], time: '18:00', assignee: 'team_commanders', priority: 'normal', domain: 'צוערים' },
+  { title: 'לעשות אישור תכניות ממ״ש', description: '', frequency: 'weekly', weekdays: [4], time: '18:00', assignee: 'team_commanders', priority: 'normal', domain: 'צוערים' },
   { title: 'סיכום שבוע ותחקיר', description: 'סיכום שבוע, תחקיר, לקחים והכנת השבוע הבא', frequency: 'weekly', weekdays: [4], time: '14:00', assignee: 'all', priority: 'high', domain: 'הערכה' },
 ];
 
@@ -312,6 +314,7 @@ function RuleEditor({ rule, from, onClose }: { rule: RecurringRule | null; from?
             <Select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
               <option value="week_lead">אחראי השבוע</option>
               <option value="all">כל הסגל (עותק לכל אחד)</option>
+              <option value="team_commanders">המפק״צים (עותק לכל מפקד צוות)</option>
               {users.map((u) => (
                 <option key={u.id} value={String(u.id)}>
                   {u.displayName}

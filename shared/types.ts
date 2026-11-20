@@ -728,6 +728,47 @@ export interface TrackLeadHistory {
   beside?: boolean;
 }
 
+/** a square of the staff's checklist that was marked: when, by whom, its grade, and whether the grade reached the sheet */
+export interface StaffCheckMark {
+  at: string;
+  byName: string;
+  grade: number | null;
+  /** the grade in the course's grade sheet: written there, failed (sheetNote says why), or no sheet connected */
+  sheet: 'written' | 'error' | 'off' | '';
+  sheetNote: string;
+}
+
+/** a team's table in the staff's checklist */
+export interface StaffChecksTeam {
+  id: number | null;
+  name: string;
+  commanderName: string | null;
+  /** the one looking may mark its squares */
+  canMark: boolean;
+  /** their own team */
+  mine: boolean;
+  cadets: { id: number; name: string; marks: Record<string, StaffCheckMark> }[];
+}
+
+/** the course's grade sheet in Google, the grades of the checklist go into */
+export interface GradeSheetStatus {
+  url: string;
+  fileName: string;
+  /** a Google account that may edit it is connected */
+  connected: boolean;
+  email: string;
+  lastError: string;
+  /** the commander's: setting the link and connecting */
+  canManage: boolean;
+  /** Google sign-in is set up on the server */
+  available: boolean;
+}
+
+export interface StaffChecksBoard {
+  teams: StaffChecksTeam[];
+  sheet: GradeSheetStatus;
+}
+
 /** what moved to whoever took someone's place */
 export interface StaffMoved {
   teams: number;
@@ -876,6 +917,10 @@ export interface StaffPageData {
   fromCommander: Task[];
   upcoming: Task[];
   weeks: Week[];
+  /** the cadets' experiences they run */
+  experiences: Experience[];
+  /** the teams they command */
+  teams: { id: number; name: string }[];
 }
 
 export interface WeekDetail {

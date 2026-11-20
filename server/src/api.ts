@@ -29,7 +29,7 @@ import {
   SIGNS_IN,
 } from './auth';
 import { badRequest, clock, config, forbidden, getSettings, HttpError, notFound, nowIso, patchSchema, tz, updateSettings } from './core';
-import { db } from './db';
+import { currentSlot, db } from './db';
 import { getFile, putFile, removeFile, sendStoredFile, uploadName } from './files';
 import { changed, FINISHED, logActivity, NOTIFICATION_ROWS, notificationsChanged, notify, snoozeNotification, toNotification, unreadCount } from './journal';
 import { deleteRule, listRules, saveRule } from './recurring';
@@ -134,6 +134,7 @@ import {
 } from './weeks';
 import { createTrack, deleteTrack, getTrack, listTracks, trackWithPrevious, updateTrack } from './tracks';
 import { trackLeadHistory } from './trackLeads';
+import { disconnectGradeSheet, finishSheetConnect, gradeSheetConnectUrl, gradeSheetStatus, setGradeSheetLink, sheetRequestWaiting, takeSheetRequest } from './gradeSheet';
 
 /** The address the app is reached at, for links that leave it (calendar feeds). */
 const origin = (req: Request) => `${req.protocol}://${req.host}`;
@@ -333,7 +334,24 @@ export function apiRouter(): Router {
     const state = String((req.query as Record<string, unknown>).state ?? '');
     // started a moment ago on another copy of the server: this one reads the newest data first (cloud.ts runs
     // a "not found" again on it) before saying the sign-in expired
-    if (req.headers['x-kks-fresh'] === '0' && !signInWaiting(state)) return next(notFound('החיבור ל-Google לא נמצא'));
+    if (req.headers['x-kks-fresh'] === '0' && !signInWaiting(state) && !sheetRequestWaiting(state)) return next(notFound('החיבור ל-Google לא נמצא'));
+    // the course's grade sheet (gradeSheet.ts): back to the staff's checklist, with how it went
+    const sheet = takeSheetRequest(state);
+    if (sheet) {
+      void (async () => {
+        const q = req.query as Record<string, string | undefined>;
+        const back = (result: string) => res.redirect(303, `/staff-checks?sheet=${result}`);
+        if (!req.user || req.user.id !== sheet.userId) return back('denied');
+        if (q.error || !q.code) return back('cancelled');
+        try {
+          back(await finishSheetConnect(sheet.userId, String(q.code), sheet.verifier, origin(req)));
+        } catch (e) {
+          console.error('grade sheet connect failed:', (e as Error).message);
+          back('failed');
+        }
+      })().catch(next);
+      return;
+    }
     const cal = takeCalendarRequest(state);
     if (!cal) return void driveCallback(req, res).catch(next);
     void (async () => {
@@ -1095,6 +1113,25 @@ export function apiRouter(): Router {
   });
 
   // ---------------- writing into Google Calendar (gcalSync.ts) ----------------
+
+  // the course's grade sheet in Google (gradeSheet.ts): its link, and the account that writes into it
+  const sheetHere = () => {
+    if (currentSlot()) throw badRequest('גליון הציונים מחובר בקורס הנוכחי');
+  };
+  r.put('/grade-sheet', requireCommander, (req, res) => {
+    sheetHere();
+    setGradeSheetLink(z.object({ url: z.string().max(500) }).parse(req.body).url);
+    res.json(gradeSheetStatus(me(req)));
+  });
+  r.post('/grade-sheet/connect', requireCommander, (req, res) => {
+    sheetHere();
+    res.json({ url: gradeSheetConnectUrl(me(req), origin(req)) });
+  });
+  r.delete('/grade-sheet', requireCommander, (req, res) => {
+    sheetHere();
+    disconnectGradeSheet();
+    res.json(gradeSheetStatus(me(req)));
+  });
 
   r.get('/google/calendar', async (req, res) => res.json(await calendarStatus(me(req))));
   r.post('/google/calendar/connect', (req, res) => {

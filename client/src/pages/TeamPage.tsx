@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { shortDate } from '@shared/dates';
-import type { StaffPageData, StaffStatus } from '@shared/types';
+import type { Experience, StaffPageData, StaffStatus } from '@shared/types';
 import { staffHealthLabel } from '@shared/taskLogic';
 import { AbsencesCard } from '../components/Absences';
 import { ContactButtons } from '../components/ContactButtons';
@@ -205,8 +205,58 @@ export function StaffPage() {
               </Link>
             ))}
           </div>
+          <StaffExperiences data={data} />
         </div>
       </div>
+    </div>
+  );
+}
+
+const PHASE: Record<Experience['phase'], { label: string; tone: string }> = {
+  planned: { label: 'מתוכננת', tone: '' },
+  active: { label: 'עכשיו', tone: 't-blue' },
+  awaiting_feedback: { label: 'מחכה למשוב', tone: 't-orange' },
+  done: { label: 'הסתיימה', tone: 't-green' },
+};
+
+/** the cadets' experiences this staff member runs, and the teams they command (their checklist) */
+function StaffExperiences({ data }: { data: StaffPageData }) {
+  const open = data.experiences.filter((x) => x.phase !== 'done');
+  const done = data.experiences.length - open.length;
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3 className="grow">התנסויות שמעביר</h3>
+        <span className="count-pill">{data.experiences.length}</span>
+      </div>
+      {data.teams.length > 0 && (
+        <Link to="/staff-checks" className="row small staff-checks-link">
+          <Icon name="checks" size={15} />
+          <span className="grow">מעקב סגל - {data.teams.map((t) => t.name).join(', ')}</span>
+        </Link>
+      )}
+      {!data.experiences.length ? (
+        <div className="card-body small muted">לא חונך אף התנסות.</div>
+      ) : (
+        <ul className="staff-exp-list">
+          {open.map((x) => (
+            <li key={x.id}>
+              <Link to={`/cadets/${x.cadetId}`} className="staff-exp">
+                <div className="grow">
+                  <div className="strong">{x.cadetName}</div>
+                  <div className="tiny muted">
+                    {x.role}
+                    {x.teamName ? ` · ${x.teamName}` : ''} · {shortDate(x.startDate)}
+                    {x.endDate !== x.startDate ? `-${shortDate(x.endDate)}` : ''}
+                  </div>
+                </div>
+                <span className={`badge ${PHASE[x.phase].tone}`}>{PHASE[x.phase].label}</span>
+              </Link>
+            </li>
+          ))}
+          {done > 0 && <li className="tiny muted staff-exp-done">ועוד {done === 1 ? 'התנסות אחת שהסתיימה' : `${done} התנסויות שהסתיימו`}</li>}
+        </ul>
+      )}
     </div>
   );
 }

@@ -16491,3 +16491,143 @@ html:has(.subtask-fold) {
 .track-lesson + .track-lesson {
   border-top: 1px solid var(--line);
 }
+
+/* the staff's checklist for each cadet: a table for each team (StaffChecksPage.tsx) */
+.grade-sheet-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.grade-sheet-card.small {
+  flex-direction: row;
+  align-items: center;
+}
+.staff-checks-card {
+  margin-bottom: 16px;
+}
+.staff-checks-card h2 {
+  font-size: 17px;
+  margin: 0;
+}
+.staff-checks-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.staff-checks {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 860px;
+  font-size: 13px;
+}
+.staff-checks th,
+.staff-checks td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+.staff-checks thead th {
+  font-weight: 600;
+  line-height: 1.25;
+  min-width: 72px;
+  background: var(--card-2);
+}
+.staff-checks .sc-name {
+  text-align: start;
+  min-width: 120px;
+  position: sticky;
+  inset-inline-start: 0;
+  background: var(--card);
+  z-index: 1;
+  font-weight: 600;
+}
+.staff-checks thead .sc-name {
+  background: var(--card-2);
+}
+.sc-grade-tag {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.sc-box {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  border: 1.5px solid var(--line-2, var(--line));
+  border-radius: 7px;
+  background: var(--card);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
+}
+.sc-box:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.sc-box.on {
+  background: var(--blue, #2f5bd3);
+  border-color: var(--blue, #2f5bd3);
+}
+.sc-box:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+.sc-grade {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin-top: 3px;
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+}
+.sc-sheet {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  border: 0;
+  padding: 0;
+}
+.sc-sheet.ok {
+  color: var(--green, #1f8a4c);
+}
+.sc-sheet.err {
+  background: var(--red, #c62828);
+  color: #fff;
+  cursor: pointer;
+}
+.staff-checks tfoot td,
+.staff-checks tfoot th {
+  background: var(--card-2);
+}
+/* the experiences a staff member runs (TeamPage.tsx) */
+.staff-exp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.staff-exp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  color: inherit;
+}
+.staff-exp-done {
+  padding: 8px 18px;
+  border-top: 1px solid var(--line);
+}
+.staff-checks-link {
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  color: inherit;
+  gap: 8px;
+}

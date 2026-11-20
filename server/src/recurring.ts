@@ -17,7 +17,7 @@ export const recurringSchema = z
     frequency: z.enum(['daily', 'weekly']),
     weekdays: z.array(z.number().int().min(0).max(6)).optional().default([]),
     time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'שעה לא תקינה'),
-    assignee: z.string().regex(/^(all|week_lead|\d+)$/),
+    assignee: z.string().regex(/^(all|week_lead|team_commanders|\d+)$/),
     priority: z.enum(PRIORITIES).optional().default('normal'),
     domain: z.string().max(60).optional().default(''),
     active: z.boolean().optional().default(true),
@@ -44,6 +44,7 @@ interface RuleRow {
 function assigneeLabel(a: string): string {
   if (a === 'all') return 'כל הסגל';
   if (a === 'week_lead') return 'אחראי השבוע';
+  if (a === 'team_commanders') return 'המפק״צים';
   return getUserRow(Number(a))?.display_name ?? 'לא ידוע';
 }
 
@@ -151,9 +152,16 @@ export function generateRecurring(dateKey: string): number {
       db().run('UPDATE recurring_rules SET last_generated_date = ? WHERE id = ?', dateKey, rule.id);
       if (!creator) return;
       let ownerIds: number[] = [];
-      let assignMode: 'shared' | 'all' = 'shared';
+      let assignMode: 'shared' | 'all' | 'copies' = 'shared';
       if (rule.assignee === 'all') assignMode = 'all';
-      else if (rule.assignee === 'week_lead') {
+      else if (rule.assignee === 'team_commanders') {
+        // each team commander a task of their own
+        ownerIds = db()
+          .all<{ id: number }>('SELECT DISTINCT u.id FROM teams t JOIN users u ON u.id = t.commander_id WHERE u.active = 1 ORDER BY u.id')
+          .map((u) => u.id);
+        if (!ownerIds.length) return;
+        assignMode = 'copies';
+      } else if (rule.assignee === 'week_lead') {
         const wid = weekForDate(dateKey);
         const lead = wid ? db().get<{ lead_id: number | null }>('SELECT lead_id FROM weeks WHERE id = ?', wid)?.lead_id : null;
         ownerIds = [lead ?? creator.id];

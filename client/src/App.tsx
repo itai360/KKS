@@ -36,6 +36,7 @@ const SociometricPage = lazyPage(() => import('./pages/SociometricPage'), 'Socio
 const TakpatzHome = lazyPage(() => import('./pages/TakpatzPage'), 'TakpatzHome');
 const TakpatzTeamPage = lazyPage(() => import('./pages/TakpatzPage'), 'TakpatzTeamPage');
 const ExperiencesPage = lazyPage(() => import('./pages/ExperiencesPage'), 'ExperiencesPage');
+const StaffChecksPage = lazyPage(() => import('./pages/StaffChecksPage'), 'StaffChecksPage');
 const CommandPage = lazyPage(() => import('./pages/CommandPage'), 'CommandPage');
 const MorePage = lazyPage(() => import('./pages/MorePage'), 'MorePage');
 const EventEditorPage = lazyPage(() => import('./pages/EventEditorPage'), 'EventEditorPage');
@@ -164,6 +165,7 @@ function AuthedRoutes() {
               <Route path="/cadets/:id/talks/:recordId" element={<TalkPage />} />
               <Route path="/cadets/:id/weapon/:formId" element={<WeaponFormPage />} />
               <Route path="/experiences" element={<ExperiencesPage />} />
+              <Route path="/staff-checks" element={<StaffChecksPage />} />
               <Route path="/procedures" element={<ProceduresPage />} />
               <Route path="/evaluations" element={<EvaluationsPage />} />
               <Route path="/sociometric" element={<SociometricPage />} />

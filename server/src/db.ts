@@ -1645,7 +1645,64 @@ ALTER TABLE debrief_items ADD COLUMN track_id INTEGER REFERENCES tracks(id) ON D
 CREATE INDEX debrief_items_track ON debrief_items(track_id);
 `;
 
-const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50, V51_GOOGLE_EVENTS, SCHEMA_V52, SCHEMA_V53, SCHEMA_V54, SCHEMA_V55, SCHEMA_V56, SCHEMA_V57, SCHEMA_V58, SCHEMA_V59, SCHEMA_V60, SCHEMA_V61, SCHEMA_V62, SCHEMA_V63];
+/**
+ * The staff's checklist for each cadet (staffChecks.ts): the opening talk, the experience, the feedback... - a
+ * mark each, the assignment's with its grade, and whether the grade was written into the course's grade sheet
+ * in Google (gradeSheet.ts, its link here). And the team commanders' weekly ממ"ש tasks, in a course that has a
+ * staff already: on Tuesday the ממ"ש experience to go over with the cadet, on Thursday the ממ"ש plans to approve.
+ */
+function V64_STAFF_CHECKS(db: Db): void {
+  db.exec(`
+CREATE TABLE staff_checks (
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  item TEXT NOT NULL,
+  done_at TEXT NOT NULL,
+  done_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  grade REAL,
+  sheet_state TEXT NOT NULL DEFAULT '',
+  sheet_note TEXT NOT NULL DEFAULT '',
+  sheet_at TEXT,
+  PRIMARY KEY (cadet_id, item)
+);
+CREATE TABLE grade_sheet (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  url TEXT NOT NULL DEFAULT '',
+  file_id TEXT NOT NULL DEFAULT '',
+  file_name TEXT NOT NULL DEFAULT '',
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  email TEXT NOT NULL DEFAULT '',
+  refresh_token TEXT NOT NULL DEFAULT '',
+  connected_at TEXT,
+  last_error TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE grade_sheet_requests (
+  state_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  verifier TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+`);
+  const by = db.get<{ id: number }>("SELECT id FROM users WHERE role = 'commander' AND active = 1 ORDER BY id LIMIT 1");
+  if (!by) return;
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  for (const [title, day] of [
+    ['הורדת התנסות ממ״ש', 2],
+    ['לעשות אישור תכניות ממ״ש', 4],
+  ] as const) {
+    if (db.get('SELECT 1 FROM recurring_rules WHERE title = ?', title)) continue;
+    db.run(
+      "INSERT INTO recurring_rules(title, description, frequency, weekdays, time, assignee, priority, domain, active, start_date, created_by, created_at) VALUES (?, '', 'weekly', ?, '18:00', 'team_commanders', 'normal', 'צוערים', 1, ?, ?, ?)",
+      title,
+      JSON.stringify([day]),
+      today,
+      by.id,
+      now,
+    );
+  }
+}
+
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50, V51_GOOGLE_EVENTS, SCHEMA_V52, SCHEMA_V53, SCHEMA_V54, SCHEMA_V55, SCHEMA_V56, SCHEMA_V57, SCHEMA_V58, SCHEMA_V59, SCHEMA_V60, SCHEMA_V61, SCHEMA_V62, SCHEMA_V63, V64_STAFF_CHECKS];
 
 /** Brings a database to the current schema (tests may stop at an earlier version). */
 export function migrate(db: Db, upTo = MIGRATIONS.length): void {

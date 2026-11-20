@@ -113,6 +113,7 @@ import {
 import { createWeaponForm, decideWeaponForm, deleteWeaponForm, updateWeaponForm, weaponForm } from './weaponForms';
 import { COPY_AREAS, copyIntoSlot, copySource, deleteSlot, inSlot, openParallelCourse, parallelCourses, slotOf, switchSlot } from './parallel';
 import { addNewcomer, applyStaffChanges, courseStaff } from './courseStaff';
+import { markStaffCheck, retryAllSheet, retrySheet, staffChecksBoard } from './staffChecks';
 import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
@@ -701,6 +702,13 @@ export function v3Router(): Router {
     reopenDiscussion(me(req), id(req.params.id));
     res.json(discussionDetail(me(req), id(req.params.id)));
   });
+
+  // ---------------- the staff's checklist for each cadet (staffChecks.ts) ----------------
+
+  r.get('/staff-checks', (req, res) => res.json(staffChecksBoard(me(req))));
+  r.post('/staff-checks/sheet/retry', requireCommander, async (req, res) => res.json(await retryAllSheet(me(req))));
+  r.put('/staff-checks/:cadetId/:item', async (req, res) => res.json({ mark: await markStaffCheck(me(req), id(req.params.cadetId), String(req.params.item), req.body) }));
+  r.post('/staff-checks/:cadetId/:item/sheet', async (req, res) => res.json({ mark: await retrySheet(me(req), id(req.params.cadetId), String(req.params.item)) }));
 
   // ---------------- a course opened beside the current one (parallel.ts) ----------------
 

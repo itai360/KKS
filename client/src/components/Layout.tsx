@@ -59,7 +59,7 @@ interface NavItem {
 /** the menu's last group: the course's calendar and, on it, which calendars it shows */
 const CAL_GROUP = 'יומן';
 /** each topic of the menu, by its title - its mark beside it, and alone when the menu is folded to icons */
-const GROUP_ICONS: Record<string, string> = { 'ניהול משימות': 'tasks', 'תכנון הקורס': 'plan', 'פיקוד ובקרה': 'pulse', צוערים: 'cap', 'תחקירים ולמידה': 'lightbulb', 'סגל וכלים': 'wrench', [CAL_GROUP]: 'calendar' };
+const GROUP_ICONS: Record<string, string> = { 'ניהול משימות': 'tasks', 'תכנון הקורס': 'plan', 'פיקוד ובקרה': 'pulse', 'צוערים וסגל': 'cap', 'תחקירים ולמידה': 'lightbulb', 'סגל וכלים': 'wrench', [CAL_GROUP]: 'calendar' };
 
 /** the bell: how many are new, a short ring as one arrives, and a tap opens them over the screen (Notifications.tsx) */
 function Bell({ unread }: { unread: number }) {
@@ -182,7 +182,7 @@ function DayIcon({ day }: { day: number }) {
 }
 
 export function useNavSections(): NavSection[] {
-  const { isCommander, can } = useSession();
+  const { isCommander, can, user } = useSession();
   const requests = useApi<TaskRequest[]>(isCommander ? '/api/requests' : null, ['requests', 'tasks']);
   const approvals = useApi<Task[]>(isCommander ? '/api/tasks?status=pending_approval' : null, ['tasks']);
   const pending = (requests.data?.length ?? 0) + (approvals.data?.length ?? 0);
@@ -195,10 +195,15 @@ export function useNavSections(): NavSection[] {
   // the cadets, debriefs and learning, the staff and the tools
   const procedures = { to: '/procedures', label: 'אי עמידה בנהלים', icon: 'shield', keywords: 'נהלים הפקרת נשק נשק מאחורה טלפון דיגום כומתה שרוך גומיות תג שם משמעת' };
   const cadets: NavSection = {
-    title: 'צוערים',
+    title: 'צוערים וסגל',
     tab: 'cadets',
     items: [
       { to: '/cadets', label: 'צוערים', icon: 'cap', keywords: 'צוותים פטורים משמעת שיחות אישיות' },
+      // the staff: what each does with each cadet, and each one's tasks and the experiences they run
+      { to: '/staff-checks', label: 'מעקב סגל', icon: 'checks', keywords: 'שיחת פתיחה משוב התנסות ספרא וסייפא מטלה ציון סוציומטרי הורדה' },
+      isCommander
+        ? { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס משימות התנסויות' }
+        : { to: `/team/${user.id}`, label: 'הדף שלי', icon: 'users', keywords: 'המשימות שלי התנסויות שאני מעביר' },
       { to: '/evaluations', label: 'תיקי הערכה', icon: 'folder', keywords: 'ציונים מבחנים ועדה' },
       { to: '/sociometric', label: 'סוציומטרי', icon: 'socio' },
       { to: '/experiences', label: 'התנסויות', icon: 'target', keywords: 'משובים חונך' },
@@ -255,7 +260,6 @@ export function useNavSections(): NavSection[] {
         title: 'סגל וכלים',
         tab: 'more',
         items: [
-          { to: '/team', label: 'הסגל', icon: 'users', keywords: 'כוח אדם כ"א זמינות היעדרויות עומס' },
           { to: '/announcements', label: 'הודעות לסגל', icon: 'flag' },
           { to: '/alignment', label: 'יישור קו', icon: 'message', count: alignment },
           { to: '/directory', label: 'אנשי קשר', icon: 'phone' },
@@ -1133,7 +1137,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </NavLink>
         <NavLink to="/cadets" className={() => (barIdx === 1 ? 'active' : '')} aria-current={barIdx === 1 ? 'page' : undefined}>
           <TabIcon name="cadets" filled={barIdx === 1} />
-          <span className="nav-label">צוערים</span>
+          <span className="nav-label">צוערים וסגל</span>
         </NavLink>
         <button
           id="plus-button"
