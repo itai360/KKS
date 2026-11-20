@@ -16531,18 +16531,29 @@ html:has(.subtask-fold) {
   margin: 0;
 }
 .staff-checks-scroll {
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
 }
-/* the names stay in place while the squares scroll sideways. On an iPhone a pinned column in a table of collapsed
-   borders, or in a scroller of the old touch scrolling, is not painted at all - so each cell draws its own lines
-   (its end and its bottom; the table's first row and column their outer ones), and the pinned cells are a layer of
-   their own */
+/* the names beside the squares, not scrolling with them (StaffChecksPage.tsx): each name on one line, its row as
+   tall as its row of squares */
+.sc-split {
+  display: flex;
+  align-items: flex-start;
+}
 .staff-checks {
   border-collapse: separate;
   border-spacing: 0;
-  width: 100%;
-  min-width: 860px;
   font-size: 13px;
+}
+.staff-checks.sc-grid {
+  width: 100%;
+  min-width: 740px;
+}
+.staff-checks.sc-names {
+  flex: none;
+  width: 132px;
+  table-layout: fixed;
 }
 .staff-checks th,
 .staff-checks td {
@@ -16560,18 +16571,17 @@ html:has(.subtask-fold) {
   min-width: 72px;
   background: var(--card-2);
 }
-.staff-checks .sc-name {
+.staff-checks.sc-names th {
   text-align: start;
-  min-width: 120px;
-  position: sticky;
-  inset-inline-start: 0;
-  background: var(--card);
-  z-index: 2;
+  min-width: 0;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-inline-start: 1px solid var(--line);
-  transform: translateZ(0);
+  background: var(--card);
 }
-.staff-checks thead .sc-name {
+.staff-checks.sc-names thead th {
   background: var(--card-2);
 }
 .sc-grade-tag {

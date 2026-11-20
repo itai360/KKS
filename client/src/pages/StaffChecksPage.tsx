@@ -2,7 +2,7 @@
 // what the staff does with each across the top. A square is tapped once it happened; the assignment's asks for its
 // grade, which goes into the cadet's evaluation file and the course's grade sheet in Google.
 
-import { useEffect, useState } from 'react';
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { STAFF_CHECK_ITEMS, type StaffCheckItem } from '@shared/staffChecks';
 import type { GradeSheetStatus, StaffCheckMark, StaffChecksBoard, StaffChecksTeam } from '@shared/types';
@@ -145,7 +145,28 @@ export function StaffChecksPage() {
   );
 }
 
+/** each row of the names as tall as its row of squares (a grade under a square, a long heading) */
+function useRowsAlike(names: RefObject<HTMLTableElement | null>, grid: RefObject<HTMLTableElement | null>) {
+  useLayoutEffect(() => {
+    const g = grid.current;
+    const n = names.current;
+    if (!g || !n) return;
+    const sync = () => {
+      for (let i = 0; i < Math.min(g.rows.length, n.rows.length); i++) n.rows[i].style.height = `${g.rows[i].getBoundingClientRect().height}px`;
+    };
+    sync();
+    const watch = new ResizeObserver(sync);
+    watch.observe(g);
+    return () => {
+      watch.disconnect();
+    };
+  });
+}
+
 function TeamTable({ team, onTap, onRetry }: { team: StaffChecksTeam; onTap: (c: StaffChecksTeam['cadets'][number], i: StaffCheckItem) => void; onRetry: (cadetId: number, key: string) => void }) {
+  const names = useRef<HTMLTableElement>(null);
+  const grid = useRef<HTMLTableElement>(null);
+  useRowsAlike(names, grid);
   return (
     <section className="card staff-checks-card" aria-labelledby={`team-${team.id ?? 'none'}`}>
       <div className="card-head">
@@ -159,77 +180,92 @@ function TeamTable({ team, onTap, onRetry }: { team: StaffChecksTeam; onTap: (c:
       {!team.cadets.length ? (
         <div className="card-body small muted">אין צוערים בצוות.</div>
       ) : (
-        <div className="staff-checks-scroll">
-          <table className="staff-checks">
+        <div className="sc-split">
+          {/* the names stand apart from the squares and do not move: only the squares scroll sideways (a pinned
+              column in a table scrolled right to left is put out of place on an iPhone, and the names were gone).
+              Each square says whose it is, so the names here are for the eye alone */}
+          <table className="staff-checks sc-names" ref={names} aria-hidden="true">
             <thead>
               <tr>
-                <th scope="col" className="sc-name">
-                  שם הצוער
-                </th>
-                {STAFF_CHECK_ITEMS.map((i) => (
-                  <th key={i.key} scope="col">
-                    {i.label}
-                    {i.grade && <span className="sc-grade-tag">+ ציון</span>}
-                  </th>
-                ))}
+                <th>שם הצוער</th>
               </tr>
             </thead>
             <tbody>
               {team.cadets.map((c) => (
                 <tr key={c.id}>
-                  <th scope="row" className="sc-name">
-                    {c.name}
-                  </th>
-                  {STAFF_CHECK_ITEMS.map((i) => {
-                    const m = c.marks[i.key];
-                    const label = `${i.label} - ${c.name}`;
-                    return (
-                      <td key={i.key}>
-                        <button
-                          type="button"
-                          className={`sc-box${m ? ' on' : ''}`}
-                          aria-pressed={!!m}
-                          aria-label={label}
-                          disabled={!team.canMark}
-                          title={m ? `${m.byName ? `${m.byName} · ` : ''}${fmtDateTime(m.at)}` : team.canMark ? (i.grade ? 'סימון - עם הציון' : 'סימון') : 'רק מפקד הצוות מסמן'}
-                          onClick={() => onTap(c, i)}
-                        >
-                          {m && <Icon name="check" size={14} />}
-                        </button>
-                        {m && m.grade !== null && (
-                          <span className="sc-grade">
-                            {m.grade}
-                            {m.sheet === 'written' && (
-                              <span className="sc-sheet ok" title={`נכתב בגליון${m.sheetNote ? ` (${m.sheetNote})` : ''}`}>
-                                <Icon name="checks" size={11} />
-                              </span>
-                            )}
-                            {m.sheet === 'error' && (
-                              <button type="button" className="sc-sheet err" title={`לא נכתב בגליון: ${m.sheetNote} - לחיצה לניסיון חוזר`} aria-label={`ניסיון חוזר לכתוב בגליון את הציון של ${c.name}`} onClick={() => onRetry(c.id, i.key)}>
-                                !
-                              </button>
-                            )}
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
+                  <th title={c.name}>{c.name}</th>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr>
-                <th scope="row" className="sc-name tiny muted">
-                  בוצע
-                </th>
-                {STAFF_CHECK_ITEMS.map((i) => (
-                  <td key={i.key} className="tiny muted mono">
-                    {team.cadets.filter((c) => c.marks[i.key]).length}/{team.cadets.length}
-                  </td>
-                ))}
+                <th className="tiny muted">בוצע</th>
               </tr>
             </tfoot>
           </table>
+          <div className="staff-checks-scroll">
+            <table className="staff-checks sc-grid" ref={grid}>
+              <thead>
+                <tr>
+                  {STAFF_CHECK_ITEMS.map((i) => (
+                    <th key={i.key} scope="col">
+                      {i.label}
+                      {i.grade && <span className="sc-grade-tag">+ ציון</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {team.cadets.map((c) => (
+                  <tr key={c.id}>
+                    {STAFF_CHECK_ITEMS.map((i) => {
+                      const m = c.marks[i.key];
+                      const label = `${i.label} - ${c.name}`;
+                      return (
+                        <td key={i.key}>
+                          <button
+                            type="button"
+                            className={`sc-box${m ? ' on' : ''}`}
+                            aria-pressed={!!m}
+                            aria-label={label}
+                            disabled={!team.canMark}
+                            title={m ? `${m.byName ? `${m.byName} · ` : ''}${fmtDateTime(m.at)}` : team.canMark ? (i.grade ? 'סימון - עם הציון' : 'סימון') : 'רק מפקד הצוות מסמן'}
+                            onClick={() => onTap(c, i)}
+                          >
+                            {m && <Icon name="check" size={14} />}
+                          </button>
+                          {m && m.grade !== null && (
+                            <span className="sc-grade">
+                              {m.grade}
+                              {m.sheet === 'written' && (
+                                <span className="sc-sheet ok" title={`נכתב בגליון${m.sheetNote ? ` (${m.sheetNote})` : ''}`}>
+                                  <Icon name="checks" size={11} />
+                                </span>
+                              )}
+                              {m.sheet === 'error' && (
+                                <button type="button" className="sc-sheet err" title={`לא נכתב בגליון: ${m.sheetNote} - לחיצה לניסיון חוזר`} aria-label={`ניסיון חוזר לכתוב בגליון את הציון של ${c.name}`} onClick={() => onRetry(c.id, i.key)}>
+                                  !
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  {STAFF_CHECK_ITEMS.map((i) => (
+                    <td key={i.key} className="tiny muted mono">
+                      {team.cadets.filter((c) => c.marks[i.key]).length}/{team.cadets.length}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
     </section>
