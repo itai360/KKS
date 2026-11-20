@@ -739,9 +739,9 @@ export function v3Router(): Router {
   });
   r.get('/courses/parallel/:id/copy/:area', requireCommander, (req, res) => {
     const area = z.enum(COPY_AREAS as [string, ...string[]]).parse(req.params.area) as (typeof COPY_AREAS)[number];
-    res.json(copySource(id(req.params.id), area));
+    res.json(copySource(id(req.params.id), area, me(req)));
   });
-  r.post('/courses/parallel/:id/copy', requireCommander, (req, res) => res.json(copyIntoSlot(id(req.params.id), req.body)));
+  r.post('/courses/parallel/:id/copy', requireCommander, (req, res) => res.json(copyIntoSlot(id(req.params.id), req.body, me(req))));
   r.post('/courses/parallel/:id/promote', requireCommander, async (req, res) => {
     const archive = await promoteParallelCourse(me(req), id(req.params.id), req.body);
     switchSlot(res, null);

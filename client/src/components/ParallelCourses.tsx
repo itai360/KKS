@@ -29,7 +29,18 @@ const AREAS: { key: CopyArea; label: string; hint: string }[] = [
   { key: 'guide', label: 'מדרג אכיפה', hint: '' },
   { key: 'lessons', label: 'בנק הלקחים', hint: 'הלקחים שנשמרו למחזור הבא' },
 ];
-const areaLabel = (a: CopyArea) => AREAS.find((x) => x.key === a)?.label ?? a;
+/** what can be copied later, item by item: the staff's tasks too - each going on with whoever does that job in the
+ *  new course (who goes on is set in "הסגל - מי ממשיך") */
+const COPY_AREAS: { key: CopyArea; label: string }[] = [{ key: 'tasks', label: 'משימות הסגל - המשכיות' }, ...AREAS];
+const areaLabel = (a: CopyArea) => COPY_AREAS.find((x) => x.key === a)?.label ?? a;
+
+type CopyItem = CopySource['items'][number];
+/** the items in their groups (whose they will be), in the order they came */
+const grouped = (items: CopyItem[]) => {
+  const out = new Map<string, CopyItem[]>();
+  for (const i of items) out.set(i.group ?? '', [...(out.get(i.group ?? '') ?? []), i]);
+  return [...out];
+};
 
 const dateY = (key: string) => {
   const [y, m, d] = key.split('-');
@@ -300,13 +311,33 @@ function CopyIntoCourse({ course, main, onClose, onDone }: { course: ParallelCou
   const [err, setErr] = useState<string | null>(null);
   const toast = useToast();
   const open = (data?.area === area ? data.items : []).filter((i) => !i.exists);
+  const flip = (ids: number[], on: boolean) =>
+    setPicked((p) => {
+      const n = new Set(p);
+      for (const id of ids) {
+        if (on) n.add(id);
+        else n.delete(id);
+      }
+      return n;
+    });
+  const item = (i: CopyItem) => (
+    <label key={i.id} className={`check pcourse-item${i.exists ? ' is-there' : ''}`}>
+      <input type="checkbox" disabled={i.exists} checked={i.exists || picked.has(i.id)} onChange={() => flip([i.id], !picked.has(i.id))} />
+      <span className="grow small">
+        {i.name}
+        {i.sub && <span className="muted"> · {i.sub}</span>}
+      </span>
+      {i.exists && <span className="tiny muted">כבר שם</span>}
+    </label>
+  );
 
   const submit = async () => {
     setBusy(true);
     setErr(null);
     try {
       const r = await api.post<{ copied: number; skipped: number }>(`/api/courses/parallel/${course.id}/copy`, { area, ids: [...picked] });
-      toast({ title: r.copied === 1 ? `הועתק פריט אחד ל${course.name}` : `הועתקו ${r.copied} פריטים ל${course.name}`, tone: 'green' });
+      const what = area === 'tasks' ? (r.copied === 1 ? 'משימה אחת' : `${r.copied} משימות`) : r.copied === 1 ? 'פריט אחד' : `${r.copied} פריטים`;
+      toast({ title: `${r.copied === 1 ? 'הועתקה' : 'הועתקו'} ${what} ל${course.name}`, tone: 'green' });
       setPicked(new Set());
       onDone();
       await reload();
@@ -340,13 +371,14 @@ function CopyIntoCourse({ course, main, onClose, onDone }: { course: ParallelCou
               setPicked(new Set());
             }}
           >
-            {AREAS.map((a) => (
+            {COPY_AREAS.map((a) => (
               <option key={a.key} value={a.key}>
                 {a.label}
               </option>
             ))}
           </Select>
         </Field>
+        {data?.area === area && data.note && <p className="small muted">{data.note}</p>}
         <ErrorBox error={error ?? err} />
         {loading && data?.area !== area ? (
           <Loading rows={3} />
@@ -363,28 +395,27 @@ function CopyIntoCourse({ course, main, onClose, onDone }: { course: ParallelCou
               )}
             </div>
             <div className="pcourse-items" role="group" aria-label={areaLabel(area)}>
-              {data.items.map((i) => (
-                <label key={i.id} className={`check pcourse-item${i.exists ? ' is-there' : ''}`}>
-                  <input
-                    type="checkbox"
-                    disabled={i.exists}
-                    checked={i.exists || picked.has(i.id)}
-                    onChange={() =>
-                      setPicked((p) => {
-                        const n = new Set(p);
-                        if (n.has(i.id)) n.delete(i.id);
-                        else n.add(i.id);
-                        return n;
-                      })
-                    }
-                  />
-                  <span className="grow small">
-                    {i.name}
-                    {i.sub && <span className="muted"> · {i.sub}</span>}
-                  </span>
-                  {i.exists && <span className="tiny muted">כבר שם</span>}
-                </label>
-              ))}
+              {data.items.some((i) => i.group)
+                ? grouped(data.items).map(([group, items]) => {
+                    const free = items.filter((i) => !i.exists).map((i) => i.id);
+                    const all = free.length > 0 && free.every((id) => picked.has(id));
+                    return (
+                      <div key={group} className="pcourse-group" role="group" aria-label={group}>
+                        <div className="pcourse-group-head">
+                          <Icon name="my" size={15} />
+                          <b className="grow small">{group}</b>
+                          <span className="tiny muted">{items.length}</span>
+                          {free.length > 0 && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => flip(free, !all)}>
+                              {all ? 'ניקוי' : 'כל המשימות'}
+                            </button>
+                          )}
+                        </div>
+                        {items.map(item)}
+                      </div>
+                    );
+                  })
+                : data.items.map(item)}
             </div>
           </>
         ) : null}

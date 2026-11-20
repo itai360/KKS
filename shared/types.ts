@@ -676,7 +676,7 @@ export interface WeekRenumber {
 }
 
 /** what a course opened beside the current one can take from it - at its opening, and later */
-export type CopyArea = 'weeks' | 'tracks' | 'templates' | 'recurring' | 'teams' | 'documents' | 'guide' | 'lessons';
+export type CopyArea = 'weeks' | 'tracks' | 'templates' | 'recurring' | 'teams' | 'documents' | 'guide' | 'lessons' | 'tasks';
 
 /** a course opened beside the current one (the next cycle, prepared while this one runs) */
 export interface ParallelCourse {
@@ -784,7 +784,10 @@ export interface CopySource {
   area: CopyArea;
   /** the current course's name */
   from: string;
-  items: { id: number; name: string; sub: string; exists: boolean }[];
+  /** how what is copied goes there (the staff's tasks: to whom, and when) */
+  note?: string;
+  /** group: whose it will be there (the staff's tasks) - the items come grouped by it */
+  items: { id: number; name: string; sub: string; group?: string; exists: boolean }[];
 }
 
 export type AttentionKind =

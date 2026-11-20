@@ -143,6 +143,63 @@ describe('a course beside the current one', () => {
     expect((await c.s1.get(`/api/courses/parallel/${course.id}/copy/templates`)).status).toBe(403);
   });
 
+  it("the staff's tasks go on in it: with whoever does that job there, at the same point of the course", async () => {
+    await fillCourse();
+    // s1's (with a sub-task, s3 beside it), s2's done one, s3's - and what does not go on: cancelled, private, a recurring task's
+    const ready = await newTask(c.cmd, { title: 'תכנון מטווח', ownerIds: [c.ids.s1], deadline: at('2026-10-14', '09:30') });
+    expect((await c.cmd.patch(`/api/tasks/${ready}`, { participantIds: [c.ids.s3] })).status).toBe(200);
+    await newTask(c.cmd, { title: 'הזמנת מטרות', ownerIds: [c.ids.s1], parentId: ready, deadline: at('2026-10-12', '12:00') });
+    const done = await newTask(c.cmd, { title: 'סיכום שבוע שטח', ownerIds: [c.ids.s2], deadline: at('2026-10-02', '18:00') });
+    expect((await c.s2.post(`/api/tasks/${done}/transition`, { action: 'complete' })).status).toBe(200);
+    await newTask(c.cmd, { title: 'שיחות חתך', ownerIds: [c.ids.s3], deadline: at('2026-11-01', '20:00') });
+    const off = await newTask(c.cmd, { title: 'משימה שבוטלה', ownerIds: [c.ids.s2] });
+    expect((await c.cmd.post(`/api/tasks/${off}/transition`, { action: 'cancel', reason: 'כבר לא נדרש' })).status).toBe(200);
+    await newTask(c.s2, { title: 'תזכורת אישית', ownerIds: [c.ids.s2], visibility: 'private' });
+
+    const course = await openBeside({ take: [] });
+    // the next cycle: s1 leaves and s2 takes the place; s3 leaves with no one in it
+    const staff = `/api/courses/parallel/${course.id}/staff`;
+    expect((await c.cmd.post(staff, { changes: [{ userId: c.ids.s1, inCourse: false, replacedBy: c.ids.s2 }, { userId: c.ids.s3, inCourse: false }] })).status).toBe(200);
+
+    const src = (await c.cmd.get(`/api/courses/parallel/${course.id}/copy/tasks`)).body as CopySource;
+    expect(src.note).toContain('26 שבועות');
+    const byName = Object.fromEntries(src.items.map((i) => [i.name, i]));
+    expect(Object.keys(byName).sort()).toEqual(['הזמנת ציוד', 'סיכום שבוע שטח', 'שיחות חתך', 'תכנון מטווח']);
+    expect(byName['תכנון מטווח']).toMatchObject({ group: 'מפק"צ 2 (במקום מפק"צ 1)', exists: false });
+    expect(byName['תכנון מטווח'].sub).toBe('14.10 ← 14.4 · פתוחה');
+    expect(byName['סיכום שבוע שטח']).toMatchObject({ group: 'מפק"צ 2' });
+    expect(byName['סיכום שבוע שטח'].sub).toContain('הושלמה');
+    expect(byName['שיחות חתך'].group).toBe('מפק"צ 3 - לא ממשיך, המשימות יעברו אליך');
+    expect((await c.s1.get(`/api/courses/parallel/${course.id}/copy/tasks`)).status).toBe(403);
+
+    const ids = ['תכנון מטווח', 'סיכום שבוע שטח', 'שיחות חתך'].map((n) => byName[n].id);
+    expect((await c.cmd.post(`/api/courses/parallel/${course.id}/copy`, { area: 'tasks', ids })).body).toEqual({ copied: 3, skipped: 0 });
+    // again: there already
+    expect((await c.cmd.post(`/api/courses/parallel/${course.id}/copy`, { area: 'tasks', ids })).body).toEqual({ copied: 0, skipped: 3 });
+    expect(((await c.cmd.get(`/api/courses/parallel/${course.id}/copy/tasks`)).body as CopySource).items.filter((i) => i.exists).length).toBe(3);
+
+    withSlotDb(course.id, () => {
+      const rows = db().all<{ id: number; title: string; owner_id: number; deadline: string; status: string; parent_id: number | null; completed_at: string | null }>(
+        'SELECT id, title, owner_id, deadline, status, parent_id, completed_at FROM tasks ORDER BY id',
+      );
+      const of = (t: string) => rows.find((r) => r.title === t)!;
+      // to whoever does the job there, at the same point of the course (26 weeks on), the hour kept - to be done anew
+      expect(of('תכנון מטווח')).toMatchObject({ owner_id: c.ids.s2, deadline: at('2027-04-14', '09:30'), status: 'todo', parent_id: null });
+      expect(of('הזמנת מטרות')).toMatchObject({ owner_id: c.ids.s2, deadline: at('2027-04-12', '12:00'), parent_id: of('תכנון מטווח').id });
+      expect(of('סיכום שבוע שטח')).toMatchObject({ owner_id: c.ids.s2, status: 'todo', completed_at: null });
+      expect(of('שיחות חתך')).toMatchObject({ owner_id: c.ids.cmd, deadline: at('2027-05-02', '20:00') });
+      expect(rows.map((r) => r.title)).not.toContain('משימה שבוטלה');
+      expect(rows.map((r) => r.title)).not.toContain('תזכורת אישית');
+      // s3 beside it does not go on, and no one takes the place: no one is beside it there
+      expect(db().all('SELECT user_id FROM task_participants WHERE task_id = ?', of('תכנון מטווח').id)).toEqual([]);
+      expect(db().get<{ body: string }>('SELECT body FROM task_updates WHERE task_id = ?', of('תכנון מטווח').id)?.body).toBe(
+        'ממשיכה מקורס בדיקה - מחזור 1: שם הייתה של מפק"צ 1, פתוחה, עד 14.10.',
+      );
+    });
+    // and a course opening does not take the staff's tasks along (who goes on is not known yet)
+    expect((await c.cmd.post('/api/courses/parallel', { name: 'מחזור 3', take: ['tasks'] })).status).toBe(400);
+  });
+
   it("a week's tasks in it repeat what the current course did that week", async () => {
     await fillCourse();
     const course = await openBeside({ take: ['weeks'] });

@@ -7,7 +7,8 @@
 //
 // The new course starts with what the commander chose to take from the current one (weeks - moved to its
 // dates -, tracks, templates, recurring tasks, teams, documents, the discipline guide, the lessons kept for the
-// next cycle), and takes more from it later, item by item. When the current course ends, the one opened beside
+// next cycle), and takes more from it later, item by item - the staff's tasks too, each going on with whoever
+// does that job in the next cycle. When the current course ends, the one opened beside
 // it becomes the current course; the one that ended is kept whole, as every course that ended is.
 
 import { createHash, randomUUID } from 'node:crypto';
@@ -15,7 +16,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
-import { addDays, diffDays, isDateKey, localDateKey } from '../../shared/dates';
+import { addDays, diffDays, isDateKey, localDateKey, localTime, zonedIso } from '../../shared/dates';
 import { searchKey } from '../../shared/search';
 import type { CopyArea, CopySource, ParallelCourse } from '../../shared/types';
 import { parseCookies, type UserRow } from './auth';
@@ -332,7 +333,9 @@ export function switchSlot(res: Response, id: number | null, userId?: number): v
 
 // ---------------- opening one ----------------
 
-export const COPY_AREAS: CopyArea[] = ['weeks', 'tracks', 'templates', 'recurring', 'teams', 'documents', 'guide', 'lessons'];
+export const COPY_AREAS: CopyArea[] = ['weeks', 'tracks', 'templates', 'recurring', 'teams', 'documents', 'guide', 'lessons', 'tasks'];
+/** what a course opening takes along - the staff's tasks come later, once it is known who goes on (courseStaff.ts) */
+const OPEN_AREAS = COPY_AREAS.filter((a) => a !== 'tasks');
 
 const dateOrNull = z
   .string()
@@ -347,7 +350,7 @@ export const openCourseSchema = z
     symbol: z.string().trim().max(12).optional(),
     startDate: dateOrNull,
     endDate: dateOrNull,
-    take: z.array(z.enum(COPY_AREAS as [CopyArea, ...CopyArea[]])).max(20).optional().default([]),
+    take: z.array(z.enum(OPEN_AREAS as [CopyArea, ...CopyArea[]])).max(20).optional().default([]),
   })
   .refine((v) => !v.startDate || !v.endDate || v.startDate <= v.endDate, 'תאריך הסיום לפני תאריך ההתחלה')
   // the weeks move to the same point of the new course: from its start
@@ -504,6 +507,8 @@ function copyWhole(area: CopyArea, from: Db, to: Db, shift: number, take: CopyAr
       }));
       return;
     }
+    case 'tasks':
+      return;
   }
 }
 
@@ -535,14 +540,17 @@ const AREA: Record<CopyArea, AreaSpec> = {
     order: 'occurred_on DESC, id DESC',
     where: "id IN (SELECT debrief_id FROM debrief_items WHERE kind = 'lesson' AND horizon = 'next')",
   },
+  // its own way (staffTasksSource, carryStaffTasks): to whom, and when
+  tasks: { table: 'tasks', name: 'title', label: (r) => String(r.title), order: 'deadline' },
 };
 
 const sameName = (d: Db, spec: AreaSpec) => new Set(d.all<Record<string, unknown>>(`SELECT ${q(spec.name)} AS n FROM ${q(spec.table)}${spec.where ? ` WHERE ${spec.where}` : ''}`).map((r) => searchKey(String(r.n ?? ''))));
 
 /** what the current course has of an area, each marked when the course beside it has it already */
-export function copySource(slotId: number, area: CopyArea): CopySource {
+export function copySource(slotId: number, area: CopyArea, actor: UserRow): CopySource {
   const spec = AREA[area];
   if (!spec) throw badRequest('אין דבר כזה להעתיק');
+  if (area === 'tasks') return staffTasksSource(slotId, actor);
   const home = homeDb();
   const rows = home.all<Record<string, unknown>>(`SELECT * FROM ${q(spec.table)}${spec.where ? ` WHERE ${spec.where}` : ''} ORDER BY ${spec.order}`);
   const here = inSlot(slotId, () => sameName(db(), spec));
@@ -559,8 +567,9 @@ export const copySchema = z.object({
 });
 
 /** Copies chosen items of the current course into the course beside it - new there, what it has already left. */
-export function copyIntoSlot(slotId: number, raw: unknown): { copied: number; skipped: number } {
+export function copyIntoSlot(slotId: number, raw: unknown, actor: UserRow): { copied: number; skipped: number } {
   const p = copySchema.parse(raw);
+  if (p.area === 'tasks') return carryStaffTasks(slotId, p.ids, actor);
   const spec = AREA[p.area];
   const home = homeDb();
   const rows = home.all<Record<string, unknown>>(`SELECT * FROM ${q(spec.table)} WHERE id IN (${p.ids.join(',')})${spec.where ? ` AND ${spec.where}` : ''}`);
@@ -660,7 +669,185 @@ function insertOne(area: CopyArea, from: Db, to: Db, r: Record<string, unknown>,
       }
       return;
     }
+    case 'tasks':
+      return; // carryStaffTasks
   }
+}
+
+// ---------------- the staff's tasks, going on in the next cycle ----------------
+// What each of the staff did this cycle is theirs to do again in the next: a task goes to the same person if
+// they go on to the next course, to whoever takes their place if not (the course's staff, courseStaff.ts), or
+// to the commander copying it when no one does. It comes at the same point of the next course (moved by the
+// courses' starts, as the weeks are), to be done anew - with its sub-tasks, the people beside it, and a word of
+// what it was this cycle.
+
+/** a task of its own (not a sub-task, nor one a recurring task makes - the recurring tasks are copied as such),
+ *  not cancelled, not private */
+const CARRIED = "parent_id IS NULL AND recurring_rule_id IS NULL AND status <> 'cancelled' AND visibility <> 'private'";
+
+const STATUS_WORD: Record<string, string> = { todo: 'פתוחה', in_progress: 'בביצוע', waiting: 'ממתינה', pending_approval: 'ממתינה לאישור', done: 'הושלמה' };
+
+interface Carrier {
+  to: number;
+  /** whose the task will be, as the commander reads it */
+  label: string;
+  /** no one goes on with it: the commander copying it has it */
+  fallback?: boolean;
+}
+
+/** whose a task becomes in the course beside (in scope): its owner's if they go on, whoever takes their place */
+function carrierOf(actor: UserRow): (owner: number) => Carrier {
+  const d = db();
+  const out = new Map(d.all<{ user_id: number; replaced_by: number | null }>('SELECT user_id, replaced_by FROM course_staff_out').map((r) => [r.user_id, r.replaced_by]));
+  // the staff the courses know: every open account, and those waiting for the next course
+  const staff = new Map(homeDb().all<{ id: number; display_name: string }>('SELECT id, display_name FROM users WHERE active = 1 OR id IN (SELECT user_id FROM course_staff_out)').map((u) => [u.id, u.display_name]));
+  const nameOf = (id: number) => staff.get(id) ?? homeDb().get<{ display_name: string }>('SELECT display_name FROM users WHERE id = ?', id)?.display_name ?? 'איש סגל';
+  const there = (id: number | null | undefined): id is number => typeof id === 'number' && staff.has(id) && !out.has(id) && !!d.get('SELECT 1 FROM users WHERE id = ?', id);
+  return (owner) => {
+    if (there(owner)) return { to: owner, label: nameOf(owner) };
+    const by = out.get(owner);
+    if (there(by)) return { to: by, label: `${nameOf(by)} (במקום ${nameOf(owner)})` };
+    return { to: actor.id, label: `${nameOf(owner)} - לא ממשיך, המשימות יעברו אליך`, fallback: true };
+  };
+}
+
+/** a task's deadline at the same point of the course beside: its day moved, its hour kept */
+function movedDeadline(iso: string, shift: number, zone: string): string {
+  if (!shift) return iso;
+  return zonedIso(addDays(localDateKey(iso, zone), shift), localTime(iso, zone), zone);
+}
+
+const dayMonth = (iso: string, zone: string) => {
+  const [, m, d] = localDateKey(iso, zone).split('-');
+  return `${Number(d)}.${Number(m)}`;
+};
+
+function staffTasksSource(slotId: number, actor: UserRow): CopySource {
+  const home = homeDb();
+  const zone = tz();
+  const from = String(settingOf(home, 'courseName') ?? '');
+  const rows = home.all<{ id: number; title: string; owner_id: number; deadline: string; status: string }>(
+    `SELECT id, title, owner_id, deadline, status FROM tasks WHERE ${CARRIED} ORDER BY deadline, id`,
+  );
+  return inSlot(slotId, () => {
+    const to = db();
+    const shift = shiftDays(home, to);
+    const carrier = carrierOf(actor);
+    const there = new Set(to.all<{ title: string; owner_id: number }>('SELECT title, owner_id FROM tasks WHERE parent_id IS NULL').map((t) => `${searchKey(t.title)}|${t.owner_id}`));
+    const weeks = Math.round(shift / 7);
+    const name = String(settingOf(to, 'courseName') ?? '');
+    return {
+      area: 'tasks' as const,
+      from,
+      note: shift
+        ? `כל משימה עוברת לאותו איש סגל, או למי שנכנס במקומו (לפי "הסגל - מי ממשיך"), ומגיעה לאותה נקודה ב${name} - ${weeks} שבועות אחרי - כמשימה פתוחה.`
+        : `כל משימה עוברת לאותו איש סגל, או למי שנכנס במקומו (לפי "הסגל - מי ממשיך"), כמשימה פתוחה. המועדים נשארים כמו שהם - כדי שיוזזו לאותה נקודה בקורס, צריך תאריך התחלה לשני הקורסים.`,
+      items: rows
+        .map((r) => {
+          const c = carrier(r.owner_id);
+          const due = movedDeadline(r.deadline, shift, zone);
+          return {
+            id: r.id,
+            name: r.title,
+            sub: `${shift ? `${dayMonth(r.deadline, zone)} ← ${dayMonth(due, zone)}` : dayMonth(due, zone)} · ${STATUS_WORD[r.status] ?? r.status}`,
+            group: c.label,
+            exists: there.has(`${searchKey(r.title)}|${c.to}`),
+          };
+        })
+        .sort((a, b) => a.group.localeCompare(b.group, 'he')),
+    };
+  });
+}
+
+/** the chosen tasks, each going on in the course beside with whoever does that job there */
+function carryStaffTasks(slotId: number, ids: number[], actor: UserRow): { copied: number; skipped: number } {
+  const home = homeDb();
+  const zone = tz();
+  const from = String(settingOf(home, 'courseName') ?? '');
+  const rows = home.all<Record<string, unknown>>(`SELECT * FROM tasks WHERE id IN (${ids.join(',')}) AND ${CARRIED} ORDER BY deadline, id`);
+  let copied = 0;
+  inSlot(slotId, () => {
+    const to = db();
+    const shift = shiftDays(home, to);
+    const carrier = carrierOf(actor);
+    const there = new Set(to.all<{ title: string; owner_id: number }>('SELECT title, owner_id FROM tasks WHERE parent_id IS NULL').map((t) => `${searchKey(t.title)}|${t.owner_id}`));
+    const now = nowIso();
+    // the copies of one task given to several stay together there
+    const groups = new Map<string, string>();
+    const fresh = (r: Record<string, unknown>, owner: number, parent: number | null) => {
+      const due = movedDeadline(String(r.deadline), shift, zone);
+      const week = to.get<{ id: number }>('SELECT id FROM weeks WHERE start_date <= ? AND end_date >= ? ORDER BY start_date LIMIT 1', localDateKey(due, zone), localDateKey(due, zone))?.id ?? null;
+      const group = typeof r.group_id === 'string' && r.group_id ? (groups.get(r.group_id) ?? groups.set(r.group_id, randomUUID()).get(r.group_id)!) : null;
+      return insertNew(home, to, 'tasks', {
+        ...r,
+        owner_id: owner,
+        created_by: actor.id,
+        deadline: due,
+        status: 'todo',
+        week_id: week,
+        track_id: trackThere(home, to, r.track_id),
+        parent_id: parent,
+        group_id: group,
+        event_id: null,
+        meeting_id: null,
+        recurring_rule_id: null,
+        cadet_id: null,
+        experience_id: null,
+        debrief_id: null,
+        block_reason: null,
+        block_waiting_for: null,
+        block_next_step: null,
+        needs_commander: 0,
+        overdue_response: null,
+        overdue_response_at: null,
+        cancel_reason: null,
+        carried_count: 0,
+        reminded_24h: 0,
+        reminded_2h: 0,
+        overdue_notified: 0,
+        awaiting_accept: 0,
+        started_at: null,
+        completed_at: null,
+        completed_late: null,
+        created_at: now,
+        updated_at: now,
+        last_activity_at: now,
+      });
+    };
+    const besides = (oldId: number, newId: number, owner: number) => {
+      // whoever was beside it, or takes their place - one who leaves with no one in their place is not
+      for (const p of home.all<{ user_id: number }>('SELECT user_id FROM task_participants WHERE task_id = ?', oldId)) {
+        const who = carrier(p.user_id);
+        if (!who.fallback && who.to !== owner) to.run('INSERT OR IGNORE INTO task_participants(task_id, user_id) VALUES (?, ?)', newId, who.to);
+      }
+    };
+    to.tx(() => {
+      for (const r of rows) {
+        const c = carrier(r.owner_id as number);
+        const key = `${searchKey(String(r.title))}|${c.to}`;
+        if (there.has(key)) continue;
+        const id = fresh(r, c.to, null);
+        besides(r.id as number, id, c.to);
+        for (const sub of home.all<Record<string, unknown>>("SELECT * FROM tasks WHERE parent_id = ? AND status <> 'cancelled' ORDER BY id", r.id as number)) {
+          const sc = carrier(sub.owner_id as number);
+          const sid = fresh(sub, sc.to, id);
+          besides(sub.id as number, sid, sc.to);
+        }
+        const was = homeDb().get<{ display_name: string }>('SELECT display_name FROM users WHERE id = ?', r.owner_id as number)?.display_name ?? '';
+        to.run(
+          "INSERT INTO task_updates(task_id, user_id, kind, body, created_at) VALUES (?, ?, 'comment', ?, ?)",
+          id,
+          actor.id,
+          `ממשיכה מ${from}: שם הייתה של ${was}, ${STATUS_WORD[String(r.status)] ?? String(r.status)}, עד ${dayMonth(String(r.deadline), zone)}.`,
+          now,
+        );
+        there.add(key);
+        copied++;
+      }
+    });
+  });
+  changed(...ALL_TOPICS);
+  return { copied, skipped: rows.length - copied };
 }
 
 // ---------------- its end: deleted, or becoming the current course ----------------

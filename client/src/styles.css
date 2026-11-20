@@ -9111,6 +9111,25 @@ html[data-kb] .topbar .search-pop {
 .check.pcourse-item.is-there {
   color: var(--muted);
 }
+/* the staff's tasks: under whose they will be, each with a "all of theirs" */
+.pcourse-group + .pcourse-group {
+  border-top: 1px solid var(--line-2);
+}
+.pcourse-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 8px 4px 12px;
+  background: var(--card-2);
+  border-bottom: 1px solid var(--line);
+}
+.pcourse-group-head .btn {
+  min-height: 32px;
+}
 .course-menu {
   padding: 4px 0;
   border-bottom: 1px solid var(--line);
