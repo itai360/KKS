@@ -515,7 +515,8 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
   };
   return (
     <BulkScope quickDelete={false} entity="teams" noun="צוותים" topics={['cadets']} ids={teams.map((t) => t.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} צוותים? הצוערים שלהם יישארו ללא צוות.' }]}>
-    <Modal title="צוותים ומפקדי צוות" onClose={onClose}>
+    {/* each field saves as it is left; "שמירה" saves the one being edited (and a new team typed in) and closes */}
+    <Modal title="צוותים ומפקדי צוות" onClose={onClose} autosave>
       <div className="col gap-6">
         {teams.length > 1 && (
           <div>
@@ -1348,7 +1349,8 @@ function RecordForm({
           </Field>
         </div>
       )}
-      <div className="row">
+      {/* in sight while the fields above are filled in: at the foot of the dialog, or above the phone's bar */}
+      <div className="row sticky-save">
         <button className="btn btn-primary" disabled={busy || (!body.trim() && !(kind === 'discipline' && offense)) || (kind === 'evaluation' && !score)} onClick={() => void submit()}>
           שמור בתיק
         </button>

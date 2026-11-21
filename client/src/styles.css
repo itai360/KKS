@@ -4562,6 +4562,12 @@ input::-webkit-date-and-time-value {
     border-radius: 0;
     padding-bottom: calc(14px + env(safe-area-inset-bottom));
   }
+  /* a dialog that saves as you go: its one button spans the sheet, under the thumb */
+  .modal-save-foot .btn.modal-save {
+    flex: 1;
+    height: 48px;
+    font-size: 16px;
+  }
   /* the phone's bar floats over the page as a capsule of glass: the symbols and their words, a mark that
      slides to the chosen tab, the "+" in the middle */
   .bottom-nav {
@@ -12954,12 +12960,13 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 .save-bar .small {
   margin-inline-end: 6px;
 }
-.save-bar-undo {
+/* inside the bar (apple.css, read after this file, gives every .btn a grey capsule of its own) */
+.save-bar .save-bar-undo {
   border-color: transparent;
   background: transparent;
   color: var(--paper);
 }
-.save-bar-save {
+.save-bar .save-bar-save {
   border-color: var(--paper);
   background: var(--paper);
   color: var(--ink);
@@ -12980,6 +12987,51 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 @media (prefers-reduced-motion: reduce) {
   .save-bar {
     animation: fade 0.2s ease-out;
+  }
+}
+.save-bar-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline-end: 10px;
+  min-height: 32px;
+}
+.save-bar.floating-save.is-done {
+  padding-inline: 16px;
+}
+/* a phone's keyboard up (lib/keyboard.ts): the floating "שמירה" sits right above it, not behind it */
+html[data-kb] .save-bar.floating-save {
+  top: calc(var(--vv-top, 0px) + var(--vv-h, 100dvh) - 56px);
+  bottom: auto;
+}
+
+/* a form's save button stays in sight while the fields above it are filled in: at the foot of a dialog's
+   scrolling body, and on a page at the foot of the screen - above the phone's floating bar */
+.sticky-save {
+  position: sticky;
+  bottom: var(--sticky-save-bottom, 0px);
+  z-index: 2;
+  padding-block: 10px;
+  background: var(--card);
+  transition: bottom 0.42s var(--spring);
+}
+.modal-body .sticky-save {
+  margin-bottom: -18px;
+  padding-bottom: 18px;
+}
+@media (max-width: 860px) {
+  body {
+    --sticky-save-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+  body:has(.bottom-nav.compact) {
+    --sticky-save-bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+  body:has(.bottom-nav.away) {
+    --sticky-save-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  /* in a dialog the bar is under the dialog: the foot of its body is the place */
+  .modal-body {
+    --sticky-save-bottom: 0px;
   }
 }
 

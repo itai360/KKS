@@ -288,6 +288,10 @@ export function SaveBar({ saver, file }: { saver: Saver; file: EvaluationFile })
       ) : s.state === 'pending' ? (
         <>
           <Icon name="clock" size={15} /> שינויים ממתינים לשמירה
+          {/* they save by themselves in a moment; this saves them now */}
+          <button type="button" className="btn btn-sm btn-primary" onPointerDown={(e) => e.preventDefault()} onClick={() => void saver.flush()}>
+            <Icon name="check" size={14} /> שמירה
+          </button>
         </>
       ) : s.state === 'failed' ? (
         <>

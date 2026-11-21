@@ -30,6 +30,7 @@ function RankInput({ c, onSave }: { c: TakpatzCadet; onSave: (rank: number | nul
       inputMode="numeric"
       value={v}
       onChange={(e) => setV(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+      data-autosave
       onBlur={commit}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       aria-label={`הדירוג של ${c.name}`}

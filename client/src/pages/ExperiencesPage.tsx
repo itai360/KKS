@@ -659,7 +659,8 @@ function TrackingSheet({ x, onClose }: { x: Experience; onClose: () => void }) {
     }
   };
   return (
-    <Modal title={`${x.role} - ${x.cadetName}`} onClose={onClose}>
+    // the mentor saves as it is picked: with something to change here, "שמירה" says so and closes
+    <Modal title={`${x.role} - ${x.cadetName}`} onClose={onClose} autosave={x.canEdit && x.status !== 'done'}>
       <div className="col gap-12">
         <ExperienceCard x={x} compact />
         {x.canEdit && x.status !== 'done' && (
