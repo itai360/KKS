@@ -45,8 +45,9 @@ export function ActivityFileItem({ file }: { file: ActivityFile }) {
       });
     }
   };
+  // its name, link and note are saved as they are left - the floating "שמירה" is in sight meanwhile (FloatingSave)
   return (
-    <div className="af-item">
+    <div className="af-item" data-autosave>
       <div className="af-top">
         <Icon name="folder" size={16} />
         {file.canEdit ? (
