@@ -491,6 +491,8 @@ function SavedText({ value, canEdit, onSave, placeholder, empty, rows = 2 }: { v
       value={text}
       placeholder={placeholder}
       onChange={(e) => setText(e.target.value)}
+      // saved as it is left; while it is edited the floating "שמירה" is in sight (FloatingSave)
+      data-autosave
       onBlur={() => {
         if (text !== value) void onSave(text);
       }}
@@ -625,6 +627,7 @@ function PointText({ point, save }: { point: Discussion['pointList'][number]; sa
         value={body}
         maxLength={300}
         aria-label="הנקודה"
+        data-autosave
         onChange={(e) => setBody(e.target.value)}
         onBlur={() => {
           if (body.trim() && body !== point.body) keep({ body });
@@ -637,6 +640,7 @@ function PointText({ point, save }: { point: Discussion['pointList'][number]; sa
         value={outcome}
         placeholder="מה עלה, מה הוחלט"
         aria-label={`מה עלה על: ${point.body}`}
+        data-autosave
         onChange={(e) => setOutcome(e.target.value)}
         onBlur={() => {
           if (outcome !== point.outcome) keep({ outcome });
@@ -749,6 +753,7 @@ function ActionRow({ a, d, save, people }: { a: DiscussionAction; d: Discussion;
             value={body}
             maxLength={300}
             aria-label="הפעולה"
+            data-autosave
             onChange={(e) => setBody(e.target.value)}
             onBlur={() => {
               if (body.trim() && body !== a.body) patch({ body });

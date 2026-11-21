@@ -96,6 +96,8 @@ export function EditCell({
         aria-label={label}
         maxLength={2000}
         onChange={(e) => setDraft(e.target.value)}
+        // saved as it is left (FloatingSave shows a "שמירה" meanwhile)
+        data-autosave
         onBlur={() => void commit()}
         onKeyDown={onKey}
       />

@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { PageBack } from './BackButton';
 import { usePageTitle } from '../lib/title';
 import { ask } from './Confirm';
+import { changesSettled } from '../lib/api';
 import { useSheetGesture } from './sheetGesture';
 import { lockScroll } from '../lib/scrollLock';
 import { trapFocus } from '../lib/focusTrap';
@@ -50,6 +51,7 @@ export function Modal({
   closable = true,
   readOnly,
   className,
+  autosave,
 }: {
   title: ReactNode;
   onClose: () => void;
@@ -64,18 +66,52 @@ export function Modal({
   readOnly?: boolean;
   /** a look of its own (the menu sheet) */
   className?: string;
+  /**
+   * Each field here saves itself as it is left or changed (the teams dialog), so it is never "unsaved" and
+   * closing does not ask about it. A pinned "שמירה" (when there is no footer of its own) saves the field being
+   * edited and a form inside with something typed in it (a new row), then closes once the saves came back.
+   */
+  autosave?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(closable ? onClose : () => undefined);
   onCloseRef.current = closable ? onClose : () => undefined;
+  const autosaveRef = useRef(autosave);
+  autosaveRef.current = autosave;
   // what each field held when first touched: closing by Escape, a click outside or the X
   // after typing asks first, so a long text is not lost to a stray click
   const initial = useRef(new Map<Element, string>());
+  const unsaved = () => [...initial.current].some(([el, was]) => el.isConnected && fieldValue(el) !== was);
+  // saving as you go: the field being edited saves as it is left, so leave it now (a tap on a phone's
+  // button does not take the focus from it)
+  const commit = () => {
+    const active = document.activeElement as HTMLElement | null;
+    if (active && ref.current?.contains(active) && active.matches('input, textarea, select')) active.blur();
+  };
+  // closes once the saves on their way came back - unless one failed: its error is on screen, so it stays
+  const closeWhenSaved = async () => {
+    const { failed } = await changesSettled();
+    if (failed) return false;
+    onCloseRef.current();
+    return true;
+  };
   const tryClose = useRef(async () => {
-    const changed = [...initial.current].some(([el, was]) => el.isConnected && fieldValue(el) !== was);
-    if (!changed || (await ask({ title: 'לסגור בלי לשמור?', body: 'מה שהוקלד בחלון הזה יימחק.', confirm: 'סגירה בלי שמירה', cancel: 'המשך עריכה', danger: true }))) onCloseRef.current();
+    if (autosaveRef.current) commit();
+    if (unsaved() && !(await ask({ title: 'לסגור בלי לשמור?', body: 'מה שהוקלד בחלון הזה יימחק.', confirm: 'סגירה בלי שמירה', cancel: 'המשך עריכה', danger: true }))) return;
+    if (autosaveRef.current) await closeWhenSaved();
+    else onCloseRef.current();
   });
+  const [saving, setSaving] = useState(false);
+  const saveAll = async () => {
+    commit();
+    // a form inside with something typed in it (a new team's name): added too
+    ref.current?.querySelectorAll('form').forEach((form) => {
+      if ([...initial.current].some(([el, was]) => form.contains(el) && el.isConnected && fieldValue(el) !== was)) form.requestSubmit();
+    });
+    setSaving(true);
+    if (!(await closeWhenSaved())) setSaving(false);
+  };
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
@@ -87,6 +123,8 @@ export function Modal({
     document.addEventListener('keydown', onKey);
     const touched = (e: FocusEvent) => {
       const el = e.target as Element;
+      // saving as you go, only a form's fields wait for a button (the new team's name)
+      if (autosaveRef.current && !el.closest('form')) return;
       if (el.matches('input, textarea, select') && !el.matches('[data-transient], [type=hidden], [type=file]') && !initial.current.has(el)) initial.current.set(el, fieldValue(el));
     };
     ref.current?.addEventListener('focusin', touched);
@@ -185,7 +223,10 @@ export function Modal({
   const backdrop = useRef<HTMLDivElement>(null);
   useSheetGesture(ref, {
     enabled: closable,
-    canLeave: () => ![...initial.current].some(([el, was]) => el.isConnected && fieldValue(el) !== was),
+    canLeave: () => {
+      if (autosaveRef.current) commit();
+      return !unsaved();
+    },
     leave: () => onCloseRef.current(),
     refused: () => void tryClose.current(),
     backdrop,
@@ -210,7 +251,19 @@ export function Modal({
         <div className="modal-body" tabIndex={readOnly ? 0 : undefined}>
           {children}
         </div>
-        {footer && <div className="modal-foot">{footer}</div>}
+        {footer ? (
+          <div className="modal-foot">{footer}</div>
+        ) : (
+          autosave &&
+          closable && (
+            // saving as you go: still a button that says so, in sight however long the dialog is
+            <div className="modal-foot modal-save-foot">
+              <button type="button" className="btn btn-primary modal-save" onClick={() => void saveAll()} disabled={saving}>
+                <Icon name="check" /> {saving ? 'שומר...' : 'שמירה'}
+              </button>
+            </div>
+          )
+        )}
       </div>
     </div>,
     document.body,
