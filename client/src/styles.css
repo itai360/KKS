@@ -16723,3 +16723,79 @@ html:has(.subtask-fold) {
     display: none;
   }
 }
+
+/* an activity file (ActivityFiles.tsx): its name, its steps to tap, its link and what is missing, who fills it in */
+.af-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+.af-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.af-title {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+}
+.af-title:hover,
+.af-title:focus {
+  border-color: var(--line-2);
+  background: var(--card);
+}
+.af-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip.af-step {
+  height: 34px;
+  font-size: 13px;
+}
+.chip.af-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* the step it is at: black (a graphite at night), as everything chosen */
+.chip.af-step.on {
+  background: var(--tint-fill);
+  color: #fff;
+}
+.af-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.sticky-side .af-fields {
+  grid-template-columns: 1fr;
+}
+@media (max-width: 560px) {
+  .af-fields {
+    grid-template-columns: 1fr;
+  }
+}
+.af-note {
+  margin: 0;
+}
+.af-more {
+  padding: 8px 18px 12px;
+  border-top: 1px solid var(--line);
+}
+.af-filters {
+  margin: 4px 0 14px;
+}
+.af-week-title a {
+  color: inherit;
+}

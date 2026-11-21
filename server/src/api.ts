@@ -617,6 +617,7 @@ export function apiRouter(): Router {
       entryCamp: z.string().trim().max(80),
       entryUnit: z.string().trim().max(80),
       experienceTrackers: z.array(z.number().int().positive()).max(30),
+      activityFileOwners: z.array(z.number().int().positive()).max(10),
     })
     .partial();
 

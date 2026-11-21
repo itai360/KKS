@@ -258,6 +258,7 @@ export function useNavSections(): NavSection[] {
           { to: '/weeks', label: 'שבועות הקורס', icon: 'layers', keywords: 'מוכנות שבוע פקודת שבוע' },
           { to: '/weekly', label: 'שבועי', icon: 'weekly' },
           { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
+          { to: '/activity-files', label: 'תיקי פעילות', icon: 'folder', keywords: 'תיק פעילות אישור מפ מטה' },
           { to: '/plans', label: 'אישור תוכניות', icon: 'stamp' },
           threeWeek,
         ],
@@ -312,6 +313,7 @@ export function useNavSections(): NavSection[] {
         { to: '/weeks', label: 'שבועות הקורס', icon: 'layers', keywords: 'מוכנות שבוע פקודת שבוע' },
         { to: '/weekly', label: 'שבועי', icon: 'weekly' },
         { to: '/tracks', label: 'צירים בקורס', icon: 'route' },
+        { to: '/activity-files', label: 'תיקי פעילות', icon: 'folder', keywords: 'תיק פעילות אישור מפ מטה' },
         // what the commander opened to the staff (settings - permissions)
         ...(can('plans') ? [{ to: '/plans', label: 'אישור תוכניות', icon: 'stamp' }, threeWeek] : []),
       ],

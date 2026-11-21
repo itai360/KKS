@@ -71,6 +71,7 @@ const DEFAULT_SETTINGS: CourseSettings = {
   entryCamp: '',
   entryUnit: '',
   experienceTrackers: [],
+  activityFileOwners: [],
 };
 
 let settingsCache: CourseSettings | null = null;

@@ -114,6 +114,7 @@ import { createWeaponForm, decideWeaponForm, deleteWeaponForm, updateWeaponForm,
 import { COPY_AREAS, copyIntoSlot, copySource, deleteSlot, inSlot, openParallelCourse, parallelCourses, slotOf, switchSlot } from './parallel';
 import { addNewcomer, applyStaffChanges, courseStaff } from './courseStaff';
 import { markStaffCheck, retryAllSheet, retrySheet, staffChecksBoard } from './staffChecks';
+import { activityFiles, createActivityFile, deleteActivityFile, updateActivityFile, weekIdOf } from './activityFiles';
 import { isPushEndpoint } from './netguard';
 import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
 import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
@@ -776,6 +777,14 @@ export function v3Router(): Router {
 
   // ---------------- plan approval: the commander's documents for the commander above ----------------
 
+  // the weeks' activity files (activityFiles.ts): everyone sees them; their people and the commander move them on
+  r.get('/activity-files', (req, res) => res.json(activityFiles(me(req), weekIdOf(req.query.week))));
+  r.post('/activity-files', (req, res) => res.json(createActivityFile(me(req), req.body)));
+  r.patch('/activity-files/:id', (req, res) => res.json(updateActivityFile(me(req), id(req.params.id), req.body)));
+  r.delete('/activity-files/:id', (req, res) => {
+    deleteActivityFile(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
   r.get('/plans', requireAbility('plans'), async (_req, res) => res.json(await plansOverview()));
   r.get('/plans/:weekId', requireAbility('plans'), async (req, res) => res.json(await planDocument(id(req.params.weekId))));
   r.patch('/plans/:weekId', requireAbility('plans'), async (req, res) => {

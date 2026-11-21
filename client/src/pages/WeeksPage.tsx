@@ -20,6 +20,7 @@ import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
 import { emitLocalChange } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { prefetch, useApi } from '../lib/useApi';
+import { WeekActivityFiles } from '../components/ActivityFiles';
 
 export function WeeksPage() {
   const { weeks, isCommander, can, staff } = useSession();
@@ -701,6 +702,7 @@ export function WeekPage() {
         </div>
         <div className="col gap-16 sticky-side">
           <LeadWorkflow week={w} />
+          <WeekActivityFiles weekId={w.id} />
           {!w.staffPrep && <PriorLessons title="לקחים מהמחזור הקודם לשבוע הזה" context={{ weekId: w.id, canDecide: isCommander || w.leadId === user.id, owner: w.leadId, due: addDays(w.startDate, -2) }} />}
           <PreviousCycle week={w} canCopy={canManage} />
           {(w.topic || w.goals) && (

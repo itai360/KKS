@@ -30,6 +30,7 @@ import type {
 } from './constants';
 import type { DiscussionKind } from './discussions';
 import type { WeaponException } from './weaponForms';
+import type { ActivityFileStatus } from './activityFiles';
 
 export interface User {
   id: number;
@@ -88,6 +89,39 @@ export interface CourseSettings {
   entryUnit: string;
   /** who follows the experiences of every team (the tracking table): sees their feedback and marks them */
   experienceTrackers: number[];
+  /** who looks after the activity files (תיקי פעילות), with each week's lead */
+  activityFileOwners: number[];
+}
+
+/** a week's activity file (shared/activityFiles.ts) */
+export interface ActivityFile {
+  id: number;
+  weekId: number;
+  title: string;
+  status: ActivityFileStatus;
+  /** where the file is (a link to Drive, say) */
+  link: string;
+  /** what is still missing, a word to the commander */
+  note: string;
+  statusAt: string | null;
+  statusByName: string | null;
+  /** who fills it in: the activity files' people and the week's lead */
+  owners: { id: number; name: string }[];
+  canEdit: boolean;
+}
+
+/** the activity files of the course, week by week */
+export interface ActivityFilesWeek {
+  id: number;
+  number: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  leadId: number | null;
+  leadName: string | null;
+  /** may open an activity file for it */
+  canAdd: boolean;
+  files: ActivityFile[];
 }
 
 /** a visitor's entry to the base: asked for by anyone on the staff, sent on to the base by the commander */
