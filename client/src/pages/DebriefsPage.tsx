@@ -17,7 +17,7 @@ import { Icon } from '../components/Icon';
 import { DateTimeInputs, UserPicker } from '../components/NewTask';
 import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageError, PageHead, Seg, Select, TimeInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, FloatingActions, Loading, Modal, PageError, PageHead, Seg, Select, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { saveSheet } from '../lib/sheet';
 import { isoAt, todayKey } from '../lib/format';
@@ -716,14 +716,14 @@ function ItemColumn({
             {editing === i.id ? (
               <div className="col gap-6">
                 <textarea className="textarea" value={draft} onChange={(e) => setDraft(e.target.value)} style={{ minHeight: 60 }} />
-                <div className="row gap-6">
+                <FloatingActions>
                   <button className="btn btn-sm btn-primary" onClick={() => void onEdit(i, draft).then(() => setEditing(null))}>
                     שמור
                   </button>
                   <button className="btn btn-sm btn-ghost" onClick={() => setEditing(null)}>
                     ביטול
                   </button>
-                </div>
+                </FloatingActions>
               </div>
             ) : (
               <>

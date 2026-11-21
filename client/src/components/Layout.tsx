@@ -29,6 +29,7 @@ import { PHONE_VIEWS, showCalendarNow, useCalendarBar, VIEW_ICONS, VIEW_LABELS }
 import { setMainMenuHost } from '../lib/mainMenu';
 import { todayKey } from '../lib/format';
 import { ShortcutsHelp } from './Shortcuts';
+import { FloatingSave } from './FloatingSave';
 import { initials } from './ui';
 import { SETTINGS_ITEM } from './NavMenu';
 import { NotificationsPanel } from './Notifications';
@@ -1134,6 +1135,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </BackContext.Provider>
           <ShortcutsHelp />
           <CommandPalette pages={palettePages} />
+          <FloatingSave />
         </main>
       </div>
 

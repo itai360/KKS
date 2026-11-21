@@ -2,7 +2,7 @@
 // weeks at once): where a document is on its way, the kinds of activity, how ready an activity is,
 // rewriting a part, and recording the approval of the commander above.
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { shortDate, weekdayName } from '@shared/dates';
 import type { PlanEvent, PlanEventKind, PlanStatus } from '@shared/types';
 import { api } from '../lib/api';
@@ -138,6 +138,7 @@ export function ApproveDialog<T>({
   const [notes, setNotes] = useState(approval?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const formId = useId();
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -156,8 +157,17 @@ export function ApproveDialog<T>({
     }
   };
   return (
-    <Modal title={`רישום אישור - ${name}`} onClose={onClose}>
-      <form className="col gap-12" onSubmit={(e) => void submit(e)}>
+    <Modal
+      title={`רישום אישור - ${name}`}
+      onClose={onClose}
+      // the button in the dialog's pinned footer, in sight above the notes however long they get
+      footer={
+        <button type="submit" form={formId} className="btn btn-primary" disabled={busy || by.trim().length < 2 || !on}>
+          {busy ? 'שומר...' : 'רישום האישור'}
+        </button>
+      }
+    >
+      <form id={formId} className="col gap-12" onSubmit={(e) => void submit(e)}>
         <Field label="מי אישר" required>
           <input className="input" value={by} onChange={(e) => setBy(e.target.value)} placeholder='דרגה, שם ותפקיד - לדוגמה: אל"ם ישראל ישראלי, מפקד הבה"ד' required data-autofocus />
         </Field>
@@ -169,9 +179,6 @@ export function ApproveDialog<T>({
         </Field>
         <div className="small muted">אירועי המפתח {scope} נשמרים כפי שהם עכשיו. אם ישתנו אחרי האישור, המסמך יראה מה השתנה.</div>
         <ErrorBox error={error} />
-        <button className="btn btn-primary" disabled={busy || by.trim().length < 2 || !on}>
-          {busy ? 'שומר...' : 'רישום האישור'}
-        </button>
       </form>
     </Modal>
   );

@@ -20,7 +20,7 @@ import { Icon } from './Icon';
 import { SectionRail, type RailItem } from './SectionRail';
 import { draftGroups, emptyGroup, groupDone, groupsProblem, sentGroups, TraitGroupsView, TraitPicker, TraitSummary, type DraftGroup } from './TraitPicker';
 import { useToast } from './Toasts';
-import { DateInput, ErrorBox, Field, Modal, Seg, Select } from './ui';
+import { DateInput, ErrorBox, Field, FloatingActions, Modal, Seg, Select } from './ui';
 
 type Value = string | number | null;
 const NUMBER_FIELDS: EvaluationField[] = EXAM_FIELDS.filter((k) => !EXAM_TEXT_FIELDS.includes(k));
@@ -355,7 +355,8 @@ function Input({ field, saver, file, type = 'text', placeholder, min, max, step,
   return (
     <>
       {long ? (
-        <AutoText value={text} minRows={minRows} placeholder={placeholder} aria-label={aria} onChange={(e) => saver.change(field, e.target.value)} onBlur={() => void saver.flush()} />
+        // saved as it is left, or by the floating "שמירה" while it is edited (FloatingSave)
+        <AutoText value={text} minRows={minRows} placeholder={placeholder} aria-label={aria} data-autosave onChange={(e) => saver.change(field, e.target.value)} onBlur={() => void saver.flush()} />
       ) : type === 'date' ? (
         <DateInput value={text} aria-label={aria} onChange={(v) => saver.change(field, v || null, true)} onBlur={() => void saver.flush()} />
       ) : (
@@ -370,6 +371,7 @@ function Input({ field, saver, file, type = 'text', placeholder, min, max, step,
           step={step}
           placeholder={placeholder}
           aria-label={aria}
+          data-autosave
           onChange={(e) => saver.change(field, e.target.value)}
           onBlur={() => void saver.flush()}
         />
@@ -832,9 +834,11 @@ function DynamicsSection({ file, setFile }: { file: EvaluationFile; setFile: (f:
             ))}
           </Select>
         </Field>
-        <button type="button" className="btn btn-primary" disabled={busy || !date || !score || !rank} onClick={() => void add()}>
-          <Icon name="plus" /> הוספת הערכה
-        </button>
+        <FloatingActions>
+          <button type="button" className="btn btn-primary" disabled={busy || !date || !score || !rank} onClick={() => void add()}>
+            <Icon name="plus" /> הוספת הערכה
+          </button>
+        </FloatingActions>
       </div>
       <ErrorBox error={error} />
     </>
@@ -951,11 +955,11 @@ function NotesSection({ file, setFile, onHistory, authorName }: { file: Evaluati
         <Field label={groups.some(groupDone) ? 'התייחסות כללית (לא חובה)' : 'התייחסות'}>
           <AutoText value={body} minRows={3} onChange={(e) => setBody(e.target.value)} placeholder="תפקוד, חוזקות, פערים, אירועים, משוב שניתן לצוער והשינוי שנצפה בעקבותיו" />
         </Field>
-        <div className="row">
+        <FloatingActions>
           <button type="button" className="btn btn-primary" disabled={busy || !ready || !date} onClick={() => void add()}>
             <Icon name="plus" /> הוספת התייחסות
           </button>
-        </div>
+        </FloatingActions>
         <ErrorBox error={error} />
       </div>
     </>
@@ -1029,11 +1033,11 @@ function PointsSection({ file, setFile, onHistory }: { file: EvaluationFile; set
         <Field label="המשמעות הפיקודית והקשר להתאמה להמשך הקורס ולקצונה">
           <AutoText value={significance} minRows={3} onChange={(e) => setSignificance(e.target.value)} />
         </Field>
-        <div className="row">
+        <FloatingActions>
           <button type="button" className="btn btn-primary" disabled={busy || !description.trim()} onClick={() => void add()}>
             <Icon name="plus" /> הוספת נקודה
           </button>
-        </div>
+        </FloatingActions>
         <ErrorBox error={error} />
       </div>
     </>
@@ -1179,14 +1183,14 @@ function ItemEditor({
           )}
           <ErrorBox error={error} />
           {!conflict && (
-            <div className="row gap-6">
+            <FloatingActions>
               <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void save()}>
                 {busy ? 'שומר...' : 'שמירה'}
               </button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>
                 ביטול
               </button>
-            </div>
+            </FloatingActions>
           )}
         </div>
       ) : (

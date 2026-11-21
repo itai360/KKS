@@ -10,7 +10,7 @@ import { useSession } from '../lib/session';
 import { useApi } from '../lib/useApi';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Loading, Modal } from './ui';
+import { ErrorBox, Field, FloatingActions, Loading, Modal } from './ui';
 import { ask } from './Confirm';
 
 export function GoogleCalendarModal({ onClose }: { onClose: () => void }) {
@@ -201,11 +201,11 @@ export function CalendarSources() {
           >
             <input className="input mono" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" />
           </Field>
-          <div>
+          <FloatingActions>
             <button className="btn btn-primary btn-sm" disabled={busy || !url.trim()} onClick={() => void add()}>
               {busy ? 'בודק את היומן...' : 'חיבור היומן'}
             </button>
-          </div>
+          </FloatingActions>
         </div>
       )}
     </section>
@@ -322,11 +322,11 @@ export function PlanCalendars() {
         >
           <input className="input mono" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" />
         </Field>
-        <div>
+        <FloatingActions>
           <button className="btn btn-primary btn-sm" disabled={busy || !url.trim()} onClick={() => void add()}>
             {busy ? 'קורא את היומן מ-Google...' : chosen.length ? 'הוספת יומן לתוכנית' : 'בחירת היומן לתוכנית'}
           </button>
-        </div>
+        </FloatingActions>
       </div>
     </section>
   );

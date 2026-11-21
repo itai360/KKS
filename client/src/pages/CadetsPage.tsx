@@ -33,7 +33,7 @@ import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { unlessHeld, useRowMenu, type RowMenuItem } from '../components/RowMenu';
 import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, FloatingActions, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
 import { api, changedFields, qs } from '../lib/api';
 import { telHref, waHref } from '../lib/contact';
 import { saveSheet } from '../lib/sheet';
@@ -515,7 +515,8 @@ function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void })
   };
   return (
     <BulkScope quickDelete={false} entity="teams" noun="צוותים" topics={['cadets']} ids={teams.map((t) => t.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} צוותים? הצוערים שלהם יישארו ללא צוות.' }]}>
-    <Modal title="צוותים ומפקדי צוות" onClose={onClose}>
+    {/* each field saves as it is left; "שמירה" saves the one being edited (and a new team typed in) and closes */}
+    <Modal title="צוותים ומפקדי צוות" onClose={onClose} autosave>
       <div className="col gap-6">
         {teams.length > 1 && (
           <div>
@@ -1348,12 +1349,12 @@ function RecordForm({
           </Field>
         </div>
       )}
-      <div className="row">
+      <FloatingActions>
         <button className="btn btn-primary" disabled={busy || (!body.trim() && !(kind === 'discipline' && offense)) || (kind === 'evaluation' && !score)} onClick={() => void submit()}>
           שמור בתיק
         </button>
         <ErrorBox error={error} />
-      </div>
+      </FloatingActions>
     </div>
   );
 }

@@ -166,6 +166,27 @@ function change<T>(method: string, url: string, body?: unknown, headers?: Record
   return p;
 }
 
+/**
+ * Resolves once every change on its way has its answer: a screen that saves each field as it is left
+ * (the teams dialog) closes, or says "saved", only after those answers came back.
+ */
+export async function changesSettled(): Promise<{ waited: boolean; failed: boolean; error?: string }> {
+  let waited = false;
+  let error: string | undefined;
+  let failed = false;
+  while (sending.size) {
+    waited = true;
+    const answers = await Promise.allSettled([...sending.values()]);
+    for (const a of answers) {
+      if (a.status !== 'rejected') continue;
+      failed = true;
+      // the server's own words (the rank is already given, the name is taken), said where it was refused
+      error ??= a.reason instanceof Error ? a.reason.message : undefined;
+    }
+  }
+  return { waited, failed, error };
+}
+
 export const api = {
   get: <T>(url: string) => request<T>('GET', url),
   post: <T>(url: string, body: unknown = {}) => change<T>('POST', url, body),

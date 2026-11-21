@@ -2,7 +2,7 @@
 // again (once, however many requests were refused) and then sends them again.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, changedFields, setReauthHandler, setUnauthorizedHandler } from '../src/lib/api';
+import { api, ApiError, changedFields, changesSettled, setReauthHandler, setUnauthorizedHandler } from '../src/lib/api';
 
 type Call = { url: string; method: string; body: unknown };
 let calls: Call[];
@@ -106,5 +106,40 @@ describe('saving an edit', () => {
     // missing and empty-null count as the same
     expect(changedFields({ teamId: undefined }, { teamId: null })).toEqual({});
     expect(changedFields<{ leadId: number | null }>({ leadId: 3 }, { leadId: null })).toEqual({ leadId: null });
+  });
+});
+
+// A screen that saves each field as it is left closes, or says "saved", only once those answers came back
+// (Modal's autosave, FloatingSave).
+describe('changes on their way', () => {
+  it('nothing on its way: answers at once, having waited for nothing', async () => {
+    expect(await changesSettled()).toEqual({ waited: false, failed: false, error: undefined });
+  });
+
+  it('waits for every change still on its way, including one sent while waiting', async () => {
+    signedIn = true;
+    const answers: Array<() => void> = [];
+    vi.stubGlobal('fetch', (url: string) => new Promise<Response>((resolve) => answers.push(() => resolve(new Response(JSON.stringify({ url }), { status: 200 })))));
+    void api.put('/api/teams/1', { name: 'א' });
+    let done = false;
+    const settled = changesSettled().then((r) => {
+      done = true;
+      return r;
+    });
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    void api.put('/api/teams/2', { name: 'ב' });
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[0]();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(done).toBe(false);
+    answers[1]();
+    expect(await settled).toEqual({ waited: true, failed: false, error: undefined });
+  });
+
+  it('says when one of them failed, and in the server\'s words, so the dialog stays open with its error', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ error: 'השם תפוס' }), { status: 409 }));
+    const put = api.put('/api/teams/1', { name: 'א' }).catch(() => undefined);
+    expect(await changesSettled()).toEqual({ waited: true, failed: true, error: 'השם תפוס' });
+    await put;
   });
 });
