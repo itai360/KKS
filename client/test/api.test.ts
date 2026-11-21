@@ -113,7 +113,7 @@ describe('saving an edit', () => {
 // (Modal's autosave, FloatingSave).
 describe('changes on their way', () => {
   it('nothing on its way: answers at once, having waited for nothing', async () => {
-    expect(await changesSettled()).toEqual({ waited: false, failed: false });
+    expect(await changesSettled()).toEqual({ waited: false, failed: false, error: undefined });
   });
 
   it('waits for every change still on its way, including one sent while waiting', async () => {
@@ -133,13 +133,13 @@ describe('changes on their way', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(done).toBe(false);
     answers[1]();
-    expect(await settled).toEqual({ waited: true, failed: false });
+    expect(await settled).toEqual({ waited: true, failed: false, error: undefined });
   });
 
-  it('says when one of them failed, so the dialog stays open with its error', async () => {
+  it('says when one of them failed, and in the server\'s words, so the dialog stays open with its error', async () => {
     vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ error: 'השם תפוס' }), { status: 409 }));
     const put = api.put('/api/teams/1', { name: 'א' }).catch(() => undefined);
-    expect(await changesSettled()).toEqual({ waited: true, failed: true });
+    expect(await changesSettled()).toEqual({ waited: true, failed: true, error: 'השם תפוס' });
     await put;
   });
 });

@@ -13033,6 +13033,10 @@ html[data-kb] .save-bar.floating-save {
   .modal-body {
     --sticky-save-bottom: 0px;
   }
+  /* a field brought into sight on such a page stops above the save button and the bar, not behind them */
+  html:has(main .sticky-save) {
+    scroll-padding-bottom: 150px;
+  }
 }
 
 /* ---------------- home: a decision in "לטיפול שלך" answers in place and folds away (pages/DashboardPage.tsx) ---------------- */
