@@ -12,7 +12,7 @@ import { ask } from '../components/Confirm';
 import { WordButton } from '../components/DocNav';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { DateInput, ErrorBox, Field, Loading, Modal, PageError, SuggestInput, TimeInput } from '../components/ui';
+import { DateInput, ErrorBox, Field, FloatingActions, Loading, Modal, PageError, SuggestInput, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDateTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -303,14 +303,14 @@ export function WeaponFormPage() {
           {writing ? (
             <div className="col gap-8 no-print">
               <textarea className="textarea" rows={3} value={decision} onChange={(e) => setDecision(e.target.value)} maxLength={5000} placeholder="ההחלטה - ותיסגר" data-autofocus />
-              <div className="row gap-6">
+              <FloatingActions>
                 <button className="btn btn-primary" disabled={busy || !decision.trim()} onClick={() => void decide(decision.trim())}>
                   <Icon name="stamp" /> אישור ההחלטה
                 </button>
-                <button className="btn" disabled={busy} onClick={() => setDecision(null)}>
+                <button className="btn btn-ghost" disabled={busy} onClick={() => setDecision(null)}>
                   ביטול
                 </button>
-              </div>
+              </FloatingActions>
             </div>
           ) : f.decided ? (
             <>

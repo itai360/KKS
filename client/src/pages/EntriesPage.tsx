@@ -11,7 +11,7 @@ import { DoneDrawer } from '../components/DoneDrawer';
 import { addEntry, pasteEntry, readEntryPaste } from '../components/EntryAdd';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, PageHead } from '../components/ui';
+import { Empty, ErrorBox, Field, FloatingActions, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { leaveClass, useLeaving } from '../lib/leaving';
@@ -256,7 +256,7 @@ function PlaceCard({ place }: { place: EntryPlace }) {
           </Field>
         </div>
         <ErrorBox error={error} />
-        <div className="row gap-8">
+        <FloatingActions>
           <button className="btn btn-primary btn-sm" disabled={busy}>
             <Icon name="check" /> שמירה
           </button>
@@ -265,7 +265,7 @@ function PlaceCard({ place }: { place: EntryPlace }) {
               ביטול
             </button>
           )}
-        </div>
+        </FloatingActions>
       </form>
     </section>
   );

@@ -15,7 +15,7 @@ import { Icon } from '../components/Icon';
 import { InstallCard } from '../components/InstallApp';
 import { SectionRail, type RailItem } from '../components/SectionRail';
 import { useToast } from '../components/Toasts';
-import { DateInput, ErrorBox, Field, Loading, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
+import { DateInput, ErrorBox, Field, FloatingActions, Loading, Modal, openable, PageHead, Seg, TimeInput } from '../components/ui';
 import { api } from '../lib/api';
 import { demoHooks, IS_DEMO } from '../lib/demo';
 import { leaveClass, useLeaving } from '../lib/leaving';
@@ -1127,11 +1127,11 @@ function ContactCard() {
           </Field>
         </div>
         <ErrorBox error={error} />
-        <div>
+        <FloatingActions>
           <button className="btn btn-primary btn-sm" disabled={!dirty}>
             שמירה
           </button>
-        </div>
+        </FloatingActions>
       </form>
     </div>
   );

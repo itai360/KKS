@@ -3366,13 +3366,14 @@ input::-webkit-date-and-time-value {
   white-space: pre-line;
 }
 
-.btn-danger-solid {
+/* .btn.: apple.css, read after this file, gives every .btn a grey capsule - this one stays red */
+.btn.btn-danger-solid {
   background: var(--red);
   border-color: var(--red);
   color: #fff;
 }
 @media (hover: hover) {
-.btn-danger-solid:hover {
+.btn.btn-danger-solid:hover {
   background: var(--red-ink);
   border-color: var(--red-ink);
 }
@@ -13005,36 +13006,80 @@ html[data-kb] .save-bar.floating-save {
   bottom: auto;
 }
 
-/* a form's save button stays in sight while the fields above it are filled in: at the foot of a dialog's
-   scrolling body, and on a page at the foot of the screen - above the phone's floating bar */
-.sticky-save {
+/* Every form's buttons float (components/ui.tsx: FloatingActions): capsules with a shadow over the content,
+   in sight while the fields above are filled in - at the foot of the screen on a page, above the phone's
+   floating bar, and at the foot of a dialog inside one. */
+.float-actions {
   position: sticky;
-  bottom: var(--sticky-save-bottom, 0px);
-  z-index: 2;
-  padding-block: 10px;
-  background: var(--card);
+  bottom: var(--float-bottom, 0px);
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-block: 12px 4px;
+  pointer-events: none;
   transition: bottom 0.42s var(--spring);
 }
-.modal-body .sticky-save {
-  margin-bottom: -18px;
-  padding-bottom: 18px;
+.float-actions > * {
+  pointer-events: auto;
+}
+.float-actions .btn,
+.modal > .modal-foot .btn {
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-size: 15.5px;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.5);
+}
+/* a quiet button keeps a capsule of its own, so it still reads over what scrolls under it */
+.float-actions .btn-ghost,
+.modal > .modal-foot .btn-ghost {
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.float-actions .error-box {
+  flex-basis: 100%;
+}
+/* the event editor's form runs to the screen's edges on a phone: its floating save keeps the margin */
+.float-actions.g-ed-float {
+  padding-inline: 16px;
+}
+/* every dialog's buttons float too: the content fades out under them instead of ending at a bar */
+.modal > .modal-foot,
+.modal[data-more-below] > .modal-foot {
+  position: relative;
+  z-index: 2;
+  margin-top: -18px;
+  padding-top: 20px;
+  border-top: 0;
+  box-shadow: none;
+  background: linear-gradient(to bottom, transparent, var(--card) 18px);
+  pointer-events: none;
+}
+.modal > .modal-foot > * {
+  pointer-events: auto;
 }
 @media (max-width: 860px) {
   body {
-    --sticky-save-bottom: calc(80px + env(safe-area-inset-bottom));
+    --float-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  body:has(.bottom-nav) {
+    --float-bottom: calc(80px + env(safe-area-inset-bottom));
   }
   body:has(.bottom-nav.compact) {
-    --sticky-save-bottom: calc(66px + env(safe-area-inset-bottom));
+    --float-bottom: calc(66px + env(safe-area-inset-bottom));
   }
-  body:has(.bottom-nav.away) {
-    --sticky-save-bottom: calc(12px + env(safe-area-inset-bottom));
+  body:has(.bottom-nav.away),
+  body:has(.app.is-focus) {
+    --float-bottom: calc(12px + env(safe-area-inset-bottom));
   }
   /* in a dialog the bar is under the dialog: the foot of its body is the place */
   .modal-body {
-    --sticky-save-bottom: 0px;
+    --float-bottom: 0px;
   }
-  /* a field brought into sight on such a page stops above the save button and the bar, not behind them */
-  html:has(main .sticky-save) {
+  /* a field brought into sight on such a page stops above the buttons and the bar, not behind them */
+  html:has(main .float-actions) {
     scroll-padding-bottom: 150px;
   }
 }

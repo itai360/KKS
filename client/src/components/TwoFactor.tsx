@@ -10,7 +10,7 @@ import { useHashScroll } from '../lib/hashScroll';
 import { useSession } from '../lib/session';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { ErrorBox, Field, Modal } from './ui';
+import { ErrorBox, Field, FloatingActions, Modal } from './ui';
 
 /** after the password: the 6-digit code from the app, or a backup code */
 export function CodeStep({ ticket, onSignedIn, onRestart }: { ticket: string; onSignedIn: (r: { user: User }) => void; onRestart: () => void }) {
@@ -143,9 +143,11 @@ function EnableDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
             <Icon name="shield" /> האימות הדו-שלבי פעיל. מעכשיו בכל כניסה תתבקשו גם לקוד מהאפליקציה.
           </div>
           <RecoveryCodes codes={codes} />
-          <button className="btn btn-primary" onClick={onDone}>
-            שמרתי את הקודים - סיום
-          </button>
+          <FloatingActions>
+            <button className="btn btn-primary" onClick={onDone}>
+              שמרתי את הקודים - סיום
+            </button>
+          </FloatingActions>
         </div>
       ) : !setup ? (
         <form className="col gap-12" onSubmit={(e) => (e.preventDefault(), void run(async () => setSetup(await api.post('/api/auth/2fa/setup', { password }))))}>
@@ -156,9 +158,11 @@ function EnableDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
             <input className="input" type="password" dir="ltr" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required data-autofocus />
           </Field>
           <ErrorBox error={error} />
-          <button className="btn btn-primary" disabled={busy || !password}>
-            המשך
-          </button>
+          <FloatingActions>
+            <button className="btn btn-primary" disabled={busy || !password}>
+              המשך
+            </button>
+          </FloatingActions>
         </form>
       ) : (
         <form
@@ -189,9 +193,11 @@ function EnableDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
             <input className="input code-input" dir="ltr" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="000000" required data-autofocus />
           </Field>
           <ErrorBox error={error} />
-          <button className="btn btn-primary" disabled={busy || code.length !== 6}>
-            הפעלה
-          </button>
+          <FloatingActions>
+            <button className="btn btn-primary" disabled={busy || code.length !== 6}>
+              הפעלה
+            </button>
+          </FloatingActions>
         </form>
       )}
     </Modal>
@@ -234,9 +240,11 @@ function ConfirmDialog({ title, action, onClose, onDone, danger }: { title: stri
           <input className="input code-input" dir="ltr" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} maxLength={11} required />
         </Field>
         <ErrorBox error={error} />
-        <button className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} disabled={busy || !password || !code}>
-          {action === 'disable' ? 'ביטול האימות הדו-שלבי' : 'יצירת קודים חדשים'}
-        </button>
+        <FloatingActions>
+          <button className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} disabled={busy || !password || !code}>
+            {action === 'disable' ? 'ביטול האימות הדו-שלבי' : 'יצירת קודים חדשים'}
+          </button>
+        </FloatingActions>
       </form>
     </Modal>
   );
@@ -320,9 +328,11 @@ export function TwoFactorSettings() {
         <Modal title="קודי הגיבוי החדשים" onClose={() => setCodes(null)}>
           <div className="col gap-12">
             <RecoveryCodes codes={codes} />
-            <button className="btn btn-primary" onClick={() => setCodes(null)}>
-              שמרתי - סיום
-            </button>
+            <FloatingActions>
+              <button className="btn btn-primary" onClick={() => setCodes(null)}>
+                שמרתי - סיום
+              </button>
+            </FloatingActions>
           </div>
         </Modal>
       )}

@@ -10,7 +10,7 @@ import type { Absence } from '@shared/types';
 import { ask } from './Confirm';
 import { Icon } from './Icon';
 import { useToast } from './Toasts';
-import { DateInput, ErrorBox, Field } from './ui';
+import { DateInput, ErrorBox, Field, FloatingActions } from './ui';
 import { api } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -130,14 +130,14 @@ export function AbsencesCard({ userId, mine, canEdit }: { userId: number; mine: 
               </Field>
             </div>
             <ErrorBox error={error} />
-            <div className="row gap-6">
+            <FloatingActions>
               <button className="btn btn-primary btn-sm" disabled={busy || !start}>
                 שמירה
               </button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>
                 ביטול
               </button>
-            </div>
+            </FloatingActions>
           </form>
         )}
       </div>
