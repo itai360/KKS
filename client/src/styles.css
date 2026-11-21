@@ -12945,11 +12945,14 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   max-width: calc(100% - 32px);
   margin-inline: auto;
   padding: 6px;
-  padding-inline-start: 16px;
+  padding-inline-start: 18px;
   border-radius: 999px;
-  background: var(--ink);
-  color: var(--paper);
-  box-shadow: var(--shadow-lg);
+  /* the same glass as the phone's floating bar under it, the app's black button in it */
+  background: var(--bar-glass);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  backdrop-filter: blur(24px) saturate(1.8);
+  color: var(--ink);
+  box-shadow: var(--bar-shadow);
   animation: save-bar-in 0.36s var(--spring);
 }
 @keyframes save-bar-in {
@@ -12960,17 +12963,34 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
 }
 .save-bar .small {
   margin-inline-end: 6px;
+  color: var(--muted);
 }
 /* inside the bar (apple.css, read after this file, gives every .btn a grey capsule of its own) */
+.save-bar .btn {
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+}
 .save-bar .save-bar-undo {
   border-color: transparent;
   background: transparent;
-  color: var(--paper);
+  color: var(--ink);
 }
 .save-bar .save-bar-save {
-  border-color: var(--paper);
-  background: var(--paper);
-  color: var(--ink);
+  border-color: var(--tint-fill);
+  background: var(--tint-fill);
+  color: #fff;
+}
+@media (hover: hover) {
+  .save-bar .save-bar-save:hover:not(:disabled) {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+  .save-bar .save-bar-undo:hover {
+    background: var(--hover-2);
+  }
 }
 @media (max-width: 860px) {
   /* above the floating navigation bar, lower while it is small - and down to the edge while it steps aside */
@@ -12995,7 +13015,16 @@ a:where(.strong, .muted, .small, .un-link, .attn-title, .grow, .badge):not(.row,
   align-items: center;
   gap: 6px;
   padding-inline-end: 10px;
-  min-height: 32px;
+  min-height: 38px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.save-bar-saved svg {
+  color: var(--green-ink, var(--green));
+}
+.save-bar-saved[role='alert'],
+.save-bar-saved[role='alert'] svg {
+  color: var(--red-ink, var(--red));
 }
 .save-bar.floating-save.is-done {
   padding-inline: 16px;
@@ -13030,13 +13059,17 @@ html[data-kb] .save-bar.floating-save {
   padding: 0 22px;
   border-radius: 999px;
   font-size: 15.5px;
-  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--bar-shadow);
 }
-/* a quiet button keeps a capsule of its own, so it still reads over what scrolls under it */
-.float-actions .btn-ghost,
-.modal > .modal-foot .btn-ghost {
-  background: var(--card);
-  border: 1px solid var(--line);
+/* a quiet button keeps a capsule of its own - the glass of the phone's floating bar - so it still reads over
+   what scrolls under it */
+.float-actions .btn:not(.btn-primary):not(.btn-danger-solid),
+.modal > .modal-foot .btn:not(.btn-primary):not(.btn-danger-solid) {
+  background: var(--bar-glass);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  backdrop-filter: blur(24px) saturate(1.8);
+  border: 0;
+  color: var(--ink);
 }
 .float-actions .error-box {
   flex-basis: 100%;
