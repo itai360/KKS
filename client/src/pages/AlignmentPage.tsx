@@ -13,7 +13,7 @@ import { useNewTask } from '../components/NewTask';
 import { Icon } from '../components/Icon';
 import { useRowMenu, type RowMenuItem } from '../components/RowMenu';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Loading, Modal, PageHead, initials } from '../components/ui';
+import { Empty, ErrorBox, FloatingActions, Loading, Modal, PageHead, initials } from '../components/ui';
 import { api } from '../lib/api';
 import { dateKeyOf, fmtAgo, fmtTime, todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -329,11 +329,11 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (r: Al
           <textarea className="input" rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder="[14:05, 3.10.2026] דנה: ..." dir="auto" />
         </label>
         <ErrorBox error={error} />
-        <div className="row gap-6">
+        <FloatingActions>
           <button className="btn btn-primary" onClick={() => void run(() => api.post<AlignmentImport>('/api/alignment/import', { text }))} disabled={busy || !text.trim()}>
             {busy ? 'מעדכן...' : 'הוספת ההודעות'}
           </button>
-        </div>
+        </FloatingActions>
       </div>
     </Modal>
   );

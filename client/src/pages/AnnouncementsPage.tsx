@@ -11,7 +11,7 @@ import { ask } from '../components/Confirm';
 import { DoneDrawer } from '../components/DoneDrawer';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { Empty, ErrorBox, Field, Loading, PageHead } from '../components/ui';
+import { Empty, ErrorBox, Field, FloatingActions, Loading, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime } from '../lib/format';
 import { useFresh } from '../lib/fresh';
@@ -165,7 +165,7 @@ function Composer({ onPost }: { onPost: (body: object) => Promise<boolean> }) {
       <label className="row gap-6 small">
         <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} /> דחוף
       </label>
-      <div className="row gap-6">
+      <FloatingActions>
         <button className="btn btn-primary" disabled={busy || !title.trim()} aria-keyshortcuts="Control+Enter">
           <Icon name="check" /> {busy ? 'שולח...' : urgent ? 'שליחה דחופה לכל הסגל' : 'שליחה לכל הסגל'}
         </button>
@@ -173,7 +173,7 @@ function Composer({ onPost }: { onPost: (body: object) => Promise<boolean> }) {
         <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
           ביטול
         </button>
-      </div>
+      </FloatingActions>
     </form>
   );
 }

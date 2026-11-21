@@ -270,6 +270,15 @@ export function Modal({
   );
 }
 
+/**
+ * A form's buttons, floating: capsules over the content that stay in sight while the fields above are filled
+ * in - at the foot of the screen on a page (above the phone's bar), at the foot of a dialog inside one. Every
+ * form's save floats, as the dialogs' footers do (styles.css: float-actions).
+ */
+export function FloatingActions({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={`float-actions no-print${className ? ` ${className}` : ''}`}>{children}</div>;
+}
+
 export function Field({ label, required, hint, children, className }: { label: ReactNode; required?: boolean; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <label className={`field ${className ?? ''}`}>

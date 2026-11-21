@@ -33,7 +33,7 @@ import { DateTimeInputs, useNewTask } from '../components/NewTask';
 import { unlessHeld, useRowMenu, type RowMenuItem } from '../components/RowMenu';
 import { OpenTaskList } from '../components/TaskRow';
 import { useToast } from '../components/Toasts';
-import { DateInput, Empty, ErrorBox, Field, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
+import { DateInput, Empty, ErrorBox, Field, FloatingActions, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
 import { api, changedFields, qs } from '../lib/api';
 import { telHref, waHref } from '../lib/contact';
 import { saveSheet } from '../lib/sheet';
@@ -1349,13 +1349,12 @@ function RecordForm({
           </Field>
         </div>
       )}
-      {/* in sight while the fields above are filled in: at the foot of the dialog, or above the phone's bar */}
-      <div className="row sticky-save">
+      <FloatingActions>
         <button className="btn btn-primary" disabled={busy || (!body.trim() && !(kind === 'discipline' && offense)) || (kind === 'evaluation' && !score)} onClick={() => void submit()}>
           שמור בתיק
         </button>
         <ErrorBox error={error} />
-      </div>
+      </FloatingActions>
     </div>
   );
 }

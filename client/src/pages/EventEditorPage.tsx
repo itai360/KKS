@@ -17,7 +17,7 @@ import { ColorMenu, GuestsEditor, RemindersEditor, RepeatSelect, ScopeDialog, Sh
 import { FindTime, type FindTimePerson } from '../components/FindTime';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toasts';
-import { DateInput, ErrorBox, Loading, Select, TimeInput } from '../components/ui';
+import { DateInput, ErrorBox, FloatingActions, Loading, Select, TimeInput } from '../components/ui';
 import { api, changedFields } from '../lib/api';
 import { todayKey } from '../lib/format';
 import { emitLocalChange } from '../lib/realtime';
@@ -299,7 +299,7 @@ function Editor({ event, google }: { event: ScheduleEvent | null; google: EventG
           void save();
         }}
       >
-        {/* the head: close, the title, save - and, an event there is, delete */}
+        {/* the head: close, the title - and, an event there is, delete. Save floats at the foot (FloatingActions) */}
         <header className="g-ed-head">
           <button type="button" className="icon-btn g-ed-close" onClick={() => void close()} aria-label="סגירה" title="סגירה">
             <Icon name="x" />
@@ -311,9 +311,6 @@ function Editor({ event, google }: { event: ScheduleEvent | null; google: EventG
                 <Icon name="trash" />
               </button>
             )}
-            <button type="submit" className="btn g-filled-btn g-ed-save" disabled={busy}>
-              {saveLabel}
-            </button>
           </div>
         </header>
 
@@ -439,6 +436,12 @@ function Editor({ event, google }: { event: ScheduleEvent | null; google: EventG
           </section>
         </div>
         )}
+        {/* the save floats, as every form's does: in sight at the foot of the screen however long the event is */}
+        <FloatingActions className="g-ed-float">
+          <button type="submit" className="btn btn-primary g-ed-save" disabled={busy}>
+            <Icon name="check" /> {saveLabel}
+          </button>
+        </FloatingActions>
       </form>
 
       {askScope && (
