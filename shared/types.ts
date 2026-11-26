@@ -1,0 +1,1999 @@
+// API data shapes shared by the server (producer) and the client (consumer).
+
+import type { DebriefAnswers, DebriefKind, LessonDecision, LessonHorizon, ProposalOwner } from './debriefForms';
+import type { EntryFields } from './entry';
+import type { TraitGroup } from './evaluationTraits';
+import type { ExperienceFeedbackForm } from './experienceFeedback';
+import type { ExperienceKind, ExperienceSpan } from './experiences';
+import type { StaffPermissions } from './permissions';
+import type { StaffGroupDef } from './staffGroups';
+import type {
+  AbsenceReason,
+  CadetStatus,
+  CarryAction,
+  CommitteeDecision,
+  EvalTone,
+  Standing,
+  DebriefItemKind,
+  LessonKind,
+  NotificationCategory,
+  OverdueResponse,
+  Priority,
+  RecordKind,
+  RecurrenceFrequency,
+  RequestType,
+  Role,
+  TaskStatus,
+  Tone,
+  Visibility,
+  WeekStatus,
+} from './constants';
+import type { DiscussionKind } from './discussions';
+import type { WeaponException } from './weaponForms';
+import type { ActivityFileStatus } from './activityFiles';
+
+export interface User {
+  id: number;
+  username: string;
+  displayName: string;
+  title: string;
+  role: Role;
+  active: boolean;
+  phone: string;
+  email: string;
+  /** two-step sign-in is on (only for oneself, and in the commander's list of users) */
+  twoFactor?: boolean;
+  /** on how many devices phone notifications are on (the commander's list of users) */
+  pushDevices?: number;
+  /** gives tasks to the staff without their taking them on first (the commander sets it) */
+  assignsFreely?: boolean;
+  /** new to the staff of the next course: waits for it (the commander's list of users) */
+  nextCourse?: boolean;
+  /** when they last signed in with Google (the commander's list of users) */
+  googleAt?: string | null;
+}
+
+/** a Google account that tried to sign in and is not in the list of users yet (the commander's) */
+export interface GoogleRequest {
+  email: string;
+  name: string;
+  firstAt: string;
+  lastAt: string;
+  tries: number;
+}
+
+/** signing in: a session, or - with two-step sign-in - a ticket for the code step */
+export interface LoginResult {
+  user?: User;
+  twoFactor?: boolean;
+  ticket?: string;
+}
+
+export interface CourseSettings {
+  courseName: string;
+  courseSymbol: string;
+  startDate: string | null;
+  endDate: string | null;
+  timezone: string;
+  staleDays: number;
+  defaultDeadlineTime: string;
+  overloadThreshold: number;
+  readinessWarnThreshold: number;
+  domains: string[];
+  /** the groups tasks go to together (staffGroups.ts) */
+  staffGroups: StaffGroupDef[];
+  /** what the staff may do beyond their own work (shared/permissions.ts); what is not set is at its default */
+  staffPermissions: StaffPermissions;
+  /** the entry requests' message (shared/entry.ts): the camp in its title, and the unit visitors come to */
+  entryCamp: string;
+  entryUnit: string;
+  /** who follows the experiences of every team (the tracking table): sees their feedback and marks them */
+  experienceTrackers: number[];
+  /** who looks after the activity files (תיקי פעילות), with each week's lead */
+  activityFileOwners: number[];
+}
+
+/** a reservist in the contacts (מילואים): someone who comes to the course from time to time */
+export interface Reservist {
+  id: number;
+  fullName: string;
+  phone: string;
+  email: string;
+  /** what they do here (a role, a specialty) */
+  role: string;
+  notes: string;
+  createdByName: string | null;
+  /** the commander, and whoever added them, may remove them */
+  canDelete: boolean;
+}
+
+/** a week's activity file (shared/activityFiles.ts) */
+export interface ActivityFile {
+  id: number;
+  weekId: number;
+  title: string;
+  status: ActivityFileStatus;
+  /** where the file is (a link to Drive, say) */
+  link: string;
+  /** what is still missing, a word to the commander */
+  note: string;
+  statusAt: string | null;
+  statusByName: string | null;
+  /** who fills it in: the activity files' people and the week's lead */
+  owners: { id: number; name: string }[];
+  canEdit: boolean;
+}
+
+/** the activity files of the course, week by week */
+export interface ActivityFilesWeek {
+  id: number;
+  number: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  leadId: number | null;
+  leadName: string | null;
+  /** may open an activity file for it */
+  canAdd: boolean;
+  files: ActivityFile[];
+}
+
+/** a visitor's entry to the base: asked for by anyone on the staff, sent on to the base by the commander */
+export interface EntryRequest extends EntryFields {
+  originCourse?: string | null;
+  id: number;
+  status: 'pending' | 'sent';
+  createdBy: number | null;
+  createdByName: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  sentByName: string | null;
+  /** its writer while it waits; the commander always */
+  canEdit: boolean;
+}
+
+export interface Task {
+  /** The previous course this unfinished work came from. */
+  originCourse?: string | null;
+  id: number;
+  title: string;
+  description: string;
+  ownerId: number;
+  ownerName: string;
+  participantIds: number[];
+  /** the commanders among them: attached to oversee it (בבקרה) - told of it, not theirs to do */
+  overseerIds: number[];
+  createdBy: number;
+  createdByName: string;
+  creatorRole: Role;
+  deadline: string;
+  priority: Priority;
+  status: TaskStatus;
+  domain: string;
+  /** the area "אחר": what it is */
+  domainNote: string;
+  weekId: number | null;
+  weekName: string | null;
+  /** the course track (ציר) it belongs to */
+  trackId: number | null;
+  trackName: string | null;
+  eventId: number | null;
+  eventTitle: string | null;
+  parentId: number | null;
+  groupId: string | null;
+  /** a copy for each person: all the copies (not cancelled) - whose each is, and whether it is done */
+  groupCopies: { id: number; ownerId: number; done: boolean }[];
+  /** the group the task went to - its copies' people, or its owner with its participants (staffGroups.ts) */
+  groupName: string | null;
+  recurringRuleId: number | null;
+  cadetId: number | null;
+  cadetName: string | null;
+  experienceId: number | null;
+  debriefId: number | null;
+  debriefTitle: string | null;
+  /** given by another staff member: waits for its owner to take it on (or hand it back) */
+  awaitingAccept: boolean;
+  requiresApproval: boolean;
+  visibility: Visibility;
+  blockReason: string | null;
+  blockWaitingFor: string | null;
+  blockNextStep: string | null;
+  needsCommander: boolean;
+  overdueResponse: OverdueResponse | null;
+  overdueResponseAt: string | null;
+  cancelReason: string | null;
+  carriedCount: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;
+  subtaskTotal: number;
+  subtaskDone: number;
+  openDependencies: number;
+  // computed by the server at response time
+  overdue: boolean;
+  dueSoon: boolean;
+  stale: boolean;
+  tone: Tone;
+}
+
+export interface TaskUpdate {
+  id: number;
+  taskId: number;
+  userId: number;
+  userName: string;
+  kind: 'comment' | 'instruction' | 'return' | 'system';
+  body: string;
+  createdAt: string;
+}
+
+export interface Attachment {
+  id: number;
+  taskId: number | null;
+  eventId: number | null;
+  userId: number;
+  userName: string;
+  kind: 'link' | 'file';
+  title: string;
+  url: string;
+  size: number | null;
+  createdAt: string;
+}
+
+export interface ActivityEntry {
+  id: number;
+  taskId: number | null;
+  taskTitle: string | null;
+  weekId: number | null;
+  userId: number | null;
+  userName: string | null;
+  action: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface TaskRequest {
+  id: number;
+  type: RequestType;
+  taskId: number;
+  taskTitle: string;
+  requestedBy: number;
+  requestedByName: string;
+  newDeadline: string | null;
+  newOwnerId: number | null;
+  newOwnerName: string | null;
+  currentDeadline: string;
+  currentOwnerName: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  decidedBy: number | null;
+  decidedByName: string | null;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface TaskPermissions {
+  canEdit: boolean;
+  canChangeDeadline: boolean;
+  canChangeOwner: boolean;
+  canDelete: boolean;
+  canUpdateStatus: boolean;
+  canApprove: boolean;
+  canCancel: boolean;
+  canRequestDeadline: boolean;
+  canRequestTransfer: boolean;
+  /** attach others to it (anyone who sees it may attach themselves) */
+  canAttach: boolean;
+}
+
+export interface GroupProgress {
+  groupId: string;
+  total: number;
+  done: number;
+  members: { taskId: number; ownerId: number; ownerName: string; status: TaskStatus; overdue: boolean }[];
+}
+
+export interface TaskDetail {
+  task: Task;
+  updates: TaskUpdate[];
+  attachments: Attachment[];
+  activity: ActivityEntry[];
+  subtasks: Task[];
+  parent: Pick<Task, 'id' | 'title'> | null;
+  dependsOn: Pick<Task, 'id' | 'title' | 'status' | 'ownerName' | 'deadline'>[];
+  blocks: Pick<Task, 'id' | 'title' | 'status' | 'ownerName' | 'deadline'>[];
+  group: GroupProgress | null;
+  requests: TaskRequest[];
+  permissions: TaskPermissions;
+  /** the weekly debrief task of a week (opened by the automation on its Tuesday): the week, and its debrief once opened */
+  weeklyDebrief: { weekId: number; weekName: string; debriefId: number | null } | null;
+}
+
+export interface Week {
+  id: number;
+  number: number;
+  name: string;
+  topic: string;
+  goals: string;
+  startDate: string;
+  endDate: string;
+  leadId: number | null;
+  leadName: string | null;
+  status: WeekStatus;
+  approvedAt: string | null;
+  approvedByName: string | null;
+  closedAt: string | null;
+  totalTasks: number;
+  doneTasks: number;
+  overdueTasks: number;
+  readiness: number;
+  /** one of the staff's preparation weeks right after the closing week (שבועות הכנת סגל): which of them -
+   * every lesson kept for the next cycle is shown there */
+  staffPrep: { index: number; of: number } | null;
+}
+
+export interface Lesson {
+  id: number;
+  weekId: number;
+  kind: LessonKind;
+  body: string;
+  createdBy: number;
+  createdByName: string;
+  taskId: number | null;
+  taskTitle: string | null;
+  createdAt: string;
+}
+
+/** a course track (ציר בקורס) - its tasks counted as a week's are */
+export interface Track {
+  id: number;
+  name: string;
+  leadId: number | null;
+  leadName: string | null;
+  goals: string;
+  totalTasks: number;
+  doneTasks: number;
+  overdueTasks: number;
+  blockedTasks: number;
+  /** the nearest deadline of a task still open */
+  nextDeadline: string | null;
+  readiness: number;
+}
+
+export interface TrackDetail {
+  track: Track;
+  /** the commander, or the track's lead */
+  canManage: boolean;
+  byDomain: DomainReadiness[];
+  byWeek: { weekId: number | null; name: string; number: number | null; startDate: string | null; total: number; done: number; readiness: number }[];
+  tasks: Task[];
+  /** the lessons of the course's debriefs given this track */
+  lessons: TrackLesson[];
+  /** the lessons the previous cycle gave the track of the same name (none: no previous course, or not looked at) */
+  previous: { courseName: string; lessons: TrackLesson[] } | null;
+}
+
+/** a lesson of a debrief, in its training track */
+export interface TrackLesson {
+  id: number;
+  body: string;
+  /** this cycle (a task) or the next one (the lessons bank) */
+  horizon: 'now' | 'next' | null;
+  /** its debrief - to open it (null: a previous course's) */
+  debriefId: number | null;
+  debriefTitle: string;
+  debriefKind: string;
+  occurredOn: string;
+  owner: string;
+  dueDate: string | null;
+  taskId: number | null;
+  taskStatus: TaskStatus | null;
+}
+
+export interface DomainReadiness {
+  domain: string;
+  total: number;
+  done: number;
+  readiness: number;
+}
+
+export interface ScheduleEvent {
+  /** The previous course this unfinished work came from. */
+  originCourse?: string | null;
+  id: number;
+  /** its copy in Google Calendar (the calendar's list and an event's own read add it) */
+  google?: EventGoogle | null;
+  date: string;
+  /** the last day of an event of several days (null or missing: one day) */
+  endDate?: string | null;
+  /** all day (or the days it lasts): no hour of its own - startTime is then "00:00" */
+  allDay?: boolean;
+  /** its colour in the calendar (shared/calendarLayers.ts CAL_COLORS); missing: the course's blue */
+  color?: string | null;
+  /** one of a repeating series of events (each a whole event of its own): the series' id */
+  seriesId?: number | null;
+  /** the series' rule, as Google Calendar keeps it (RRULE, e.g. "FREQ=WEEKLY;BYDAY=TH"), and in words */
+  recurrence?: string | null;
+  recurrenceText?: string | null;
+  /** of a series: changed on its own, so a change to the whole series passes it by */
+  detached?: boolean;
+  /** the calendar it is in: the course's (everyone sees it) or one's own (only its maker and its guests) */
+  calendar?: EventCalendar;
+  /** busy (opaque) or free (transparent) */
+  transparency?: 'opaque' | 'transparent';
+  /** default, public or private (a private event of the course shows only "busy" to others) */
+  visibility?: 'default' | 'public' | 'private';
+  /** reminders before it, in minutes; null or missing: the default */
+  reminders?: EventReminder[] | null;
+  /** the staff invited, with their answers */
+  guests?: EventGuest[];
+  /** the reader's own answer, when invited */
+  myResponse?: GuestResponse | null;
+  /** what guests may do */
+  guestsCanModify?: boolean;
+  guestsCanInvite?: boolean;
+  guestsCanSee?: boolean;
+  createdBy?: number | null;
+  createdByName?: string | null;
+  /** the reader may change it */
+  canEdit?: boolean;
+  /** private, and the reader is not in it: only "busy" is shown */
+  hidden?: boolean;
+  /** in the trash since (the trash's own list only) */
+  deletedAt?: string | null;
+  startTime: string;
+  endTime: string | null;
+  title: string;
+  location: string;
+  ownerId: number | null;
+  ownerName: string | null;
+  weekId: number | null;
+  notes: string;
+  cancelled: boolean;
+  taskTotal: number;
+  taskDone: number;
+  /** the schedule's list only: how many of its preparation tasks are the reader's (in charge or taking part) */
+  myTasks?: number;
+}
+
+export type EventCalendar = 'course' | 'personal';
+export type GuestResponse = 'needsAction' | 'accepted' | 'declined' | 'tentative';
+export interface EventGuest {
+  userId: number;
+  name: string;
+  response: GuestResponse;
+  optional?: boolean;
+}
+export interface EventReminder {
+  /** how long before it starts */
+  minutes: number;
+}
+/** what is in the trash: an event, or the days of a series deleted together */
+export interface TrashedEvent {
+  /** the event (of a series: the first of those deleted together) */
+  id: number;
+  title: string;
+  date: string;
+  startTime: string;
+  allDay: boolean;
+  /** how many days of a series were deleted together (1: one event) */
+  count: number;
+  deletedAt: string;
+  deletedByName: string | null;
+  calendar: EventCalendar;
+}
+
+/** An event from a Google (or any iCal) calendar shown in the schedule. Read-only. */
+/** an event's copy in Google Calendar (server/src/gcalSync.ts) */
+export interface EventGoogle {
+  calendarId: string;
+  calendarName: string;
+  /** written; waiting to be written; Google refused it (tried again); its account cannot write now */
+  state: 'pending' | 'synced' | 'error' | 'off';
+  error: string | null;
+  /** chosen for it, for its series, or the course's calendar in Google */
+  src: 'event' | 'series' | 'course';
+}
+
+/** a Google calendar one can write events into */
+export interface GoogleCalendarChoice {
+  id: string;
+  summary: string;
+  color: string;
+  primary: boolean;
+}
+
+export interface GoogleCalendarStatus {
+  /** the server has a Google client */
+  available: boolean;
+  connected: boolean;
+  /** connected once, the permission since taken back */
+  reconnect: boolean;
+  email: string;
+  calendars: GoogleCalendarChoice[];
+  error: string | null;
+  /** the Google calendar the course's events go to */
+  course: { calendarId: string; name: string; color: string; ownerName: string; mine: boolean } | null;
+  canSetCourse: boolean;
+  /** waiting to be written; refused or waiting for an account */
+  pending: number;
+  failed: number;
+}
+
+export interface ExternalEvent {
+  id: string;
+  /** its id in its calendar (the same event written from here is left out, so it shows once) */
+  uid?: string;
+  sourceId: number;
+  sourceName: string;
+  date: string;
+  /** null: an all-day event */
+  startTime: string | null;
+  endTime: string | null;
+  title: string;
+  location: string;
+}
+
+export interface CalendarSource {
+  id: number;
+  name: string;
+  /** the name the calendar has in Google Calendar, once it was read */
+  calendarName: string | null;
+  /** one of Google's calendar colours (shared/calendarLayers.ts GOOGLE_COLORS), chosen by the commander; null: by its place */
+  color: string | null;
+  error: string | null;
+  /** read for the first time, Google still sending it */
+  loading: boolean;
+  /** the calendar's id in Google (its Google address holds it; not the secret part): to write events into it
+   *  once one's Google account is connected. null: not a Google calendar */
+  googleId: string | null;
+}
+
+/** the Google calendars the plan documents read (server/src/calendar.ts) */
+export interface PlanCalendars {
+  /** loading: read for the first time, Google still sending it */
+  calendars: { index: number; name: string; error: string | null; loading: boolean }[];
+  /** not chosen in the app yet: the one the server was set up with */
+  fromServer: boolean;
+  /** the calendars connected to the schedule not chosen for the plans yet - by name; each added in one tap,
+   *  its address staying on the server */
+  connected?: { id: number; name: string }[];
+}
+
+/** A course week found in a Google calendar, and what importing it would do. */
+export interface CalendarWeek {
+  uid: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  number: number | null;
+  /** the course week it matches: imported from this event before, or starting on the same day */
+  weekId: number | null;
+  action: 'create' | 'update' | 'same';
+  /** what an update changes, in words */
+  changes: string[];
+}
+
+export interface CalendarWeeksPreview {
+  weeks: CalendarWeek[];
+  /** events in the calendar that did not look like weeks */
+  ignored: number;
+}
+
+/** The user's personal link for subscribing to the schedule from Google Calendar. */
+export interface CalendarFeed {
+  url: string;
+  googleUrl: string;
+}
+
+export interface EventDetail {
+  event: ScheduleEvent;
+  tasks: Task[];
+  attachments: Attachment[];
+  debriefs: Debrief[];
+  /** its copy in Google Calendar, when it has one (the routes add it) */
+  google?: EventGoogle | null;
+}
+
+export interface TemplateItem {
+  title: string;
+  description?: string;
+  domain?: string;
+  priority?: Priority;
+  /** days relative to the anchor (week start / event date); negative = before */
+  offsetDays: number;
+  time?: string;
+  /** 'week_lead' | 'event_owner' | user id as string | '' (choose on apply) */
+  owner?: string;
+  stage?: string;
+  requiresApproval?: boolean;
+}
+
+export interface Template {
+  id: number;
+  name: string;
+  description: string;
+  kind: 'week' | 'activity' | 'general';
+  items: TemplateItem[];
+  autoApplyDaysBefore: number | null;
+  createdAt: string;
+}
+
+export interface RecurringRule {
+  id: number;
+  title: string;
+  description: string;
+  frequency: RecurrenceFrequency;
+  weekdays: number[];
+  time: string;
+  assignee: string; // user id as string, or 'all' / 'week_lead'
+  assigneeLabel: string;
+  priority: Priority;
+  domain: string;
+  active: boolean;
+  createdAt: string;
+  lastGeneratedDate: string | null;
+}
+
+export interface Notification {
+  id: number;
+  type: string;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  taskId: number | null;
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+  /** put off: comes back unread at this time */
+  snoozedUntil: string | null;
+  /** what it is about is finished (or it was the news of something done): heard as it comes, not kept in the bell */
+  finished?: boolean;
+  /** as it pops up the moment it comes - as on the phone: the thing itself, then what happened to it (only then) */
+  pop?: { title: string; body: string };
+  /** about a course opened beside the current one (its id); absent: the current course */
+  courseSlot?: number | null;
+}
+
+/** where a follow-up action of a discussion stands: no task opened for it yet, or its task's state */
+export type DiscussionActionState = 'open' | 'task' | 'late' | 'done' | 'cancelled';
+
+export interface DiscussionAction {
+  id: number;
+  body: string;
+  ownerId: number | null;
+  ownerName: string | null;
+  dueOn: string | null;
+  taskId: number | null;
+  state: DiscussionActionState;
+}
+
+export interface DiscussionPoint {
+  id: number;
+  body: string;
+  /** what came up, what was decided on it */
+  outcome: string;
+  done: boolean;
+}
+
+/** a discussion in the list */
+export interface DiscussionSummary {
+  /** The previous course this unfinished work came from. */
+  originCourse?: string | null;
+  id: number;
+  kind: DiscussionKind;
+  title: string;
+  heldOn: string;
+  heldAt: string | null;
+  status: 'planned' | 'summarized';
+  leadId: number | null;
+  leadName: string | null;
+  weekId: number | null;
+  weekName: string | null;
+  participants: number;
+  points: number;
+  pointsDone: number;
+  /** its follow-up actions: how many, how many still open (late among them), done */
+  actions: { total: number; open: number; late: number; done: number };
+  /** the person reading is in it - leads it, was asked to it, or owns an action of it */
+  mine: boolean;
+}
+
+/** a participant from outside the staff */
+export interface DiscussionGuest {
+  name: string;
+  /** what they are: "קצין הבטיחות", "נציג הגדוד" */
+  role: string;
+  /** where the summary is sent - may be empty */
+  email: string;
+}
+
+export interface Discussion extends DiscussionSummary {
+  background: string;
+  decisions: string;
+  guestList: DiscussionGuest[];
+  participantList: { id: number; name: string }[];
+  pointList: DiscussionPoint[];
+  actionList: DiscussionAction[];
+  createdBy: number | null;
+  createdByName: string | null;
+  summarizedAt: string | null;
+  summarizedByName: string | null;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+/** the weeks whose number is not their dates' in the calendar - and what it becomes */
+export interface WeekRenumber {
+  changes: { id: number; name: string; startDate: string; from: number; to: number; newName: string }[];
+}
+
+/** what a course opened beside the current one can take from it - at its opening, and later */
+export type CopyArea = 'weeks' | 'tracks' | 'templates' | 'recurring' | 'teams' | 'documents' | 'guide' | 'lessons' | 'tasks';
+
+/** a course opened beside the current one (the next cycle, prepared while this one runs) */
+export interface ParallelCourse {
+  id: number;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  stats: { tasks: number; weeks: number; events: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** one of the staff, in a course: whether they go on in it, who took their place, and what is theirs in it */
+export interface CourseStaffPerson {
+  id: number;
+  name: string;
+  title: string;
+  role: 'commander' | 'staff';
+  inCourse: boolean;
+  /** who took their place in the course (when they do not go on in it) */
+  replacedBy: number | null;
+  /** new to the staff of the next course: not in the current one until the next becomes it */
+  newcomer: boolean;
+  /** the teams they command */
+  teams: string[];
+  /** the weeks still ahead they lead */
+  weeks: number;
+  /** the tracks they lead */
+  tracks: string[];
+  /** their open tasks */
+  tasks: number;
+  /** recurring tasks given to them */
+  recurring: number;
+}
+
+/** tracks without a lead now: who led each, as the automatic backups kept it (trackLeads.ts) */
+export interface TrackLeadHistory {
+  missing: {
+    trackId: number;
+    name: string;
+    /** the lead in the most recent backup that had one: when that was, and the backup after it that no longer did */
+    lead: { id: number; name: string; active: boolean; at: string; goneBy: string | null } | null;
+  }[];
+  /** how many backups were looked at */
+  checked: number;
+  /** what the activity log says of the tracks and the staff, the latest first */
+  activity: { at: string; text: string }[];
+  /** in a course beside the current one: the backups are the current course's */
+  beside?: boolean;
+}
+
+/** a square of the staff's checklist that was marked: when, by whom, its grade, and whether the grade reached the sheet */
+export interface StaffCheckMark {
+  at: string;
+  byName: string;
+  grade: number | null;
+  /** the grade in the course's grade sheet: written there, failed (sheetNote says why), or no sheet connected */
+  sheet: 'written' | 'error' | 'off' | '';
+  sheetNote: string;
+}
+
+/** a team's table in the staff's checklist */
+export interface StaffChecksTeam {
+  id: number | null;
+  name: string;
+  commanderName: string | null;
+  /** the one looking may mark its squares */
+  canMark: boolean;
+  /** their own team */
+  mine: boolean;
+  cadets: { id: number; name: string; marks: Record<string, StaffCheckMark> }[];
+}
+
+/** the course's grade sheet in Google, the grades of the checklist go into */
+export interface GradeSheetStatus {
+  url: string;
+  fileName: string;
+  /** a Google account that may edit it is connected */
+  connected: boolean;
+  email: string;
+  lastError: string;
+  /** the commander's: setting the link and connecting */
+  canManage: boolean;
+  /** Google sign-in is set up on the server */
+  available: boolean;
+}
+
+export interface StaffChecksBoard {
+  teams: StaffChecksTeam[];
+  sheet: GradeSheetStatus;
+}
+
+/** what moved to whoever took someone's place */
+export interface StaffMoved {
+  teams: number;
+  weeks: number;
+  tracks: number;
+  tasks: number;
+  recurring: number;
+  templates: number;
+}
+
+/** what the current course has of an area, to take into the course beside it */
+export interface CopySource {
+  area: CopyArea;
+  /** the current course's name */
+  from: string;
+  /** how what is copied goes there (the staff's tasks: to whom, and when) */
+  note?: string;
+  /** group: whose it will be there (the staff's tasks) - the items come grouped by it */
+  items: { id: number; name: string; sub: string; group?: string; exists: boolean }[];
+}
+
+export type AttentionKind =
+  | 'overdue'
+  | 'due_soon'
+  | 'stale'
+  | 'blocked'
+  | 'approval'
+  | 'request'
+  | 'decision'
+  | 'readiness'
+  | 'overload'
+  | 'debrief'
+  | 'lessons'
+  | 'away';
+
+export interface AttentionItem {
+  kind: AttentionKind;
+  tone: Tone;
+  title: string;
+  subtitle: string;
+  ownerName?: string;
+  deadline?: string;
+  taskId?: number;
+  requestId?: number;
+  weekId?: number;
+  userId?: number;
+  /** number of all-staff copies merged into this line */
+  count?: number;
+  /** where it opens, when not the task, week or person */
+  link?: string;
+}
+
+/** an announcement to the staff, and (for whoever posted it) who confirmed reading it */
+export interface Announcement {
+  id: number;
+  title: string;
+  body: string;
+  requireAck: boolean;
+  urgent: boolean;
+  createdBy: number | null;
+  createdByName: string | null;
+  createdAt: string;
+  /** this person: when they read and confirmed */
+  readAt: string | null;
+  ackedAt: string | null;
+  /** the commander and the author: everyone it went to */
+  audience?: { userId: number; name: string; readAt: string | null; ackedAt: string | null }[];
+}
+
+/** someone on the staff away for some days */
+export interface Absence {
+  /** The previous course this unfinished work came from. */
+  originCourse?: string | null;
+  id: number;
+  userId: number;
+  userName: string;
+  startDate: string;
+  endDate: string;
+  reason: AbsenceReason;
+  note: string;
+  createdByName: string | null;
+  /** their open tasks due while they are away */
+  tasksDue: number;
+}
+
+/** how loaded someone is, to choose who takes a task */
+export interface UserLoad {
+  userId: number;
+  /** open tasks due in the next 7 days (overdue included), routine recurring ones aside */
+  week: number;
+  overdue: number;
+  /** due on the day asked about */
+  onDay: number;
+  away: Pick<Absence, 'startDate' | 'endDate' | 'reason'> | null;
+}
+
+export interface StaffStatus {
+  userId: number;
+  name: string;
+  title: string;
+  away?: Pick<Absence, 'startDate' | 'endDate' | 'reason'> | null;
+  open: number;
+  inProgress: number;
+  waiting: number;
+  overdue: number;
+  done: number;
+  doneThisWeek: number;
+  dueToday: number;
+}
+
+export interface DashboardData {
+  stats: { today: number; overdue: number; week: number; doneThisWeek: number; dueSoon: number; blocked: number };
+  attention: AttentionItem[];
+  staff: StaffStatus[];
+  currentWeek: Week | null;
+  nextWeek: Week | null;
+  todayEvents: ScheduleEvent[];
+  pendingApprovals: number;
+  pendingRequests: number;
+}
+
+export interface MyTasksData {
+  overdue: Task[];
+  today: Task[];
+  important: Task[];
+  week: Task[];
+  later: Task[];
+  waiting: Task[];
+  recentDone: Task[];
+  /** the open tasks of others one oversees (בבקרה) - attached to them as a commander; late first */
+  oversight: Task[];
+  myWeeks: Week[];
+  /** company-wide tasks of others; the copies of an all-staff task once, with how many finished it */
+  teamTasks: Task[];
+  groupProgress: Record<string, { done: number; total: number }>;
+  stats: { today: number; overdue: number; week: number; doneToday: number };
+}
+
+export interface StaffPageData {
+  user: User;
+  stats: StaffStatus & {
+    total: number;
+    onTimePct: number;
+    latePct: number;
+    openLatePct: number;
+  };
+  open: Task[];
+  overdue: Task[];
+  done: Task[];
+  selfCreated: Task[];
+  fromCommander: Task[];
+  upcoming: Task[];
+  weeks: Week[];
+  /** the cadets' experiences they run */
+  experiences: Experience[];
+  /** the teams they command */
+  teams: { id: number; name: string }[];
+}
+
+export interface WeekDetail {
+  week: Week;
+  byDomain: DomainReadiness[];
+  tasks: Task[];
+  events: ScheduleEvent[];
+  lessons: Lesson[];
+  checklistTemplates: Template[];
+  appliedTemplateIds: number[];
+  nextWeek: Pick<Week, 'id' | 'name' | 'startDate'> | null;
+  debriefs: Debrief[];
+  /** notes the staff added on the way, waiting for the week's weekly debrief to be opened */
+  debriefNotesWaiting: number;
+  experiences: Experience[];
+}
+
+export interface CloseCheck {
+  overdue: Task[];
+  open: Task[];
+  blocked: Task[];
+  lessonsCount: number;
+  nextWeek: Pick<Week, 'id' | 'name' | 'startDate'> | null;
+}
+
+export interface CarryDecision {
+  taskId: number;
+  action: CarryAction;
+  newDeadline?: string;
+  reason?: string;
+}
+
+export interface BriefingData {
+  date: string;
+  events: ScheduleEvent[];
+  critical: Task[];
+  dueToday: Task[];
+  overdue: Task[];
+  blocked: Task[];
+  byOwner: { userId: number; name: string; dueToday: number; overdue: number; blocked: number }[];
+  /** cadets excused from a rule now - the staff must know */
+  exemptions: Exemption[];
+}
+
+/** One discipline record in the export (the cadets the user manages, any status). */
+export interface DisciplineLogEntry {
+  id: number;
+  occurredOn: string;
+  cadetId: number;
+  cadetName: string;
+  teamName: string | null;
+  category: string;
+  offense: string;
+  occurrence: number | null;
+  formal: boolean;
+  noteNumber: number | null;
+  severity: string;
+  title: string;
+  body: string;
+  authorName: string;
+}
+
+/** Discipline over a range of days, among the cadets the user manages. */
+export interface DisciplineSummary {
+  events: number;
+  notes: number;
+  byCategory: { category: string; count: number }[];
+  cadets: { id: number; fullName: string; teamName: string | null; events: number; notes: number; totalNotes: number }[];
+}
+
+export interface WeeklyReport {
+  from: string;
+  to: string;
+  /** null for someone who manages no cadets */
+  discipline: DisciplineSummary | null;
+  opened: number;
+  completed: number;
+  carried: number;
+  overdue: number;
+  byDomain: DomainReadiness[];
+  openPoints: Task[];
+  completedByStaff: { userId: number; name: string; done: number; late: number }[];
+}
+
+export interface LookAheadData {
+  days: { date: string; total: number; critical: number; byOwner: Record<number, number> }[];
+  weeks: { label: string; from: string; to: string; total: number; week: Week | null }[];
+  staffLoad: { userId: number; name: string; total: number }[];
+}
+
+export interface DayEndData {
+  date: string;
+  dueToday: number;
+  doneToday: number;
+  completedToday: Task[];
+  stillOpen: Task[];
+  tomorrow: Task[];
+}
+
+export interface SearchResults {
+  tasks: Task[];
+  users: User[];
+  weeks: Week[];
+  events: ScheduleEvent[];
+  cadets: Cadet[];
+  debriefs: Debrief[];
+  documents: CourseDocument[];
+}
+
+// ---------------- Version 3 (section 31) ----------------
+
+export interface Team {
+  id: number;
+  name: string;
+  commanderId: number | null;
+  commanderName: string | null;
+  sort: number;
+  cadetCount: number;
+}
+
+export interface Cadet {
+  id: number;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  personalNumber: string;
+  teamId: number | null;
+  teamName: string | null;
+  phone: string;
+  notes: string;
+  status: CadetStatus;
+  recordCount: number;
+  lastRecordAt: string | null;
+  avgScore: number | null;
+  disciplineCount: number;
+  /** discipline notes (הערות משמעת) - the third dismisses the cadet */
+  disciplineNotes: number;
+  /** what the cadet is excused from now (exemptions), for every staff member to see */
+  exemptions: string[];
+  /** the evaluation committee the third discipline note opened (deleting a note before it decides cancels it) */
+  notesCommittee: { id: number; decision: CommitteeDecision | null } | null;
+  talkCount: number;
+  /** the personal file: talks, restricted records, notes, evaluation */
+  canManage: boolean;
+  /** the details, exemptions and experiences */
+  canEdit: boolean;
+}
+
+export interface CadetRecord {
+  id: number;
+  cadetId: number;
+  kind: RecordKind;
+  title: string;
+  body: string;
+  category: string;
+  score: number | null;
+  followUp: string;
+  private: boolean;
+  taskId: number | null;
+  taskTitle: string | null;
+  weekId: number | null;
+  weekName: string | null;
+  authorId: number;
+  authorName: string;
+  occurredOn: string;
+  createdAt: string;
+  canDelete: boolean;
+  /** discipline: the offense from the enforcement ladder ("קטגוריה · מקרה"), or '' */
+  offense: string;
+  /** discipline: which time this offense is for the cadet (1 = first) */
+  occurrence: number | null;
+  /** discipline: a discipline note (הערת משמעת) */
+  formal: boolean;
+  /** discipline note: its number among the cadet's notes (1-3) */
+  noteNumber: number | null;
+  /** a personal talk filled in as a form (shared/talks.ts): the answers by field */
+  talk: Record<string, string> | null;
+  /** a talk its writer (or the course commander) can still complete */
+  canEdit: boolean;
+}
+
+export interface Experience {
+  id: number;
+  cadetId: number;
+  cadetName: string;
+  teamName: string | null;
+  /** a role in an event, or a broad experience (התנסות רוחב) held for part of the course (span) */
+  kind: ExperienceKind;
+  span: ExperienceSpan | null;
+  /** the role; for a broad experience, its type */
+  role: string;
+  weekId: number | null;
+  weekName: string | null;
+  eventId: number | null;
+  eventTitle: string | null;
+  startDate: string;
+  endDate: string;
+  goals: string;
+  mentorId: number | null;
+  mentorName: string | null;
+  status: 'planned' | 'done';
+  phase: 'planned' | 'active' | 'awaiting_feedback' | 'done';
+  strengths: string;
+  improvements: string;
+  feedback: string;
+  /** given in the course's format (shared/experienceFeedback.ts) - the score is then out of 100; without it, feedback given before, out of 5 */
+  feedbackForm: ExperienceFeedbackForm | null;
+  score: number | null;
+  evaluatedByName: string | null;
+  evaluatedAt: string | null;
+  canSeeFeedback: boolean;
+  canEdit: boolean;
+  canGiveFeedback: boolean;
+  feedbackTaskId: number | null;
+  /** marked in the tracking table: by whom and when */
+  markedAt: string | null;
+  markedByName: string | null;
+  canMark: boolean;
+}
+
+// ---------------- evaluation files (תיקי הערכה) ----------------
+
+/** a dated remark in the evaluation file (התייחסות המפק"צ); earlier versions are kept in the history */
+export interface EvaluationNote {
+  id: number;
+  occurredOn: string;
+  /** the remark in full */
+  body: string;
+  authorId: number;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedByName: string | null;
+  /** sent back with a change: a change made meanwhile by someone else is not overwritten */
+  version: number;
+  edited: boolean;
+  canEdit: boolean;
+  /** a remark written before the file had its present form: its tone, subject and when it was shown */
+  legacy: { tone: EvalTone | null; category: string; shownOn: string | null } | null;
+  /** the traits it names (shared/evaluationTraits.ts), by axis and sub-axis in the catalog's order */
+  traits: TraitGroup[];
+}
+
+/** a critical point or event (נקודה / אירוע קריטי) */
+export interface EvaluationPoint {
+  id: number;
+  period: string;
+  description: string;
+  significance: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedByName: string | null;
+  version: number;
+  edited: boolean;
+  canEdit: boolean;
+}
+
+/** one group dynamics assessment: a score of 1-5 and a place in the team of 1-12 */
+export interface EvaluationDynamics {
+  id: number;
+  occurredOn: string;
+  score: number;
+  rank: number;
+  authorName: string;
+  canDelete: boolean;
+}
+
+/**
+ * exams and fitness: null is "not entered yet", which is not a zero. The fitness threshold
+ * (run…, pushups…) and the readings exam are always in the file; the mid and final fitness tests
+ * and exams once the course adds them (shared/evaluation.ts, EXAM_TESTS).
+ */
+export interface EvaluationExams {
+  runResult: string | null;
+  runScore: number | null;
+  pushups: number | null;
+  pushupsScore: number | null;
+  /** a fitness test's overall score (ציון כש"ג), as the grade sheet has it */
+  fitBaseScore: number | null;
+  readingsA: number | null;
+  readingsB: number | null;
+  midRunResult: string | null;
+  midRunScore: number | null;
+  midPushups: number | null;
+  midPushupsScore: number | null;
+  midFitScore: number | null;
+  midA: number | null;
+  midB: number | null;
+  endRunResult: string | null;
+  endRunScore: number | null;
+  endPushups: number | null;
+  endPushupsScore: number | null;
+  endFitScore: number | null;
+  finalA: number | null;
+  finalB: number | null;
+}
+
+/** an exam or fitness test of the file (shared/evaluation.ts names them) */
+export type ExamTest = 'fitBase' | 'readings' | 'fitMid' | 'midExam' | 'fitEnd' | 'finalExam';
+
+/** the fields of the file that are set one by one (shared/evaluation.ts names them) */
+export type EvaluationField =
+  | 'companyCommander'
+  | 'teamCommander'
+  | 'firstName'
+  | 'lastName'
+  | 'personalNumber'
+  | 'unit'
+  | 'city'
+  | 'enlistedOn'
+  | 'releaseOn'
+  | 'militaryPath'
+  | keyof EvaluationExams
+  | 'committeeReason'
+  | 'summary'
+  | 'standing';
+
+// ---------------- the grade sheet (server/src/grades.ts) ----------------
+
+/** where a column goes: a field of the file, one of the course's grades, a new grade, or nowhere */
+export type GradeTarget = keyof EvaluationExams | `item:${number}` | 'new' | 'skip';
+
+export interface GradeColumn {
+  index: number;
+  header: string;
+  target: GradeTarget;
+  /** numbers for cadets that were found */
+  values: number;
+  /** of them, how many replace a different grade already in the file */
+  changes: number;
+  /** and how many are already in the file just like that - nothing to do */
+  same: number;
+  /** cells that are not a number (a mark, a word) - not imported */
+  other: number;
+  /** numbers outside 0-100 - not imported */
+  outOfRange: number;
+  /** the cadets whose grade would change: what is in the file and what comes from the sheet (the first 200) */
+  changed: { cadetId: number; name: string; before: number; after: number }[];
+}
+
+export interface GradeImportPreview {
+  /** the sheet's header row, counted from 1 as in the spreadsheet */
+  headerRow: number;
+  columns: GradeColumn[];
+  /** the cadets' rows: found, or not found in the course */
+  rows: { line: number; name: string; personalNumber: string; cadetId: number | null; cadetName: string | null }[];
+  /** what a column can go to */
+  targets: { value: GradeTarget; label: string }[];
+}
+
+export interface GradeImportResult {
+  cadets: number;
+  set: number;
+  replaced: number;
+  kept: number;
+  /** grades already in the file just as in the sheet */
+  unchanged: number;
+  unmatched: number;
+}
+
+/** one change in the file's history */
+export interface EvaluationChange {
+  id: number;
+  at: string;
+  userName: string | null;
+  section: string;
+  action: 'set' | 'add' | 'edit' | 'delete';
+  /** what changed, in words */
+  label: string;
+  oldValue: string | null;
+  newValue: string | null;
+  itemId: number | null;
+}
+
+export interface EvaluationOpinion {
+  text: string;
+  byName: string | null;
+  at: string | null;
+}
+
+export interface Committee {
+  id: number;
+  cadetId: number;
+  kind: string;
+  reason: string;
+  meetingDate: string | null;
+  referredAt: string;
+  referredByName: string | null;
+  /** when the version presented to the committee was taken */
+  snapshotAt: string;
+  decision: CommitteeDecision | null;
+  decisionText: string;
+  decidedAt: string | null;
+  decidedByName: string | null;
+}
+
+/**
+ * The evaluation file (תיק הערכה): a living file that goes with the cadet through the course, in
+ * nine parts, alongside what the cadet file holds. Seen only by the company commander (the course
+ * commander) and the cadet's team commander.
+ */
+export interface EvaluationFile {
+  /** the file's present form (committees keep older versions as they were) */
+  layout: 2;
+  cadet: Cadet;
+  teamCommanderName: string | null;
+  /** 1. general: who fills in the file; empty stands for the name from the system (…Auto) */
+  general: { companyCommander: string; teamCommander: string; companyCommanderAuto: string | null; teamCommanderAuto: string | null };
+  /** 2. the cadet: name and personal number from the cadet card, the rest kept in the file */
+  details: { firstName: string; lastName: string; personalNumber: string; unit: string; city: string; enlistedOn: string | null; releaseOn: string | null };
+  /** 3. */
+  militaryPath: string;
+  /** 4. the tests shown, in order: the ones always there, the ones the course added, any with a value */
+  tests: ExamTest[];
+  exams: EvaluationExams;
+  /** tests added for the course that no file has a value in yet - they can still be taken away */
+  removableTests: ExamTest[];
+  /** the course's other grades (from the grade sheet), in the sheet's order; null is not entered */
+  grades: { id: number; name: string; value: number | null; /** no cadet has it yet - it can be taken away */ removable: boolean }[];
+  /** 5. oldest first */
+  dynamics: EvaluationDynamics[];
+  /** 6. */
+  committeeReason: string;
+  /** 7. oldest first */
+  notes: EvaluationNote[];
+  /** 8. */
+  points: EvaluationPoint[];
+  /** 9. the company commander's summary - written by them, read by the team commander */
+  summary: EvaluationOpinion;
+  standing: Standing;
+  /** from the cadet file: average score by criterion */
+  scores: { criterion: string; average: number; count: number }[];
+  experiences: { role: string; startDate: string; endDate: string; mentorName: string | null; score: number | null; strengths: string; improvements: string; form: ExperienceFeedbackForm | null }[];
+  discipline: CadetRecord[];
+  talks: CadetRecord[];
+  committees: Committee[];
+  updatedAt: string | null;
+  updatedByName: string | null;
+  canEditSummary: boolean;
+  canRefer: boolean;
+  generatedAt: string;
+}
+
+export interface EvaluationListItem {
+  cadetId: number;
+  fullName: string;
+  personalNumber: string;
+  teamId: number | null;
+  teamName: string | null;
+  status: CadetStatus;
+  standing: Standing;
+  notes: number;
+  points: number;
+  /** of the exam and fitness fields of the tests in the file (examsTotal), how many are entered */
+  exams: number;
+  examsTotal: number;
+  lastDynamics: { score: number; rank: number; occurredOn: string } | null;
+  hasSummary: boolean;
+  hasCommitteeReason: boolean;
+  disciplineNotes: number;
+  committee: { id: number; kind: string; decision: CommitteeDecision | null } | null;
+  updatedAt: string | null;
+  updatedByName: string | null;
+}
+
+/** A committee with the evaluation file as it was presented to it. */
+export interface CommitteeDetail {
+  committee: Committee;
+  file: EvaluationFile;
+}
+
+/** A cadet excused from a rule - shaving, carrying a weapon - until a date or further notice. */
+export interface Exemption {
+  id: number;
+  cadetId: number;
+  cadetName: string;
+  teamName: string | null;
+  subject: string;
+  details: string;
+  /** why: only for the team commander and the course commander (it may be medical) */
+  reason: string;
+  until: string | null;
+  active: boolean;
+  createdByName: string | null;
+  createdAt: string;
+  canDelete: boolean;
+}
+
+/**
+ * Before discipline is recorded by someone who does not see the cadet's discipline (anyone may record it):
+ * what the record shows once saved, so the enforcement ladder gives the right step - not the records.
+ */
+export interface DisciplinePreview {
+  /** which time this offense is for the cadet (1 = the first) */
+  occurrence: number;
+  /** the cadet's discipline notes so far */
+  notes: number;
+  /** a discipline note now sends the cadet to an evaluation committee */
+  refers: boolean;
+}
+
+export interface CadetDetail {
+  cadet: Cadet;
+  exemptions: Exemption[];
+  records: CadetRecord[];
+  experiences: Experience[];
+  tasks: Task[];
+  scores: { date: string; criterion: string; score: number }[];
+  /** the exceptional-weapon forms the person may see (the team's commander, the course commander, who wrote one) */
+  weaponForms: WeaponFormSummary[];
+}
+
+/** an exceptional-weapon form of a cadet, in their file */
+export interface WeaponFormSummary {
+  id: number;
+  cadetId: number;
+  occurredOn: string;
+  occurredAt: string | null;
+  kind: WeaponException;
+  kindText: string;
+  authorName: string | null;
+  /** the course commander decided on it - and so it is closed */
+  decided: boolean;
+}
+
+export interface WeaponForm extends WeaponFormSummary {
+  cadetName: string;
+  personalNumber: string;
+  teamName: string | null;
+  teamCommanderName: string | null;
+  place: string;
+  kindOther: string;
+  weaponType: string;
+  weaponNumber: string;
+  description: string;
+  foundBy: string;
+  cadetVersion: string;
+  handling: string;
+  decision: string;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  authorId: number | null;
+  createdAt: string;
+  canEdit: boolean;
+  canDecide: boolean;
+  canDelete: boolean;
+}
+
+export interface DebriefItem {
+  id: number;
+  debriefId: number;
+  kind: DebriefItemKind;
+  body: string;
+  sort: number;
+  taskId: number | null;
+  taskTitle: string | null;
+  taskStatus: TaskStatus | null;
+  recurringRuleId: number | null;
+  recurringTitle: string | null;
+  createdAt: string;
+  /** a lesson in a debrief form: this cycle (a task on summing up) or the next one (the lessons bank) */
+  horizon: LessonHorizon | null;
+  ownerId: number | null;
+  ownerName: string | null;
+  /** who it is on (the company debrief: several, groups too) - the owner alone when it has no list */
+  owners: ProposalOwner[];
+  /** its training track: the lesson shows in the track, and in the same track of the next cycle */
+  trackId: number | null;
+  trackName: string | null;
+  dueDate: string | null;
+  /** next cycle: the week or the event it is for */
+  target: string;
+}
+
+/** a week the bottom bar's "+" offers for a note to its weekly debrief */
+export interface WeekNoteWeek {
+  id: number;
+  number: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  /** its weekly debrief, once opened */
+  debriefId: number | null;
+  summedUp: boolean;
+  /** notes waiting for the debrief to be opened */
+  waiting: number;
+}
+
+/** a lesson kept for the next cycle, shown when its week or event comes round again */
+export interface BankLesson {
+  id: number;
+  body: string;
+  target: string;
+  targetWeek: number | null;
+  ownerName: string | null;
+  debriefId: number;
+  debriefTitle: string;
+  debriefKind: DebriefKind;
+  occurredOn: string;
+  createdByName: string | null;
+  /** asked for a week or an event: what was decided about it there */
+  review?: LessonReview | null;
+}
+
+export interface LessonReview {
+  decision: LessonDecision;
+  note: string;
+  taskId: number | null;
+  taskTitle: string | null;
+  taskStatus: TaskStatus | null;
+  decidedByName: string | null;
+  decidedAt: string;
+}
+
+export interface Debrief {
+  /** The previous course this unfinished work came from. */
+  originCourse?: string | null;
+  id: number;
+  kind: DebriefKind;
+  /** the form's answers, by question */
+  answers: DebriefAnswers;
+  /** the company debrief: the cadet who brings it (the training officer of the broad experience) */
+  presenterId: number | null;
+  presenterName: string | null;
+  title: string;
+  occurredOn: string;
+  eventId: number | null;
+  eventTitle: string | null;
+  weekId: number | null;
+  weekName: string | null;
+  facilitatorId: number | null;
+  /** A track debrief's selected training track. */
+  trackId: number | null;
+  trackName: string | null;
+  facilitatorName: string | null;
+  participants: string;
+  summary: string;
+  status: 'draft' | 'final';
+  /** a weekly debrief its lead sent for the commander's approval (still a draft until approved) */
+  submittedAt: string | null;
+  submittedByName: string | null;
+  /** may sum it up now - for a weekly debrief, the commander's approval; its lead sends it instead */
+  canSumUp: boolean;
+  createdBy: number;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+  itemCounts: Record<DebriefItemKind, number>;
+  openTasks: number;
+  canEdit: boolean;
+  /** Staff may contribute from creation, before submission for commander approval. */
+  canContribute: boolean;
+}
+
+/** A submitted staff point is immutable; review records who incorporated or declined it. */
+export interface DebriefContributionLesson {
+  body: string;
+  horizon: 'now' | 'next';
+  ownerId: number | null;
+  dueDate: string | null;
+  trackId?: number | null;
+}
+export interface DebriefContributionPoint {
+  id: number;
+  questionId: string | null;
+  label: string;
+  value: unknown;
+  lesson: DebriefContributionLesson | null;
+  status: 'pending' | 'accepted' | 'rejected';
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+}
+export interface DebriefContribution {
+  id: number;
+  authorId: number | null;
+  authorName: string;
+  createdAt: string;
+  points: DebriefContributionPoint[];
+}
+export interface DebriefContributions {
+  canContribute: boolean;
+  canReview: boolean;
+  contributions: DebriefContribution[];
+}
+
+export interface DebriefDetail {
+  debrief: Debrief;
+  items: DebriefItem[];
+  tasks: Task[];
+  /** a weekly (or company) debrief: the week it is about */
+  week: { id: number; number: number; name: string; goals: string } | null;
+  /** a company debrief: the cadets holding a broad role then, whom a topic can be put on */
+  broadStaff: BroadHolder[];
+}
+
+/** a cadet holding a broad role (סגל רוחב) */
+export interface BroadHolder {
+  cadetId: number;
+  name: string;
+  role: string;
+}
+
+export interface CourseDocument {
+  id: number;
+  title: string;
+  category: string;
+  description: string;
+  kind: 'link' | 'file';
+  url: string;
+  fileName: string | null;
+  size: number | null;
+  weekId: number | null;
+  weekName: string | null;
+  restricted: boolean;
+  pinned: boolean;
+  uploadedBy: number | null;
+  uploadedByName: string | null;
+  createdAt: string;
+  canEdit: boolean;
+}
+
+/** Why a snapshot of the database was taken (server/src/snapshots.ts). */
+export type SnapshotLabel = 'auto' | 'manual' | 'before_delete' | 'before_restore' | 'archive';
+
+export interface SnapshotInfo {
+  id: string;
+  savedAt: string;
+  label: SnapshotLabel;
+  bytes: number;
+}
+
+// ---------------- "יישור קו" (the staff's WhatsApp group) ----------------
+
+export interface AlignmentMessage {
+  id: number;
+  sentAt: string;
+  /** the name (or number) as WhatsApp shows it */
+  sender: string;
+  /** the staff member it was matched to, by name or phone */
+  userId: number | null;
+  userName: string | null;
+  body: string;
+  /** had a photo, video or file that the export did not include */
+  media: boolean;
+  pinned: boolean;
+}
+
+export interface AlignmentFeed {
+  /** oldest first */
+  messages: AlignmentMessage[];
+  pinned: AlignmentMessage[];
+  /** older messages to load */
+  more: boolean;
+  total: number;
+  lastImport: { at: string; added: number; byName: string | null } | null;
+}
+
+export interface AlignmentImport {
+  found: number;
+  added: number;
+  existing: number;
+  from: string;
+  to: string;
+}
+
+// ---------------- previous courses ----------------
+
+export interface CourseStats {
+  tasks: number;
+  doneTasks: number;
+  weeks: number;
+  events: number;
+  cadets: number;
+  debriefs: number;
+  /** lessons kept for the next cycle */
+  lessons: number;
+}
+
+export interface CourseArchive {
+  id: number;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  stats: CourseStats;
+  archivedAt: string;
+  archivedByName: string | null;
+}
+
+/** a task of the same week in the previous course, to repeat in this one */
+export interface PreviousCycleTask {
+  id: number;
+  title: string;
+  ownerName: string | null;
+  /** who gets it here: the same person if still on the staff, else the week's lead */
+  assigneeName: string | null;
+  /** "a copy for each": how many it went to */
+  people: number;
+  priority: Priority;
+  domain: string;
+  /** days from the week's first day (negative: before the week) */
+  dayOffset: number;
+  time: string;
+  status: TaskStatus;
+  /** a task by that name is already in this week */
+  exists: boolean;
+}
+
+export interface PreviousCycleWeek {
+  archiveId: number;
+  archiveName: string;
+  week: { name: string; number: number; startDate: string } | null;
+  tasks: PreviousCycleTask[];
+}
+
+export interface CoursesOverview {
+  current: { name: string; startDate: string | null; endDate: string | null; stats: CourseStats };
+  archives: CourseArchive[];
+  /** the previous course open for reading, if any */
+  viewing: number | null;
+}
+
+// ---------------- enforcement ladder (מדרג אכיפה) ----------------
+
+/** What to do the n-th time: the text from the ladder, and what it calls for. */
+export interface DisciplineStep {
+  text: string;
+  /** the step is a discipline note */
+  note: boolean;
+  /** the step sends the cadet to an evaluation committee */
+  committee: boolean;
+  /** the wording for this discipline note, an index into letters */
+  letter: number | null;
+}
+
+export interface DisciplineOffense {
+  /** "קטגוריה · מקרה" - what records keep, so a re-import continues the count */
+  key: string;
+  category: string;
+  name: string;
+  /** examples of what counts, from the document's footnotes */
+  definition: string[];
+  /** by occurrence: [0] is the first time; null where the ladder has nothing */
+  steps: (DisciplineStep | null)[];
+}
+
+/** Ready wording for a discipline note ("איחור למסדר - פעם רביעית"). */
+export interface DisciplineLetter {
+  title: string;
+  body: string;
+}
+
+/** Discipline across the cadets this user manages: this week, who has notes, the latest records. */
+export interface DisciplineOverview {
+  /** how many active cadets the user manages (0: nothing to show) */
+  managed: number;
+  week: { events: number; notes: number; byCategory: { category: string; count: number }[] };
+  cadets: { id: number; fullName: string; teamName: string | null; notes: number; committee: { id: number; decision: CommitteeDecision | null } | null }[];
+  recent: { id: number; cadetId: number; cadetName: string; title: string; formal: boolean; occurrence: number | null; occurredOn: string; authorName: string }[];
+}
+
+export interface DisciplineGuide {
+  offenses: DisciplineOffense[];
+  letters: DisciplineLetter[];
+  /** the link or file it came from */
+  source: string;
+  importedAt: string | null;
+  importedByName: string | null;
+}
+
+// ---------------- plan approval (server/src/plans.ts) ----------------
+
+/** what kind of activity an event is, read from its title */
+export type PlanEventKind = 'exam' | 'ceremony' | 'field' | 'range' | 'navigation' | 'visit' | 'evaluation' | 'learning' | 'values' | 'physical' | 'staff' | 'leave' | 'other';
+
+/** an activity in a plan: one event, or the same one over consecutive days */
+export interface PlanEvent {
+  /** the same event at the same time keeps its key: what changed since an approval is found by it */
+  key: string;
+  title: string;
+  date: string;
+  /** the last day; the same as date for one day */
+  endDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  location: string;
+  ownerName: string | null;
+  kind: PlanEventKind;
+  /** how central to the week, 1-6 */
+  weight: number;
+  night: boolean;
+  /** the preparation tasks of a course event; null for an event from a connected calendar */
+  prep: { done: number; total: number } | null;
+  source: 'course' | 'calendar';
+  /** added by hand to the key schedule (not one of the main blocks by itself) */
+  pinned?: boolean;
+  /** one of the main blocks by itself, taken out of the key schedule by hand */
+  dropped?: boolean;
+}
+
+export interface PlanHorizonWeek {
+  weekId: number | null;
+  number: number | null;
+  name: string;
+  topic: string;
+  startDate: string;
+  endDate: string;
+  /** the key activities, by date */
+  events: PlanEvent[];
+  /** activities of lesser weight, counted */
+  more: number;
+}
+
+export type PlanSectionKey = 'goals' | 'achievements' | 'emphases' | 'requests';
+
+export interface PlanSection {
+  /** what the document shows: the commander's wording, or the automatic draft */
+  items: string[];
+  /** the automatic draft, from the course's data */
+  auto: string[];
+  edited: boolean;
+}
+
+export type PlanStatus = 'draft' | 'ready' | 'approved';
+
+export interface PlanRisk {
+  level: 'high' | 'medium';
+  text: string;
+  answer: string;
+  /** the course's as a whole (the cadets at risk), not one week's: said once across several weeks */
+  course?: boolean;
+}
+
+export interface PlanDocument {
+  week: Week;
+  position: { index: number; total: number; daysLeft: number | null; phase: 'opening' | 'middle' | 'closing' };
+  /** the bottom line, for someone with two minutes */
+  bluf: { text: string; auto: string; edited: boolean };
+  /** this week and the three after it */
+  horizon: PlanHorizonWeek[];
+  sections: Record<PlanSectionKey, PlanSection>;
+  risks: PlanRisk[];
+  /** the moment that shows the course best, for the superior to come and see */
+  visit: PlanEvent | null;
+  cadets: { active: number; dropped: number; watch: number; risk: number; committees: number; twoNotes: number };
+  absences: Absence[];
+  lessons: BankLesson[];
+  status: PlanStatus;
+  approval: { by: string; on: string; notes: string } | null;
+  /** what changed in the week's key activities since it was approved */
+  changes: string[];
+  updatedAt: string | null;
+  updatedByName: string | null;
+}
+
+export interface PlanListItem {
+  week: Week;
+  status: PlanStatus;
+  approval: { by: string; on: string } | null;
+  changed: boolean;
+  edited: boolean;
+}
+
+export interface PlansOverview {
+  weeks: PlanListItem[];
+  currentWeekId: number | null;
+}
+
+/** one week of the three-week plan: as its own plan document has it */
+export interface ThreeWeekWeek {
+  week: Week;
+  /** where the week's own plan document stands */
+  plan: { status: PlanStatus; approval: { by: string; on: string } | null; changed: boolean };
+  /** the week's goals: the commander's wording, or the draft */
+  goals: PlanSection;
+  /** the week's main blocks - and those of the days after it, up to the next week - by date */
+  key: PlanEvent[];
+  /** the previous cycle's lessons for the week: how many, how many still without a decision, the first few */
+  lessons: { total: number; open: number; items: string[] };
+}
+
+/** the three-week plan (אישור תוכניות תלת שבועי): the week now and the three after it, in one document */
+export interface ThreeWeekPlan {
+  /** its first week - the document's address */
+  startWeekId: number;
+  /** whether it starts at the week now */
+  current: boolean;
+  /** which weeks of the course, of how many; days to its end */
+  position: { first: number; last: number; total: number; daysLeft: number | null };
+  bluf: { text: string; auto: string; edited: boolean };
+  /** four weeks - fewer at the end of the course */
+  weeks: ThreeWeekWeek[];
+  /** the weightiest activities - exams, ceremonies, exercises, navigations, ranges - by date */
+  milestones: PlanEvent[];
+  /** the preparation tasks of the four weeks */
+  readiness: { done: number; total: number; overdue: number };
+  /** the high ones first: a week's own with its number, the course's once (no number) */
+  risks: (PlanRisk & { weekNumber: number | null })[];
+  absences: Absence[];
+  cadets: PlanDocument['cadets'];
+  /** what is asked of the commander above */
+  requests: string[];
+  /** the moment that shows the course best, for the commander above to come and see */
+  visit: PlanEvent | null;
+  /** the Google calendars read with the course's schedule: by their names, how many of the period's main blocks
+   * each held, and whether it could be read */
+  calendars: { name: string; count: number; error: string | null; loading: boolean }[];
+  /** chosen for the plans ("יומן התוכנית"), or - none chosen - the ones connected to the schedule */
+  calendarsFrom: 'plan' | 'schedule';
+  status: PlanStatus;
+  approval: { by: string; on: string; notes: string } | null;
+  /** what changed in the four weeks' key activities since they were approved */
+  changes: string[];
+  updatedAt: string | null;
+  updatedByName: string | null;
+}

@@ -1,0 +1,877 @@
+import { CourseOrigin } from '../components/CourseOrigin';
+// Section 9 (task page), 20 (activity log), 41-46 (receiving, updating, blocking,
+// completing), 59-60 (dependencies, subtasks), 64 (all-staff progress).
+
+import { PageBack } from '../components/BackButton';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
+import { domainLabel, isOpenStatus, OVERDUE_RESPONSE_LABELS, PRIORITY_LABELS, REQUEST_TYPE_LABELS, STATUS_LABELS, VISIBILITY_LABELS } from '@shared/constants';
+import type { MyTasksData, Task, TaskDetail, TaskRequest } from '@shared/types';
+import { DeadlineText, PriorityBadge, StatusBadge } from '../components/Badges';
+import { Decided, useDecision } from '../components/Decision';
+import { DoneDrawer } from '../components/DoneDrawer';
+import { Icon } from '../components/Icon';
+import { subtaskOf, UserPicker, useNewTask } from '../components/NewTask';
+import { TaskActions, useTaskMutation, type EditField } from '../components/TaskActions';
+import { OpenTaskList } from '../components/TaskRow';
+import { Bar, ErrorBox, PageError, Loading, Modal } from '../components/ui';
+import { api } from '../lib/api';
+import { haptic } from '../lib/haptics';
+import { leaveClass, useLeaving, type LeavePhase } from '../lib/leaving';
+import { fileSize, fmtAgo, fmtDateTime, fmtTimeLeft } from '../lib/format';
+import { taskGoogleUrl } from '../lib/googleCalendar';
+import { useSession } from '../lib/session';
+import { usePageTitle } from '../lib/title';
+import { useToast } from '../components/Toasts';
+import { useDraft } from '../lib/draft';
+import { useApi, useTick } from '../lib/useApi';
+import { safeUrl } from '../lib/safeUrl';
+import { SearchInput } from '../components/SearchInput';
+
+export function TaskPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { data, error, loading, setData, status } = useApi<TaskDetail>(`/api/tasks/${id}`, ['tasks', 'requests', 'weeks', 'events', 'cadets', 'debriefs', 'users', 'settings']);
+  useTick(30_000);
+
+  if (loading && !data)
+    return (
+      <div className="page narrow">
+        <Loading rows={4} />
+      </div>
+    );
+  if (error && !data)
+    return (
+      <div className="page narrow">
+        <PageError error={error} status={status} what="המשימה" feminine back="/tasks" backLabel="לכל המשימות" />
+      </div>
+    );
+  if (!data) return null;
+  return <TaskView detail={data} onChange={setData} onDeleted={() => navigate('/tasks', { replace: true })} />;
+}
+
+/** given by another staff member: its owner takes it on or hands it back; anyone else sees it waits */
+function AwaitingAccept({ task: t, onChange }: { task: Task; onChange: (d: TaskDetail) => void }) {
+  const { user } = useSession();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const answer = async (accept: boolean) => {
+    setBusy(true);
+    try {
+      await api.post(`/api/tasks/${t.id}/${accept ? 'accept' : 'decline'}`);
+      haptic(accept ? 'success' : 'tick');
+      toast({ title: accept ? 'קיבלת את המשימה' : `המשימה חזרה ל${t.createdByName}`, tone: accept ? 'green' : undefined });
+      onChange(await api.get<TaskDetail>(`/api/tasks/${t.id}`));
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (t.ownerId !== user.id)
+    return (
+      <div className="accept-bar is-waiting" role="status">
+        <Icon name="clock" size={18} />
+        <span className="grow">ממתינה לאישור של {t.ownerName}</span>
+      </div>
+    );
+  return (
+    <div className="accept-bar" role="group" aria-label="משימה שממתינה לאישורך">
+      <Icon name="inbox" size={18} />
+      <span className="grow">
+        <b>{t.createdByName}</b> מבקש/ת להטיל עליך את המשימה הזו.
+      </span>
+      <span className="row gap-6">
+        <button type="button" className="btn" disabled={busy} onClick={() => void answer(false)}>
+          החזרה
+        </button>
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void answer(true)}>
+          <Icon name="check" /> קבלת המשימה
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function TaskView({ detail, onChange, onDeleted }: { detail: TaskDetail; onChange: (d: TaskDetail) => void; onDeleted: () => void }) {
+  const { task: t } = detail;
+  const pendingRequests = useMemo(() => detail.requests.filter((r) => r.status === 'pending'), [detail.requests]);
+  // decided elsewhere meanwhile (the requests page, the bell): it says how, then folds away
+  const requests = useLeaving(pendingRequests, (r) => r.id, (id) => detail.requests.find((r) => r.id === id && r.status !== 'pending'));
+  usePageTitle(t.title);
+  // a detail's pencil opens the edit dialog on that field
+  const [edit, setEdit] = useState<{ field: EditField; n: number } | null>(null);
+  const p = detail.permissions;
+  const canChange = (f: EditField) => (f === 'owner' ? p.canChangeOwner : f === 'deadline' ? p.canChangeDeadline : p.canEdit);
+  const onEdit = (field: EditField) => setEdit((e) => ({ field, n: (e?.n ?? 0) + 1 }));
+  // done right here: the card says so for a moment - a check, and a buzz where the phone has one
+  const was = useRef(t.status);
+  const [justDone, setJustDone] = useState(false);
+  useEffect(() => {
+    const before = was.current;
+    was.current = t.status;
+    if (before === t.status) return;
+    const closed = (before === 'todo' || before === 'in_progress' || before === 'waiting') && (t.status === 'done' || t.status === 'pending_approval');
+    // put back (the message's "ביטול"): the moment goes with it
+    setJustDone(closed);
+    if (closed) haptic('success');
+  }, [t.status]);
+  useEffect(() => {
+    if (!justDone) return;
+    const timer = setTimeout(() => setJustDone(false), 1800);
+    return () => clearTimeout(timer);
+  }, [justDone]);
+
+  return (
+    <div className="page">
+      <div className="row mb-12">
+        <PageBack />
+        {detail.parent && (
+          <Link to={`/tasks/${detail.parent.id}`} className="small muted">
+            משימת משנה של: <b>{detail.parent.title}</b>
+          </Link>
+        )}
+      </div>
+
+      <div className={`card card-pad t-${t.tone} task-head tone-edge${justDone ? ' just-done' : ''}`} style={{ marginBottom: 16 }}>
+        <div className="row row-top wrap">
+          <div className="grow">
+            <div className="row gap-6 wrap mb-12">
+              <StatusBadge status={t.status} overdue={t.overdue} />
+              <PriorityBadge priority={t.priority} hideNormal={false} />
+              {t.domain && <span className="badge">{domainLabel(t.domain, t.domainNote)}</span>}
+              {t.requiresApproval && <span className="badge t-blue">נדרש אישור מפקד</span>}
+              {t.visibility !== 'normal' && <span className="badge">{t.visibility === 'team' ? 'כללית לכל הסגל' : 'מוגבלת'}</span>}
+              {t.recurringRuleId && <span className="badge">משימה חוזרת</span>}
+            </div>
+            <h1 style={{ fontSize: 28, lineHeight: 1.25 }}>
+              {t.title}
+              {justDone && (
+                <span className="done-burst" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="26" height="26">
+                    <circle cx="12" cy="12" r="10.5" />
+                    <path d="M7 12.5l3.2 3.2L17 9" />
+                  </svg>
+                </span>
+              )}
+            </h1>
+            <div className="row wrap mt-8 small" style={{ gap: '4px 18px' }}>
+              <span>
+                <span className="muted">אחראי: </span>
+                <b>{t.ownerName}</b>
+              </span>
+              <span className="task-meta" style={{ margin: 0, fontSize: 14 }}>
+                <span className="muted">דד-ליין:&nbsp;</span>
+                <DeadlineText task={t} />
+              </span>
+              {t.status !== 'done' && t.status !== 'cancelled' && <span className={t.overdue ? 'text-red strong' : 'muted'}>{fmtTimeLeft(t.deadline)}</span>}
+              {t.status !== 'done' && t.status !== 'cancelled' && (
+                <a className="muted task-gcal" href={taskGoogleUrl(t)} target="_blank" rel="noopener noreferrer" title="הדד-ליין כאירוע ביומן Google שלך">
+                  <Icon name="calendar" size={14} /> ליומן Google
+                </a>
+              )}
+              {t.weekName && (
+                <Link to={`/weeks/${t.weekId}`} className="muted">
+                  {t.weekName}
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+        {t.awaitingAccept && <AwaitingAccept task={t} onChange={onChange} />}
+        {t.status === 'waiting' && (
+          <div className="update mt-16" style={{ background: 'var(--purple-bg)', borderColor: 'rgba(116,72,184,.3)' }}>
+            <div className="strong" style={{ color: 'var(--purple)' }}>
+              חסם: {t.blockReason} {t.needsCommander && <span className="badge t-red">נדרשת התערבות מפקד</span>}
+            </div>
+            <div className="small mt-8">
+              <b>ממתין ל:</b> {t.blockWaitingFor}
+            </div>
+            <div className="small">
+              <b>הצעד הבא:</b> {t.blockNextStep}
+            </div>
+          </div>
+        )}
+        {t.needsCommander && t.status !== 'waiting' && (
+          <div className="update mt-16" style={{ background: 'var(--red-bg)', borderColor: 'rgba(201,50,27,.3)' }}>
+            <b className="text-red">הועבר להחלטת מפקד הקורס</b>
+            {t.overdueResponse && <span className="small"> · {OVERDUE_RESPONSE_LABELS[t.overdueResponse]}</span>}
+          </div>
+        )}
+        {t.status === 'cancelled' && t.cancelReason && (
+          <div className="info-box mt-16">
+            <b>בוטלה:</b> {t.cancelReason}
+          </div>
+        )}
+        {requests.rows.map((r) => (
+          <RequestBox key={r.id} r={r} canApprove={detail.permissions.canApprove} gone={requests.phaseOf(r.id)} />
+        ))}
+        {/* the weekly debrief task: the debrief itself is one press away, and summing it up closes the task */}
+        {detail.weeklyDebrief && (
+          <div className="info-box mt-16 row wrap debrief-task-box">
+            <Icon name="lightbulb" size={16} />
+            <span className="grow small">
+              {t.status === 'done' ? 'התחקיר השבועי סוכם והמשימה נסגרה.' : `התחקיר השבועי של ${detail.weeklyDebrief.weekName}. כשמסכמים את התחקיר המשימה נסגרת מעצמה.`}
+            </span>
+            <Link
+              className="btn btn-sm btn-primary"
+              to={detail.weeklyDebrief.debriefId ? `/debriefs/${detail.weeklyDebrief.debriefId}` : `/debriefs?new=weekly&week=${detail.weeklyDebrief.weekId}`}
+            >
+              <Icon name="lightbulb" /> {detail.weeklyDebrief.debriefId ? 'לתחקיר השבועי' : 'פתיחת התחקיר השבועי'}
+            </Link>
+          </div>
+        )}
+        <div className="mt-16">
+          <TaskActions detail={detail} onChange={onChange} onDeleted={onDeleted} edit={edit} />
+        </div>
+      </div>
+
+      {(t.status === 'done' || t.status === 'pending_approval') && <NextUp after={t.id} />}
+
+      {detail.group && <GroupCard group={detail.group} name={detail.task.groupName} />}
+
+      <div className="split">
+        <div className="col gap-16">
+          <CourseOrigin course={t.originCourse} />
+          {t.description && (
+            <div className="card">
+              <div className="card-head">
+                <h3>פירוט</h3>
+              </div>
+              <div className="card-body" style={{ whiteSpace: 'pre-wrap' }}>
+                {t.description}
+              </div>
+            </div>
+          )}
+          <QuickAdds detail={detail} onChange={onChange} />
+          <Subtasks detail={detail} />
+          <Dependencies detail={detail} onChange={onChange} />
+          <Updates detail={detail} onChange={onChange} />
+          <Attachments detail={detail} onChange={onChange} />
+        </div>
+        <div className="col gap-16 sticky-side">
+          <Details task={t} onEdit={onEdit} canChange={canChange} attach={<Attached detail={detail} onChange={onChange} />} />
+          <ActivityLog detail={detail} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** a request waiting on the task (a later deadline, another owner): decided here it says so and folds away
+ *  (components/Decision.tsx) - and so does one decided elsewhere (gone) */
+function RequestBox({ r, canApprove, gone }: { r: TaskRequest; canApprove: boolean; gone?: LeavePhase }) {
+  const d = useDecision();
+  const verdict = d.verdict ?? (gone ? (r.status === 'approved' ? 'approved' : 'rejected') : null);
+  const decide = (approve: boolean) =>
+    void d.decide(approve ? 'approved' : 'rejected', () => api.post(`/api/requests/${r.id}/decide`, { approve }), approve ? 'הבקשה אושרה' : 'הבקשה נדחתה');
+  return (
+    <div className={`task-request${verdict ? ' is-finished' : ''}${d.fold || gone === 'fold' ? ' is-folding' : ''} leave-wrap`}>
+      <div className="update" style={{ background: 'var(--blue-bg)', borderColor: 'rgba(42,95,158,.3)' }}>
+        <div className="row wrap">
+          <div className="grow small">
+            <b>{REQUEST_TYPE_LABELS[r.type]}</b> של {r.requestedByName} {verdict ? '' : 'ממתינה להחלטה'}
+            {r.newDeadline && <> · דד-ליין מבוקש: <span className="mono">{fmtDateTime(r.newDeadline)}</span></>}
+            {r.newOwnerName && <> · אל: {r.newOwnerName}</>}
+            <div className="muted">{r.reason}</div>
+            {d.error && <div className="tiny text-red">{d.error}</div>}
+          </div>
+          {verdict ? (
+            <Decided verdict={verdict} />
+          ) : (
+            canApprove && (
+              <div className="row gap-6">
+                <button className="btn btn-sm btn-primary" onClick={() => decide(true)} aria-label={`אישור ${REQUEST_TYPE_LABELS[r.type]} של ${r.requestedByName}`}>
+                  אשר
+                </button>
+                <button className="btn btn-sm" onClick={() => decide(false)} aria-label={`דחיית ${REQUEST_TYPE_LABELS[r.type]} של ${r.requestedByName}`}>
+                  דחה
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** everyone's copy: who has not done it yet up front; who has, in one line under them - one done while the
+ *  page is open turns green a moment, then narrows away into it */
+function GroupCard({ group, name }: { group: NonNullable<TaskDetail['group']>; name: string | null }) {
+  const pct = group.total ? Math.round((group.done / group.total) * 100) : 0;
+  const left = useMemo(() => group.members.filter((m) => m.status !== 'done'), [group.members]);
+  const done = useMemo(() => group.members.filter((m) => m.status === 'done'), [group.members]);
+  const leaving = useLeaving(left, (m) => m.taskId, (id) => done.find((m) => m.taskId === id));
+  const chip = (m: NonNullable<TaskDetail['group']>['members'][number]) => (
+    <Link key={m.taskId} to={`/tasks/${m.taskId}`} className={`chip t-${m.status === 'done' ? 'green' : m.overdue ? 'red' : 'gray'}`}>
+      <span className="dot" />
+      {m.ownerName} · {m.status === 'done' ? 'הושלם' : m.overdue ? 'באיחור' : STATUS_LABELS[m.status]}
+    </Link>
+  );
+  return (
+    <div className="card card-pad mb-12" style={{ marginBottom: 16 }}>
+      <div className="row wrap">
+        <div className="grow">
+          <div className="label-caps">{name ? `משימה לקבוצה: ${name}` : 'משימה לכמה אנשים - עותק לכל אחד'}</div>
+          <div className="strong" style={{ fontSize: 20 }}>
+            {group.done} מתוך {group.total} השלימו
+          </div>
+        </div>
+        <div style={{ width: 200 }}>
+          <Bar value={pct} label="השלימו את המשימה" />
+        </div>
+      </div>
+      {leaving.rows.length > 0 ? (
+        <div className="chips mt-12" role="group" aria-label="מי עוד לא השלים">
+          {leaving.rows.map((m) => (
+            <span key={m.taskId} className={leaveClass(leaving.phaseOf(m.taskId))}>
+              {chip(m)}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="all-done-line small mt-12">
+          <Icon name="check" size={15} /> כולם השלימו
+        </p>
+      )}
+      <DoneDrawer id="group-done" count={done.length} label="השלימו">
+        <div className="chips">{done.map(chip)}</div>
+      </DoneDrawer>
+    </div>
+  );
+}
+
+function Details({ task: t, onEdit, canChange, attach }: { task: Task; onEdit: (f: EditField) => void; canChange: (f: EditField) => boolean; attach: ReactNode }) {
+  const { isCommander, user } = useSession();
+  const open = t.status !== 'done' && t.status !== 'cancelled';
+  const pen = (f: EditField, what: string) =>
+    open &&
+    canChange(f) && (
+      <button type="button" className="icon-btn kv-pen" aria-label={`שינוי ${what}`} title={`שינוי ${what}`} onClick={() => onEdit(f)}>
+        <Icon name="edit" size={14} />
+      </button>
+    );
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>פרטים</h3>
+      </div>
+      <div className="card-body">
+        <dl className="kv">
+          <dt>אחראי ראשי</dt>
+          <dd>
+            <Link to={isCommander || t.ownerId === user.id ? `/team/${t.ownerId}` : `/tasks?owner=${t.ownerId}`}>{t.ownerName}</Link>
+            {pen('owner', 'אחראי')}
+          </dd>
+          <dt>מצורפים</dt>
+          <dd>{attach}</dd>
+          <dt>נוצר על ידי</dt>
+          <dd>
+            {t.createdByName} <span className="muted tiny">· {fmtAgo(t.createdAt)}</span>
+          </dd>
+          <dt>דד-ליין</dt>
+          <dd>
+            <span className="mono">{fmtDateTime(t.deadline)}</span>
+            {pen('deadline', 'דד-ליין')}
+          </dd>
+          <dt>עדיפות</dt>
+          <dd>
+            {PRIORITY_LABELS[t.priority]}
+            {pen('priority', 'עדיפות')}
+          </dd>
+          <dt>סטטוס</dt>
+          <dd>{STATUS_LABELS[t.status]}</dd>
+          <dt>תחום</dt>
+          <dd>
+            {domainLabel(t.domain, t.domainNote) || '-'}
+            {pen('domain', 'תחום')}
+          </dd>
+          <dt>שבוע</dt>
+          <dd>
+            {t.weekId ? <Link to={`/weeks/${t.weekId}`}>{t.weekName}</Link> : '-'}
+            {pen('week', 'שבוע')}
+          </dd>
+          <dt>ציר</dt>
+          <dd>
+            {t.trackId ? <Link to={`/tracks/${t.trackId}`}>{t.trackName}</Link> : '-'}
+            {pen('track', 'ציר')}
+          </dd>
+          {t.cadetId && (
+            <>
+              <dt>צוער</dt>
+              <dd>
+                <Link to={`/cadets/${t.cadetId}`}>{t.cadetName}</Link>
+              </dd>
+            </>
+          )}
+          {t.debriefId && (
+            <>
+              <dt>תחקיר</dt>
+              <dd>
+                <Link to={`/debriefs/${t.debriefId}`}>{t.debriefTitle}</Link>
+              </dd>
+            </>
+          )}
+          {t.experienceId && (
+            <>
+              <dt>התנסות</dt>
+              <dd>
+                <Link to={`/experiences?feedback=${t.experienceId}`}>{t.status === 'done' || t.status === 'cancelled' ? 'משוב התנסות' : 'מתן משוב על ההתנסות'}</Link>
+              </dd>
+            </>
+          )}
+          {t.eventId && (
+            <>
+              <dt>פעילות בלו"ז</dt>
+              <dd>
+                <Link to={`/schedule?event=${t.eventId}`}>{t.eventTitle}</Link>
+              </dd>
+            </>
+          )}
+          <dt>נראות</dt>
+          <dd className="small">
+            {VISIBILITY_LABELS[t.visibility].split(' - ')[0]}
+            {pen('visibility', 'נראות')}
+          </dd>
+          {t.carriedCount > 0 && (
+            <>
+              <dt>הועברה</dt>
+              <dd>{t.carriedCount} פעמים לשבוע הבא</dd>
+            </>
+          )}
+          {t.completedAt && (
+            <>
+              <dt>הושלמה</dt>
+              <dd className="mono">{fmtDateTime(t.completedAt)}</dd>
+            </>
+          )}
+          <dt>עדכון אחרון</dt>
+          <dd className={t.stale ? 'text-orange strong' : ''}>{fmtAgo(t.lastActivityAt)}</dd>
+        </dl>
+      </div>
+    </div>
+  );
+}
+
+/** a task's subtasks, to break it into parts */
+const addSubtask = (newTask: ReturnType<typeof useNewTask>, t: Task) => newTask(subtaskOf(t));
+
+/**
+ * What a task can still be given - parts, an order with another task - in one row, instead of an empty
+ * card for each. Once it has some, they get their own card.
+ */
+function QuickAdds({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
+  const newTask = useNewTask();
+  const [adding, setAdding] = useState(false);
+  const t = detail.task;
+  const may = (detail.permissions.canEdit || detail.permissions.canUpdateStatus) && t.status !== 'done' && t.status !== 'cancelled';
+  const sub = may && !detail.subtasks.length;
+  const dep = may && !detail.dependsOn.length && !detail.blocks.length;
+  if (!sub && !dep) return null;
+  return (
+    <div className="card card-pad quick-adds">
+      <span className="small muted">להוסיף למשימה:</span>
+      <div className="chips">
+        {sub && (
+          <button type="button" className="chip" onClick={() => addSubtask(newTask, t)} title="לפרק משימה מורכבת לחלקים - והמשימה תקבל אחוז התקדמות">
+            <Icon name="plus" size={14} /> משימת משנה
+          </button>
+        )}
+        {dep && (
+          <button type="button" className="chip" onClick={() => setAdding(true)} title='משימה שחייבת להסתיים קודם - לדוגמה "בניית לו"ז" לפני "הפצת לו"ז לסגל"'>
+            <Icon name="dependency" size={14} /> תלות במשימה אחרת
+          </button>
+        )}
+      </div>
+      {adding && <AddDependency detail={detail} onClose={() => setAdding(false)} onChange={onChange} />}
+    </div>
+  );
+}
+
+function Subtasks({ detail }: { detail: TaskDetail }) {
+  const newTask = useNewTask();
+  const t = detail.task;
+  const canAdd = detail.permissions.canEdit || detail.permissions.canUpdateStatus;
+  // none yet: offered in the row of what can be added
+  if (!detail.subtasks.length) return null;
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3 className="grow">משימות משנה</h3>
+        {t.subtaskTotal > 0 && (
+          <span className="mono small muted">
+            {t.subtaskDone}/{t.subtaskTotal}
+          </span>
+        )}
+        {canAdd && (
+          <button className="btn btn-sm" onClick={() => addSubtask(newTask, t)}>
+            <Icon name="plus" /> הוספה
+          </button>
+        )}
+      </div>
+      <div className="card-body">
+        {t.subtaskTotal > 0 && (
+          <div className="mb-12">
+            <Bar value={Math.round((t.subtaskDone / t.subtaskTotal) * 100)} label="משימות משנה שהושלמו" />
+          </div>
+        )}
+        {/* the open parts; the done ones out of the way, in a drawer */}
+        <OpenTaskList tasks={detail.subtasks} drawerId="subtasks-done" />
+      </div>
+    </div>
+  );
+}
+
+function Dependencies({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
+  const [adding, setAdding] = useState(false);
+  const m = useTaskMutation(detail.task.id, onChange);
+  const canEdit = detail.permissions.canEdit || detail.permissions.canUpdateStatus;
+  // what it still waits for; one done (here or by its owner, live) goes - a moment, then folded - to the drawer
+  const waiting = useMemo(() => detail.dependsOn.filter((d) => isOpenStatus(d.status)), [detail.dependsOn]);
+  const resolved = useMemo(() => detail.dependsOn.filter((d) => !isOpenStatus(d.status)), [detail.dependsOn]);
+  const leaving = useLeaving(waiting, (d) => d.id, (id) => resolved.find((d) => d.id === id));
+  // none yet: offered in the row of what can be added
+  if (!detail.dependsOn.length && !detail.blocks.length) return null;
+  const dep = (d: TaskDetail['dependsOn'][number]) => (
+    <div className="row small">
+      <span className={`dot t-${d.status === 'done' ? 'green' : isOpenStatus(d.status) ? 'orange' : 'gray'}`} />
+      <Link to={`/tasks/${d.id}`} className="grow strong">
+        {d.title}
+      </Link>
+      <span className="muted">{d.ownerName}</span>
+      <span className={`badge${d.status === 'done' ? ' t-green' : ''}`}>{STATUS_LABELS[d.status]}</span>
+      {canEdit && (
+        <button className="icon-btn" aria-label="הסר תלות" onClick={() => void m.run(() => api.del<TaskDetail>(`/api/tasks/${detail.task.id}/dependencies/${d.id}`))}>
+          <Icon name="x" size={16} />
+        </button>
+      )}
+    </div>
+  );
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="dependency" />
+        <h3 className="grow">תלויות</h3>
+        {canEdit && (
+          <button className="btn btn-sm" onClick={() => setAdding(true)}>
+            <Icon name="plus" /> תלות
+          </button>
+        )}
+      </div>
+      <div className="card-body col gap-6">
+        {detail.dependsOn.length > 0 && <div className="label-caps">חייבת להסתיים קודם</div>}
+        {leaving.rows.map((d) => (
+          <div key={d.id} className={leaveClass(leaving.phaseOf(d.id))}>
+            {dep(d)}
+          </div>
+        ))}
+        {detail.dependsOn.length > 0 && !waiting.length && !leaving.rows.length && (
+          <p className="small all-done-line">
+            <Icon name="check" size={15} /> כל מה שהיא תלויה בו הושלם - אפשר להתקדם.
+          </p>
+        )}
+        <DoneDrawer id="dependencies-done" count={resolved.length} label="הושלמו">
+          <div className="col gap-6">
+            {resolved.map((d) => (
+              <div key={d.id}>{dep(d)}</div>
+            ))}
+          </div>
+        </DoneDrawer>
+        {detail.blocks.length > 0 && <div className="label-caps mt-8">ממתינות למשימה זו</div>}
+        {detail.blocks.map((d) => (
+          <div key={d.id} className="row small">
+            <span className="dot t-gray" />
+            <Link to={`/tasks/${d.id}`} className="grow">
+              {d.title}
+            </Link>
+            <span className="muted">{d.ownerName}</span>
+          </div>
+        ))}
+        <ErrorBox error={m.error} />
+      </div>
+      {adding && <AddDependency detail={detail} onClose={() => setAdding(false)} onChange={onChange} />}
+    </div>
+  );
+}
+
+function AddDependency({ detail, onClose, onChange }: { detail: TaskDetail; onClose: () => void; onChange: (d: TaskDetail) => void }) {
+  const [q, setQ] = useState('');
+  const { data } = useApi<Task[]>(`/api/tasks?scope=open&recurring=0${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+  const m = useTaskMutation(detail.task.id, onChange);
+  const exclude = new Set([detail.task.id, ...detail.dependsOn.map((d) => d.id)]);
+  return (
+    <Modal title="המשימה תלויה ב..." onClose={onClose}>
+      <SearchInput className="input" placeholder="חיפוש משימה..." value={q} data-autofocus data-transient onValue={setQ} />
+      <div className="col gap-6 mt-12" style={{ maxHeight: 360, overflowY: 'auto' }}>
+        {(data ?? [])
+          .filter((t) => !exclude.has(t.id))
+          .slice(0, 40)
+          .map((t) => (
+            <button
+              key={t.id}
+              className="btn"
+              style={{ justifyContent: 'flex-start', height: 'auto', padding: '8px 12px', textAlign: 'start' }}
+              onClick={() => void m.run(() => api.post<TaskDetail>(`/api/tasks/${detail.task.id}/dependencies`, { dependsOnId: t.id }), 'התלות נוספה').then((ok) => ok && onClose())}
+            >
+              <span className="grow">
+                {t.title}
+                <span className="tiny muted"> · {t.ownerName}</span>
+              </span>
+            </button>
+          ))}
+      </div>
+      <div className="mt-12">
+        <ErrorBox error={m.error} />
+      </div>
+    </Modal>
+  );
+}
+
+function Updates({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
+  const { isCommander } = useSession();
+  const [body, setBody] = useDraft(`update:${detail.task.id}`);
+  const [kind, setKind] = useState<'comment' | 'instruction'>('comment');
+  const m = useTaskMutation(detail.task.id, onChange);
+  const canInstruct = isCommander || detail.permissions.canEdit;
+  const send = () => {
+    if (!body.trim()) return;
+    void m.run(() => api.post<TaskDetail>(`/api/tasks/${detail.task.id}/updates`, { body: body.trim(), kind })).then((ok) => ok && setBody(''));
+  };
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="message" />
+        <h3 className="grow">עדכונים</h3>
+        <span className="mono tiny muted">{detail.updates.length}</span>
+      </div>
+      <div className="card-body col">
+        {detail.updates.length === 0 && <p className="small muted">אין צורך לשלוח הודעת וואטסאפ - כתבו כאן עדכון וכולם יראו אותו מיד.</p>}
+        {detail.updates.map((u) => (
+          <div key={u.id} className={`update ${u.kind}`}>
+            <div className="update-head">
+              <b>{u.userName}</b>
+              {u.kind === 'instruction' && <span className="badge t-blue">הנחיה</span>}
+              {u.kind === 'return' && <span className="badge t-orange">הוחזר להשלמה</span>}
+              <span className="tl-time">{fmtDateTime(u.createdAt)}</span>
+            </div>
+            <div className="update-body">{u.body}</div>
+          </div>
+        ))}
+        <div className="col gap-6 mt-8">
+          <textarea
+            className="textarea"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder={kind === 'instruction' ? 'הנחיה לאחראי...' : 'לדוגמה: בוצעה פנייה למדור. ממתין לאישור.'}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send();
+            }}
+            style={{ minHeight: 70 }}
+          />
+          <div className="row wrap">
+            <button className="btn btn-primary btn-sm" disabled={!body.trim() || m.busy} onClick={send}>
+              הוסף {kind === 'instruction' ? 'הנחיה' : 'עדכון'}
+            </button>
+            {canInstruct && (
+              <label className="check small">
+                <input type="checkbox" checked={kind === 'instruction'} onChange={(e) => setKind(e.target.checked ? 'instruction' : 'comment')} />
+                סמן כהנחיה
+              </label>
+            )}
+          </div>
+          <ErrorBox error={m.error} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Attachments({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
+  const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+  const m = useTaskMutation(detail.task.id, onChange);
+  const { user, isCommander } = useSession();
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="clip" />
+        <h3 className="grow">קבצים וקישורים</h3>
+        <button className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={m.busy}>
+          <Icon name="upload" /> העלאת קובץ
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void m.run(() => api.upload<TaskDetail>(`/api/tasks/${detail.task.id}/files`, f), 'הקובץ צורף');
+            e.target.value = '';
+          }}
+        />
+      </div>
+      <div className="card-body col gap-6">
+        {detail.attachments.map((a) => (
+          <div key={a.id} className="row small">
+            <Icon name={a.kind === 'file' ? 'file' : 'link'} size={18} className="muted" />
+            <a href={safeUrl(a.url)} target="_blank" rel="noreferrer noopener" className="grow strong" style={{ wordBreak: 'break-all' }}>
+              {a.title}
+            </a>
+            <span className="tiny muted">
+              {a.userName} · {fileSize(a.size)}
+            </span>
+            {(isCommander || a.userId === user.id || detail.permissions.canEdit) && (
+              <button className="icon-btn" aria-label="הסרה" onClick={() => void m.run(async () => { await api.del(`/api/attachments/${a.id}`); return api.get<TaskDetail>(`/api/tasks/${detail.task.id}`); })}>
+                <Icon name="trash" size={16} />
+              </button>
+            )}
+          </div>
+        ))}
+        <form
+          className="row wrap mt-8"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!url.trim()) return;
+            void m.run(() => api.post<TaskDetail>(`/api/tasks/${detail.task.id}/links`, { url: url.trim(), title: title.trim() || undefined }), 'הקישור נוסף').then((ok) => {
+              if (ok) {
+                setUrl('');
+                setTitle('');
+              }
+            });
+          }}
+        >
+          <input className="input grow" dir="ltr" type="url" placeholder="https://drive.google.com/..." value={url} onChange={(e) => setUrl(e.target.value)} style={{ minWidth: 200 }} />
+          <input className="input" placeholder="שם (לא חובה)" value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: 160 }} />
+          <button className="btn" disabled={!url.trim() || m.busy}>
+            <Icon name="link" /> הוסף קישור
+          </button>
+        </form>
+        <ErrorBox error={m.error} />
+      </div>
+    </div>
+  );
+}
+
+function ActivityLog({ detail }: { detail: TaskDetail }) {
+  const [all, setAll] = useState(false);
+  const items = all ? detail.activity : detail.activity.slice(-8);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="history" />
+        <h3 className="grow">יומן פעילות</h3>
+        {detail.activity.length > 8 && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setAll(!all)}>
+            {all ? 'פחות' : `הכל (${detail.activity.length})`}
+          </button>
+        )}
+      </div>
+      <div className="card-body">
+        <div className="timeline">
+          {items.map((a) => (
+            <div key={a.id} className="tl-item">
+              <div className="tl-time">{fmtDateTime(a.createdAt)}</div>
+              <div>{a.text}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** done with this one: the next of one's own still open, a tap away - so the work flows on instead of stopping here */
+function NextUp({ after }: { after: number }) {
+  const { user } = useSession();
+  const navigate = useNavigate();
+  const { data } = useApi<MyTasksData>('/api/my', ['tasks', 'weeks', 'events', 'cadets', 'debriefs', 'users', 'settings']);
+  const next = data ? [...data.overdue, ...data.today, ...data.important, ...data.week, ...data.later].find((x) => x.id !== after && x.ownerId === user.id) : undefined;
+  if (!next) return null;
+  return (
+    <button type="button" className={`card next-up t-${next.tone}`} onClick={() => navigate(`/tasks/${next.id}`)}>
+      <span className="next-up-label">הבאה בתור</span>
+      <span className="next-up-title">{next.title}</span>
+      <span className="next-up-meta">
+        <DeadlineText task={next} />
+        {next.weekName && <> · {next.weekName}</>}
+      </span>
+      <Icon name="chevronLeft" className="next-up-go" />
+    </button>
+  );
+}
+
+/**
+ * The ones attached beside the owner - the commander following it, say. Anyone who sees the task attaches
+ * themselves in a tap ("צרפו אותי") and leaves it; the ones on it, its creator and the commander attach others.
+ */
+function Attached({ detail, onChange }: { detail: TaskDetail; onChange: (d: TaskDetail) => void }) {
+  const { user, userName, isCommander } = useSession();
+  const t = detail.task;
+  const m = useTaskMutation(t.id, onChange);
+  const [picking, setPicking] = useState(false);
+  const open = isOpenStatus(t.status);
+  const mine = t.participantIds.includes(user.id);
+  const owner = t.ownerId === user.id;
+  const send = (body: { add?: number[]; remove?: number[] }, done: string) => void m.run(() => api.post<TaskDetail>(`/api/tasks/${t.id}/attach`, body), done);
+  return (
+    <span className="attached">
+      {/* a commander attached oversees it (בבקרה) - it is not his to do */}
+      {t.participantIds.length ? t.participantIds.map((p) => (t.overseerIds.includes(p) ? `${userName(p)} (בבקרה)` : userName(p))).join(', ') : <span className="muted">אף אחד עדיין</span>}
+      {open && !owner && !mine && (
+        <button
+          type="button"
+          className="btn btn-sm attached-me"
+          onClick={() => send({ add: [user.id] }, isCommander ? 'נוספה לבקרה שלך - תופיע ב"בקרה שלי" ותקבל עליה עדכונים' : 'צורפת למשימה - תופיע אצלך ותקבל עליה עדכונים')}
+          disabled={m.busy}
+        >
+          <Icon name="plus" size={14} /> {isCommander ? 'לבקרה שלי' : 'צרפו אותי'}
+        </button>
+      )}
+      {open && detail.permissions.canAttach && (
+        <button type="button" className="link-btn tiny" onClick={() => setPicking(true)}>
+          צירוף
+        </button>
+      )}
+      {mine && (
+        <button type="button" className="link-btn tiny muted" onClick={() => send({ remove: [user.id] }, isCommander ? 'הוסרה מהבקרה שלך' : 'יצאת מהמשימה')} disabled={m.busy}>
+          {isCommander ? 'הסרה מהבקרה' : 'יציאה'}
+        </button>
+      )}
+      {picking && <AttachDialog detail={detail} onClose={() => setPicking(false)} onSave={(ids) => {
+        const add = ids.filter((i) => !t.participantIds.includes(i));
+        const remove = t.participantIds.filter((i) => !ids.includes(i));
+        setPicking(false);
+        if (add.length || remove.length) send({ add, remove }, add.length ? `צורפו: ${add.map((i) => userName(i)).join(', ')}` : 'עודכן');
+      }} />}
+    </span>
+  );
+}
+
+function AttachDialog({ detail, onClose, onSave }: { detail: TaskDetail; onClose: () => void; onSave: (ids: number[]) => void }) {
+  const { user } = useSession();
+  const t = detail.task;
+  const [ids, setIds] = useState<number[]>(t.participantIds);
+  // taking someone else off: its owner, its creator and the commander
+  const mayRemove = detail.permissions.canEdit || t.ownerId === user.id;
+  return (
+    <Modal
+      title="צירוף למשימה"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => onSave(mayRemove ? ids : [...new Set([...t.participantIds, ...ids])])}>
+            <Icon name="check" /> שמירה
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <p className="small muted mb-12">מי שמצורף רואה את המשימה אצלו ומקבל עדכונים עליה - ומפקד הקורס מקבל אותה לבקרה שלו, לא כמשימה שלו. האחראי נשאר {t.ownerName}.</p>
+      <UserPicker value={ids.filter((i) => i !== t.ownerId)} onChange={setIds} />
+    </Modal>
+  );
+}

@@ -1,0 +1,252 @@
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import type { NextFunction, Request, Response } from 'express';
+import type { Role } from '../../shared/constants';
+import type { User } from '../../shared/types';
+import { clock, config, forbidden, HttpError, nowIso } from './core';
+import { db } from './db';
+
+export interface UserRow {
+  id: number;
+  username: string;
+  password_hash: string;
+  display_name: string;
+  title: string;
+  role: Role;
+  phone: string;
+  email: string | null;
+  active: number;
+  created_at: string;
+  must_change_password: number;
+  google_at?: string | null;
+  totp_secret: string | null;
+  /** gives tasks to the staff without their taking them on first (the commander sets it) */
+  assigns_freely?: number;
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      user?: UserRow;
+    }
+  }
+}
+
+export const COOKIE = 'kks_session';
+
+/** SQL: may sign in - an open account, or one of the staff waiting for the next course (courseStaff.ts) */
+export const SIGNS_IN = '(active = 1 OR id IN (SELECT user_id FROM course_staff_out))';
+
+export function toUser(r: UserRow): User {
+  return {
+    id: r.id,
+    username: r.username,
+    displayName: r.display_name,
+    title: r.title,
+    role: r.role,
+    active: !!r.active,
+    phone: r.phone,
+    email: r.email ?? '',
+    assignsFreely: !!r.assigns_freely,
+  };
+}
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64);
+  return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+/** compared against when the name does not exist, so that answer takes as long as any other (made on first use) */
+let dummy = '';
+export const dummyHash = () => (dummy ||= hashPassword(randomBytes(12).toString('hex')));
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [scheme, saltHex, hashHex] = stored.split('$');
+  if (scheme !== 'scrypt' || !saltHex || !hashHex) return false;
+  const expected = Buffer.from(hashHex, 'hex');
+  const actual = scryptSync(password, Buffer.from(saltHex, 'hex'), expected.length);
+  return timingSafeEqual(expected, actual);
+}
+
+const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+
+export function createSession(userId: number): string {
+  const token = randomBytes(32).toString('base64url');
+  const expires = new Date(clock.now().getTime() + config.sessionDays * 86_400_000).toISOString();
+  db().run('INSERT INTO sessions(token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)', sha256(token), userId, nowIso(), expires);
+  return token;
+}
+
+/** Signs the person out everywhere but here (a lost phone, a shared computer); returns how many. */
+export function endOtherSessions(userId: number, keepToken: string | undefined): number {
+  return db().run('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?', userId, keepToken ? sha256(keepToken) : '').changes;
+}
+
+export function destroySession(token: string): void {
+  db().run('DELETE FROM sessions WHERE token_hash = ?', sha256(token));
+}
+
+export function userForToken(token: string | undefined): UserRow | undefined {
+  if (!token) return undefined;
+  return db().get<UserRow>(
+    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.token_hash = ? AND s.expires_at > ? AND (u.active = 1 OR u.id IN (SELECT user_id FROM course_staff_out))`,
+    sha256(token),
+    nowIso(),
+  );
+}
+
+export function parseCookies(header: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    const k = part.slice(0, i).trim();
+    const v = part.slice(i + 1).trim();
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+export function sessionToken(req: Request): string | undefined {
+  return parseCookies(req.headers.cookie)[COOKIE];
+}
+
+export function setSessionCookie(res: Response, token: string): void {
+  res.cookie(COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: config.cookieSecure,
+    maxAge: config.sessionDays * 86_400_000,
+    path: '/',
+  });
+}
+
+export function clearSessionCookie(res: Response): void {
+  res.clearCookie(COOKIE, { path: '/' });
+}
+
+/** Attaches req.user for any valid session. */
+export function loadUser(req: Request, _res: Response, next: NextFunction): void {
+  req.user = userForToken(sessionToken(req));
+  next();
+}
+
+export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.user) return next(new HttpError(401, 'נדרשת התחברות'));
+  next();
+}
+
+export function requireCommander(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.user) return next(new HttpError(401, 'נדרשת התחברות'));
+  if (req.user.role !== 'commander') return next(forbidden('פעולה זו שמורה למפקד הקורס'));
+  next();
+}
+
+/**
+ * CSRF guard: state-changing requests must carry a custom header, which a
+ * cross-site form or image cannot set. Combined with SameSite=Lax cookies.
+ */
+export function csrfGuard(req: Request, _res: Response, next: NextFunction): void {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  // sharing from WhatsApp arrives as a plain form the phone opens like a link: it carries the
+  // sign-in cookie, while a form sent from another site does not (SameSite=Lax) - see alignment.ts
+  if (req.method === 'POST' && req.path === '/share-target') return next();
+  if (req.headers['x-kks'] !== '1') return next(forbidden('בקשה לא תקינה'));
+  next();
+}
+
+// Brute-force protection for the login endpoint: failed attempts are counted
+// in memory; the fifth within a minute locks the name for a minute, and the
+// lock is kept in the database so every instance of a serverless deployment
+// honours it (one write per lock, not per attempt).
+interface Limit {
+  max: number;
+  ms: number;
+  message: string;
+}
+const ADDRESS_LIMIT: Limit = { max: 5, ms: 60_000, message: 'יותר מדי ניסיונות כניסה. נסה שוב בעוד דקה.' };
+/** codes from one address (each ticket also allows only 5) */
+export const CODE_LIMIT: Limit = { max: 20, ms: 60_000, message: 'יותר מדי ניסיונות. נסו שוב בעוד דקה.' };
+/** a name tried from many addresses (a spread-out guessing attack): 10 misses lock it for 10 minutes */
+export const NAME_LIMIT: Limit = { max: 10, ms: 10 * 60_000, message: 'יותר מדי ניסיונות כניסה לשם המשתמש הזה. נסו שוב בעוד 10 דקות.' };
+const failures = new Map<string, { count: number; until: number }>();
+export function loginThrottle(key: string, limit: Limit = ADDRESS_LIMIT): void {
+  const f = failures.get(key);
+  const locked = (f && f.count >= limit.max && f.until > Date.now()) || (db().get<{ until: number }>('SELECT until FROM login_lockouts WHERE key = ?', key)?.until ?? 0) > Date.now();
+  if (locked) throw new HttpError(429, limit.message);
+}
+export function loginFailed(key: string, limit: Limit = ADDRESS_LIMIT): void {
+  const f = failures.get(key);
+  const count = f && f.until > Date.now() ? f.count + 1 : 1;
+  failures.set(key, { count, until: Date.now() + limit.ms });
+  if (count === limit.max) {
+    db().run('DELETE FROM login_lockouts WHERE until < ?', Date.now());
+    db().run('INSERT INTO login_lockouts(key, until) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until', key, Date.now() + limit.ms);
+  }
+}
+export function loginSucceeded(key: string): void {
+  failures.delete(key);
+  db().run('DELETE FROM login_lockouts WHERE key = ?', key); // writes only when there was a lock
+}
+/** forgets the attempts counted by this instance (tests) */
+export function resetLoginThrottle(): void {
+  failures.clear();
+}
+
+export function getUserRow(id: number): UserRow | undefined {
+  return db().get<UserRow>('SELECT * FROM users WHERE id = ?', id);
+}
+
+/** the team a person commands, by its number (teams.sort) - none: null */
+const TEAM_NUMBER = '(SELECT min(t.sort) FROM teams t WHERE t.commander_id = users.id)';
+/** how people are listed: the commander first, then the team commanders by their team's number (1, 2, 3...), then
+ *  everyone else by name */
+export const PEOPLE_ORDER = `role, ${TEAM_NUMBER} IS NULL, ${TEAM_NUMBER}, display_name`;
+
+export function activeUsers(): UserRow[] {
+  return db().all<UserRow>(`SELECT * FROM users WHERE active = 1 ORDER BY ${PEOPLE_ORDER}`);
+}
+
+export function commanderIds(): number[] {
+  return db()
+    .all<{ id: number }>("SELECT id FROM users WHERE role = 'commander' AND active = 1")
+    .map((r) => r.id);
+}
+
+export function staffIds(): number[] {
+  return db()
+    .all<{ id: number }>(`SELECT id FROM users WHERE role = 'staff' AND active = 1 ORDER BY ${PEOPLE_ORDER}`)
+    .map((r) => r.id);
+}
+
+export function createUser(input: {
+  username: string;
+  password: string;
+  displayName: string;
+  title?: string;
+  role: Role;
+  phone?: string;
+  email?: string;
+  /** someone else chose this password: ask for a personal one on first sign-in */
+  mustChangePassword?: boolean;
+}): number {
+  return db().run(
+    'INSERT INTO users(username, password_hash, display_name, title, role, phone, email, active, created_at, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)',
+    input.username.trim(),
+    hashPassword(input.password),
+    input.displayName.trim(),
+    input.title?.trim() ?? '',
+    input.role,
+    input.phone?.trim() ?? '',
+    input.email?.trim().toLowerCase() || null,
+    nowIso(),
+    input.mustChangePassword ? 1 : 0,
+  ).id;
+}

@@ -1,0 +1,5123 @@
+/*
+ * The calendar as the home page, in Google Calendar's way: a side bar on the same ground as the top bar
+ * ("יצירה", the small month, the layers, the modules), the top bar holding the calendar's own controls,
+ * and the calendar on a white sheet of its own - thin lines, colour only on what is on it. It sits over
+ * styles.css and apple.css; its rules are scoped to the shell and the calendar, so every other screen
+ * keeps its look. Light and dark come from the same tokens as the rest of the app.
+ */
+
+/* ---------------- the colours things are drawn in (shared/calendarLayers.ts CAL_COLORS) ---------------- */
+
+:root {
+  --g-line: var(--line);
+  --g-sheet: var(--card);
+  /* the free strip at the end of a day's column, beside its events (Google's) */
+  --g-end-gap: 12px;
+  --g-hour: 48px;
+  --g-gutter: 56px;
+  --g-now: #e8453c;
+}
+/* an event's colour: Google Calendar's eleven event colours (shared/calendarLayers.ts CAL_COLOR_HEX) */
+.c-red { --c: #d50000; }
+.c-pink { --c: #e67c73; }
+.c-orange { --c: #f4511e; }
+.c-yellow { --c: #f6bf26; --c-on: #202124; }
+.c-olive { --c: #33b679; }
+.c-green { --c: #0b8043; }
+.c-teal { --c: #039be5; }
+.c-blue { --c: #3f51b5; }
+.c-lavender { --c: #7986cb; }
+.c-purple { --c: #8e24aa; }
+.c-graphite { --c: #616161; }
+/* a connected Google calendar's colour: Google's 24 calendar colours (GOOGLE_COLORS); dark words on the lightest */
+.c-g-radicchio { --c: #ad1457; }
+.c-g-tangerine { --c: #f4511e; }
+.c-g-citron { --c: #e4c441; --c-on: #202124; }
+.c-g-basil { --c: #0b8043; }
+.c-g-blueberry { --c: #3f51b5; }
+.c-g-grape { --c: #8e24aa; }
+.c-g-cherry-blossom { --c: #d81b60; }
+.c-g-pumpkin { --c: #ef6c00; }
+.c-g-avocado { --c: #c0ca33; --c-on: #202124; }
+.c-g-eucalyptus { --c: #009688; }
+.c-g-lavender { --c: #7986cb; }
+.c-g-amethyst { --c: #9e69af; }
+.c-g-tomato { --c: #d50000; }
+.c-g-mango { --c: #f09300; --c-on: #202124; }
+.c-g-pistachio { --c: #7cb342; }
+.c-g-peacock { --c: #039be5; }
+.c-g-cocoa { --c: #795548; }
+.c-g-graphite { --c: #616161; }
+.c-g-flamingo { --c: #e67c73; }
+.c-g-banana { --c: #f6bf26; --c-on: #202124; }
+.c-g-sage { --c: #33b679; }
+.c-g-cobalt { --c: #4285f4; }
+.c-g-wisteria { --c: #b39ddb; --c-on: #202124; }
+.c-g-birch { --c: #a79b8e; }
+[class*='c-'] {
+  --c-soft: color-mix(in srgb, var(--c, #3367d6) 15%, var(--g-sheet));
+  --c-ink: color-mix(in srgb, var(--c, #3367d6) 78%, var(--ink));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) [class*='c-'] {
+    --c-soft: color-mix(in srgb, var(--c, #3367d6) 30%, var(--g-sheet));
+    --c-ink: color-mix(in srgb, var(--c, #3367d6) 45%, #fff);
+  }
+}
+:root[data-theme='dark'] [class*='c-'] {
+  --c-soft: color-mix(in srgb, var(--c, #3367d6) 30%, var(--g-sheet));
+  --c-ink: color-mix(in srgb, var(--c, #3367d6) 45%, #fff);
+}
+
+/* ---------------- the side bar: on the top bar's ground, one bar across ---------------- */
+
+.rail.gside {
+  background: var(--paper);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-inline-end: 0;
+  padding: 0 8px 12px;
+  scrollbar-width: thin;
+}
+.gside-top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--top-h);
+  padding-inline: 2px 6px;
+  background: var(--paper);
+}
+.gside-menu {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.gside-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 12px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.gside-brand .brand-mark {
+  width: auto;
+  min-width: 40px;
+  height: 40px;
+  padding: 3px 7px 0;
+  font-size: 15px;
+}
+.gside-brand .brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gside-brand .brand-name {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gside-brand .brand-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (hover: hover) {
+  .gside-brand:hover {
+    background: var(--hover);
+  }
+}
+.gside-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+}
+
+/* the small month */
+.mini-month {
+  padding: 0 6px 12px;
+}
+.mini-month-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px 4px;
+  font-size: 14px;
+}
+.mini-month-head b {
+  font-weight: 600;
+}
+.mini-month-step {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+.mini-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  row-gap: 1px;
+}
+.mini-month-w {
+  display: grid;
+  place-items: center;
+  height: 24px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.mini-month-day {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  cursor: pointer;
+}
+.mini-month-day > span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  position: relative;
+  z-index: 1;
+  transition: background 0.12s;
+}
+.mini-month-day.out {
+  color: var(--muted);
+}
+/* the days the calendar shows: a band across them */
+.mini-month-day.band::before {
+  content: '';
+  position: absolute;
+  inset: 1px 0;
+  background: var(--tint-bg);
+}
+.mini-month-day.band-start::before {
+  border-start-start-radius: 14px;
+  border-end-start-radius: 14px;
+  inset-inline-start: 1px;
+}
+.mini-month-day.band-end::before {
+  border-start-end-radius: 14px;
+  border-end-end-radius: 14px;
+  inset-inline-end: 1px;
+}
+@media (hover: hover) {
+  .mini-month-day:hover > span {
+    background: var(--hover-2);
+  }
+}
+.mini-month-day.on > span {
+  background: var(--tint-bg);
+  color: var(--tint);
+  font-weight: 700;
+}
+.mini-month-day.today > span {
+  background: var(--tint-fill);
+  color: #fff;
+  font-weight: 700;
+}
+.mini-month-day:focus-visible {
+  outline: none;
+}
+.mini-month-day:focus-visible > span {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+/* the layers: "היומנים שלי" / "יומנים נוספים" */
+.side-layers {
+  padding-bottom: 6px;
+}
+.layers {
+  padding: 2px 0;
+}
+.layers-head {
+  display: flex;
+  align-items: center;
+}
+.layers-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 18px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .layers-toggle:hover {
+    background: var(--hover);
+  }
+}
+.layers-chev {
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+.layers.open > .layers-head .layers-chev,
+.layer-filter-btn[aria-expanded='true'] .layers-chev {
+  transform: rotate(180deg);
+}
+.layers-add {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  .layer-row:hover {
+    background: var(--hover);
+  }
+}
+.layer-box {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 2px solid var(--c);
+  border-radius: 4px;
+  color: transparent;
+  transition: background 0.12s, color 0.12s;
+}
+.layer-row input:checked + .layer-box {
+  background: var(--c);
+  color: var(--c-on, #fff);
+}
+.layer-row input:focus-visible + .layer-box {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 55%, transparent);
+}
+.layer-box svg {
+  stroke-width: 3;
+}
+.layer-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layer-sub {
+  margin: 0 12px 4px;
+  padding-inline-start: 30px;
+}
+.layer-sub.check {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+}
+.layer-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 15px;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+.layer-filter-btn.is-set {
+  background: var(--tint-bg);
+  color: var(--tint);
+  font-weight: 600;
+}
+@media (hover: hover) {
+  .layer-filter-btn:hover {
+    background: var(--hover);
+  }
+}
+.layer-filter {
+  padding: 6px 0 8px;
+}
+.layer-filter .seg {
+  width: 100%;
+}
+.layer-filter .seg button {
+  flex: 1;
+  font-size: 12.5px;
+}
+.layer-filter :is(.select, .combo-input) {
+  height: 34px;
+  font-size: 13.5px;
+}
+.layer-ext {
+  display: flex;
+  align-items: center;
+}
+.layer-ext .layer-row {
+  flex: 1;
+  min-width: 0;
+}
+.layer-warn {
+  color: var(--orange-ink);
+  margin-inline-end: 8px;
+  display: grid;
+}
+/* a connected calendar's colour (the commander's): its button, and Google's palette under it */
+.layer-more {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.layer-more[aria-expanded='true'] {
+  background: var(--hover-2);
+  color: var(--ink);
+}
+.gpal {
+  display: grid;
+  grid-template-columns: repeat(6, 24px);
+  gap: 8px;
+  padding: 6px 12px 10px 12px;
+  padding-inline-start: 42px;
+}
+.gpal-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--c);
+  color: var(--c-on, #fff);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.gpal-swatch.on {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--c);
+}
+@media (hover: hover) {
+  .gpal-swatch:hover {
+    transform: scale(1.15);
+  }
+}
+.gpal-swatch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+/* a phone: bigger, and as wide as the menu lets them be */
+@media (max-width: 860px) {
+  .gpal {
+    grid-template-columns: repeat(6, minmax(24px, 30px));
+    gap: 10px;
+    padding-inline-start: 12px;
+  }
+  .gpal-swatch {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+}
+.layer-empty {
+  padding: 2px 12px 6px;
+}
+.layer-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin: 2px 0 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 15px;
+  background: none;
+  color: var(--tint);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .layer-link:hover {
+    background: var(--tint-bg);
+  }
+}
+
+/* the modules: pills, the screen on show in the course's colour, light */
+.gside .rail-link {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.gside .rail-link svg {
+  color: var(--ink-2);
+  opacity: 1;
+}
+@media (hover: hover) {
+  .gside .rail-link:hover {
+    background: var(--hover-2);
+    color: var(--ink);
+  }
+}
+.gside .rail-link.active {
+  background: var(--tint-bg);
+  color: var(--tint);
+  font-weight: 700;
+}
+.gside .rail-link.active svg {
+  color: var(--tint);
+}
+.gside .rail-link .count {
+  background: var(--red);
+  color: #fff;
+}
+.gside .rail-group-head {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 17px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+@media (hover: hover) {
+  .gside .rail-group-head:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
+}
+.gside .rail-settings {
+  margin-top: 10px;
+}
+/* the calendar leads the menu: its row says what day it is, and on the calendar its tools come under it */
+.gside .rail-cal-date {
+  margin-inline-start: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.gside .rail-cal-link.active .rail-cal-date {
+  color: var(--tint);
+}
+.rail-cal-tools {
+  padding-top: 10px;
+}
+.rail-cal.is-here {
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+/* the screens used most: a caption, then their rows, before the groups */
+.rail-frequent {
+  margin-top: 4px;
+}
+.gside .rail-section {
+  padding: 12px 14px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.gside .rail-group {
+  margin-top: 2px;
+}
+
+/* folded (a medium screen, or the person's choice): the menu's button, a round "+" and the icons */
+.rail-collapsed .gside-top {
+  justify-content: center;
+  padding: 0;
+}
+.rail-collapsed .rail.gside:not(.is-peek):not(:has(:focus-visible)) .gside-brand,
+.rail-collapsed .rail.gside.no-peek .gside-brand {
+  display: none;
+}
+.rail-collapsed .rail.gside:not(.no-peek):is(.is-peek, :has(:focus-visible)) .gside-top {
+  justify-content: flex-start;
+  padding-inline: 2px 6px;
+}
+.rail-collapsed .gside .rail-link,
+.rail-collapsed .gside .rail-group-head {
+  padding-inline: 13px;
+}
+
+/* the topics: the menu holds them alone - one row each, the one of the screen on show marked; its screens
+   are the tabs at the top of the page */
+.rail-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.gside .rail-topic {
+  font-weight: 600;
+}
+
+/* folded and opened over the page by the mouse resting on it: a floating panel, as an app's sidebar opens
+   over its content - lifted from the page, its edge and shadow showing */
+.rail-collapsed .rail.gside:not(.no-peek):is(.is-peek, :has(:focus-visible)) {
+  box-shadow:
+    0 28px 70px -20px rgba(0, 0, 0, 0.34),
+    0 0 0 1px var(--line);
+}
+
+/* ---------------- a topic's screens: tabs at the top of the page ---------------- */
+
+/* as a segmented control: the screens on one rounded track, the one on show on a raised thumb that slides to
+   the one pressed (components/SectionTabs.tsx) */
+.section-tabs {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 18px 32px 0;
+}
+.section-tabs + .page {
+  padding-top: 16px;
+}
+.section-tabs-track {
+  display: flex;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--fill);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.section-tabs-track::-webkit-scrollbar {
+  display: none;
+}
+/* more hidden at an edge: it fades there (the page reads right to left - its start is at the right) */
+.section-tabs-track.fade-start {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 32px);
+  mask-image: linear-gradient(to left, transparent, #000 32px);
+}
+.section-tabs-track.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px);
+  mask-image: linear-gradient(to right, transparent, #000 32px);
+}
+.section-tabs-track.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+.section-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.section-tab > :not(.section-tab-thumb) {
+  position: relative;
+  z-index: 1;
+}
+.section-tab svg {
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+.section-tab.on {
+  color: var(--ink);
+}
+.section-tab.on svg {
+  color: var(--tint);
+}
+@media (hover: hover) {
+  .section-tab:not(.on):hover {
+    color: var(--ink);
+    background: var(--hover-2);
+  }
+}
+/* pressed: it gives under the finger at once */
+.section-tab:not(.on):active {
+  transform: scale(0.96);
+}
+.section-tab:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 1px;
+}
+.section-tab .count {
+  margin-inline-start: 2px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 17px;
+}
+.section-tab-thumb {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 3px 10px -3px rgba(0, 0, 0, 0.16);
+  transform-origin: center;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .section-tab-thumb {
+    background: #636366;
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+  }
+}
+:root[data-theme='dark'] .section-tab-thumb {
+  background: #636366;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+}
+@media (max-width: 860px) {
+  .section-tabs {
+    padding: 10px 16px 0;
+  }
+  .section-tabs + .page {
+    padding-top: 10px;
+  }
+  .section-tab {
+    min-height: 36px;
+    padding: 0 13px;
+  }
+  /* a phone: the words alone, so more of them fit across */
+  .section-tab svg {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .section-tab,
+  .section-tab svg {
+    transition: none;
+  }
+}
+
+/* ---------------- a phone: the top bar one piece with the strip behind the clock ---------------- */
+
+/* solid, in the page's own colour (what the phone paints behind its clock): no frosted glass blurring what
+   passes under it, no band of another shade - its edge shows only once the page is scrolled under it */
+@media (max-width: 860px) {
+  .topbar {
+    background: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---------------- a phone: the same menu sliding in from its side, sized for a finger ---------------- */
+
+@media (max-width: 860px) {
+  /* clear of the clock and the notch above, of the screen's rounded edge on its side, and down to the bottom */
+  .rail.gside {
+    padding: 0 8px;
+    padding-inline-start: calc(8px + env(safe-area-inset-right, 0px));
+  }
+  .gside-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .gside .rail-link,
+  .gside .rail-group-head {
+    min-height: 44px;
+    gap: 12px;
+    border-radius: 22px;
+  }
+  .gside .rail-link {
+    font-size: 16px;
+  }
+  .gside .rail-group-head {
+    font-size: 15px;
+  }
+  .gside .rail-section {
+    padding: 14px 16px 6px;
+    font-size: 13px;
+  }
+  .gside :is(.rail-link, .rail-group-head) > svg:first-child {
+    width: 20px;
+    height: 20px;
+  }
+  /* the person and leaving: across the menu, on its own ground, at the very bottom */
+  .gside .rail-foot {
+    bottom: 0;
+    margin: auto -8px 0;
+    margin-inline-start: calc(-8px - env(safe-area-inset-right, 0px));
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-inline-start: calc(16px + env(safe-area-inset-right, 0px));
+    background: var(--paper);
+  }
+  /* the calendars: rows for a finger too */
+  .layers-toggle {
+    min-height: 44px;
+    border-radius: 22px;
+    font-size: 15px;
+  }
+  .layers-add {
+    width: 44px;
+    height: 44px;
+  }
+  .layer-row {
+    min-height: 44px;
+    gap: 14px;
+    border-radius: 22px;
+    font-size: 16px;
+  }
+  .layer-box {
+    width: 20px;
+    height: 20px;
+  }
+  .layer-sub {
+    padding-inline-start: 34px;
+  }
+  .layer-sub.check {
+    min-height: 40px;
+    font-size: 15px;
+  }
+  .layer-filter-btn {
+    min-height: 40px;
+    border-radius: 20px;
+    font-size: 14px;
+  }
+  .layer-more {
+    width: 40px;
+    height: 40px;
+  }
+  .layer-link {
+    min-height: 44px;
+    border-radius: 22px;
+    font-size: 15px;
+  }
+}
+
+/* ---------------- the top bar (a computer): the calendar's controls on the same ground ---------------- */
+
+@media (min-width: 861px) {
+  :root {
+    --top-h: 64px;
+  }
+  .topbar {
+    background: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    padding-inline: 12px 16px;
+    gap: 8px;
+  }
+  .topbar.is-calendar {
+    border-bottom-color: transparent !important;
+    box-shadow: none !important;
+  }
+  .topbar.is-calendar .search {
+    max-width: 300px;
+  }
+  .top-title {
+    min-width: 0;
+    font-size: 18px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .top-title.is-on {
+    opacity: 1;
+    transform: none;
+  }
+}
+.top-cal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.top-today {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  margin-inline-end: 6px;
+}
+.top-today:disabled {
+  opacity: 1;
+  color: var(--muted);
+}
+@media (hover: hover) {
+  .top-today:not(:disabled):hover {
+    background: var(--hover);
+  }
+}
+.top-cal-steps {
+  display: flex;
+}
+.top-cal-steps .icon-btn,
+.top-goto {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.top-cal-title {
+  margin: 0 8px 0 4px;
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+.top-goto {
+  flex-shrink: 0;
+}
+
+/* a narrow computer: the days shown keep their whole name. What gives way first is the sync word and
+   the settings button (it is in the person's menu too); then the search folds to its icon, and opens
+   on a click as on a phone - the title stepping aside while it is typed in */
+@media (min-width: 861px) {
+  .topbar.is-calendar .top-cal {
+    flex-shrink: 0;
+  }
+}
+@media (min-width: 861px) and (max-width: 1180px) {
+  .topbar.is-calendar .live {
+    display: none !important;
+  }
+}
+@media (min-width: 861px) and (max-width: 1100px) {
+  .topbar.is-calendar .search {
+    flex: 1 1 0;
+    min-width: 38px;
+    transition: flex-basis 0.32s var(--spring), flex-grow 0.32s var(--spring);
+  }
+  .topbar.is-calendar .search:not(:focus-within) {
+    flex: 0 0 38px;
+  }
+  .topbar.is-calendar .search:not(:focus-within) input {
+    padding: 0;
+    color: transparent;
+    cursor: pointer;
+  }
+  .topbar.is-calendar .search:not(:focus-within) input::placeholder {
+    color: transparent;
+  }
+  .topbar.is-calendar .search:not(:focus-within) > svg {
+    right: 10px;
+  }
+  .topbar.is-calendar .search:not(:focus-within) .search-palette {
+    display: none;
+  }
+  .topbar.is-calendar:has(.search:focus-within) .top-cal-title,
+  .topbar.is-calendar:has(.search:focus-within) .top-goto {
+    display: none;
+  }
+}
+
+/* a button and what drops from it: the view, every screen, the person */
+.dd {
+  position: relative;
+}
+.dd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .dd-btn:hover {
+    background: var(--hover-2);
+  }
+}
+.dd-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.dd-btn[aria-expanded='true'] {
+  background: var(--hover-2);
+}
+.top-view .dd-btn {
+  padding: 0 12px 0 16px;
+  border: 1px solid var(--line-2);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.top-user .dd-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+.top-user .dd-btn .avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+}
+.dd-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-end: 0;
+  z-index: 50;
+  min-width: 220px;
+  padding: 6px 0;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow-lg);
+  animation: dd-in 0.16s var(--spring) both;
+  transform-origin: top left;
+}
+@keyframes dd-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+.dd-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.dd-item svg {
+  color: var(--ink-2);
+}
+@media (hover: hover) {
+  .dd-item:hover {
+    background: var(--hover);
+  }
+}
+.dd-item:focus-visible {
+  outline: none;
+  background: var(--hover-2);
+}
+.dd-item.on {
+  background: var(--tint-bg);
+  color: var(--tint);
+  font-weight: 600;
+}
+.dd-item .kbd {
+  font-size: 11px;
+}
+.dd-sep {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--line);
+}
+.dd-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.dd-who .avatar {
+  width: 40px;
+  height: 40px;
+}
+
+/* ---------------- the calendar's page (a computer): the sheet, the panel, the strip ---------------- */
+
+.cal-page.is-desk {
+  padding: 0 0 0 0;
+  max-width: none;
+}
+.cal-page.is-desk .cal-main {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  height: calc(100dvh - var(--top-h) - 12px);
+  padding-inline-end: 4px;
+}
+.cal-page.is-desk.view-agenda .cal-main {
+  height: auto;
+  min-height: calc(100dvh - var(--top-h) - 12px);
+}
+.cal-sheet {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--g-sheet);
+}
+.cal-sheet.is-list {
+  overflow: visible;
+  padding: 16px 20px 24px;
+}
+.cal-sheet > .period-clip,
+.cal-sheet > .period-clip > .period-swipe {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------- day, a few days, the week ---------------- */
+
+.gc {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  --hour: var(--g-hour);
+}
+.gc-head {
+  display: grid;
+  grid-template-columns: var(--g-gutter) repeat(var(--days), minmax(0, 1fr));
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  border-bottom: 1px solid var(--g-line);
+  flex-shrink: 0;
+}
+.gc-gutter {
+  min-width: 0;
+}
+.gc-dayhead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0 4px;
+  border-inline-start: 1px solid transparent;
+}
+.gc-dw {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.gc-dn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 24px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.gc-dn:disabled {
+  cursor: default;
+}
+@media (hover: hover) {
+  .gc-dn:not(:disabled):hover {
+    background: var(--hover-2);
+  }
+}
+.gc-dayhead.is-past .gc-dn {
+  color: var(--ink-2);
+}
+.gc-dayhead.is-today .gc-dw {
+  color: var(--tint);
+}
+.gc-dayhead.is-today .gc-dn {
+  background: var(--tint-fill);
+  color: #fff;
+  font-weight: 500;
+}
+/* the rows above the hours */
+.gc-allday-gutter {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6px;
+}
+.gc-allday-toggle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.gc-allday-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.gc-allday {
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: repeat(var(--days), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), 24px);
+  grid-auto-rows: 24px;
+  row-gap: 2px;
+  min-height: 28px;
+  padding: 2px 0 6px;
+  align-content: start;
+}
+.gc-more {
+  align-self: center;
+  justify-self: start;
+  margin: 0 4px;
+  padding: 0 8px;
+  height: 22px;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .gc-more:hover {
+    background: var(--hover-2);
+    color: var(--ink);
+  }
+}
+/* the hours */
+.gc-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+.gc-body {
+  display: grid;
+  grid-template-columns: var(--g-gutter) repeat(var(--days), minmax(0, 1fr));
+  position: relative;
+}
+.gc-hours {
+  position: relative;
+  height: calc(var(--hour) * 24);
+}
+.gc-hours span {
+  position: absolute;
+  inset-inline-end: 8px;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.gc-col {
+  position: relative;
+  height: calc(var(--hour) * 24);
+  border-inline-start: 1px solid var(--g-line);
+  background-image: repeating-linear-gradient(to bottom, var(--g-line) 0, var(--g-line) 1px, transparent 1px, transparent var(--hour));
+}
+.gc-col.can-create {
+  cursor: default;
+}
+.gc-event {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid var(--g-sheet);
+  border-radius: 6px;
+  background: var(--c);
+  color: var(--c-on, #fff);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: start;
+  cursor: pointer;
+  transition: box-shadow 0.15s, opacity 0.15s;
+}
+@media (hover: hover) {
+  .gc-event:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    z-index: 3;
+  }
+}
+.gc-event:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  z-index: 3;
+}
+.gc-event-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* as Google's: a title goes on to the next lines, word by word, while the event is tall enough, the hours under it */
+.gc-event:not(.is-short) .gc-event-title {
+  flex-shrink: 0;
+  white-space: normal;
+}
+/* a narrow event (lying on another, or a phone's column): one line of as many letters as fit, and when
+   it starts rather than the whole span */
+.gc-event {
+  container-type: inline-size;
+}
+@container (max-width: 76px) {
+  .gc-t-end {
+    display: none;
+  }
+  .gc-event:not(.is-short) .gc-event-title {
+    white-space: nowrap;
+    text-overflow: clip;
+  }
+}
+.gc-event-meta {
+  opacity: 0.92;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.gc-event.is-short {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding-block: 0;
+}
+.gc-event.is-short .gc-event-meta {
+  font-size: 11px;
+}
+.gc-event.is-faded {
+  opacity: 0.55;
+}
+.gc-event.is-faded .gc-event-title {
+  text-decoration: line-through;
+}
+/* over already: pale, as Google Calendar draws what is behind you, so what is next stands out */
+.gc-event.is-past {
+  background: color-mix(in srgb, var(--c) 58%, var(--g-sheet));
+}
+.gc-event.is-now {
+  box-shadow: 0 0 0 2px var(--g-sheet), 0 0 0 4px color-mix(in srgb, var(--c) 45%, transparent);
+}
+.gc-event.is-movable {
+  cursor: grab;
+}
+.gc-event.is-dragging {
+  opacity: 0.88;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  z-index: 5;
+  cursor: grabbing;
+}
+.gc-event.is-selected {
+  outline: 3px solid var(--focus);
+  outline-offset: -1px;
+}
+.gc-event.is-ghost {
+  inset-inline: 2px 6px;
+  background: var(--c, var(--tint-fill));
+  color: var(--c-on, #fff);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+  z-index: 4;
+  pointer-events: none;
+}
+.gc-prep {
+  margin-top: auto;
+  align-self: flex-start;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.gc-prep.is-done {
+  background: rgba(255, 255, 255, 0.34);
+}
+.gc-resize {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 7px;
+  cursor: ns-resize;
+}
+.gc-check {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: 4px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+.gc-event.is-selected .gc-check {
+  background: currentColor;
+}
+/* now: a red line across today, its dot at the start */
+.gc-now {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 4;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--g-now);
+  pointer-events: none;
+}
+.gc-now::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -6px;
+  top: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--g-now);
+}
+
+/* ---------------- a thing in a row: a bar, a dot and its hour, a deadline ---------------- */
+
+.gc-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 22px;
+  margin: 0 4px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 22px;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.gc-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gc-chip-time {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.gc-chip.is-bar {
+  background: var(--c);
+  color: var(--c-on, #fff);
+  font-weight: 600;
+}
+/* a course week, who is away: calm, as they cover whole days. (A Google calendar's events are drawn
+   as Google draws them: filled with the calendar's colour.) */
+.gc-chip.is-bar.k-week,
+.gc-chip.is-bar.k-absence {
+  background: var(--c-soft);
+  color: var(--c-ink);
+}
+.gc-chip.is-bar.k-week {
+  border-inline-start: 3px solid var(--c);
+}
+.gc-chip.cut-start {
+  margin-inline-start: 0;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+.gc-chip.cut-end {
+  margin-inline-end: 0;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.gc-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--c);
+}
+.gc-task-ring {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border: 2px solid var(--c);
+  border-radius: 50%;
+}
+.gc-chip.is-task.is-overdue {
+  color: var(--red-ink);
+}
+.gc-chip.is-note svg {
+  color: var(--c);
+  flex-shrink: 0;
+}
+.gc-chip.is-faded {
+  opacity: 0.55;
+}
+.gc-chip.is-faded .gc-chip-title {
+  text-decoration: line-through;
+}
+.gc-chip.is-bar.is-past {
+  background: color-mix(in srgb, var(--c) 58%, var(--g-sheet));
+}
+.gc-chip.is-bar.is-past.k-week,
+.gc-chip.is-bar.is-past.k-absence {
+  background: color-mix(in srgb, var(--c-soft) 60%, var(--g-sheet));
+  color: color-mix(in srgb, var(--c-ink) 72%, var(--g-sheet));
+}
+.gc-chip.is-past:not(.is-bar) {
+  color: var(--muted);
+}
+.gc-chip.is-past .gc-dot,
+.gc-chip.is-past .gc-task-ring,
+.gc-chip.is-past.is-note svg {
+  opacity: 0.5;
+}
+/* an invitation as Google draws it: not answered - an outline in its colour; "maybe" - stripes; said no -
+   an outline, struck through */
+.gc-event.rsvp-pending,
+.gc-event.rsvp-maybe,
+.gc-event.rsvp-no,
+.gc-chip.is-bar.rsvp-pending,
+.gc-chip.is-bar.rsvp-maybe,
+.gc-chip.is-bar.rsvp-no {
+  border: 1.5px solid var(--c);
+  background: var(--g-sheet);
+  color: var(--c-ink);
+}
+.gc-event.rsvp-maybe,
+.gc-chip.is-bar.rsvp-maybe {
+  background: repeating-linear-gradient(-45deg, var(--g-sheet) 0 5px, var(--c-soft) 5px 10px);
+}
+.gc-event.rsvp-no .gc-event-title,
+.gc-chip.rsvp-no .gc-chip-title {
+  text-decoration: line-through;
+}
+.gc-event.rsvp-no,
+.gc-chip.rsvp-no,
+.gc-event.is-past[class*='rsvp-'],
+.gc-chip.is-past[class*='rsvp-'] {
+  opacity: 0.6;
+}
+.gc-chip.rsvp-pending .gc-dot,
+.gc-chip.rsvp-maybe .gc-dot,
+.gc-chip.rsvp-no .gc-dot {
+  background: none;
+  box-shadow: inset 0 0 0 2px var(--c);
+}
+@media (hover: hover) {
+  .gc-chip:not(.is-bar):hover {
+    background: var(--hover-2);
+  }
+  .gc-chip.is-bar:hover {
+    filter: brightness(0.95);
+  }
+}
+.gc-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+}
+.gc-chip.is-selected {
+  outline: 2px solid var(--focus);
+}
+.gc-chip.is-ghost {
+  background: var(--c, var(--tint-fill));
+  color: var(--c-on, #fff);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+/* ---------------- the month ---------------- */
+
+.gc-month {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.gc-month-head {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr));
+  flex-shrink: 0;
+}
+.gc-month-head > div {
+  padding: 8px 0 4px;
+  border-inline-start: 1px solid var(--g-line);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.gc-month-head > div:first-child,
+.gc-week-bg > .gc-cell:first-child {
+  border-inline-start-color: transparent;
+}
+.gc-month-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: repeat(var(--weeks), minmax(0, 1fr));
+}
+.gc-week {
+  position: relative;
+  min-height: 0;
+  border-top: 1px solid var(--g-line);
+  overflow: hidden;
+}
+.gc-week-bg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr));
+}
+.gc-cell {
+  border-inline-start: 1px solid var(--g-line);
+  transition: background 0.12s;
+}
+@media (hover: hover) {
+  .gc-cell.can-create:hover {
+    background: var(--hover);
+  }
+}
+.gc-cell.is-over {
+  background: var(--tint-bg);
+}
+.gc-week-fg {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr));
+  grid-template-rows: 26px repeat(var(--rows), 22px);
+  row-gap: 1px;
+  pointer-events: none;
+}
+.gc-daynum {
+  justify-self: center;
+  align-self: center;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  margin-top: 4px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.gc-daynum.is-out {
+  color: var(--muted);
+}
+.gc-daynum.is-today {
+  background: var(--tint-fill);
+  color: #fff;
+}
+@media (hover: hover) {
+  .gc-daynum:not(.is-today):hover {
+    background: var(--hover-2);
+  }
+}
+/* a phone's month, as Google Calendar's app draws it: everything a small filled bar with its title, and a
+   tap anywhere on a day opens that day (the bars are too small to aim at one by one) */
+.gc-month.is-compact .gc-month-head > div {
+  padding: 6px 0 3px;
+  border-inline-start-color: transparent;
+}
+.gc-month.is-compact .gc-cell {
+  cursor: pointer;
+}
+.gc-month.is-compact .gc-cell:active {
+  background: var(--hover);
+}
+.gc-month.is-compact .gc-week-fg {
+  grid-template-rows: 22px repeat(var(--rows), 16px);
+}
+.gc-month.is-compact .gc-daynum,
+.gc-month.is-compact .gc-chip,
+.gc-month.is-compact .gc-more {
+  pointer-events: none;
+}
+.gc-month.is-compact .gc-daynum {
+  min-width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  padding: 0 4px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.gc-month.is-compact .gc-chip {
+  height: 16px;
+  margin: 0 1px;
+  padding: 0 3px;
+  gap: 2px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 16px;
+}
+.gc-month.is-compact .gc-chip.cut-start {
+  margin-inline-start: 0;
+}
+.gc-month.is-compact .gc-chip.cut-end {
+  margin-inline-end: 0;
+}
+.gc-month.is-compact .gc-chip.is-bar.k-week {
+  border-inline-start-width: 2px;
+}
+.gc-month.is-compact .gc-chip-time {
+  display: none;
+}
+/* as many letters as the day has room for, as Google's app: no "..." taking the room of two of them */
+.gc-month.is-compact .gc-chip-title {
+  text-overflow: clip;
+}
+.gc-month.is-compact .gc-task-ring {
+  width: 8px;
+  height: 8px;
+  border-width: 1.5px;
+}
+.gc-month.is-compact .gc-chip.is-note svg {
+  width: 10px;
+  height: 10px;
+}
+.gc-month.is-compact .gc-more {
+  height: 16px;
+  margin: 0 2px;
+  padding: 0 3px;
+  font-size: 10px;
+}
+
+/* ---------------- the year ---------------- */
+
+.gc-year {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  align-content: start;
+  gap: 20px 32px;
+  padding: 20px 28px 28px;
+}
+.gc-ym-title {
+  display: block;
+  margin: 0 4px 6px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .gc-ym-title:hover {
+    background: var(--hover);
+    color: var(--tint);
+  }
+}
+.gc-ym-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  row-gap: 2px;
+}
+.gc-ym-w {
+  display: grid;
+  place-items: center;
+  height: 22px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.gc-ym-day {
+  position: relative;
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.gc-ym-day.l-1 {
+  background: color-mix(in srgb, var(--tint) 12%, transparent);
+}
+.gc-ym-day.l-2 {
+  background: color-mix(in srgb, var(--tint) 24%, transparent);
+}
+.gc-ym-day.l-3 {
+  background: color-mix(in srgb, var(--tint) 40%, transparent);
+}
+.gc-ym-day.l-4 {
+  background: color-mix(in srgb, var(--tint) 62%, transparent);
+  color: #fff;
+}
+/* the course's days: a line under each, its first and last ringed */
+.gc-ym-day.in-course::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  inset-inline: 5px;
+  height: 2px;
+  border-radius: 1px;
+  background: #2e7d32;
+}
+.gc-ym-day.course-edge {
+  box-shadow: inset 0 0 0 2px #2e7d32;
+}
+.gc-ym-day.is-today {
+  background: var(--tint-fill);
+  color: #fff;
+  font-weight: 700;
+}
+@media (hover: hover) {
+  .gc-ym-day:not(.is-today):hover {
+    outline: 2px solid var(--line-2);
+  }
+}
+.gc-ym-day.is-out {
+  cursor: default;
+}
+
+/* ---------------- the card beside a thing, and the quick create ---------------- */
+
+.cal-pop {
+  position: fixed;
+  z-index: 90;
+  max-height: calc(100dvh - 24px);
+  /* only up and down, and only when the window is short: nothing in it is wider than it */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.12);
+  animation: pop-in 0.18s var(--spring) both;
+}
+.cal-pop:focus {
+  outline: none;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+.item-card {
+  padding: 8px 8px 16px;
+}
+.ic-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.ic-tools .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.ic-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 0 12px 0 16px;
+}
+.ic-swatch {
+  width: 16px;
+  height: 16px;
+  margin-top: 8px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--c);
+}
+.ic-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.ic-title.is-cancelled,
+.ic-title.is-done {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.ic-title-row .task-check {
+  margin-top: 4px;
+}
+.ic-when {
+  padding: 2px 16px 10px 48px;
+  padding-inline-start: 48px;
+  padding-inline-end: 16px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.ic-badges {
+  padding: 0 16px 8px;
+  padding-inline-start: 48px;
+}
+.item-card > .badge {
+  margin-inline-start: 48px;
+  margin-bottom: 8px;
+}
+.ic-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 6px 16px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.ic-row > svg {
+  margin-top: 1px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.ic-notes {
+  margin: 6px 16px 0 16px;
+  margin-inline-start: 48px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--fill);
+  font-size: 13.5px;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.ic-note {
+  padding: 6px 16px 0;
+  padding-inline-start: 48px;
+}
+.ic-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 16px 0;
+  padding-inline-start: 48px;
+}
+
+.qc {
+  padding: 6px 16px 16px;
+}
+.qc-top {
+  display: flex;
+  justify-content: flex-end;
+  margin-inline-end: -8px;
+}
+.qc-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+.qc-title {
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 6px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line-2);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 22px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.qc-title:focus {
+  border-bottom: 2px solid var(--tint);
+  padding-bottom: 5px;
+}
+.qc-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.qc-tabs button {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.qc-tabs button.on {
+  background: var(--tint-bg);
+  color: var(--tint);
+}
+@media (hover: hover) {
+  .qc-tabs button:not(.on):hover {
+    background: var(--hover);
+  }
+}
+.qc-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.qc-row > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.qc-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.qc-when .input {
+  width: 128px;
+  height: 36px;
+}
+.qc-when .combo-input,
+.qc-when input[aria-label*='שעת'] {
+  width: 86px;
+}
+.qc-times {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.qc-dash {
+  color: var(--muted);
+}
+.qc-allday {
+  display: flex;
+  margin: -4px 0 10px;
+  padding-inline-start: 32px;
+}
+.qc-note {
+  margin: -6px 0 10px;
+  padding-inline-start: 32px;
+}
+.qc-row .input,
+.qc-row .select {
+  height: 38px;
+}
+.qc-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.qc-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--c);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.qc-swatch.on {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--c);
+}
+@media (hover: hover) {
+  .qc-swatch:hover {
+    transform: scale(1.12);
+  }
+}
+.qc-swatch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+/* a phone: two even rows of bigger colours, easy to tap */
+@media (max-width: 860px) {
+  .qc-swatches {
+    display: grid;
+    grid-template-columns: repeat(6, 30px);
+    gap: 12px 14px;
+  }
+  .qc-swatch {
+    width: 30px;
+    height: 30px;
+  }
+}
+.qc-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+/* a phone: the card and the quick create are sheets - their buttons at the foot */
+.cal-pop-sheet .qc-foot,
+.cal-pop-sheet .qc-top,
+.cal-pop-sheet .ic-tools > button:last-child {
+  display: none;
+}
+.cal-pop-sheet .item-card {
+  padding: 0 0 8px;
+}
+.cal-pop-sheet .qc {
+  padding: 0;
+}
+
+/* ---------------- the panel beside the calendar, and its strip ---------------- */
+
+.gc-panel {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--g-sheet);
+  animation: panel-in 0.22s var(--spring) both;
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+.gc-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 6px 16px;
+  padding-inline-start: 16px;
+  padding-inline-end: 8px;
+}
+.gc-panel-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.cp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 16px;
+}
+.cp-day {
+  margin: 4px 4px 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.cp-group {
+  margin-bottom: 14px;
+}
+.cp-group > .label-caps {
+  margin: 0 4px 6px;
+}
+.cp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .cp-item:hover {
+    background: var(--hover);
+  }
+}
+.cp-item.is-faded {
+  opacity: 0.6;
+}
+.cp-swatch {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--c, var(--muted));
+}
+.cp-item > .grow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cp-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-week {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 4px 14px;
+}
+.cp-week h3 {
+  margin: 0 0 2px;
+  font-size: 16px;
+}
+.cp-goals {
+  margin: 0 4px;
+  white-space: pre-wrap;
+}
+.cp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 4px 0;
+}
+.gc-strip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 48px;
+  padding-top: 8px;
+}
+.gc-strip .icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.gc-strip .icon-btn.is-on {
+  background: var(--tint-bg);
+  color: var(--tint);
+}
+
+/* ---------------- the calendar on a phone ---------------- */
+
+@media (max-width: 860px) {
+  :root {
+    --g-gutter: 44px;
+    --g-hour: 52px;
+    /* a phone's column is narrow: a thin strip only, as the app's */
+    --g-end-gap: 5px;
+  }
+  .gc-dn {
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+  }
+  .gc-dayhead {
+    padding-top: 6px;
+  }
+  .gc-event {
+    padding: 2px 5px;
+    font-size: 11.5px;
+  }
+  .gc-chip {
+    margin: 0 2px;
+    padding: 0 5px;
+    font-size: 11.5px;
+  }
+  .gc-hours span {
+    inset-inline-end: 4px;
+    font-size: 10px;
+  }
+  .gc-year {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    padding: 12px;
+  }
+}
+
+/* ---------------- less motion; print ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-pop,
+  .dd-panel,
+  .gc-panel {
+    animation: none;
+  }
+  .gc-event,
+  .layers-chev {
+    transition: none;
+  }
+}
+@media print {
+  .gc-strip,
+  .gc-panel,
+  .gc-allday-toggle,
+  .gc-now {
+    display: none !important;
+  }
+  .cal-page.is-desk .cal-main {
+    height: auto;
+  }
+  .cal-sheet {
+    border-radius: 0;
+    overflow: visible;
+  }
+  .gc-scroll {
+    overflow: visible;
+  }
+  .gc-event,
+  .gc-chip.is-bar {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* the connected calendars in the Google Calendar dialog: each in its colour */
+.src-icon {
+  display: grid;
+  color: var(--c);
+}
+
+/* ---------------- Google's own accents: the blue of its buttons and selection, its filled fields ---------------- */
+
+:root {
+  --g-blue: #0b57d0;
+  --g-on-blue: #fff;
+  --g-blue-hover: #0a4fbd;
+  --g-blue-soft: #d3e3fd;
+  --g-on-blue-soft: #041e49;
+  --g-field: #f0f4f9;
+  --g-field-hover: #e9eef6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --g-blue: #a8c7fa;
+    --g-on-blue: #062e6f;
+    --g-blue-hover: #c2d7fb;
+    --g-blue-soft: #004a77;
+    --g-on-blue-soft: #c2e7ff;
+    --g-field: #2a2a2d;
+    --g-field-hover: #333337;
+  }
+}
+:root[data-theme='dark'] {
+  --g-blue: #a8c7fa;
+  --g-on-blue: #062e6f;
+  --g-blue-hover: #c2d7fb;
+  --g-blue-soft: #004a77;
+  --g-on-blue-soft: #c2e7ff;
+  --g-field: #2a2a2d;
+  --g-field-hover: #333337;
+}
+
+/* buttons as Google's: a filled pill, and text buttons */
+.btn.g-filled-btn {
+  height: 40px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--g-blue);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: none;
+}
+:root[data-theme='dark'] .btn.g-filled-btn,
+.btn.g-filled-btn:where([data-dark]) {
+  color: #062e6f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .btn.g-filled-btn {
+    color: #062e6f;
+  }
+}
+@media (hover: hover) {
+  .btn.g-filled-btn:hover:not(:disabled) {
+    background: var(--g-blue-hover);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  }
+}
+.btn.g-filled-btn.is-danger {
+  background: #d93025;
+  color: #fff;
+}
+.btn.g-text-btn {
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--g-blue);
+  font-size: 14px;
+  font-weight: 500;
+}
+@media (hover: hover) {
+  .btn.g-text-btn:hover {
+    background: color-mix(in srgb, var(--g-blue) 8%, transparent);
+  }
+}
+.g-link-btn {
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--g-blue);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.g-link-btn:hover {
+  text-decoration: underline;
+}
+
+/* radios and checks as Google's */
+.g-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.g-radio,
+.g-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.g-radio input,
+.g-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--g-blue);
+  flex-shrink: 0;
+}
+
+/* ---------------- an event's whole form: a page of its own ---------------- */
+
+.app.is-focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app.is-focus > .rail,
+.app.is-focus .topbar,
+.app.is-focus .bottom-nav,
+.app.is-focus .rail-scrim {
+  display: none !important;
+}
+.g-editor {
+  min-height: 100dvh;
+  background: var(--card);
+  color: var(--ink);
+}
+.g-ed-form {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+}
+.g-ed-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--card);
+}
+.g-ed-close {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.g-ed-title {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line-2);
+  border-radius: 4px 4px 0 0;
+  background: var(--g-field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 400;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.g-ed-title:focus {
+  border-bottom-color: var(--g-blue);
+  box-shadow: inset 0 -2px 0 var(--g-blue);
+}
+.g-ed-title::placeholder {
+  color: var(--muted);
+}
+.g-ed-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.g-ed-actions .icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.g-ed-when {
+  padding: 4px 0 8px 0;
+  padding-inline-start: 60px;
+}
+.g-ed-times,
+.g-ed-when2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.g-ed-when2 {
+  margin-top: 4px;
+  gap: 16px;
+}
+.g-ed-dash {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.g-editor :is(.input, .select, .textarea),
+.g-recur :is(.input, .select) {
+  border: 0;
+  border-radius: 4px;
+  background: var(--g-field);
+  box-shadow: none;
+  font-size: 14px;
+}
+@media (hover: hover) {
+  .g-editor :is(.input, .select, .textarea):hover {
+    background: var(--g-field-hover);
+  }
+}
+.g-editor :is(.input, .select, .textarea):focus,
+.g-editor :is(.input, .select):focus-within {
+  box-shadow: inset 0 -2px 0 var(--g-blue);
+}
+.g-ed-date {
+  width: 150px;
+}
+.g-ed-time {
+  width: 96px;
+}
+.g-ed-repeat {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+.g-ed-tabs {
+  display: flex;
+  gap: 24px;
+  margin: 8px 0 16px;
+  padding-inline-start: 60px;
+  border-bottom: 1px solid var(--line);
+}
+.g-ed-tab {
+  padding: 12px 4px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  border-radius: 3px 3px 0 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.g-ed-tab.on {
+  color: var(--g-blue);
+  border-bottom-color: var(--g-blue);
+}
+@media (hover: hover) {
+  .g-ed-tab:not(.on):hover {
+    color: var(--ink);
+  }
+}
+.g-ed-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 48px;
+}
+.g-ed-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.g-ed-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+}
+.g-ed-row.is-top {
+  align-items: flex-start;
+}
+.g-ed-row.is-top > svg {
+  margin-top: 10px;
+}
+.g-ed-row > svg {
+  width: 24px;
+  flex-shrink: 0;
+  color: var(--ink-2);
+  margin-inline: 12px 4px;
+}
+.g-ed-cal {
+  min-width: 200px;
+}
+.g-ed-small {
+  min-width: 140px;
+}
+.g-ed-notes {
+  min-height: 140px;
+  padding: 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.g-ed-note {
+  margin: 4px 2px 0;
+}
+.g-ed-side-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* the colour menu */
+.g-color {
+  position: relative;
+}
+.g-color-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .g-color-btn:hover {
+    background: var(--g-field);
+  }
+}
+.g-dot {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--c);
+  flex-shrink: 0;
+}
+.g-color-menu {
+  /* over the page, placed by its button (EventDialogs.tsx): never cut by the card it opens from */
+  position: fixed;
+  z-index: 140;
+  display: grid;
+  grid-template-columns: repeat(6, 28px);
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.g-swatch {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--c);
+  color: var(--c-on, #fff);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+@media (hover: hover) {
+  .g-swatch:hover {
+    transform: scale(1.12);
+  }
+}
+.g-swatch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* notifications */
+.g-reminders {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.g-reminder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.g-reminder-kind {
+  min-width: 52px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.g-num {
+  width: 72px;
+  text-align: center;
+}
+.g-unit {
+  min-width: 96px;
+}
+.icon-btn.g-x {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.icon-btn.g-x.on {
+  color: var(--g-blue);
+  background: color-mix(in srgb, var(--g-blue) 10%, transparent);
+}
+
+/* guests */
+.g-guests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.g-guest-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.g-guest-sum .muted {
+  font-size: 12px;
+  font-weight: 400;
+}
+.g-guest-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.g-guest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+@media (hover: hover) {
+  .g-guest:hover {
+    background: var(--hover);
+  }
+}
+.g-guest-name {
+  min-width: 0;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.g-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #8e9aaf;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.g-answer {
+  position: absolute;
+  bottom: -2px;
+  inset-inline-end: -2px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--card);
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+.g-answer.is-accepted {
+  background: #188038;
+}
+.g-answer.is-declined {
+  background: #d93025;
+}
+.g-answer.is-tentative {
+  background: #80868b;
+}
+.g-perms {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.g-perms-title {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* the custom repeat and the series question */
+.g-recur-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.g-recur-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.g-recur-label {
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.g-days {
+  display: flex;
+  gap: 8px;
+}
+.g-day {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--g-field);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.g-day.on {
+  background: var(--g-blue);
+  color: var(--g-on-blue);
+}
+.g-ends-date {
+  width: 150px;
+}
+.g-recur-says {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.g-month-pick {
+  max-width: 280px;
+}
+
+/* the trash */
+.g-trash-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+.g-trash-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.g-trash-row:last-child {
+  border-bottom: 0;
+}
+.g-trash-row .g-dot {
+  width: 12px;
+  height: 12px;
+}
+.g-trash-when {
+  width: 150px;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.g-trash-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.g-trash-by {
+  font-weight: 400;
+}
+
+/* a phone: the Google Calendar app's editor - one column, the title under the bar, rows divided */
+@media (max-width: 860px) {
+  .g-ed-form {
+    padding: 0 0 calc(32px + env(safe-area-inset-bottom, 0px));
+  }
+  .g-ed-head {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'close . actions' 'title title title';
+    gap: 0 8px;
+    padding: env(safe-area-inset-top, 0px) 8px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .g-ed-close {
+    grid-area: close;
+  }
+  .g-ed-actions {
+    grid-area: actions;
+  }
+  .g-ed-title {
+    grid-area: title;
+    margin: 4px 8px 0;
+    padding-inline: 12px;
+    font-size: 24px;
+    background: transparent;
+  }
+  .btn.g-filled-btn.g-ed-save {
+    height: 36px;
+    padding: 0 20px;
+  }
+  .g-ed-when,
+  .g-ed-tabs {
+    padding-inline: 16px;
+  }
+  .g-ed-when {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .g-ed-date {
+    width: 140px;
+  }
+  .g-ed-tabs {
+    gap: 20px;
+    margin: 0 0 8px;
+  }
+  .g-ed-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .g-ed-details {
+    gap: 0;
+  }
+  .g-ed-row {
+    min-height: 56px;
+    padding: 6px 16px 6px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .g-ed-row > svg {
+    margin-inline: 4px 4px;
+  }
+  .g-ed-row .select,
+  .g-ed-row .input {
+    min-width: 0;
+  }
+  .g-ed-guests {
+    padding: 16px;
+  }
+  .g-ed-cal {
+    min-width: 0;
+    flex: 1;
+  }
+  .g-ed-small {
+    min-width: 0;
+    flex: 1;
+  }
+  .g-trash-when {
+    width: auto;
+  }
+  .g-trash-row {
+    flex-wrap: wrap;
+  }
+}
+
+/* the event's card, as Google's: the rule under the time, guests with their answers, plain description */
+.ic-recur {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.g-card .ic-notes {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-size: 14px;
+  -webkit-line-clamp: 8;
+}
+.ic-guests-sum {
+  display: flex;
+  flex-direction: column;
+  font-weight: 500;
+}
+.ic-guests {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ic-guests li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+}
+.ic-guests .g-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+.g-rsvp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.g-rsvp-q {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+.g-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .g-chip:hover {
+    background: var(--hover);
+  }
+}
+.g-chip.on {
+  border-color: transparent;
+  background: var(--g-blue-soft);
+  color: var(--g-on-blue-soft);
+}
+
+/* the quick create, as Google's: a grip, the title, chips for event / task, a line for the time, "add" rows */
+.g-qc .qc-top {
+  position: relative;
+  justify-content: flex-end;
+  min-height: 36px;
+}
+.qc-grip {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 36px;
+  margin-inline: -16px;
+  border-radius: 8px 8px 0 0;
+  background: var(--g-field);
+}
+.g-qc .qc-close {
+  position: relative;
+  z-index: 1;
+  color: var(--ink-2);
+}
+.g-qc .qc-title {
+  margin-top: 12px;
+}
+.g-qc .qc-title:focus {
+  border-bottom-color: var(--g-blue);
+}
+.g-qc .qc-tabs button {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.g-qc .qc-tabs button.on {
+  background: var(--g-blue-soft);
+  color: var(--g-on-blue-soft);
+}
+.g-qc .qc-row {
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 4px;
+  min-height: 40px;
+}
+.g-qc .qc-row > svg {
+  margin-top: 9px;
+  color: var(--ink-2);
+}
+.qc-line,
+.qc-add {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 40px;
+  justify-content: center;
+  padding: 4px 8px;
+  margin-inline-start: -8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+}
+.qc-add {
+  color: var(--ink-2);
+}
+@media (hover: hover) {
+  .qc-line:hover,
+  .qc-add:hover {
+    background: var(--hover);
+  }
+}
+.qc-line-sub {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.qc-when-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qc-when2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.qc-when2 .g-check {
+  min-height: 36px;
+}
+.qc-repeat {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+.qc-guests {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.qc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  padding-inline: 10px 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  font-size: 13px;
+}
+.qc-chip button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.qc-notes {
+  min-height: 72px;
+}
+.qc-cal {
+  flex: 1;
+}
+.g-qc :is(.input, .select, .textarea) {
+  border: 0;
+  border-radius: 4px;
+  background: var(--g-field);
+  box-shadow: none;
+}
+.g-qc .qc-foot {
+  align-items: center;
+}
+/* a short window: the card scrolls, its buttons stay in sight at its foot */
+.cal-pop.g-qc .qc-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-inline: -16px;
+  margin-bottom: -16px;
+  padding: 10px 16px 16px;
+  background: var(--card);
+}
+/* while the new event's block is moved or a new time drawn, its card steps aside; it comes back beside the
+   block where it is let go */
+.cal-dragging .cal-pop.g-qc {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-out;
+}
+
+
+/* ---------------- the schedule ("סדר יום"), as Google Calendar's ---------------- */
+/* each day a row: its date on the side (today in blue), its events beside it - a dot of their colour, the
+   hours, the title and the place; on a phone, chips filled with their colour, as Google's app */
+.cal-page .agenda .gs-day {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  align-items: start;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cal-page .gs-date {
+  position: sticky;
+  top: calc(var(--top-h) + var(--strip-h, 0px) + 6px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 8px 2px 0;
+  font-size: inherit;
+  font-weight: 400;
+}
+.cal-page .gs-num {
+  order: 0;
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 22px;
+  color: var(--ink);
+}
+.cal-page .gs-mon {
+  order: 1;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.cal-page .gs-mon::after {
+  content: ',';
+}
+.cal-page .gs-wd {
+  order: 2;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+/* today: the same circle as the grid's (white on the deep blue, in both themes) */
+.cal-page .gs-day.is-today .gs-num {
+  color: #fff;
+  background: var(--tint-fill);
+}
+.cal-page .gs-day.is-today .gs-mon,
+.cal-page .gs-day.is-today .gs-wd {
+  color: var(--tint);
+  font-weight: 600;
+}
+.cal-page .gs-day.is-past .gs-num,
+.cal-page .gs-day.is-past .gs-mon,
+.cal-page .gs-day.is-past .gs-wd {
+  color: var(--ink-3, var(--ink-2));
+}
+.cal-page .gs-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.cal-page .gs-items .event-row {
+  display: grid;
+  grid-template-columns: 12px 116px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 40px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  box-shadow: none;
+}
+@media (hover: hover) {
+  .cal-page .gs-items .event-row:hover {
+    background: var(--hover);
+  }
+}
+.cal-page .gs-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c, var(--tint-fill));
+}
+.cal-page .gs-dot.gs-flag {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-inline-start: -2px;
+  background: none;
+  color: var(--orange);
+}
+.cal-page .gs-items .event-time {
+  display: block;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cal-page .gs-items .event-time .end {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.cal-page .gs-items .event-time.small {
+  font-size: 13px;
+}
+.cal-page .gs-items .event-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.cal-page .gs-items .task-meta {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.cal-page .gs-items .event-row.past .event-time,
+.cal-page .gs-items .event-row.past .event-title {
+  color: var(--ink-3, var(--ink-2));
+}
+.cal-page .gs-items .event-row.past .gs-dot {
+  opacity: 0.55;
+}
+.cal-page .gs-items .event-row.now {
+  background: color-mix(in srgb, var(--g-blue) 7%, transparent);
+}
+.cal-page .gs-items .event-row.cancelled .event-title {
+  text-decoration: line-through;
+}
+.cal-page .gs-empty {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: start;
+  cursor: pointer;
+}
+.cal-page .gs-empty:disabled {
+  cursor: default;
+}
+@media (hover: hover) {
+  .cal-page .gs-empty:not(:disabled):hover {
+    background: var(--hover);
+  }
+}
+.cal-page .gs-empty-add {
+  margin-inline-start: 4px;
+  color: var(--g-blue);
+}
+/* the days with nothing in them: one quiet line where the list skips them */
+.cal-page .agenda .agenda-gap {
+  margin: 0;
+  padding: 8px 10px;
+  padding-inline-start: 128px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  font-size: 12.5px;
+  color: var(--ink-3, var(--ink-2));
+}
+.cal-page .agenda .agenda-gap .agenda-add {
+  display: none;
+}
+/* where a course week starts: a quiet heading across the list */
+.cal-page .agenda .agenda-week {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.cal-page .agenda-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 14px 0 24px;
+}
+.cal-page .agenda-more {
+  color: var(--ink-2);
+}
+
+@media (max-width: 860px) {
+  .cal-page.is-phone .agenda .gs-day {
+    grid-template-columns: 48px minmax(0, 1fr);
+    padding: 4px 0;
+    border-bottom: 0;
+  }
+  .cal-page.is-phone .gs-date {
+    flex-direction: column;
+    gap: 0;
+    padding: 2px 0;
+  }
+  .cal-page.is-phone .gs-wd {
+    order: 0;
+    font-size: 11.5px;
+  }
+  .cal-page.is-phone .gs-num {
+    order: 1;
+    min-width: 34px;
+    height: 34px;
+    font-size: 19px;
+  }
+  .cal-page.is-phone .gs-mon {
+    display: none;
+  }
+  .cal-page.is-phone .gs-items {
+    gap: 6px;
+    padding-block: 2px;
+  }
+  /* an event: a chip filled with its colour - its title, then its hours and place */
+  .cal-page.is-phone .gs-items .event-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+    min-height: 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--c, var(--tint-fill));
+    color: var(--c-on, #fff);
+  }
+  .cal-page.is-phone .gs-items .event-row > div:not(.event-time):not(.row) {
+    order: 0;
+  }
+  .cal-page.is-phone .gs-items .event-row > .event-time {
+    order: 1;
+  }
+  .cal-page.is-phone .gs-items .event-row > .row {
+    order: 2;
+  }
+  .cal-page.is-phone .gs-items .event-row > .gs-dot {
+    display: none;
+  }
+  .cal-page.is-phone .gs-items .event-title,
+  .cal-page.is-phone .gs-items .event-time,
+  .cal-page.is-phone .gs-items .task-meta {
+    color: inherit;
+  }
+  .cal-page.is-phone .gs-items .event-title {
+    font-weight: 600;
+  }
+  .cal-page.is-phone .gs-items .event-time,
+  .cal-page.is-phone .gs-items .task-meta {
+    font-size: 12.5px;
+    opacity: 0.92;
+  }
+  .cal-page.is-phone .gs-items .event-notes {
+    display: none;
+  }
+  .cal-page.is-phone .gs-items .event-row .badge {
+    background: rgba(255, 255, 255, 0.24);
+    color: inherit;
+  }
+  .cal-page.is-phone .gs-items .event-row.past {
+    opacity: 0.6;
+  }
+  .cal-page.is-phone .gs-items .event-row.past .event-time,
+  .cal-page.is-phone .gs-items .event-row.past .event-title {
+    color: inherit;
+  }
+  .cal-page.is-phone .gs-items .event-row.now {
+    box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--c, var(--tint-fill));
+  }
+  /* a deadline is a flag, not a block of time: outlined, not filled */
+  .cal-page.is-phone .gs-items .event-row.deadline {
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--line-2);
+  }
+  .cal-page.is-phone .agenda .agenda-gap {
+    padding-inline-start: 56px;
+    border-bottom: 0;
+  }
+  .cal-page.is-phone .gs-empty {
+    padding: 8px 10px;
+  }
+}
+
+/* ---------------- the search over the events, as Google Calendar's ---------------- */
+/* the words on top (a filled pill), how many were found, and what they found as the schedule's list */
+.cal-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 48px;
+  margin: 0 0 2px;
+  padding: 2px 4px;
+  border-radius: 24px;
+  background: var(--g-field);
+}
+.cal-search-bar:focus-within {
+  background: var(--g-sheet);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--g-line);
+}
+.cal-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+.cal-search-input::placeholder {
+  color: var(--muted);
+}
+.cal-search-count {
+  margin: 8px 12px 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+/* a phone: the search takes the calendar's bar - a white pill over the page - and stays on top as the
+   list goes under it; the results say their month, as they are far apart */
+.cal-page.is-phone .cal-search-bar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--g-sheet);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+.cal-page.is-phone .cal-search .gs-mon {
+  display: block;
+  order: 2;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cal-page.is-phone .cal-search .gs-mon::after {
+  content: none;
+}
+
+/* ---------------- the calendar's settings, as Google's ---------------- */
+.g-settings .g-set + .g-set {
+  margin-top: 18px;
+}
+.g-settings .g-set h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.g-set-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--g-line);
+  cursor: pointer;
+}
+.g-set-row:last-child {
+  border-bottom: 0;
+}
+.g-set-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.g-set-text b {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.g-set-text small {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+.g-set-text b svg {
+  vertical-align: -3px;
+  color: var(--g-blue, var(--focus));
+}
+.g-set-text small.text-red {
+  color: var(--red);
+}
+.g-set-note {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.g-set-note p {
+  margin: 0;
+}
+.g-set-note ol {
+  margin: 6px 0 0;
+  padding-inline-start: 20px;
+}
+.g-set-note li + li {
+  margin-top: 4px;
+}
+/* a Google calendar's choice can be long: the select gives way on a narrow screen */
+.g-set .g-set-select {
+  max-width: 48%;
+  text-overflow: ellipsis;
+}
+/* the event card: where it is in Google, and whether Google has it as it is here */
+.ic-google {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 4px;
+}
+.ic-google-ok {
+  color: var(--green-ink, #188038);
+}
+.ic-google-err {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  color: var(--red);
+}
+.g-set-select {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--g-field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.g-set-select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* the dimming of what is over, turned off: the list's past rows as the rest */
+.cal-page.is-desk.no-dim-past .gs-items .event-row.past .event-time,
+.cal-page.is-desk.no-dim-past .gs-items .event-row.past .event-title {
+  color: var(--ink);
+}
+.cal-page.no-dim-past .gs-items .event-row.past .gs-dot {
+  opacity: 1;
+}
+.cal-page.is-phone.no-dim-past .gs-items .event-row.past {
+  opacity: 1;
+}
+/* an invitation in the list: a hollow dot (on a phone, an outlined chip), "maybe" striped, said no struck through */
+.cal-page .gs-items .event-row[class*='rsvp-'] .gs-dot {
+  background: none;
+  box-shadow: inset 0 0 0 2px var(--c);
+}
+.cal-page .gs-items .event-row.rsvp-no .event-title {
+  text-decoration: line-through;
+}
+.cal-page.is-phone .gs-items .event-row.rsvp-pending,
+.cal-page.is-phone .gs-items .event-row.rsvp-no {
+  background: var(--card);
+  color: var(--c-ink);
+  box-shadow: inset 0 0 0 1.5px var(--c);
+}
+.cal-page.is-phone .gs-items .event-row.rsvp-maybe {
+  background: repeating-linear-gradient(-45deg, var(--card) 0 6px, var(--c-soft) 6px 12px);
+  color: var(--c-ink);
+  box-shadow: inset 0 0 0 1.5px var(--c);
+}
+.cal-page.is-phone .gs-items .event-row.rsvp-no {
+  opacity: 0.6;
+}
+
+/* ---------------- "מציאת זמן", as Google's "Find a time" ---------------- */
+/* the day's hours, a column for each person with their busy times, the event as a band across them all */
+.ft {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-inline-start: 60px;
+}
+.ft-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.ft-day {
+  font-size: 15px;
+  font-weight: 500;
+}
+.ft-says {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.ft-says.is-free {
+  background: color-mix(in srgb, #188038 12%, transparent);
+  color: var(--green-ink, #137333);
+}
+.ft-says.is-busy {
+  background: color-mix(in srgb, #d93025 10%, transparent);
+  color: var(--red-ink, #b3261e);
+}
+.ft-grid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--g-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--g-sheet);
+}
+.ft-people,
+.ft-body {
+  display: grid;
+  grid-template-columns: 52px repeat(var(--n), minmax(0, 1fr));
+}
+.ft-people {
+  border-bottom: 1px solid var(--g-line);
+}
+.ft-person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 4px;
+  border-inline-start: 1px solid var(--g-line);
+  text-align: center;
+}
+.ft-person b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ft-person small {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.ft-person.is-busy b {
+  color: var(--red-ink, #b3261e);
+}
+.ft-allday {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--hover-2);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.ft-scroll {
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.ft-body {
+  position: relative;
+}
+.ft-hours {
+  position: relative;
+}
+.ft-hours span {
+  position: absolute;
+  inset-inline-end: 6px;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ft-hours span:first-child {
+  transform: none;
+}
+.ft-cols {
+  position: relative;
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  background-image: repeating-linear-gradient(to bottom, var(--g-line) 0, var(--g-line) 1px, transparent 1px, transparent 44px);
+  cursor: pointer;
+}
+.ft-col {
+  position: relative;
+  border-inline-start: 1px solid var(--g-line);
+}
+.ft-busy {
+  position: absolute;
+  inset-inline: 3px 6px;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink-2) 16%, var(--g-sheet));
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.ft-busy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ft-band {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 2;
+  border: 2px solid var(--g-blue);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--g-blue) 14%, transparent);
+  pointer-events: none;
+}
+.ft-band span {
+  position: absolute;
+  inset-inline-start: 6px;
+  top: 2px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--g-blue);
+  color: var(--g-on-blue);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 860px) {
+  .ft {
+    padding-inline: 12px;
+  }
+  .ft-people,
+  .ft-body {
+    grid-template-columns: 40px repeat(var(--n), minmax(0, 1fr));
+  }
+}
+
+/* ---------------- a phone's calendar: Google Calendar's app, the whole screen ---------------- */
+/* As the app (the screenshot it was matched to): its own bar on top - the menu in a light circle, the month
+   with a small triangle, the search and today in one pill, the person in a ringed circle - then what lasts
+   all day as full-width coloured bars ("(יום 2/7)"), and the hours under them with the times on the left
+   ("8:00"), 88px an hour, big white titles set to the left. The page itself never scrolls: the hours (or
+   the list) scroll inside it, the floating bar of screens over them, and the "+" in the corner. */
+:root {
+  --g-fab: #d3e3fd;
+  --g-on-fab: #0c41a3;
+  --g-ring: #2c86ff;
+  --g-hour-ink: #70757a;
+  --g-round-line: rgba(0, 0, 0, 0.1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --g-fab: #004a77;
+    --g-on-fab: #c2e7ff;
+    --g-ring: #7cacf8;
+    --g-hour-ink: #9aa0a6;
+    --g-round-line: rgba(255, 255, 255, 0.14);
+  }
+}
+:root[data-theme='dark'] {
+  --g-fab: #004a77;
+  --g-on-fab: #c2e7ff;
+  --g-ring: #7cacf8;
+  --g-hour-ink: #9aa0a6;
+  --g-round-line: rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 860px) {
+  /* nothing moves the page: no scroll, no bounce - only the boxes inside it scroll */
+  html.cal-shell,
+  html.cal-shell body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    /* the page in the calendar's own colour: the strip behind the clock is the bar's, one piece with it */
+    background: var(--g-sheet);
+  }
+  html.cal-shell .topbar {
+    display: none;
+  }
+  /* the calendar's bar (and the search's, in its place) pinned to the top of the screen, solid: an iPhone
+     paints the strip behind its clock from a bar pinned there - sharp, one piece with it. A bar that only
+     sits at the top of the page is drawn under the clock through a soft blur, and looks smudged */
+  html.cal-shell {
+    --gph-bar-h: calc(env(safe-area-inset-top, 0px) + 58px);
+    --gph-search-h: calc(env(safe-area-inset-top, 0px) + 66px);
+  }
+  html.cal-shell .cal-page.is-phone:not(.is-searching) {
+    padding-top: var(--gph-bar-h);
+  }
+  html.cal-shell .cal-page.is-phone .gph-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    height: var(--gph-bar-h);
+    box-sizing: border-box;
+  }
+  html.cal-shell .cal-page.is-phone.is-searching {
+    padding-top: var(--gph-search-h);
+  }
+  html.cal-shell .cal-page.is-phone.is-searching .gph-body.gph-scroll {
+    padding-top: 0;
+  }
+  html.cal-shell .cal-page.is-phone .cal-search-top {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    height: var(--gph-search-h);
+    box-sizing: border-box;
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) max(14px, env(safe-area-inset-right, 0px)) 8px max(14px, env(safe-area-inset-left, 0px));
+    background: var(--g-sheet);
+  }
+  html.cal-shell .cal-page.is-phone .cal-search-top .cal-search-bar {
+    position: static;
+    margin: 0;
+  }
+  html.cal-shell .cal-page.is-phone {
+    height: 100vh;
+    height: 100dvh;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--g-sheet);
+  }
+  .cal-page.is-phone .gph-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* the list (and the search) scroll in their box, clear of the floating bar at its end */
+  .cal-page.is-phone .gph-body.gph-scroll {
+    display: block;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 14px calc(110px + env(safe-area-inset-bottom, 0px));
+  }
+  .cal-page.is-phone.is-searching .gph-body.gph-scroll {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+  }
+  /* what stays on top while the list goes under it: the top of its own box, not of the page */
+  .cal-page.is-phone .gph-scroll .agenda-dayhead {
+    top: 0;
+  }
+  .cal-page.is-phone .gph-scroll .gs-date {
+    top: 6px;
+  }
+  .cal-page.is-phone .gph-body > .period-clip,
+  .cal-page.is-phone .gph-body > .period-clip > .period-swipe {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .cal-page.is-phone .gph-body > .period-clip {
+    overflow: hidden;
+    background: var(--g-sheet);
+  }
+  .cal-page.is-phone .gc,
+  .cal-page.is-phone .gc-month {
+    flex: 1;
+    min-height: 0;
+  }
+  /* the month ends above the floating bar */
+  .cal-page.is-phone .gc-month {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+  .cal-page.is-phone .gph-body > .card {
+    margin: 0 14px;
+  }
+  .cal-page.is-phone > .mine-bar,
+  .cal-page.is-phone > .error-box {
+    margin: 0 14px 8px;
+  }
+
+  /* ---- the bar ---- */
+  .gph-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: calc(env(safe-area-inset-top, 0px) + 6px) max(16px, env(safe-area-inset-right, 0px)) 10px max(20px, env(safe-area-inset-left, 0px));
+    background: var(--g-sheet);
+  }
+  .gph-round,
+  .gph-pill {
+    height: 42px;
+    border: 1px solid var(--g-round-line);
+    background: var(--g-sheet);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+    color: var(--ink-2);
+  }
+  .gph-round {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 42px;
+    padding: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gph-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    min-width: 0;
+    margin-inline-start: 8px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 21px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 21px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gph-title > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* the small filled triangle after the month, as the app's */
+  .gph-caret {
+    flex-shrink: 0;
+    width: 0;
+    height: 0;
+    border-inline: 6px solid transparent;
+    border-top: 6px solid var(--ink-2);
+    transition: transform 0.25s var(--spring, ease-out);
+  }
+  .gph-caret.is-open {
+    transform: rotate(180deg);
+  }
+  .gph-pill {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 6px;
+    padding: 0 8px;
+    border-radius: 21px;
+  }
+  .gph-pill-btn {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--ink-2);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gph-round:active,
+  .gph-pill-btn:active,
+  .gph-title:active {
+    background: var(--hover);
+  }
+  /* today: a little calendar with today's date in it, as Google's */
+  .gph-today-num {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 21px;
+    height: 21px;
+    border: 2px solid currentColor;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .gph-today-num::before,
+  .gph-today-num::after {
+    content: '';
+    position: absolute;
+    top: -5px;
+    width: 2px;
+    height: 5px;
+    border-radius: 1px;
+    background: currentColor;
+  }
+  .gph-today-num::before {
+    left: 3px;
+  }
+  .gph-today-num::after {
+    right: 3px;
+  }
+  /* the person: a letter in a coloured circle with a ring, and how many notifications are new */
+  .gph-avatar {
+    position: relative;
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    margin-inline-start: 14px;
+    padding: 2px;
+    border: 2.5px solid var(--g-ring);
+    border-radius: 50%;
+    background: var(--g-sheet);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gph-avatar:active {
+    transform: scale(0.95);
+  }
+  .gph-avatar-count {
+    position: absolute;
+    top: -5px;
+    inset-inline-end: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border: 2px solid var(--g-sheet);
+    border-radius: 9px;
+    background: var(--red, #d93025);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .gph-month {
+    margin: 0 14px 10px;
+    animation: gph-drop 0.22s var(--spring, ease-out) both;
+    transform-origin: top center;
+  }
+  @keyframes gph-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scaleY(0.96);
+    }
+  }
+  .gph-month .mdots-day.today .n {
+    background: var(--g-blue);
+    color: #fff;
+  }
+  .gph-month .mdots-day.on:not(.today) .n {
+    background: var(--g-blue-soft);
+    color: var(--g-on-blue-soft);
+  }
+
+  /* a small phone: the bar's parts a little smaller, so the month keeps its whole name */
+  @media (max-width: 359px) {
+    html.cal-shell {
+      --gph-bar-h: calc(env(safe-area-inset-top, 0px) + 54px);
+    }
+    .gph-bar {
+      padding-inline: max(10px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
+    }
+    .gph-round,
+    .gph-avatar {
+      width: 38px;
+      height: 38px;
+    }
+    .gph-round,
+    .gph-pill {
+      height: 38px;
+    }
+    .gph-pill {
+      gap: 2px;
+      padding: 0 3px;
+    }
+    .gph-pill-btn {
+      width: 34px;
+      height: 34px;
+    }
+    .gph-avatar {
+      margin-inline-start: 8px;
+    }
+    .gph-title {
+      margin-inline-start: 4px;
+      gap: 8px;
+      font-size: 19px;
+    }
+  }
+  /* ---- the "+" in the corner: above the floating bar, lower while it is small ---- */
+  .gph-fab {
+    position: fixed;
+    left: max(16px, env(safe-area-inset-left, 0px));
+    bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+    z-index: 35;
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border: 0;
+    border-radius: 16px;
+    background: var(--g-fab);
+    color: var(--g-on-fab);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2),
+      0 4px 12px -2px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      bottom 0.42s var(--spring),
+      transform 0.15s;
+  }
+  body:has(.bottom-nav.compact) .gph-fab {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.bottom-nav.away) .gph-fab {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .gph-fab:active {
+    transform: scale(0.94);
+  }
+
+  /* ---- the sheet of the person, and lists of choices in a sheet ---- */
+  .gph-who {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 22px 14px;
+  }
+  .gph-avatar-face {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: var(--av, var(--g-blue));
+    color: #fff;
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .gph-avatar-face.is-big {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    font-size: 21px;
+  }
+}
+
+/* lists of choices in a phone's sheet, as the app's menus */
+.gph-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 10px;
+}
+.gph-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 52px;
+  margin-inline-end: 14px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 26px 0 0 26px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.gph-item svg {
+  color: var(--ink-2);
+}
+.gph-item:active {
+  background: var(--hover);
+}
+
+/* ---- the hours, as the app draws them ---- */
+.gc-app {
+  /* the app keeps its hours on the left, also in Hebrew: the grid goes left to right, the titles stay Hebrew */
+  direction: ltr;
+  --hour: 88px;
+  --g-gutter: 58px;
+  --g-end-gap: 11px;
+}
+.gc-app .gc-head {
+  position: relative;
+  z-index: 6;
+  border-bottom: 0;
+  background: var(--g-sheet);
+  transition: box-shadow 0.2s ease;
+}
+/* the hours scrolled under what lasts all day: a shadow under it */
+.gc-app.is-scrolled .gc-head {
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.16);
+}
+.gc-app .gc-allday {
+  grid-template-rows: repeat(var(--rows), 27px);
+  grid-auto-rows: 27px;
+  row-gap: 2px;
+  min-height: 12px;
+  padding: 8px 0 6px;
+  border-inline-start: 1px solid var(--g-line);
+}
+.gc-app .gc-allday-gutter {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 6px 0 6px;
+}
+.gc-appday {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.gc-appday .gc-dw {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-hour-ink);
+}
+.gc-appday .gc-dn {
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+  cursor: default;
+}
+.gc-appday.is-today .gc-dw {
+  color: var(--g-blue);
+}
+.gc-appday.is-today .gc-dn {
+  background: var(--g-blue);
+  color: var(--g-on-blue);
+}
+.gc-app .gc-dayhead.is-today .gc-dw {
+  color: var(--g-blue);
+}
+.gc-app .gc-dayhead.is-today .gc-dn {
+  background: var(--g-blue);
+  color: var(--g-on-blue);
+}
+.gc-app .gc-dayhead .gc-dw {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-hour-ink);
+}
+.gc-app .gc-dayhead + .gc-dayhead,
+.gc-app .gc-dayhead {
+  border-inline-start: 1px solid transparent;
+}
+/* what lasts all day: a full-width bar of its colour, its title (and which of its days) set to the left */
+.gc-app .gc-chip.is-bar {
+  direction: rtl;
+  justify-content: flex-end;
+  height: 27px;
+  margin: 0 var(--g-end-gap) 0 1px;
+  padding: 0 12px;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.gc-app .gc-chip.is-bar.k-week {
+  border-inline-start: 0;
+  background: var(--c);
+  color: var(--c-on, #fff);
+}
+.gc-app .gc-chip.is-bar.is-past.k-week {
+  background: color-mix(in srgb, var(--c) 58%, var(--g-sheet));
+  color: var(--c-on, #fff);
+}
+.gc-app .gc-chip:not(.is-bar) {
+  direction: rtl;
+  justify-content: flex-end;
+  height: 27px;
+  font-size: 14px;
+}
+.gc-app .gc-chip-count {
+  white-space: pre;
+}
+.gc-app .gc-more {
+  direction: rtl;
+}
+/* the times on the left, "8:00", at their lines - the lines reaching a little into the margin */
+.gc-app .gc-hours {
+  background-image: repeating-linear-gradient(to bottom, var(--g-line) 0, var(--g-line) 1px, transparent 1px, transparent var(--hour));
+  background-size: 7px 100%;
+  background-position: right top;
+  background-repeat: no-repeat;
+}
+.gc-app .gc-hours span {
+  inset-inline-start: 16px;
+  inset-inline-end: auto;
+  font-size: 12px;
+  color: var(--g-hour-ink);
+}
+/* the hours go on under the floating bar: room to scroll the last of them above it */
+.gc-app .gc-scroll {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.gc-app .gc-scroll::-webkit-scrollbar {
+  display: none;
+}
+.gc-app .gc-event {
+  direction: rtl;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 5px 11px 3px;
+  border-radius: 4px;
+  font-size: 15px;
+  line-height: 1.25;
+  text-align: left;
+}
+.gc-app .gc-event-title {
+  max-width: 100%;
+  font-weight: 500;
+}
+.gc-app .gc-event:not(.is-short) .gc-event-title {
+  overflow-wrap: anywhere;
+}
+.gc-app .gc-event-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  opacity: 0.9;
+}
+.gc-app .gc-event.is-short {
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-end;
+  padding-block: 3px 0;
+}
+.gc-app .gc-event.is-ghost {
+  inset-inline: 1px var(--g-end-gap);
+}
+/* a finger held on free time is a new event there: no text selection or the browser's menu under it, and the
+   new event grows in where the finger is, as the app's does */
+.gc-app .gc-col {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.gc-event.is-ghost.is-pressed {
+  transform-origin: 50% 0;
+  animation: gc-press-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+@keyframes gc-press-in {
+  from {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-event.is-ghost.is-pressed {
+    animation: none;
+  }
+}
+/* the app marks no event as going on now - the line across the hours says it */
+.gc-app .gc-event.is-now {
+  box-shadow: none;
+}
+/* a title goes on to the next lines in every width, as the app's (a narrow column too) */
+.gc-app .gc-event:not(.is-short) .gc-event-title {
+  white-space: normal;
+}
+/* a crowded hour: a narrow box gives its title the room its padding took, in a smaller type - words go on
+   to the next line whole, a long one breaks only when it cannot fit */
+.gc-app .gc-event.is-narrow {
+  padding-inline: 5px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+.gc-app .gc-event.is-narrow .gc-event-title {
+  overflow-wrap: break-word;
+}
+.gc-app .gc-event.is-narrow .gc-event-sub {
+  display: none;
+}
+/* three days: narrower columns, the app's smaller type */
+.gc-app.gc-three .gc-event {
+  padding: 4px 6px 2px;
+  font-size: 13px;
+}
+.gc-app.gc-three .gc-event-sub {
+  font-size: 11.5px;
+}
+.gc-app.gc-three .gc-chip.is-bar {
+  padding: 0 8px;
+  font-size: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gph-month {
+    animation: none;
+  }
+  .gph-fab,
+  .gph-caret,
+  .gc-app .gc-head {
+    transition: none;
+  }
+}
+@media print {
+  .gph-bar,
+  .gph-fab {
+    display: none !important;
+  }
+}
+
+/* ---- a phone's side menu on the calendar: its views first, as Google Calendar's app opens its menu ---- */
+.gside-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0 8px;
+}
+.gside-view {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 24px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gside-view svg {
+  flex-shrink: 0;
+  color: var(--ink-2);
+}
+.gside-view.on {
+  background: var(--g-blue-soft);
+  color: var(--g-on-blue-soft);
+  font-weight: 600;
+}
+.gside-view.on svg {
+  color: var(--g-on-blue-soft);
+}
+.gside-view:active {
+  background: var(--hover);
+}
+.gside-sep {
+  display: block;
+  height: 1px;
+  margin: 6px 16px;
+  background: var(--line);
+}
+
+/* ---- a phone's menu is the tab's own: its name on top, its screens, and "כל המסכים" going on to every one ---- */
+.gside-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 12px;
+  animation: gside-in 0.32s var(--spring, cubic-bezier(0.2, 0.9, 0.3, 1)) both;
+}
+/* on to every screen: it comes in from the far side, as a page pushed on a phone (right to left: from the left) */
+.gside-panel.is-forward {
+  --from: -36px;
+}
+/* back to the tab's own: from the side it went to */
+.gside-panel.is-back {
+  --from: 36px;
+}
+@keyframes gside-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--from, 0px));
+  }
+}
+.gside-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px 10px;
+  color: var(--ink);
+}
+.gside-head svg {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  color: var(--tint-fill, var(--g-blue));
+}
+.gside-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.gside-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gside-sec + .gside-sec {
+  margin-top: 8px;
+}
+/* a tab with two kinds of screens: each kind named small above them */
+.gside-sub {
+  padding: 8px 16px 4px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.gside-all .rail-label {
+  flex: 1;
+}
+.gside-all .gside-chev {
+  color: var(--muted);
+}
+.gside-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  min-height: 40px;
+  padding: 0 10px 0 14px;
+  border: 0;
+  border-radius: 20px;
+  background: none;
+  color: var(--g-blue, var(--focus));
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gside-back:active {
+  background: var(--hover);
+}
+.gside-layers {
+  margin-top: 4px;
+}
+@media (max-width: 860px) {
+  /* a raised sheet over the page, as Google Calendar's menu: white, and in the dark a step lighter than the page */
+  .rail.gside,
+  .gside .gside-top,
+  .gside .rail-foot {
+    background: var(--g-sheet);
+  }
+  /* a window floating over the page - a window in a window, rounded, clear of every edge of the screen and of
+     the clock - not a strip glued to the side and cut off under the clock */
+  .rail.gside {
+    inset-block: calc(env(safe-area-inset-top, 0px) + 10px) calc(env(safe-area-inset-bottom, 0px) + 10px);
+    inset-inline-start: calc(env(safe-area-inset-right, 0px) + 10px);
+    width: min(320px, calc(100vw - 64px));
+    height: auto;
+    margin: 0;
+    padding: 0 8px;
+    border-radius: 28px;
+  }
+  .app.menu-open .rail.gside {
+    box-shadow:
+      0 30px 70px -18px rgba(0, 0, 0, 0.45),
+      0 0 0 0.5px var(--line-2);
+  }
+  .gside .gside-top {
+    min-height: 60px;
+    padding-top: 6px;
+  }
+  /* the person and leaving: across the window's foot, its own rounded corners below */
+  .gside .rail-foot {
+    margin: auto -8px 0;
+    padding: 10px 16px 12px;
+  }
+  /* the menu's top names the course only - the tab's own name is the heading under it */
+  .gside .gside-top .brand-sub {
+    display: none;
+  }
+  /* the screen on show, marked as the calendar's chosen view is */
+  .gside-panel .rail-link.active {
+    background: var(--g-blue-soft);
+    color: var(--g-on-blue-soft);
+    font-weight: 600;
+  }
+  .gside-panel .rail-link.active svg {
+    color: var(--g-on-blue-soft);
+  }
+}
+.rail-foot .rail-foot-settings {
+  color: var(--rail-muted);
+}
+.rail-foot .rail-foot-settings.active {
+  color: var(--g-blue, var(--focus));
+}
+@media (prefers-reduced-motion: reduce) {
+  .gside-panel {
+    animation-name: gside-fade;
+  }
+  @keyframes gside-fade {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+/* ---------------- a computer's new event: its block in hand while its card is open ---------------- */
+
+/* it appears where the time was pressed - grown from its start - and glides when put elsewhere */
+.gc-event.is-ghost.is-draft {
+  pointer-events: auto;
+  cursor: grab;
+  z-index: 6;
+  animation: draft-in 0.2s var(--spring) backwards;
+  transform-origin: top center;
+  transition: top 0.18s var(--spring), height 0.18s var(--spring);
+}
+.gc-event.is-ghost.is-draft.is-dragged {
+  z-index: 7;
+  cursor: grabbing;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  transition: none;
+}
+@keyframes draft-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.4);
+  }
+}
+/* its top and bottom edges: stretched to start earlier or end later */
+.gc-draft-edge {
+  position: absolute;
+  inset-inline: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+.gc-draft-edge.is-start {
+  top: -2px;
+}
+.gc-draft-edge.is-end {
+  bottom: -2px;
+}
+/* the time being drawn, before the mouse lets go: lifted a little, its hours in it */
+.gc-col > .gc-event.is-ghost:not(.is-draft) {
+  animation: draft-in 0.14s ease-out backwards;
+  transform-origin: top center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-event.is-ghost.is-draft,
+  .gc-col > .gc-event.is-ghost:not(.is-draft) {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ---------------- a phone's new event, as Google Calendar's app: the block in hand, the sheet under it ---------------- */
+
+/* the new event's block takes the finger: held and moved it goes along, its handles stretch it */
+.gc-app .gc-event.is-ghost.is-draft {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  z-index: 6;
+  overflow: visible;
+}
+/* picked up: a little lifted, as a thing in hand */
+.gc-app .gc-event.is-ghost.is-dragged {
+  z-index: 7;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  cursor: grabbing;
+  transition: top 0.08s linear, height 0.08s linear;
+}
+/* the handles: a white dot ringed in the event's colour at its top and its bottom, the finger's place around it
+   wider than the dot */
+.gc-draft-handle {
+  position: absolute;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--c, var(--g-blue));
+  border-radius: 50%;
+  background: var(--g-sheet);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  touch-action: none;
+  cursor: ns-resize;
+}
+.gc-draft-handle::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+}
+.gc-draft-handle.is-start {
+  top: -8px;
+  inset-inline-end: 14px;
+}
+.gc-draft-handle.is-end {
+  bottom: -8px;
+  inset-inline-start: 14px;
+}
+
+/* the sheet under it: low over the page, no shade - the calendar above still answers the finger */
+.peek-sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  max-height: min(62dvh, 560px);
+  border-radius: 20px 20px 0 0;
+  background: var(--g-sheet);
+  color: var(--ink);
+  box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.18), 0 -1px 0 var(--g-line);
+  animation: peek-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.peek-sheet.is-pulled {
+  transition: none;
+}
+@keyframes peek-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+/* the keyboard up: the sheet sits on it, in what is still in sight */
+html[data-kb] .peek-sheet {
+  bottom: auto;
+  top: calc(var(--vv-top, 0px) + var(--vv-h, 100dvh));
+  translate: 0 -100%;
+  max-height: calc(var(--vv-h, 100dvh) - 96px);
+  animation: none;
+}
+.peek-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 14px 16px 2px;
+  touch-action: none;
+  cursor: grab;
+}
+.peek-grab {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  border-radius: 3px;
+  background: var(--g-line);
+}
+.peek-title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.peek-close {
+  color: var(--ink-2);
+}
+.peek-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px 6px;
+}
+.peek-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--g-line);
+}
+html[data-kb] .peek-foot {
+  padding-bottom: 8px;
+}
+/* the card's own head and buttons: the sheet has them */
+.peek-sheet .qc-top,
+.peek-sheet .qc-foot {
+  display: none;
+}
+.peek-sheet .qc {
+  padding: 0;
+}
+.peek-sheet .qc-title {
+  margin-top: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .peek-sheet {
+    animation: none;
+    transition: none;
+  }
+  .gc-app .gc-event.is-ghost.is-dragged {
+    transition: none;
+  }
+}
+
+/* only chosen (a phone, before it is opened): an outlined box with no fill and its two handles, as Google
+   Calendar's app - a tap on it opens the new event */
+.gc-app .gc-event.is-ghost.is-draft.is-selecting {
+  background: color-mix(in srgb, var(--c, var(--g-blue)) 7%, transparent);
+  border: 2px solid var(--c, var(--g-blue));
+  border-radius: 8px;
+  box-shadow: none;
+  color: transparent;
+  animation: gc-select-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+.gc-app .gc-event.is-selecting > .gc-event-title,
+.gc-app .gc-event.is-selecting > .gc-event-meta {
+  visibility: hidden;
+}
+.gc-app .gc-event.is-ghost.is-selecting.is-dragged {
+  background: color-mix(in srgb, var(--c, var(--g-blue)) 12%, transparent);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  animation: none;
+}
+@keyframes gc-select-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+/* its handles: a dot in its colour with a soft ring around it */
+.gc-app .gc-event.is-selecting .gc-draft-handle {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background: var(--c, var(--g-blue));
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--c, var(--g-blue)) 26%, transparent);
+}
+.gc-app .gc-event.is-selecting .gc-draft-handle.is-start {
+  top: -9px;
+}
+.gc-app .gc-event.is-selecting .gc-draft-handle.is-end {
+  bottom: -9px;
+}
+/* the new event's start and end on the hours, in the accent colour, over the hour written there */
+.gc-app .gc-hours .gc-hour-mark {
+  position: absolute;
+  z-index: 1;
+  inset-inline-start: 11px;
+  transform: translateY(-50%);
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--g-sheet);
+  color: var(--g-blue);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-app .gc-event.is-ghost.is-draft.is-selecting {
+    animation: none;
+  }
+}
+
+/* ---------------- the days before and after, beside the one in sight (SchedulePage) ----------------
+   Out of sight - the clip hides them - until the finger brings one in: the next day waits on the left (a
+   right-to-left page turns that way), the day before on the right, each showing the same hours */
+.period-swipe {
+  position: relative;
+}
+.period-side {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  background: var(--g-sheet);
+}
+.period-side.is-next {
+  transform: translateX(-100%);
+}
+.period-side.is-prev {
+  transform: translateX(100%);
+}
+.period-side > .gc,
+.period-side > .gc-month {
+  flex: 1;
+  min-height: 0;
+}
+
+/* a topic in parts (סגל, צוערים): the parts' bar, and under it the lighter bar of the part's other screens */
+.section-parts .section-tabs.is-sub {
+  padding-top: 8px;
+}
+.section-parts + .page {
+  padding-top: 16px;
+}
+.section-tabs.is-sub .section-tabs-track {
+  background: transparent;
+  padding: 0;
+  gap: 6px;
+}
+.section-tabs.is-sub .section-tab {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.section-tabs.is-sub .section-tab.on {
+  border-color: transparent;
+  color: var(--tint);
+  font-weight: 600;
+}
+.section-tabs.is-sub .section-tab-thumb,
+:root[data-theme='dark'] .section-tabs.is-sub .section-tab-thumb {
+  border-radius: 999px;
+  background: var(--tint-bg);
+  box-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .section-tabs.is-sub .section-tab-thumb {
+    background: var(--tint-bg);
+    box-shadow: none;
+  }
+}
+@media (max-width: 860px) {
+  .section-parts .section-tabs.is-sub {
+    padding-top: 6px;
+  }
+  .section-parts + .page {
+    padding-top: 10px;
+  }
+}

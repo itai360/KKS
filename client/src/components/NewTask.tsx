@@ -1,0 +1,526 @@
+// Section 8 + 33: "+ משימה" must be faster than a WhatsApp message:
+// name, owner, deadline, send. Section 27: or just write a sentence.
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ABSENCE_REASON_LABELS, OTHER_DOMAIN, PRIORITIES, PRIORITY_LABELS, VISIBILITIES, VISIBILITY_LABELS, type Priority, type Visibility } from '@shared/constants';
+import { addDays, shortDate, startOfWeek, weekdayOf } from '@shared/dates';
+import type { UserLoad } from '@shared/types';
+import { parseTaskText, type ParsedTask } from '@shared/parser';
+import { api } from '../lib/api';
+import { dateKeyOf, fmtDeadline, fmtTime, getTz, isoAt, todayKey } from '../lib/format';
+import { emitLocalChange } from '../lib/realtime';
+import { useSession } from '../lib/session';
+import { useApi } from '../lib/useApi';
+import { useStaffGroups } from '../lib/taskGroups';
+import { Icon } from './Icon';
+import { useToast } from './Toasts';
+import { DateInput, ErrorBox, Field, Modal, Seg, Select, TimeInput } from './ui';
+import { takesKeys } from '../lib/keyboard';
+
+export interface NewTaskInitial {
+  title?: string;
+  ownerIds?: number[];
+  allStaff?: boolean;
+  deadline?: string;
+  weekId?: number | null;
+  trackId?: number | null;
+  eventId?: number | null;
+  parentId?: number | null;
+  domain?: string;
+  priority?: Priority;
+  description?: string;
+  text?: string;
+  heading?: string;
+}
+
+const Ctx = createContext<(initial?: NewTaskInitial, onCreated?: (ids: number[]) => void) => void>(() => undefined);
+export const useNewTask = () => useContext(Ctx);
+
+/** a new part of a task (a subtask): under it, in its week, track and area, its owner's, by its deadline */
+export const subtaskOf = (t: { id: number; title: string; weekId: number | null; trackId: number | null; ownerId: number; domain: string; deadline: string }): NewTaskInitial => ({
+  parentId: t.id,
+  weekId: t.weekId,
+  trackId: t.trackId,
+  ownerIds: [t.ownerId],
+  domain: t.domain,
+  deadline: t.deadline,
+  heading: `משימת משנה: ${t.title}`,
+});
+
+export function NewTaskProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<{ initial: NewTaskInitial; onCreated?: (ids: number[]) => void } | null>(null);
+  const open = useCallback((initial: NewTaskInitial = {}, onCreated?: (ids: number[]) => void) => setState({ initial, onCreated }), []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (takesKeys(el)) return;
+      // not on top of an open dialog
+      if (document.querySelector('.modal')) return;
+      if ((e.key === 'n' || e.key === 'מ') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        open();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  return (
+    <Ctx.Provider value={open}>
+      {children}
+      {state && (
+        <NewTaskModal
+          initial={state.initial}
+          onClose={() => setState(null)}
+          onCreated={(ids) => {
+            state.onCreated?.(ids);
+            setState(null);
+          }}
+        />
+      )}
+    </Ctx.Provider>
+  );
+}
+
+export function quickDeadlines(defaultTime: string): { label: string; date: string; time: string }[] {
+  const today = todayKey();
+  const thursday = (() => {
+    const t = addDays(startOfWeek(today), 4);
+    return t >= today ? t : addDays(t, 7);
+  })();
+  const out = [
+    { label: `היום ${defaultTime}`, date: today, time: defaultTime },
+    { label: 'מחר 12:00', date: addDays(today, 1), time: '12:00' },
+    { label: `מחר ${defaultTime}`, date: addDays(today, 1), time: defaultTime },
+  ];
+  if (weekdayOf(today) < 4) out.push({ label: 'סוף השבוע', date: thursday, time: '16:00' });
+  out.push({ label: 'בעוד שבוע', date: addDays(today, 7), time: defaultTime });
+  return out;
+}
+
+/** "שבוע 3 · שבוע שטח (27.9-3.10)" */
+const weekLabel = (w: { number: number; name: string; startDate: string; endDate: string }) => `שבוע ${w.number} · ${w.name} (${shortDate(w.startDate)}-${shortDate(w.endDate)})`;
+
+export function DateTimeInputs({ date, time, onDate, onTime }: { date: string; time: string; onDate: (v: string) => void; onTime: (v: string) => void }) {
+  return (
+    <div className="row gap-6">
+      <DateInput value={date} onChange={(v) => onDate(v)} required aria-label="תאריך" style={{ flex: 1.4 }} />
+      <TimeInput value={time} onChange={onTime} required aria-label="שעה" style={{ flex: 1 }} />
+    </div>
+  );
+}
+
+export function UserPicker({
+  value,
+  onChange,
+  allowAll,
+  all,
+  onAll,
+  multiple = true,
+  date,
+}: {
+  value: number[];
+  onChange: (ids: number[]) => void;
+  allowAll?: boolean;
+  all?: boolean;
+  onAll?: (v: boolean) => void;
+  multiple?: boolean;
+  /** the day the task is due: who is away then, and what else they have that day */
+  date?: string;
+}) {
+  const { users, user, settings } = useSession();
+  // how loaded each person is, and who is away - so a task goes to someone who can take it
+  const load = useApi<UserLoad[]>(`/api/load${date ? `?date=${date}` : ''}`, ['tasks', 'users']).data;
+  const loadOf = (id: number) => load?.find((l) => l.userId === id);
+  const people = users; // alphabetical, as the session keeps them
+  const heavy = (n: number) => (n >= settings.overloadThreshold ? 't-red' : n >= Math.ceil(settings.overloadThreshold * 0.6) ? 't-orange' : '');
+  const awayChosen = all ? [] : value.map((id) => ({ u: users.find((x) => x.id === id), l: loadOf(id) })).filter((x) => x.u && x.l?.away);
+  // the course's groups at one press - "מפק"צים", "פורום מוביל" (all the staff is "כל הסגל" where it is offered)
+  const groups = useStaffGroups().filter((g) => multiple && g.memberIds.length > 1 && !(allowAll && g.rule === 'staff'));
+  const isChosen = (ids: number[]) => !all && ids.length === value.length && ids.every((id) => value.includes(id));
+  return (
+    <div className="col gap-6">
+      <div className="chips">
+        {allowAll && (
+          <button type="button" className={`chip${all ? ' on' : ''}`} onClick={() => onAll?.(!all)}>
+            <Icon name="users" size={15} /> כל הסגל
+          </button>
+        )}
+        {groups.map((g) => {
+          const on = isChosen(g.memberIds);
+          return (
+            <button
+              key={`g-${g.id}`}
+              type="button"
+              className={`chip chip-group${on ? ' on' : ''}`}
+              aria-pressed={on}
+              title={g.memberIds.map((id) => users.find((u) => u.id === id)?.displayName ?? '').join(', ')}
+              onClick={() => {
+                onAll?.(false);
+                onChange(on ? [] : g.memberIds);
+              }}
+            >
+              <Icon name="users" size={15} /> {g.name}
+            </button>
+          );
+        })}
+        {people.map((u) => {
+          const on = !all && value.includes(u.id);
+          const l = loadOf(u.id);
+          const name = u.id === user.id ? `אני (${u.displayName})` : u.displayName;
+          const about = l
+            ? [
+                l.away && `${ABSENCE_REASON_LABELS[l.away.reason]} עד ${shortDate(l.away.endDate)}`,
+                `${l.week} משימות פתוחות בשבוע הקרוב`,
+                l.overdue ? `${l.overdue} באיחור` : '',
+                date && l.onDay ? `${l.onDay} באותו יום` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : '';
+          return (
+            <button
+              key={u.id}
+              type="button"
+              className={`chip${on ? ' on' : ''}${l?.away ? ' chip-away' : ''}`}
+              title={about || undefined}
+              aria-label={about ? `${name} - ${about}` : name}
+              aria-pressed={on}
+              onClick={() => {
+                onAll?.(false);
+                if (!multiple) onChange([u.id]);
+                else onChange(on ? value.filter((v) => v !== u.id) : [...value, u.id]);
+              }}
+            >
+              {name}
+              {l?.away ? (
+                <span className="chip-note">{ABSENCE_REASON_LABELS[l.away.reason]}</span>
+              ) : (
+                l && l.week > 0 && (
+                  <span className={`chip-load ${heavy(l.week)}`} aria-hidden="true">
+                    {l.week}
+                  </span>
+                )
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {awayChosen.map(({ u, l }) => (
+        <span key={u!.id} className="small text-orange away-warn" role="status">
+          <Icon name="alert" size={13} /> {u!.displayName} ב{ABSENCE_REASON_LABELS[l!.away!.reason]} {date ? `ב-${shortDate(date)}` : 'היום'} (עד {shortDate(l!.away!.endDate)}) - אולי מישהו אחר?
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function NewTaskModal({ initial, onClose, onCreated }: { initial: NewTaskInitial; onClose: () => void; onCreated: (ids: number[]) => void }) {
+  const { user, isCommander, can, settings, users, weeks, tracks } = useSession();
+  // a task for anyone - the course commander, or all the staff at once (the staff, where the commander lets them)
+  const forAnyone = can('tasks');
+  const toast = useToast();
+  const defaultTime = settings.defaultDeadlineTime;
+  const initDate = initial.deadline ? dateKeyOf(initial.deadline) : '';
+  const initTime = initial.deadline ? fmtTime(initial.deadline) : defaultTime;
+
+  const [text, setText] = useState(initial.text ?? '');
+  const [title, setTitle] = useState(initial.title ?? '');
+  const [ownerIds, setOwnerIds] = useState<number[]>(initial.ownerIds ?? (isCommander ? [] : [user.id]));
+  const [allStaff, setAllStaff] = useState(!!initial.allStaff);
+  const [mode, setMode] = useState<'shared' | 'copies'>('shared');
+  // attached beside the owners: the commander following a staff member's task, or the commander following one he gave
+  const [attach, setAttach] = useState(false);
+  const [date, setDate] = useState(initDate);
+  const [time, setTime] = useState(initTime);
+  const [more, setMore] = useState(false);
+  const [description, setDescription] = useState(initial.description ?? '');
+  const [priority, setPriority] = useState<Priority>(initial.priority ?? 'normal');
+  const [domain, setDomain] = useState(initial.domain ?? '');
+  const [domainNote, setDomainNote] = useState('');
+  const [weekId, setWeekId] = useState<string>(initial.weekId ? String(initial.weekId) : 'auto');
+  const [trackId, setTrackId] = useState<string>(initial.trackId ? String(initial.trackId) : 'auto');
+  const [requiresApproval, setRequiresApproval] = useState(false);
+  const [visibility, setVisibility] = useState<Visibility>('normal');
+  const [link, setLink] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [parsed, setParsed] = useState<ParsedTask | null>(null);
+
+  const applyText = useCallback(
+    (value: string) => {
+      setText(value);
+      if (!value.trim()) {
+        setParsed(null);
+        return;
+      }
+      const p = parseTaskText(value, {
+        users: users.map((u) => ({ id: u.id, displayName: u.displayName, title: u.title })),
+        weeks: weeks.map((w) => ({ id: w.id, name: w.name })),
+        domains: settings.domains,
+        tz: getTz(),
+        defaultTime,
+      });
+      setParsed(p);
+      if (p.title) setTitle(p.title);
+      if (p.allStaff && forAnyone) setAllStaff(true);
+      else if (p.ownerIds.length) {
+        setAllStaff(false);
+        setOwnerIds(p.ownerIds);
+      }
+      if (p.deadlineDate) setDate(p.deadlineDate);
+      if (p.deadlineTime) setTime(p.deadlineTime);
+      if (p.priority) setPriority(p.priority);
+      if (p.domain) setDomain(p.domain);
+      if (p.weekId) setWeekId(String(p.weekId));
+      if (p.priority || p.domain) setMore(true);
+    },
+    [users, weeks, settings.domains, defaultTime, forAnyone],
+  );
+
+  useEffect(() => {
+    if (initial.text) applyText(initial.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const quick = useMemo(() => quickDeadlines(defaultTime), [defaultTime]);
+  const deadlineIso = date && time ? isoAt(date, time) : null;
+  // the week a task falls in by its deadline, when none is chosen
+  const autoWeek = date ? weeks.find((w) => w.startDate <= date && w.endDate >= date) : undefined;
+  // a task in an area named like a track (שטח, ניווטים...) goes in that track unless another is chosen
+  const autoTrack = domain ? tracks.find((t) => t.name === domain) : undefined;
+  const hasMany = !allStaff && ownerIds.length > 1;
+  // staff given a task by a staff member take it on first (not from the commander, nor from one exempted)
+  const askNames = isCommander || user.assignsFreely || allStaff ? [] : ownerIds.filter((id) => id !== user.id).map((id) => users.find((u) => u.id === id)).filter((u) => u?.role === 'staff').map((u) => u!.displayName);
+  // who can be attached here: the commander (for a staff member), or the commander himself (for a task he gives
+  // others) - on a single task, not one copied to each person
+  const attachTargets = allStaff || (hasMany && mode === 'copies') || !ownerIds.length
+    ? []
+    : isCommander
+      ? ownerIds.includes(user.id) ? [] : [user.id]
+      : users.filter((u) => u.active && u.role === 'commander' && !ownerIds.includes(u.id)).map((u) => u.id);
+  // what the form holds now - picked by hand or read from the sentence
+  const ownerNames = allStaff ? ['כל הסגל'] : ownerIds.map((id) => users.find((u) => u.id === id)?.displayName ?? '');
+  const missing = [!title.trim() && 'שם', !allStaff && !ownerIds.length && 'אחראי', !deadlineIso && 'דד-ליין'].filter((x): x is string => !!x);
+
+  const submit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setError(null);
+    if (!title.trim()) return setError('חובה למלא שם משימה');
+    if (!allStaff && !ownerIds.length) return setError('חובה לבחור אחראי');
+    if (!deadlineIso) return setError('כל משימה חייבת דד-ליין - משימה בלי זמן היא רק תזכורת');
+    setBusy(true);
+    try {
+      const res = await api.post<{ ids: number[] }>('/api/tasks', {
+        title: title.trim(),
+        description,
+        assignMode: allStaff ? 'all' : mode,
+        ownerIds: allStaff ? [] : ownerIds,
+        attachIds: attach ? attachTargets : [],
+        deadline: deadlineIso,
+        priority,
+        domain,
+        domainNote: domain === OTHER_DOMAIN ? domainNote.trim() : '',
+        weekId: weekId === 'auto' ? undefined : weekId === 'none' ? null : Number(weekId),
+        trackId: trackId === 'auto' ? undefined : trackId === 'none' ? null : Number(trackId),
+        eventId: initial.eventId ?? null,
+        parentId: initial.parentId ?? null,
+        requiresApproval,
+        visibility,
+        links: link.trim() ? [{ url: link.trim() }] : [],
+      });
+      toast({
+        title: askNames.length ? `נשלחה לאישור של ${askNames.join(', ')}` : res.ids.length > 1 ? `נפתחו ${res.ids.length} משימות` : 'המשימה נפתחה',
+        body: askNames.length ? `${title.trim()} · תעבור אחרי האישור` : `${title.trim()} · ${fmtDeadline(deadlineIso)}`,
+        tone: 'green',
+      });
+      emitLocalChange('tasks');
+      onCreated(res.ids);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={initial.heading ?? 'משימה חדשה'} onClose={onClose}>
+      <form
+        onSubmit={submit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void submit();
+        }}
+        className="col gap-16"
+      >
+        <div>
+          <div className="nl-box">
+            <input
+              className="input"
+              value={text}
+              onChange={(e) => applyText(e.target.value)}
+              placeholder='כתבו משפט: "מפק"צ 2 לסגור את המטווח עד רביעי 18:00 בעדיפות גבוהה"'
+              aria-label="יצירת משימה בטקסט חופשי"
+              data-autofocus
+            />
+            <span className="btn btn-sm btn-ghost" aria-hidden style={{ pointerEvents: 'none' }}>
+              <Icon name="zap" /> זיהוי
+            </span>
+          </div>
+          {parsed && (
+            <div className="parse-preview" aria-live="polite">
+              {title.trim() && <span className="badge t-gray">משימה: {title.trim()}</span>}
+              {ownerNames.map((n) => (
+                <span key={n} className="badge t-blue">
+                  אחראי: {n}
+                </span>
+              ))}
+              {deadlineIso && <span className="badge t-green">דד-ליין: {fmtDeadline(deadlineIso)}</span>}
+              {domain && <span className="badge t-purple">תחום: {domain}</span>}
+              {priority !== 'normal' && <span className="badge t-orange">עדיפות: {PRIORITY_LABELS[priority]}</span>}
+              {missing.map((m) => (
+                <span key={m} className="badge t-red">
+                  חסר {m}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <Field label="שם המשימה" required>
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder='לדוגמה: לסגור לו"ז לשבוע התקפה' maxLength={200} />
+        </Field>
+
+        <Field label="שבוע בקורס" hint={weekId === 'auto' ? (autoWeek ? `לפי הדד-ליין: ${weekLabel(autoWeek)}` : date ? 'הדד-ליין לא נופל באף שבוע' : 'נקבע לפי הדד-ליין') : undefined}>
+          <Select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+            <option value="auto">{autoWeek ? `אוטומטי - ${autoWeek.name}` : 'אוטומטי לפי הדד-ליין'}</option>
+            <option value="none">ללא שבוע</option>
+            {[...weeks]
+              .sort((a, b) => a.startDate.localeCompare(b.startDate))
+              .map((w) => (
+                <option key={w.id} value={w.id}>
+                  {weekLabel(w)}
+                </option>
+              ))}
+          </Select>
+        </Field>
+
+        <Field label="ציר בקורס" hint={trackId === 'auto' ? (autoTrack ? `לפי התחום: ${autoTrack.name}` : 'ללא ציר - או בחירת ציר מהרשימה') : undefined}>
+          <Select className="select" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
+            <option value="auto">{autoTrack ? `אוטומטי - ${autoTrack.name}` : 'אוטומטי לפי התחום'}</option>
+            <option value="none">ללא ציר</option>
+            {tracks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="אחראי" required hint={!forAnyone ? 'אפשר לבחור את עצמך או כל איש סגל אחר; משימה למפקד הקורס - רק בשבוע שבאחריותך' : undefined}>
+          <UserPicker value={ownerIds} onChange={setOwnerIds} allowAll={forAnyone} all={allStaff} onAll={setAllStaff} date={date || undefined} />
+          {askNames.length > 0 && (
+            <span className="hint">
+              המשימה תעבור רק אחרי אישור של {askNames.join(', ')}
+            </span>
+          )}
+        </Field>
+        {hasMany && (
+          <Seg
+            wrap
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'shared', label: `משימה משותפת - אחראי ראשי: ${users.find((u) => u.id === ownerIds[0])?.displayName ?? ''}` },
+              { value: 'copies', label: 'עותק נפרד לכל אחד' },
+            ]}
+          />
+        )}
+        {allStaff && <div className="info-box">תיפתח משימה נפרדת לכל איש סגל, ותוכל לראות מי השלים ומי עדיין לא.</div>}
+        {attachTargets.length > 0 && (
+          <label className="check new-task-attach">
+            <input type="checkbox" checked={attach} onChange={(e) => setAttach(e.target.checked)} />
+            <span>
+              {isCommander ? 'לצרף אותי לבקרה' : 'לצרף את מפקד הקורס לבקרה'}
+              <span className="tiny muted"> - {isCommander ? 'תופיע אצלי ב"בקרה שלי" ואקבל עליה עדכונים' : 'תופיע אצלו בבקרה, לא כמשימה שלו, ויקבל עליה עדכונים'}</span>
+            </span>
+          </label>
+        )}
+
+        <Field label="דד-ליין" required>
+          <DateTimeInputs date={date} time={time} onDate={setDate} onTime={setTime} />
+          <div className="chips mt-8">
+            {quick.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                className={`chip chip-sm${date === q.date && time === q.time ? ' on' : ''}`}
+                onClick={() => {
+                  setDate(q.date);
+                  setTime(q.time);
+                }}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setMore(!more)}>
+          <Icon name={more ? 'chevronDown' : 'chevronLeft'} /> פרטים נוספים
+        </button>
+
+        {more && (
+          <div className="form-grid">
+            <Field label="פירוט" className="span-2">
+              <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="מה בדיוק צריך לבצע" />
+            </Field>
+            <Field label="עדיפות" className="span-2">
+              <Seg value={priority} onChange={setPriority} options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] }))} />
+            </Field>
+            <Field label="תחום">
+              <Select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
+                <option value="">ללא</option>
+                {settings.domains.map((d) => (
+                  <option key={d}>{d}</option>
+                ))}
+              </Select>
+            </Field>
+            {domain === OTHER_DOMAIN && (
+              <Field label="איזה תחום?">
+                <input className="input" value={domainNote} onChange={(e) => setDomainNote(e.target.value)} maxLength={120} placeholder="לדוגמה: תקשוב, טקסים, רווחה" data-autofocus />
+              </Field>
+            )}
+            <Field label="נראות">
+              <Select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
+                {VISIBILITIES.map((v) => (
+                  <option key={v} value={v}>
+                    {VISIBILITY_LABELS[v]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="קישור / מסמך">
+              <input className="input" type="url" dir="ltr" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://drive.google.com/..." />
+            </Field>
+            <label className="check span-2">
+              <input type="checkbox" checked={requiresApproval} onChange={(e) => setRequiresApproval(e.target.checked)} />
+              נדרש אישור מפקד לסגירת המשימה
+            </label>
+          </div>
+        )}
+        <ErrorBox error={error} />
+        {/* stays in view while the form scrolls */}
+        <div className="fab-dock">
+          <span className="tiny muted hide-mobile fab-hint">
+            <span className="kbd">Ctrl</span>+<span className="kbd">Enter</span> לשליחה
+          </span>
+          {missing.length > 0 && <span className="fab-missing">חסר: {missing.join(', ')}</span>}
+          <button className={`btn btn-primary fab-send${missing.length ? ' incomplete' : ''}`} type="submit" disabled={busy}>
+            <Icon name="check" /> {busy ? 'שולח...' : 'שלח'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

@@ -1,0 +1,459 @@
+// The schedule and Google Calendar, both ways (see server/src/calendar.ts).
+
+import { useEffect, useRef, useState } from 'react';
+import { sourceColor } from '@shared/calendarLayers';
+import { shortDate } from '@shared/dates';
+import type { CalendarFeed, CalendarSource, CalendarWeeksPreview, PlanCalendars as PlanCalendarList } from '@shared/types';
+import { api } from '../lib/api';
+import { emitLocalChange } from '../lib/realtime';
+import { useSession } from '../lib/session';
+import { useApi } from '../lib/useApi';
+import { Icon } from './Icon';
+import { useToast } from './Toasts';
+import { ErrorBox, Field, FloatingActions, Loading, Modal } from './ui';
+import { ask } from './Confirm';
+
+export function GoogleCalendarModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal
+      title="יומן Google"
+      onClose={onClose}
+      footer={
+        <button className="btn btn-ghost" onClick={onClose}>
+          סגירה
+        </button>
+      }
+    >
+      <div className="col gap-16">
+        <MyFeed />
+        <div className="divider" style={{ margin: 0 }} />
+        <CalendarSources />
+      </div>
+    </Modal>
+  );
+}
+
+/** The schedule, and one's own tasks still open, in the user's own Google Calendar. */
+function MyFeed() {
+  const toast = useToast();
+  const feed = useApi<CalendarFeed>('/api/calendar/feed', []);
+  const [error, setError] = useState<string | null>(null);
+
+  const copy = async () => {
+    if (!feed.data) return;
+    try {
+      await navigator.clipboard.writeText(feed.data.url);
+      toast({ title: 'הקישור הועתק', tone: 'green' });
+    } catch {
+      setError('לא ניתן להעתיק אוטומטית - סמנו את הקישור והעתיקו אותו.');
+    }
+  };
+
+  const rotate = async () => {
+    if (!(await ask({ title: 'ליצור קישור חדש ליומן?', body: 'הקישור הקודם יפסיק לעבוד, וצריך יהיה להוסיף את היומן מחדש ב-Google.', confirm: 'קישור חדש' }))) return;
+    try {
+      feed.setData(await api.post<CalendarFeed>('/api/calendar/feed/rotate'));
+      toast({ title: 'נוצר קישור חדש', tone: 'green' });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <section className="col gap-6">
+      <h3>הלו"ז והמשימות ביומן Google שלך</h3>
+      <div className="small muted">
+        כל אירועי הלו"ז, וכל משימה פתוחה שלך בשעת הדד-ליין שלה, יופיעו ביומן Google שלך ויתעדכנו מעצמם - משימה שהושלמה יורדת משם. Google בודק שינויים כמה פעמים ביום, כך ששינוי חדש מופיע שם באיחור של עד כמה שעות (למשימה אחת עכשיו: "ליומן Google" בדף המשימה). הכי נוח להוסיף מהמחשב, ומשם היומן מופיע גם באפליקציה בטלפון.
+      </div>
+      <ErrorBox error={error ?? feed.error} />
+      {!feed.data ? (
+        <Loading rows={1} />
+      ) : (
+        <>
+          <div className="row wrap gap-6">
+            <a className="btn btn-primary" href={feed.data.googleUrl} target="_blank" rel="noopener noreferrer" data-autofocus>
+              <Icon name="calendar" /> הוספה ליומן Google
+            </a>
+            <button className="btn" onClick={() => void copy()}>
+              <Icon name="link" /> העתקת הקישור
+            </button>
+          </div>
+          <details className="small">
+            <summary style={{ cursor: 'pointer' }}>לא נפתח? הוספה ידנית</summary>
+            <div className="col gap-6 mt-12">
+              <div>ב-Google Calendar במחשב: ליד "יומנים אחרים" לוחצים על + ובוחרים "מכתובת URL", ומדביקים את הקישור:</div>
+              <input className="input mono" dir="ltr" readOnly value={feed.data.url} onFocus={(e) => e.currentTarget.select()} aria-label="קישור ליומן" />
+              <div className="muted">אפשר להוסיף את אותו הקישור גם ליומן של אייפון או Outlook.</div>
+            </div>
+          </details>
+          <div className="row wrap gap-6 tiny muted">
+            <span className="grow">הקישור אישי: מי שמחזיק בו רואה את הלו"ז ואת המשימות שלך. אל תשתפו אותו.</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => void rotate()}>
+              יצירת קישור חדש
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * While a big Google calendar is still on its way (the server reads it in the background), ask again
+ * every few seconds - for up to two minutes. `data` is what was last fetched: each answer that is still
+ * loading sets the next ask.
+ */
+export function useReloadWhileLoading(loading: boolean, reload: () => Promise<void>, data: unknown): void {
+  const tries = useRef(0);
+  const again = useRef(reload);
+  again.current = reload;
+  useEffect(() => {
+    if (!loading) {
+      tries.current = 0;
+      return;
+    }
+    if (tries.current >= 30) return;
+    const t = setTimeout(() => {
+      tries.current++;
+      void again.current();
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [loading, data]);
+}
+
+/** what a calendar still loading says, under its name */
+const STILL_LOADING = 'Google שולח את היומן - יומן גדול לוקח עד דקה. הוא יופיע כאן מעצמו.';
+
+/** Google calendars whose events appear in the schedule - and in the plan documents (the weekly and the three-week). */
+export function CalendarSources() {
+  const { isCommander } = useSession();
+  const toast = useToast();
+  const sources = useApi<CalendarSource[]>('/api/calendar/sources', ['events']);
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useReloadWhileLoading(!!sources.data?.some((s) => s.loading), sources.reload, sources.data);
+
+  const add = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const next = await api.post<CalendarSource[]>('/api/calendar/sources', { name, url });
+      sources.setData(next);
+      setName('');
+      setUrl('');
+      emitLocalChange('events');
+      const loading = next.some((s) => s.loading);
+      toast({ title: loading ? 'היומן חובר - Google עוד שולח אותו, והאירועים יופיעו בלו"ז בעוד רגע' : 'היומן חובר - האירועים שלו מופיעים בלו"ז', tone: 'green' });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (s: CalendarSource) => {
+    if (!(await ask({ title: `להפסיק להציג את "${s.name}" בלו"ז?`, body: 'האירועים שלו לא יופיעו עוד בלו"ז. אפשר לחבר אותו שוב בכל עת.', confirm: 'הפסקה', danger: true }))) return;
+    try {
+      sources.setData(await api.del<CalendarSource[]>(`/api/calendar/sources/${s.id}`));
+      emitLocalChange('events');
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const list = sources.data ?? [];
+  return (
+    <section className="col gap-6">
+      <h3>יומני Google בתוך הלו"ז</h3>
+      <div className="small muted">אירועים מיומן Google מופיעים בלו"ז לכל הסגל, לקריאה בלבד, ומתעדכנים כל כמה דקות. כל עוד לא נבחר יומן לאישור התוכניות, הם משמשים גם אותו.</div>
+      <ErrorBox error={error ?? sources.error} />
+      {list.map((s, i) => (
+        <div key={s.id} className="row gap-6">
+          {/* in the colour it is drawn in (chosen beside it in the side bar, as in Google) */}
+          <span className={`src-icon c-${sourceColor(s.color, i)}`} aria-hidden="true">
+            <Icon name="calendar" />
+          </span>
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="strong">{s.name}</div>
+            {/* the name it has in Google, where it was connected by another */}
+            {s.calendarName && s.calendarName !== s.name && <div className="small muted">ב-Google: {s.calendarName}</div>}
+            {s.loading && <div className="small muted">{STILL_LOADING}</div>}
+            {s.error && <div className="small text-red">{s.error}</div>}
+          </div>
+          {isCommander && (
+            <button className="btn btn-ghost btn-sm" onClick={() => void remove(s)}>
+              הסרה
+            </button>
+          )}
+        </div>
+      ))}
+      {!isCommander && list.length === 0 && <div className="small muted">עדיין לא חובר יומן. מפקד הקורס יכול לחבר אותו מכאן.</div>}
+      {isCommander && (
+        <div className="info-box col gap-6">
+          <Field label="שם היומן" hint="אפשר להשאיר ריק - השם יילקח מהיומן ב-Google.">
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="השם שלו ב-Google" maxLength={60} />
+          </Field>
+          <Field
+            label="הכתובת הסודית של היומן בפורמט iCal"
+            hint={'ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "שילוב היומן" ← "כתובת סודית בפורמט iCal". ליומן ציבורי אפשר גם את הכתובת הציבורית או את קישור התצוגה שלו. הכתובת נשמרת בשרת בלבד ולא מוצגת לאיש.'}
+          >
+            <input className="input mono" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" />
+          </Field>
+          <FloatingActions>
+            <button className="btn btn-primary btn-sm" disabled={busy || !url.trim()} onClick={() => void add()}>
+              {busy ? 'בודק את היומן...' : 'חיבור היומן'}
+            </button>
+          </FloatingActions>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The calendar the plan documents read ("יומן התוכנית"): its main blocks enter them; it is not shown in the schedule. */
+export function PlanCalendars() {
+  const toast = useToast();
+  const list = useApi<PlanCalendarList>('/api/plan-calendars', ['plans']);
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loading = !!list.data?.calendars.some((c) => c.loading);
+  useReloadWhileLoading(loading, list.reload, list.data);
+  // the calendar has come in from Google: the plan documents read it again
+  const wasLoading = useRef(false);
+  useEffect(() => {
+    if (wasLoading.current && !loading) emitLocalChange('plans');
+    wasLoading.current = loading;
+  }, [loading]);
+
+  const add = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const next = await api.post<PlanCalendarList>('/api/plan-calendars', { name, url });
+      list.setData(next);
+      setName('');
+      setUrl('');
+      emitLocalChange('plans');
+      toast({ title: next.calendars.some((c) => c.loading) ? 'היומן נבחר - Google עוד שולח אותו, והלבנות יופיעו בעוד רגע' : 'היומן נבחר לאישור התוכניות', tone: 'green' });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  // one of the calendars connected to the schedule, in one tap (its address stays on the server)
+  const addConnected = async (id: number, label: string) => {
+    setError(null);
+    setBusy(true);
+    try {
+      const next = await api.post<PlanCalendarList>('/api/plan-calendars', { sourceId: id });
+      list.setData(next);
+      emitLocalChange('plans');
+      toast({ title: next.calendars.some((c) => c.loading) ? `"${label}" נוסף - Google עוד שולח אותו, והלבנות יופיעו בעוד רגע` : `"${label}" נוסף לאישור התוכניות`, tone: 'green' });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (index: number, label: string) => {
+    if (!(await ask({ title: `להפסיק למשוך את "${label}" לאישור התוכניות?`, body: 'אירועי המפתח שלו לא ייכנסו עוד לתוכניות. אפשר לבחור אותו שוב בכל עת.', confirm: 'הפסקה', danger: true }))) return;
+    try {
+      list.setData(await api.del<PlanCalendarList>(`/api/plan-calendars/${index}`));
+      emitLocalChange('plans');
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const chosen = list.data?.calendars ?? [];
+  return (
+    <section className="col gap-6">
+      <h3>יומן התוכנית</h3>
+      <div className="small muted">
+        היומן שממנו נמשכות הלבנות העיקריות לאישור התוכניות - השבועי והתלת שבועי: מבחנים, טקסים, תרגילים, ניווטים, מטווחים, ביקורים ובלוקים של כמה ימים. שיעורים ושגרה לא נכנסים, והיומן לא מוצג בלו"ז.
+        {!chosen.length && list.data && ' כל עוד לא נבחר יומן, נמשכים היומנים שמחוברים ללו"ז.'}
+      </div>
+      {list.loading && !list.data && <Loading rows={1} />}
+      <ErrorBox error={error ?? list.error} />
+      {chosen.map((c) => (
+        <div key={c.index} className="row gap-6">
+          <Icon name="calendar" />
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="strong">{c.name}</div>
+            {list.data?.fromServer && <div className="small muted">הוגדר בשרת</div>}
+            {c.loading && <div className="small muted">{STILL_LOADING}</div>}
+            {c.error && <div className="small text-red">{c.error}</div>}
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => void remove(c.index, c.name)}>
+            הסרה
+          </button>
+        </div>
+      ))}
+      {/* the calendars already connected to the schedule: added in one tap */}
+      {!!list.data?.connected?.length && (
+        <div className="col gap-6">
+          <div className="small strong">מהיומנים שמחוברים ללו"ז</div>
+          {list.data.connected.map((c) => (
+            <div key={c.id} className="row gap-6 plan-connected">
+              <Icon name="calendar" />
+              <span className="grow" style={{ minWidth: 0 }}>
+                {c.name}
+              </span>
+              <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void addConnected(c.id, c.name)}>
+                <Icon name="plus" size={14} /> הוספה לתוכנית
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="info-box col gap-6">
+        <div className="small strong">או יומן אחר, לפי הכתובת שלו</div>
+        <Field label="שם היומן" hint="אפשר להשאיר ריק - השם יילקח מהיומן ב-Google.">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="השם שלו ב-Google" maxLength={60} />
+        </Field>
+        <Field
+          label="הכתובת הסודית של היומן בפורמט iCal"
+          hint={'ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "שילוב היומן" ← "כתובת סודית בפורמט iCal".'}
+        >
+          <input className="input mono" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" />
+        </Field>
+        <FloatingActions>
+          <button className="btn btn-primary btn-sm" disabled={busy || !url.trim()} onClick={() => void add()}>
+            {busy ? 'קורא את היומן מ-Google...' : chosen.length ? 'הוספת יומן לתוכנית' : 'בחירת היומן לתוכנית'}
+          </button>
+        </FloatingActions>
+      </div>
+    </section>
+  );
+}
+
+/** Course weeks from a Google calendar: preview what was found, then create / update the chosen weeks. */
+export function CalendarWeeksModal({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const saved = useApi<{ url: string | null }>('/api/weeks/calendar', []);
+  const [url, setUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<CalendarWeeksPreview | null>(null);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [showInSchedule, setShowInSchedule] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const address = url ?? saved.data?.url ?? '';
+
+  const check = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const p = await api.post<CalendarWeeksPreview>('/api/weeks/calendar/preview', { url: address });
+      setPreview(p);
+      setChosen(new Set(p.weeks.filter((w) => w.action !== 'same').map((w) => w.uid)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const apply = async () => {
+    if (!preview) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const items = preview.weeks.filter((w) => chosen.has(w.uid));
+      await api.post('/api/weeks/calendar/apply', { url: address, items, showInSchedule });
+      emitLocalChange('weeks', 'events');
+      toast({ title: `השבועות עודכנו מהיומן (${items.length})`, tone: 'green' });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const toggle = (uid: string) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+
+  return (
+    <Modal
+      title="שבועות הקורס מיומן Google"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          {preview && preview.weeks.length > 0 && (
+            <button className="btn btn-primary" disabled={busy || chosen.size === 0} onClick={() => void apply()}>
+              {busy ? 'מעדכן...' : `עדכון ${chosen.size} שבועות`}
+            </button>
+          )}
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-16">
+        <div className="small muted">
+          כל אירוע ביומן ששמו מתחיל ב"שבוע" הופך לשבוע בקורס. אירוע של יום אחד מסמן את השבוע שמתחיל בו. אם אין אירועים כאלה, נלקחים אירועים של 3 עד 14 ימים. לפני שמשהו
+          משתנה תראו את הרשימה ותבחרו מה לעדכן. אפשר לחזור לכאן בכל פעם שהיומן משתנה.
+        </div>
+        <Field label="הכתובת הסודית של היומן בפורמט iCal" hint={'ב-Google Calendar במחשב: ליד שם היומן ⋮ ← "הגדרות ושיתוף" ← "שילוב היומן" ← "כתובת סודית בפורמט iCal".'}>
+          <div className="row gap-6">
+            <input
+              className="input mono grow"
+              dir="ltr"
+              value={address}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setPreview(null);
+              }}
+              placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+              data-autofocus
+            />
+            <button className="btn" disabled={busy || address.trim().length < 8} onClick={() => void check()}>
+              {busy && !preview ? 'קורא את היומן...' : 'בדיקת היומן'}
+            </button>
+          </div>
+        </Field>
+        <ErrorBox error={error} />
+        {preview &&
+          (preview.weeks.length === 0 ? (
+            <div className="info-box">לא נמצאו ביומן אירועים שנראים כמו שבועות ({preview.ignored} אירועים נבדקו). תנו לאירועי השבועות שם שמתחיל ב"שבוע", למשל "שבוע 1 - הכרות".</div>
+          ) : (
+            <div className="col gap-6">
+              {preview.weeks.map((w) => (
+                <label key={w.uid} className="row gap-6" style={{ cursor: w.action === 'same' ? 'default' : 'pointer', opacity: w.action === 'same' ? 0.6 : 1 }}>
+                  <input type="checkbox" checked={chosen.has(w.uid)} disabled={w.action === 'same'} onChange={() => toggle(w.uid)} />
+                  <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="strong">{w.name}</div>
+                    <div className="tiny muted">
+                      <span className="mono">
+                        {shortDate(w.startDate)}-{shortDate(w.endDate)}
+                      </span>
+                      {w.changes.length > 0 && ` · ${w.changes.join(' · ')}`}
+                    </div>
+                  </div>
+                  <span className={`badge ${w.action === 'create' ? 't-green' : w.action === 'update' ? 't-orange' : 't-gray'}`}>
+                    {w.action === 'create' ? 'חדש' : w.action === 'update' ? 'עדכון' : 'ללא שינוי'}
+                  </span>
+                </label>
+              ))}
+              {preview.ignored > 0 && <div className="tiny muted">עוד {preview.ignored} אירועים ביומן לא נראים כמו שבועות ולא ייכנסו.</div>}
+              <label className="row gap-6 small mt-12">
+                <input type="checkbox" checked={showInSchedule} onChange={(e) => setShowInSchedule(e.target.checked)} />
+                להציג את שאר אירועי היומן גם בלו"ז
+              </label>
+            </div>
+          ))}
+      </div>
+    </Modal>
+  );
+}

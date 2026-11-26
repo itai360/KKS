@@ -1,0 +1,438 @@
+// Security: what one staff member must never see of another's (or the commander's) private
+// matters - checked on every screen's data at once - and the guards around sign-in,
+// requests from other sites, files and links.
+
+import { deflateRawSync, gzipSync } from 'node:zlib';
+import request from 'supertest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { hashPassword } from '../src/auth';
+import { db } from '../src/db';
+import { assertPublicUrl, isPrivateAddress, isPushEndpoint, readLimited, safeFetch } from '../src/netguard';
+import { at, newTask, setup, staffMay, type Ctx } from './helpers';
+
+let c: Ctx;
+beforeEach(async () => {
+  c = await setup();
+});
+
+const SECRET = 'ZQX';
+
+/** private matters of others, each with a marker that must not reach s3 */
+/** a call that must succeed - otherwise the test would pass for nothing */
+async function ok(res: request.Response | Promise<request.Response>) {
+  const r = await res;
+  if (r.status !== 200) throw new Error(`planting failed: ${r.status} ${JSON.stringify(r.body)}`);
+  return r;
+}
+
+async function plantSecrets() {
+  const team = (await c.cmd.post('/api/teams', { name: 'צוות אלון', commanderId: c.ids.s1 })).body[0].id;
+  const cadet = (await c.cmd.post('/api/cadets', { firstName: 'נועה', lastName: 'כהן', teamId: team })).body.cadet?.id ?? (await c.cmd.get('/api/cadets')).body[0].id;
+  const week = (await c.cmd.post('/api/weeks', { name: 'שבוע שטח', startDate: '2026-09-27', endDate: '2026-10-03', leadId: c.ids.s2 })).body;
+  const weekId = week.week?.id ?? week.id;
+  // a private task, its update, link and a request on it
+  const task = await newTask(c.cmd, { title: `${SECRET}1 משימה פרטית`, description: `${SECRET}1b`, ownerIds: [c.ids.s1], visibility: 'private', weekId });
+  await ok(c.s1.post(`/api/tasks/${task}/updates`, { body: `${SECRET}11 עדכון` }));
+  await ok(c.s1.post(`/api/tasks/${task}/links`, { url: 'https://example.com/x', title: `${SECRET}12 קישור` }));
+  await ok(c.s1.post(`/api/tasks/${task}/requests`, { type: 'deadline', newDeadline: at('2026-10-09'), reason: `${SECRET}8 סיבה` }));
+  // a restricted document
+  await ok(c.cmd.post('/api/documents', { kind: 'link', title: `${SECRET}2 מסמך מוגבל`, category: 'נהלים', url: 'https://example.com/doc', restricted: true }));
+  // a talk and a discipline record (by the team's commander) and another staff member's private note
+  await ok(c.s1.post(`/api/cadets/${cadet}/records`, { kind: 'talk', title: 'שיחה', body: `${SECRET}3 שיחה אישית` }));
+  await ok(c.s2.post(`/api/cadets/${cadet}/records`, { kind: 'note', title: 'הערה', body: `${SECRET}4 הערה פרטית`, private: true }));
+  await ok(c.s1.post(`/api/cadets/${cadet}/records`, { kind: 'discipline', title: 'משמעת', body: `${SECRET}9 משמעת` }));
+  // an exemption's reason (the subject and details are for everyone)
+  await ok(c.cmd.post(`/api/cadets/${cadet}/exemptions`, { subject: 'גילוח', details: 'עד הודעה חדשה', reason: `${SECRET}5 סיבה רפואית` }));
+  // the evaluation file: the company commander's summary and the team commander's remark and critical point
+  await ok(c.cmd.patch(`/api/evaluations/${cadet}`, { changes: { summary: `${SECRET}6 סיכום`, committeeReason: `${SECRET}6b`, standing: 'watch' } }));
+  await ok(c.s1.post(`/api/evaluations/${cadet}/notes`, { occurredOn: '2026-09-30', body: `${SECRET}7 התייחסות` }));
+  await ok(c.s1.post(`/api/evaluations/${cadet}/points`, { period: 'שבוע 2', description: `${SECRET}7b אירוע` }));
+  // another person's absence note
+  await ok(c.s1.post('/api/absences', { startDate: '2026-10-05', endDate: '2026-10-06', reason: 'sick', note: `${SECRET}10 בדיקה רפואית` }));
+  // a visitor someone else asked to let into the base
+  await ok(c.s1.post('/api/entries', { fullName: `${SECRET}13 מבקר`, phone: '0501234567', visitorKind: 'civilian', idNumber: '123456782', reason: 'הרצאה' }));
+  return { cadet, task, weekId, team };
+}
+
+const READS = (p: { cadet: number; task: number; weekId: number }, ids: Ctx['ids']) => [
+  '/api/auth/me',
+  '/api/users',
+  '/api/settings',
+  '/api/tasks',
+  '/api/tasks?status=all',
+  '/api/my',
+  '/api/briefing',
+  '/api/reports/weekly',
+  '/api/reports/lookahead',
+  '/api/reports/day-end',
+  `/api/search?q=${SECRET}`,
+  '/api/activity',
+  '/api/notifications',
+  '/api/notifications?snoozed=1',
+  '/api/requests',
+  '/api/requests?status=all',
+  '/api/weeks',
+  `/api/weeks/${p.weekId}`,
+  `/api/weeks/${p.weekId}/close-check`,
+  '/api/events',
+  '/api/cadets',
+  '/api/cadets?status=all',
+  `/api/cadets/${p.cadet}`,
+  '/api/exemptions',
+  '/api/discipline/overview',
+  '/api/discipline/log',
+  '/api/evaluations',
+  `/api/evaluations/${p.cadet}`,
+  `/api/evaluations/${p.cadet}/history`,
+  '/api/experiences',
+  '/api/announcements',
+  '/api/absences',
+  '/api/load',
+  '/api/debriefs',
+  '/api/lessons',
+  '/api/documents',
+  '/api/alignment',
+  `/api/team/${ids.s1}`,
+  `/api/team/${ids.cmd}`,
+  '/api/templates',
+  '/api/recurring',
+  '/api/entries',
+  '/api/calendar/sources',
+  '/api/auth/sessions',
+];
+
+describe('nothing private leaks to another staff member', () => {
+  it('no screen, list or search shows s3 the private matters of others', async () => {
+    const p = await plantSecrets();
+    const leaks: string[] = [];
+    for (const url of READS(p, c.ids)) {
+      const res = await c.s3.get(url);
+      const text = JSON.stringify(res.body);
+      const found = [...new Set(text.match(new RegExp(`${SECRET}\\d+b?`, 'g')) ?? [])];
+      if (found.length) leaks.push(`${url}: ${found.join(', ')}`);
+    }
+    expect(leaks).toEqual([]);
+    // and the private task itself is not there
+    expect((await c.s3.get(`/api/tasks/${p.task}`)).status).toBe(404);
+  });
+
+  it('the people allowed still see them', async () => {
+    const p = await plantSecrets();
+    const s1Cadet = JSON.stringify((await c.s1.get(`/api/cadets/${p.cadet}`)).body); // the team's commander
+    expect(s1Cadet).toContain(`${SECRET}3`);
+    expect(s1Cadet).toContain(`${SECRET}5`);
+    expect(JSON.stringify((await c.s1.get(`/api/evaluations/${p.cadet}`)).body)).toContain(`${SECRET}6`); // the team commander reads the summary
+    expect((await c.s2.get(`/api/evaluations/${p.cadet}`)).status).toBe(403); // another team's commander: no file at all
+    expect(JSON.stringify((await c.cmd.get('/api/absences')).body)).toContain(`${SECRET}10`);
+    expect(JSON.stringify((await c.s1.get('/api/absences')).body)).toContain(`${SECRET}10`); // their own
+    expect(JSON.stringify((await c.cmd.get('/api/documents')).body)).toContain(`${SECRET}2`);
+  });
+
+  it('commander-only screens and actions answer 403 to staff', async () => {
+    for (const url of ['/api/team', '/api/courses', '/api/admin/snapshots', '/api/admin/backup', '/api/weeks/calendar']) {
+      expect((await c.s3.get(url)).status, url).toBe(403);
+    }
+    // the overview: one's own, not the course's
+    const own = (await c.s3.get('/api/dashboard')).body;
+    expect(own.staff.map((x: { userId: number }) => x.userId)).toEqual([c.ids.s3]);
+    expect((await c.s3.patch('/api/settings', { courseName: 'x' })).status).toBe(403);
+    expect((await c.s3.post('/api/users', { username: 'evil', password: 'secret123', displayName: 'x', role: 'commander' })).status).toBe(403);
+    expect((await c.s3.patch(`/api/users/${c.ids.s3}`, { role: 'commander' })).status).toBe(403);
+    expect((await c.s3.post('/api/admin/snapshots', {})).status).toBe(403);
+  });
+});
+
+describe('nobody changes what is not theirs', () => {
+  it('s3 cannot edit, delete or decide on others\' items by their numbers', async () => {
+    const p = await plantSecrets();
+    const idOf = (sql: string) => db().get<{ id: number }>(sql)!.id;
+    const shared = await newTask(c.cmd, { title: 'משימה רגילה של מפק"צ 1', ownerIds: [c.ids.s1] });
+    const talk = idOf("SELECT id FROM cadet_records WHERE body LIKE '%ZQX3%'");
+    const entry = idOf("SELECT id FROM evaluation_entries WHERE body LIKE '%ZQX7%'");
+    const point = idOf('SELECT id FROM evaluation_points LIMIT 1');
+    const absence = idOf('SELECT id FROM absences LIMIT 1');
+    const doc = idOf('SELECT id FROM documents LIMIT 1');
+    const exemption = idOf('SELECT id FROM exemptions LIMIT 1');
+    const req = idOf('SELECT id FROM requests LIMIT 1');
+    const link = idOf('SELECT id FROM attachments LIMIT 1');
+    await c.cmd.post('/api/announcements', { title: 'הודעה', body: 'תוכן', requireAck: false });
+    const ann = idOf('SELECT id FROM announcements LIMIT 1');
+    const attempts: [string, () => Promise<request.Response>][] = [
+      ['edit a private task', () => c.s3.patch(`/api/tasks/${p.task}`, { title: 'נפרץ' })],
+      ['update a private task', () => c.s3.post(`/api/tasks/${p.task}/updates`, { body: 'נפרץ' })],
+      ['delete another\'s task', () => c.s3.del(`/api/tasks/${shared}`)],
+      ['edit another\'s task', () => c.s3.patch(`/api/tasks/${shared}`, { title: 'נפרץ' })],
+      ['complete another\'s task', () => c.s3.post(`/api/tasks/${shared}/transition`, { action: 'complete' })],
+      ['delete a talk', () => c.s3.del(`/api/records/${talk}`)],
+      ['edit a remark in another\'s evaluation file', () => c.s3.patch(`/api/evaluations/notes/${entry}`, { body: 'נפרץ', version: 1 })],
+      ['delete a remark in another\'s evaluation file', () => c.s3.del(`/api/evaluations/notes/${entry}`)],
+      ['edit a critical point', () => c.s3.patch(`/api/evaluations/points/${point}`, { description: 'נפרץ', version: 1 })],
+      ['add to another\'s evaluation file', () => c.s3.post(`/api/evaluations/${p.cadet}/notes`, { occurredOn: '2026-10-01', body: 'נפרץ' })],
+      ['write the company commander\'s summary', () => c.s3.patch(`/api/evaluations/${p.cadet}`, { changes: { summary: 'נפרץ' } })],
+      ['change the exams in another\'s file', () => c.s3.patch(`/api/evaluations/${p.cadet}`, { changes: { midA: 100 } })],
+      ['add a test to the course from another\'s file', () => c.s3.post(`/api/evaluations/${p.cadet}/tests`, { test: 'fitMid' })],
+      ['take a test away from another\'s file', () => c.s3.del(`/api/evaluations/${p.cadet}/tests/fitMid`)],
+      ['delete another\'s absence', () => c.s3.del(`/api/absences/${absence}`)],
+      ['mark an absence for another', () => c.s3.post('/api/absences', { userId: c.ids.s1, startDate: '2026-10-10', endDate: '2026-10-11' })],
+      ['delete a restricted document', () => c.s3.del(`/api/documents/${doc}`)],
+      ['read a restricted document', () => c.s3.get(`/api/documents/${doc}/file`)],
+      ['decide on another\'s request', () => c.s3.post(`/api/requests/${req}/decide`, { approve: true })],
+      ['remove a link from a private task', () => c.s3.del(`/api/attachments/${link}`)],
+      ['delete an announcement', () => c.s3.del(`/api/announcements/${ann}`)],
+      ['move a cadet to another team', () => c.s3.patch(`/api/cadets/${p.cadet}`, { status: 'dismissed' })],
+    ];
+    const allowed: string[] = [];
+    for (const [what, run] of attempts) {
+      const res = await run();
+      if (res.status < 400) allowed.push(`${what}: ${res.status}`);
+    }
+    expect(allowed).toEqual([]);
+    // an exemption of another team's cadet: the cadets of every team are the staff's where the commander lets them
+    await staffMay(c, { cadets: false });
+    expect((await c.s3.del(`/api/exemptions/${exemption}`)).status).toBe(403);
+    await staffMay(c, {});
+    expect((await c.s3.del(`/api/exemptions/${exemption}`)).status).toBe(200);
+    // and nothing changed
+    expect(db().get<{ title: string }>('SELECT title FROM tasks WHERE id = ?', p.task)!.title).toContain('ZQX1');
+    expect(db().get('SELECT 1 FROM cadet_records WHERE id = ?', talk)).toBeTruthy();
+    expect(db().get<{ status: string }>('SELECT status FROM cadets WHERE id = ?', p.cadet)!.status).toBe('active');
+  });
+});
+
+describe('guards', () => {
+  it('a download that does not say its size is cut off at the limit, not read to the end', async () => {
+    let sent = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(ctl) {
+        sent += 64 * 1024;
+        ctl.enqueue(new Uint8Array(64 * 1024));
+        if (sent > 50 * 1024 * 1024) ctl.close();
+      },
+    });
+    await expect(readLimited(new Response(endless), 1024 * 1024, () => new Error('too big'))).rejects.toThrow('too big');
+    expect(sent).toBeLessThan(2 * 1024 * 1024);
+    expect((await readLimited(new Response('small'), 1024, () => new Error('too big'))).toString()).toBe('small');
+    await expect(readLimited(new Response('x', { headers: { 'content-length': '999999' } }), 1024, () => new Error('too big'))).rejects.toThrow('too big');
+  });
+
+  it('phone notifications go only to the browsers\' push services', async () => {
+    const keys = { p256dh: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U', auth: 'tBHItJI5svbpez7KI4CCXg' };
+    for (const endpoint of ['https://169.254.169.254/latest/meta-data', 'http://fcm.googleapis.com/fcm/send/x', 'https://evil.example.com/push', 'https://fcm.googleapis.com.evil.com/x']) {
+      expect((await c.s1.post('/api/push/subscribe', { endpoint, keys })).status, endpoint).toBe(400);
+    }
+    expect((await c.s1.post('/api/push/subscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys })).status).toBe(200);
+    expect(isPushEndpoint('https://web.push.apple.com/QX')).toBe(true);
+    expect(isPushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/x')).toBe(true);
+  });
+
+  it('an address the server fetches cannot lead into its own network, redirects included', async () => {
+    for (const ip of ['127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1']) {
+      expect(isPrivateAddress(ip), ip).toBe(true);
+    }
+    expect(isPrivateAddress('93.184.216.34')).toBe(false);
+    expect(isPrivateAddress('2001:4860:4860::8888')).toBe(false);
+    await expect(assertPublicUrl('https://127.0.0.1/cal.ics')).rejects.toThrow();
+    await expect(assertPublicUrl('https://[::1]/cal.ics')).rejects.toThrow();
+    await expect(assertPublicUrl('http://93.184.216.34/cal.ics')).rejects.toThrow();
+    await expect(assertPublicUrl('https://user:pw@93.184.216.34/')).rejects.toThrow();
+    await expect(assertPublicUrl('https://93.184.216.34/cal.ics')).resolves.toBeInstanceOf(URL);
+
+    const real = globalThis.fetch;
+    const asked: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      asked.push(String(url));
+      if (String(url).includes('/start')) return new Response(null, { status: 302, headers: { location: 'https://169.254.169.254/latest/meta-data' } });
+      if (String(url).includes('/hop')) return new Response(null, { status: 301, headers: { location: '/final' } });
+      return new Response('ok');
+    }) as typeof fetch;
+    try {
+      await expect(safeFetch('https://93.184.216.34/start')).rejects.toThrow('ציבורית');
+      expect(asked).toEqual(['https://93.184.216.34/start']); // the internal address was never asked
+      expect(await (await safeFetch('https://93.184.216.34/hop')).text()).toBe('ok');
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
+  it('a new password is not a weak one', async () => {
+    const make = (password: string) => c.cmd.post('/api/users', { username: `u${password.length}${Math.random().toString(36).slice(2, 6)}`, password, displayName: 'חדש', role: 'staff' });
+    expect((await make('ab12')).body.error).toContain('לפחות 8');
+    expect((await make('12345678')).body.error).toContain('אותיות');
+    expect((await make('password1')).body.error).toContain('נפוצה');
+    expect((await make('Tavor-2026')).status).toBe(200);
+    expect((await c.s1.post('/api/auth/password', { current: 'secret123', next: 'abcdefgh' })).body.error).toContain('אותיות');
+  });
+
+  it('signing in tells nothing about which names exist, and a name guessed from many addresses is locked', async () => {
+    const tryLogin = (username: string, password: string, ip: string) => request(c.app).post('/api/auth/login').set('x-kks', '1').set('X-Forwarded-For', ip).send({ username, password });
+    const unknown = await tryLogin('nobody', 'whatever1', '203.0.113.1');
+    const wrong = await tryLogin('s1', 'whatever1', '203.0.113.2');
+    expect([unknown.status, unknown.body.error]).toEqual([wrong.status, wrong.body.error]);
+    for (let i = 0; i < 10; i++) await tryLogin('s2', `guess-${i}x`, `198.51.100.${i + 1}`);
+    const locked = await tryLogin('s2', 'secret123', '198.51.100.99'); // the right password, from yet another address
+    expect(locked.status).toBe(429);
+  });
+
+  it('the sign-in cookie cannot be read by scripts or sent by other sites, and the current password is not guessed', async () => {
+    const res = await request(c.app).post('/api/auth/login').set('x-kks', '1').send({ username: 's3', password: 'secret123' });
+    const cookie = String(res.headers['set-cookie']);
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toMatch(/SameSite=Lax/i);
+    for (let i = 0; i < 5; i++) await c.s3.post('/api/auth/password', { current: `wrong-${i}x`, next: 'Tavor-2026' });
+    expect((await c.s3.post('/api/auth/password', { current: 'secret123', next: 'Tavor-2026' })).status).toBe(429);
+    // a request from another site, without the app's header, changes nothing
+    expect((await request(c.app).post('/api/auth/logout').set('Cookie', cookie.split(';')[0])).status).toBe(403);
+  });
+
+  it('someone with an old weak password is asked for a new one at sign-in', async () => {
+    db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword('123456'), c.ids.s3);
+    const agent = request.agent(c.app);
+    expect((await agent.post('/api/auth/login').set('x-kks', '1').send({ username: 's3', password: '123456' })).status).toBe(200);
+    expect((await agent.get('/api/auth/me')).body.mustChangePassword).toBe(true);
+    expect((await agent.post('/api/auth/password/first').set('x-kks', '1').send({ next: 'Tavor-2026' })).status).toBe(200);
+    expect((await agent.get('/api/auth/me')).body.mustChangePassword).toBe(false);
+    // a strong one is left alone
+    await c.s1.get('/api/auth/me');
+    expect((await c.s1.get('/api/auth/me')).body.mustChangePassword).toBe(false);
+  });
+
+  it('a "zip bomb" is refused instead of filling the memory', async () => {
+    const bomb = zipDeflated('_chat.txt', deflateRawSync(Buffer.alloc(80 * 1024 * 1024)));
+    expect(bomb.length).toBeLessThan(200_000);
+    const res = await c.s1.post('/api/alignment/import/file').set('content-type', 'application/zip').send(bomb);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('גדול מדי');
+  });
+
+  it('small things: an operation named like a built-in, someone else\'s e-mail, headers', async () => {
+    expect((await c.cmd.post('/api/bulk', { entity: 'tasks', action: 'constructor', ids: [1] })).status).toBe(400);
+    expect((await c.cmd.post('/api/bulk', { entity: '__proto__', action: 'toString', ids: [1] })).status).toBe(400);
+    await c.s1.patch('/api/me/contact', { email: 'Dana@Example.com' });
+    expect((await c.s1.get('/api/auth/me')).body.user.email).toBe('dana@example.com');
+    expect((await c.s2.patch('/api/me/contact', { email: 'dana@example.com' })).body.error).toContain('כבר משויכת');
+    const h = (await c.s1.get('/api/settings')).headers;
+    expect(h['x-frame-options']).toBe('DENY');
+    expect(h['x-content-type-options']).toBe('nosniff');
+    expect(h['permissions-policy']).toContain('camera=()');
+    expect(h['cross-origin-resource-policy']).toBe('same-origin');
+    expect(h['cache-control']).toBe('no-store');
+  });
+});
+
+/** a zip with one deflated entry */
+function zipDeflated(name: string, data: Buffer): Buffer {
+  const n = Buffer.from(name);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(8, 8);
+  local.writeUInt32LE(data.length, 18);
+  local.writeUInt32LE(80 * 1024 * 1024, 22);
+  local.writeUInt16LE(n.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(data.length, 20);
+  central.writeUInt32LE(80 * 1024 * 1024, 24);
+  central.writeUInt16LE(n.length, 28);
+  central.writeUInt32LE(0, 42);
+  const cdOffset = 30 + n.length + data.length;
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(46 + n.length, 12);
+  end.writeUInt32LE(cdOffset, 16);
+  return Buffer.concat([local, n, data, central, n, end]);
+}
+
+// the screens added since: each one read by s3 (no team, no extra abilities) must hold nothing of the above
+describe('the newer screens leak nothing either', () => {
+  it('calendar, files, weapon forms, takpatz, planning and the rest show s3 no private matter', async () => {
+    const p = await plantSecrets();
+    // a file on the private task, a weapon form and the team commander's takpatz notes
+    const file = await ok(
+      c.s1.post(`/api/tasks/${p.task}/files`).set('content-type', 'application/pdf').set('x-filename', encodeURIComponent(`${SECRET}14.pdf`)).send(Buffer.from(`%PDF-1.4 ${SECRET}14c`)),
+    );
+    const fileUrl: string = file.body.attachments.find((a: { kind: string }) => a.kind === 'file').url;
+    const form = (await ok(c.s1.post(`/api/cadets/${p.cadet}/weapon-forms`, { occurredOn: '2026-09-30', kind: 'lost', description: `${SECRET}15 נשק` }))).body.id;
+    await ok(c.s1.patch(`/api/takpatz/cadets/${p.cadet}`, { notes: `${SECRET}16 תקפ"צ`, ideas: `${SECRET}16b` }));
+    const event = (await c.cmd.post('/api/events', { title: 'אירוע', start: at('2026-09-29', '09:00'), end: at('2026-09-29', '10:00'), weekId: p.weekId })).body.id;
+    const reads = [
+      `/api/tasks/${p.task}/subtasks`,
+      fileUrl,
+      `/api/events/search?q=${SECRET}`,
+      '/api/events/busy?from=2026-09-01&to=2026-11-01',
+      '/api/events/trash',
+      ...(event ? [`/api/events/${event}`] : []),
+      '/api/me/calendar',
+      '/api/staff-groups',
+      '/api/tracks',
+      '/api/tracks/lead-history',
+      '/api/plan-calendars',
+      '/api/calendar/feed',
+      '/api/procedures',
+      '/api/sociometric',
+      `/api/cadets/${p.cadet}/sociometric`,
+      `/api/cadets/${p.cadet}/discipline-preview?offense=x`,
+      '/api/weekly/target',
+      `/api/weekly/${p.weekId}`,
+      '/api/debriefs/presenter',
+      '/api/debriefs/week-notes',
+      `/api/weeks/${p.weekId}/previous-cycle`,
+      `/api/weapon-forms/${form}`,
+      '/api/discussions',
+      '/api/staff-checks',
+      '/api/reservists',
+      '/api/activity-files',
+      '/api/plans',
+      `/api/plans/${p.weekId}`,
+      '/api/three-week',
+      `/api/three-week/${p.weekId}`,
+      '/api/takpatz',
+      `/api/takpatz/teams/${p.team}`,
+      `/api/takpatz/teams/${p.team}/export`,
+      '/api/calendar/v3/users/me/calendarList',
+      '/api/calendar/v3/calendars/primary/events?timeMin=2026-09-01T00:00:00Z&timeMax=2026-11-01T00:00:00Z',
+      '/api/calendar/v3/calendars/course/events?timeMin=2026-09-01T00:00:00Z&timeMax=2026-11-01T00:00:00Z',
+      '/api/smart/status',
+      '/api/talks/ai',
+      '/api/discipline/guide',
+      '/api/experiences/feedback-axes',
+      '/api/push/key',
+      '/api/alignment/unseen',
+      '/api/notifications/unread',
+    ];
+    const leaks: string[] = [];
+    for (const url of reads) {
+      const res = await c.s3.get(url).buffer(true);
+      const text = Buffer.isBuffer(res.body) ? res.body.toString('latin1') + res.text : `${res.text ?? ''}${JSON.stringify(res.body)}`;
+      const found = [...new Set(text.match(new RegExp(`${SECRET}\\d+[bc]?`, 'g')) ?? [])];
+      if (found.length) leaks.push(`${url} (${res.status}): ${found.join(', ')}`);
+      if (res.status >= 500) leaks.push(`${url}: server error ${res.status}`);
+    }
+    expect(leaks).toEqual([]);
+    // the ones allowed still read them: the file's writer and the team commander
+    expect((await c.s1.get(fileUrl)).status).toBe(200);
+    expect(JSON.stringify((await c.s1.get(`/api/weapon-forms/${form}`)).body)).toContain(`${SECRET}15`);
+    expect(JSON.stringify((await c.s1.get(`/api/takpatz/teams/${p.team}`)).body)).toContain(`${SECRET}16`);
+  });
+
+  it('a broken or unknown compressed body is the sender\'s mistake: refused, not a server error', async () => {
+    const send = (encoding: string, body: Buffer) =>
+      request(c.app).post('/api/auth/login').set('x-kks', '1').set('content-type', 'application/json').set('content-encoding', encoding).send(body);
+    const json = Buffer.from(JSON.stringify({ username: 'nobody', password: 'x' }));
+    expect((await send('gzip', Buffer.from('not compressed at all'))).status).toBe(400);
+    expect((await send('gzip', Buffer.concat([gzipSync(json), Buffer.from('trailing bytes')]))).status).toBe(400);
+    expect((await send('x-unknown', json)).status).toBe(415);
+  });
+
+  it('a link from a notification leads only to a screen of the app, never to another site', async () => {
+    for (const to of ['//evil.example', '/\\evil.example', '/\t/evil.example', 'https://evil.example', '/%2F%2Fevil.example', '/api/auth/logout', ' //evil.example']) {
+      const res = await c.s3.get(`/api/courses/open?to=${encodeURIComponent(to)}`).redirects(0);
+      const where = String(res.headers.location ?? '');
+      expect(res.status, to).toBe(302);
+      expect(where.startsWith('/') && !/^\/[\/\\]/.test(where) && !/^\/(%09|%0a|%0d|\s)/i.test(where), `${to} -> ${where}`).toBe(true);
+    }
+    expect((await c.s3.get(`/api/courses/open?to=${encodeURIComponent('/tasks?x=1')}`).redirects(0)).headers.location).toBe('/tasks?x=1');
+  });
+});

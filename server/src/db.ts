@@ -1,0 +1,1920 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { ADDED_DOMAINS, ADDED_TRACKS, COURSE_TRACKS } from '../../shared/constants';
+import { courseIsoWeekNumber } from '../../shared/dates';
+import { byHe } from '../../shared/sort';
+import { DEFAULT_TAKPATZ_CATALOG } from '../../shared/takpatzCatalog';
+
+export type Param = SQLInputValue | boolean | undefined;
+
+function bind(params: Param[]): SQLInputValue[] {
+  return params.map((p) => (p === undefined ? null : typeof p === 'boolean' ? (p ? 1 : 0) : p));
+}
+
+export class Db {
+  readonly raw: DatabaseSync;
+  private cache = new Map<string, StatementSync>();
+  private depth = 0;
+
+  /** wal: false keeps the whole database in its one file (the cloud deployment uploads it). */
+  constructor(path: string, opts: { wal?: boolean } = {}) {
+    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+    this.raw = new DatabaseSync(path);
+    this.raw.exec('PRAGMA foreign_keys = ON');
+    // a file saved in WAL mode stays in it unless told otherwise, and its changes would then sit in a side file
+    if (path !== ':memory:') this.raw.exec(`PRAGMA journal_mode = ${opts.wal === false ? 'DELETE' : 'WAL'}`);
+    this.raw.exec('PRAGMA busy_timeout = 5000');
+  }
+
+  private stmt(sql: string): StatementSync {
+    let s = this.cache.get(sql);
+    if (!s) {
+      s = this.raw.prepare(sql);
+      this.cache.set(sql, s);
+    }
+    return s;
+  }
+
+  all<T = Record<string, unknown>>(sql: string, ...params: Param[]): T[] {
+    return this.stmt(sql).all(...bind(params)) as T[];
+  }
+
+  get<T = Record<string, unknown>>(sql: string, ...params: Param[]): T | undefined {
+    return this.stmt(sql).get(...bind(params)) as T | undefined;
+  }
+
+  run(sql: string, ...params: Param[]): { changes: number; id: number } {
+    const r = this.stmt(sql).run(...bind(params));
+    return { changes: Number(r.changes), id: Number(r.lastInsertRowid) };
+  }
+
+  exec(sql: string): void {
+    this.raw.exec(sql);
+  }
+
+  private commitQueue: (() => void)[] = [];
+
+  /** Runs fn after the outermost transaction commits (immediately when none is open). */
+  onCommit(fn: () => void): void {
+    if (this.depth === 0) fn();
+    else this.commitQueue.push(fn);
+  }
+
+  /** Runs fn atomically. Nested calls use savepoints. */
+  tx<T>(fn: () => T): T {
+    const name = `sp${this.depth}`;
+    this.raw.exec(this.depth === 0 ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${name}`);
+    this.depth++;
+    let out: T;
+    try {
+      out = fn();
+      this.depth--;
+      this.raw.exec(this.depth === 0 ? 'COMMIT' : `RELEASE ${name}`);
+    } catch (e) {
+      this.depth--;
+      this.raw.exec(this.depth === 0 ? 'ROLLBACK' : `ROLLBACK TO ${name}; RELEASE ${name}`);
+      if (this.depth === 0) this.commitQueue = [];
+      throw e;
+    }
+    if (this.depth === 0) {
+      const queue = this.commitQueue;
+      this.commitQueue = [];
+      for (const f of queue) f();
+    }
+    return out;
+  }
+
+  close(): void {
+    this.raw.close();
+  }
+}
+
+const SCHEMA_V1 = `
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL CHECK (role IN ('commander', 'staff')),
+  phone TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+CREATE TABLE weeks (
+  id INTEGER PRIMARY KEY,
+  number INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  topic TEXT NOT NULL DEFAULT '',
+  goals TEXT NOT NULL DEFAULT '',
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  lead_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'planning' CHECK (status IN ('planning', 'open', 'closed')),
+  approved_at TEXT,
+  approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  closed_at TEXT,
+  closed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE events (
+  id INTEGER PRIMARY KEY,
+  date TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT,
+  title TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT '',
+  owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  cancelled INTEGER NOT NULL DEFAULT 0,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX events_date ON events(date);
+
+CREATE TABLE meetings (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  decisions TEXT NOT NULL DEFAULT '',
+  follow_ups TEXT NOT NULL DEFAULT '',
+  summary TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id)
+);
+
+CREATE TABLE recurring_rules (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly')),
+  weekdays TEXT NOT NULL DEFAULT '[]',
+  time TEXT NOT NULL,
+  assignee TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'normal',
+  domain TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  start_date TEXT NOT NULL,
+  last_generated_date TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE recurring_instances (
+  rule_id INTEGER NOT NULL REFERENCES recurring_rules(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  PRIMARY KEY (rule_id, date)
+);
+
+CREATE TABLE tasks (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  owner_id INTEGER NOT NULL REFERENCES users(id),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  deadline TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'critical')),
+  status TEXT NOT NULL DEFAULT 'todo'
+    CHECK (status IN ('todo', 'in_progress', 'waiting', 'pending_approval', 'done', 'cancelled')),
+  domain TEXT NOT NULL DEFAULT '',
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+  group_id TEXT,
+  meeting_id INTEGER REFERENCES meetings(id) ON DELETE SET NULL,
+  recurring_rule_id INTEGER REFERENCES recurring_rules(id) ON DELETE SET NULL,
+  requires_approval INTEGER NOT NULL DEFAULT 0,
+  visibility TEXT NOT NULL DEFAULT 'normal' CHECK (visibility IN ('normal', 'team', 'private')),
+  block_reason TEXT,
+  block_waiting_for TEXT,
+  block_next_step TEXT,
+  needs_commander INTEGER NOT NULL DEFAULT 0,
+  overdue_response TEXT,
+  overdue_response_at TEXT,
+  cancel_reason TEXT,
+  carried_count INTEGER NOT NULL DEFAULT 0,
+  reminded_24h INTEGER NOT NULL DEFAULT 0,
+  reminded_2h INTEGER NOT NULL DEFAULT 0,
+  overdue_notified INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT,
+  completed_at TEXT,
+  completed_late INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_activity_at TEXT NOT NULL
+);
+CREATE INDEX tasks_owner ON tasks(owner_id);
+CREATE INDEX tasks_deadline ON tasks(deadline);
+CREATE INDEX tasks_week ON tasks(week_id);
+CREATE INDEX tasks_status ON tasks(status);
+CREATE INDEX tasks_group ON tasks(group_id);
+CREATE INDEX tasks_parent ON tasks(parent_id);
+CREATE INDEX tasks_event ON tasks(event_id);
+
+CREATE TABLE task_participants (
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, user_id)
+);
+
+CREATE TABLE task_dependencies (
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  depends_on_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, depends_on_id),
+  CHECK (task_id <> depends_on_id)
+);
+
+CREATE TABLE task_updates (
+  id INTEGER PRIMARY KEY,
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL DEFAULT 'comment',
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX task_updates_task ON task_updates(task_id);
+
+CREATE TABLE attachments (
+  id INTEGER PRIMARY KEY,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('link', 'file')),
+  title TEXT NOT NULL,
+  url TEXT,
+  file_name TEXT,
+  mime TEXT,
+  size INTEGER,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE activity (
+  id INTEGER PRIMARY KEY,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  task_title TEXT,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  text TEXT NOT NULL,
+  data TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX activity_task ON activity(task_id);
+CREATE INDEX activity_created ON activity(created_at);
+
+CREATE TABLE notifications (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('action', 'info', 'exception')),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  link TEXT,
+  read_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX notifications_user ON notifications(user_id, read_at);
+
+CREATE TABLE requests (
+  id INTEGER PRIMARY KEY,
+  type TEXT NOT NULL CHECK (type IN ('deadline', 'transfer')),
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  requested_by INTEGER NOT NULL REFERENCES users(id),
+  new_deadline TEXT,
+  new_owner_id INTEGER REFERENCES users(id),
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  decided_by INTEGER REFERENCES users(id),
+  decision_note TEXT,
+  created_at TEXT NOT NULL,
+  decided_at TEXT
+);
+
+CREATE TABLE lessons (
+  id INTEGER PRIMARY KEY,
+  week_id INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('good', 'bad', 'change')),
+  body TEXT NOT NULL,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE templates (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'general' CHECK (kind IN ('week', 'activity', 'general')),
+  items TEXT NOT NULL DEFAULT '[]',
+  auto_apply_days_before INTEGER,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE week_templates (
+  week_id INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+  template_id INTEGER NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+  applied_at TEXT NOT NULL,
+  applied_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  PRIMARY KEY (week_id, template_id)
+);
+`;
+
+// Version 3 of the spec (section 31): cadets, experiences, debriefs, documents.
+// Plus push subscriptions and an optional e-mail for Google sign-in.
+const SCHEMA_V2 = `
+ALTER TABLE users ADD COLUMN email TEXT;
+CREATE UNIQUE INDEX users_email ON users(email COLLATE NOCASE) WHERE email IS NOT NULL;
+
+CREATE TABLE teams (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  commander_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  sort INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE cadets (
+  id INTEGER PRIMARY KEY,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL DEFAULT '',
+  personal_number TEXT NOT NULL DEFAULT '',
+  team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+  phone TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'dropped', 'graduated')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX cadets_team ON cadets(team_id);
+
+CREATE TABLE cadet_records (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('note', 'talk', 'discipline', 'evaluation')),
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
+  score INTEGER,
+  follow_up TEXT NOT NULL DEFAULT '',
+  private INTEGER NOT NULL DEFAULT 0,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  occurred_on TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX cadet_records_cadet ON cadet_records(cadet_id);
+
+CREATE TABLE experiences (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  goals TEXT NOT NULL DEFAULT '',
+  mentor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'done')),
+  strengths TEXT NOT NULL DEFAULT '',
+  improvements TEXT NOT NULL DEFAULT '',
+  feedback TEXT NOT NULL DEFAULT '',
+  score INTEGER,
+  evaluated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  evaluated_at TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX experiences_cadet ON experiences(cadet_id);
+
+CREATE TABLE debriefs (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  occurred_on TEXT NOT NULL,
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  facilitator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  participants TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'final')),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE debrief_items (
+  id INTEGER PRIMARY KEY,
+  debrief_id INTEGER NOT NULL REFERENCES debriefs(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('fact', 'finding', 'conclusion', 'lesson')),
+  body TEXT NOT NULL,
+  sort INTEGER NOT NULL DEFAULT 0,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  recurring_rule_id INTEGER REFERENCES recurring_rules(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX debrief_items_debrief ON debrief_items(debrief_id);
+
+CREATE TABLE documents (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL CHECK (kind IN ('link', 'file')),
+  url TEXT,
+  file_name TEXT,
+  mime TEXT,
+  size INTEGER,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  restricted INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE push_subscriptions (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+ALTER TABLE tasks ADD COLUMN cadet_id INTEGER REFERENCES cadets(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN experience_id INTEGER REFERENCES experiences(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN debrief_id INTEGER REFERENCES debriefs(id) ON DELETE SET NULL;
+`;
+
+// Google Calendar: a personal feed link per user, and calendars shown in the schedule
+const SCHEMA_V3 = `
+ALTER TABLE users ADD COLUMN calendar_token TEXT;
+CREATE UNIQUE INDEX users_calendar_token ON users(calendar_token);
+
+CREATE TABLE calendar_sources (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+`;
+
+// course weeks imported from a Google calendar keep the event they came from
+const SCHEMA_V4 = `
+ALTER TABLE weeks ADD COLUMN calendar_uid TEXT;
+`;
+
+// evaluation files: an assessment of each cadet, used when a cadet comes before a committee
+const SCHEMA_V5 = `
+CREATE TABLE evaluation_files (
+  cadet_id INTEGER PRIMARY KEY REFERENCES cadets(id) ON DELETE CASCADE,
+  standing TEXT NOT NULL DEFAULT 'ok' CHECK (standing IN ('ok', 'watch', 'risk')),
+  team_opinion TEXT NOT NULL DEFAULT '',
+  team_opinion_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  team_opinion_at TEXT,
+  commander_opinion TEXT NOT NULL DEFAULT '',
+  commander_opinion_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  commander_opinion_at TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE evaluation_entries (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  tone TEXT NOT NULL CHECK (tone IN ('positive', 'improve', 'exception')),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  occurred_on TEXT NOT NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  shown_on TEXT,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX evaluation_entries_cadet ON evaluation_entries(cadet_id);
+
+CREATE TABLE committees (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  meeting_date TEXT,
+  referred_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  referred_at TEXT NOT NULL,
+  snapshot TEXT NOT NULL,
+  snapshot_at TEXT NOT NULL,
+  decision TEXT CHECK (decision IN ('continue', 'conditional', 'dismissed', 'other')),
+  decision_text TEXT NOT NULL DEFAULT '',
+  decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  decided_at TEXT
+);
+CREATE INDEX committees_cadet ON committees(cadet_id);
+`;
+
+// the snapshots of the serverless deployment, whose files are kept in its file storage (snapshots.ts)
+const SCHEMA_V6 = `
+CREATE TABLE snapshots (
+  id TEXT PRIMARY KEY,
+  saved_at TEXT NOT NULL,
+  label TEXT NOT NULL,
+  bytes INTEGER NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0
+);
+`;
+
+// login lockouts shared by every instance of the serverless deployment (auth.ts)
+const SCHEMA_V7 = `
+CREATE TABLE login_lockouts (key TEXT PRIMARY KEY, until INTEGER NOT NULL);
+`;
+
+// discipline notes (הערות משמעת) and the enforcement ladder the commander imports
+const SCHEMA_V8 = `
+ALTER TABLE cadet_records ADD COLUMN offense TEXT NOT NULL DEFAULT '';
+ALTER TABLE cadet_records ADD COLUMN formal INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE cadets ADD COLUMN dismissed_by_record INTEGER;
+CREATE TABLE discipline_guide (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  offenses TEXT NOT NULL,
+  letters TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  imported_at TEXT NOT NULL,
+  imported_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+`;
+
+// the third discipline note sends the cadet to an evaluation committee instead of
+// dismissing; a cadet the first release dismissed that way goes to the committee now
+const SCHEMA_V9 = `
+ALTER TABLE committees ADD COLUMN from_record INTEGER;
+INSERT INTO committees(cadet_id, kind, reason, referred_by, referred_at, snapshot, snapshot_at, from_record)
+  SELECT c.id, 'ועדת הערכה', 'קיבל 3 הערות משמעת', r.author_id, r.created_at, '', r.created_at, c.dismissed_by_record
+  FROM cadets c JOIN cadet_records r ON r.id = c.dismissed_by_record
+  WHERE c.status = 'dropped' AND NOT EXISTS (SELECT 1 FROM committees x WHERE x.cadet_id = c.id AND x.decision IS NULL);
+UPDATE cadets SET status = 'active' WHERE dismissed_by_record IS NOT NULL AND status = 'dropped';
+UPDATE cadets SET dismissed_by_record = NULL WHERE dismissed_by_record IS NOT NULL;
+`;
+
+// a debrief about an activity in the synced Google calendar keeps its name (it has no event here)
+const SCHEMA_V10 = `
+ALTER TABLE debriefs ADD COLUMN activity TEXT NOT NULL DEFAULT '';
+`;
+
+// exemptions: a cadet excused from a rule (the staff must know not to remark on it)
+const SCHEMA_V11 = `
+CREATE TABLE exemptions (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  until TEXT,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX exemptions_cadet ON exemptions(cadet_id);
+`;
+
+// a password someone else set (a new account, a reset): the person picks their own on first sign-in
+const SCHEMA_V12 = `
+ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
+`;
+
+// debrief forms: a weekly debrief and an intensive-event debrief, filled in as a form; lessons
+// carry an owner and a date (a task when the debrief is summed up) or wait for the next cycle
+const SCHEMA_V13 = `
+ALTER TABLE debriefs ADD COLUMN kind TEXT NOT NULL DEFAULT 'general';
+ALTER TABLE debriefs ADD COLUMN answers TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE debrief_items ADD COLUMN horizon TEXT;
+ALTER TABLE debrief_items ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE debrief_items ADD COLUMN due_date TEXT;
+ALTER TABLE debrief_items ADD COLUMN target TEXT NOT NULL DEFAULT '';
+ALTER TABLE debrief_items ADD COLUMN target_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE debrief_items ADD COLUMN target_week INTEGER;
+CREATE INDEX debrief_items_horizon ON debrief_items(horizon);
+`;
+
+// closing the loop on lessons: what was decided about each lesson an earlier cycle kept for
+// a week or an event (a task, applied, not relevant), and the reminders automation sends once
+const SCHEMA_V14 = `
+CREATE TABLE lesson_reviews (
+  id INTEGER PRIMARY KEY,
+  item_id INTEGER NOT NULL REFERENCES debrief_items(id) ON DELETE CASCADE,
+  context TEXT NOT NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE CASCADE,
+  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  decision TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  decided_at TEXT NOT NULL,
+  UNIQUE (item_id, context)
+);
+CREATE TABLE automation_marks (
+  key TEXT PRIMARY KEY,
+  at TEXT NOT NULL
+);
+`;
+
+// who on the staff is away when (leave, sick day, a course, reserve duty)
+const SCHEMA_V15 = `
+CREATE TABLE absences (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT 'leave',
+  note TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX absences_dates ON absences(end_date, start_date);
+`;
+
+// the daily roll call (מצבה): where each cadet is on each day
+const SCHEMA_V16 = `
+CREATE TABLE attendance (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  status TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  marked_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  marked_at TEXT NOT NULL,
+  UNIQUE (cadet_id, date)
+);
+CREATE INDEX attendance_date ON attendance(date);
+`;
+
+// announcements to the staff, and who read and confirmed each one
+const SCHEMA_V17 = `
+CREATE TABLE announcements (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  require_ack INTEGER NOT NULL DEFAULT 1,
+  urgent INTEGER NOT NULL DEFAULT 0,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE announcement_reads (
+  announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  read_at TEXT NOT NULL,
+  acked_at TEXT,
+  PRIMARY KEY (announcement_id, user_id)
+);
+`;
+
+// a notification put off until later comes back unread then
+const SCHEMA_V18 = `
+ALTER TABLE notifications ADD COLUMN snoozed_until TEXT;
+CREATE INDEX notifications_snoozed ON notifications(snoozed_until);
+`;
+
+/** areas added to a course that keeps its own list of areas, before "אחר" (on the defaults, it has them already) */
+function addDomains(db: Db, areas: readonly string[]): void {
+  const row = db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'domains'");
+  if (!row) return; // the defaults already have them
+  let list: unknown;
+  try {
+    list = JSON.parse(row.value);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(list)) return;
+  const add = areas.filter((d) => !list.includes(d));
+  if (!add.length) return;
+  const other = list.indexOf('אחר');
+  const next = other >= 0 ? [...list.slice(0, other), ...add, ...list.slice(other)] : [...list, ...add];
+  db.run("UPDATE settings SET value = ? WHERE key = 'domains'", JSON.stringify(next.slice(0, 40)));
+}
+
+// more areas of responsibility (education, academics, PT, field, navigation, religion, vehicles):
+// a course that keeps its own list of areas gets them too, before "אחר"
+function V19_DOMAINS(db: Db): void {
+  addDomains(db, ADDED_DOMAINS);
+}
+
+// a week imported without a number in its name ("שבוע סף") was numbered after all the others (1),
+// next to weeks that carry the calendar's numbers (39): it takes its neighbours' numbering (38).
+// Only a week that looks counted (no higher than the number of weeks), and only when such weeks
+// are no more than the ones in the other numbering - one stray high number renumbers nothing.
+function V20_WEEK_NUMBERS(db: Db): void {
+  const weeks = db.all<{ id: number; number: number; name: string; start_date: string }>('SELECT id, number, name, start_date FROM weeks ORDER BY start_date');
+  const high = weeks.filter((w) => w.number > weeks.length);
+  const counted = weeks.filter((w) => w.number <= weeks.length && !/שבוע\s*\d/.test(w.name));
+  if (!high.length || !counted.length || counted.length > high.length) return;
+  const days = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
+  for (const w of counted) {
+    const near = high.reduce((a, b) => (Math.abs(days(b.start_date, w.start_date)) < Math.abs(days(a.start_date, w.start_date)) ? b : a));
+    const n = near.number + Math.round(days(w.start_date, near.start_date) / 7);
+    if (n >= 1 && n <= 100 && n !== w.number) db.run('UPDATE weeks SET number = ? WHERE id = ?', n, w.id);
+  }
+}
+
+// the area "אחר" says what it is
+const SCHEMA_V21 = `
+ALTER TABLE tasks ADD COLUMN domain_note TEXT NOT NULL DEFAULT '';
+`;
+
+// previous courses: a course that ended is kept whole as a snapshot (label 'archive', never pruned)
+const SCHEMA_V22 = `
+CREATE TABLE course_archives (
+  id INTEGER PRIMARY KEY,
+  snapshot_id TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  start_date TEXT,
+  end_date TEXT,
+  stats TEXT NOT NULL DEFAULT '{}',
+  archived_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  archived_at TEXT NOT NULL
+);
+`;
+
+// "יישור קו": the messages of the staff's WhatsApp group, from WhatsApp's chat export (alignment.ts)
+const SCHEMA_V23 = `
+CREATE TABLE alignment_messages (
+  id INTEGER PRIMARY KEY,
+  sent_at TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  body TEXT NOT NULL DEFAULT '',
+  media INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  fingerprint TEXT NOT NULL UNIQUE,
+  imported_at TEXT NOT NULL
+);
+CREATE INDEX alignment_messages_sent ON alignment_messages(sent_at);
+CREATE TABLE alignment_imports (
+  id INTEGER PRIMARY KEY,
+  at TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  added INTEGER NOT NULL,
+  found INTEGER NOT NULL
+);
+`;
+
+// the last "יישור קו" message each person has seen: the menu counts what came in since
+const SCHEMA_V24 = `
+ALTER TABLE users ADD COLUMN alignment_seen_id INTEGER NOT NULL DEFAULT 0;
+`;
+
+// two-step sign-in (twofactor.ts): the app's secret, the backup codes, and the tickets between password and code
+const SCHEMA_V25 = `
+ALTER TABLE users ADD COLUMN totp_secret TEXT;
+ALTER TABLE users ADD COLUMN totp_pending TEXT;
+ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE recovery_codes (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  used_at TEXT
+);
+CREATE INDEX recovery_codes_user ON recovery_codes(user_id);
+CREATE TABLE login_challenges (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0
+);
+`;
+
+// plan approval (plans.ts): the commander's wording of a week's plan document, and its approval
+const SCHEMA_V26 = `
+CREATE TABLE plan_docs (
+  week_id INTEGER PRIMARY KEY REFERENCES weeks(id) ON DELETE CASCADE,
+  bluf TEXT,
+  goals TEXT,
+  achievements TEXT,
+  emphases TEXT,
+  requests TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'ready', 'approved')),
+  approved_by TEXT NOT NULL DEFAULT '',
+  approved_on TEXT,
+  approval_notes TEXT NOT NULL DEFAULT '',
+  approved_events TEXT,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+`;
+
+// a personal talk filled in as a form (shared/talks.ts): the answers by field
+const SCHEMA_V27 = `
+ALTER TABLE cadet_records ADD COLUMN form TEXT;
+`;
+
+// the evaluation file as a living file in nine parts (evaluations.ts): the course and the cadet,
+// the military path, exams and fitness, group dynamics, the reason for a committee, the team
+// commander's dated remarks, the critical points and the company commander's summary - with the
+// history of every change. What was written before stays: the remarks keep their dates and
+// writers, the team commander's opinion opens their remarks, the commander's opinion is the summary.
+function V28_EVALUATION_FILE(db: Db): void {
+  db.exec(`
+ALTER TABLE evaluation_files ADD COLUMN company_commander TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN team_commander TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN unit TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN city TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN enlisted_on TEXT;
+ALTER TABLE evaluation_files ADD COLUMN release_on TEXT;
+ALTER TABLE evaluation_files ADD COLUMN military_path TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN mid_a REAL;
+ALTER TABLE evaluation_files ADD COLUMN mid_b REAL;
+ALTER TABLE evaluation_files ADD COLUMN final_a REAL;
+ALTER TABLE evaluation_files ADD COLUMN final_b REAL;
+ALTER TABLE evaluation_files ADD COLUMN run_result TEXT;
+ALTER TABLE evaluation_files ADD COLUMN run_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN pushups INTEGER;
+ALTER TABLE evaluation_files ADD COLUMN pushups_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN committee_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE evaluation_files ADD COLUMN updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE TABLE evaluation_entries_v28 (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  category TEXT NOT NULL DEFAULT '',
+  tone TEXT,
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  occurred_on TEXT NOT NULL,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  shown_on TEXT,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO evaluation_entries_v28(id, cadet_id, category, tone, title, body, occurred_on, week_id, shown_on, author_id, created_at, updated_at)
+  SELECT id, cadet_id, category, tone, title, body, occurred_on, week_id, shown_on, author_id, created_at, updated_at FROM evaluation_entries;
+DROP TABLE evaluation_entries;
+ALTER TABLE evaluation_entries_v28 RENAME TO evaluation_entries;
+CREATE INDEX evaluation_entries_cadet ON evaluation_entries(cadet_id);
+
+CREATE TABLE evaluation_dynamics (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  occurred_on TEXT NOT NULL,
+  score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+  rank INTEGER NOT NULL CHECK (rank BETWEEN 1 AND 12),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX evaluation_dynamics_cadet ON evaluation_dynamics(cadet_id);
+
+CREATE TABLE evaluation_points (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  period TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL,
+  significance TEXT NOT NULL DEFAULT '',
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX evaluation_points_cadet ON evaluation_points(cadet_id);
+
+CREATE TABLE evaluation_history (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  section TEXT NOT NULL,
+  item_id INTEGER,
+  action TEXT NOT NULL CHECK (action IN ('set', 'add', 'edit', 'delete')),
+  field TEXT NOT NULL DEFAULT '',
+  old_value TEXT,
+  new_value TEXT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  at TEXT NOT NULL
+);
+CREATE INDEX evaluation_history_cadet ON evaluation_history(cadet_id, at);
+`);
+  // the team commander's opinion becomes the first of their dated remarks (the original column stays as it was)
+  db.run(`
+INSERT INTO evaluation_entries(cadet_id, body, occurred_on, author_id, created_at, updated_at)
+SELECT f.cadet_id, 'חוות דעת מפקד הצוות (מהתיק הקודם):' || char(10) || f.team_opinion,
+  substr(coalesce(f.team_opinion_at, f.updated_at), 1, 10),
+  coalesce(f.team_opinion_by, (SELECT t.commander_id FROM cadets c JOIN teams t ON t.id = c.team_id WHERE c.id = f.cadet_id), (SELECT id FROM users WHERE role = 'commander' ORDER BY id LIMIT 1)),
+  coalesce(f.team_opinion_at, f.updated_at), coalesce(f.team_opinion_at, f.updated_at)
+FROM evaluation_files f
+WHERE trim(f.team_opinion) <> ''
+  AND coalesce(f.team_opinion_by, (SELECT t.commander_id FROM cadets c JOIN teams t ON t.id = c.team_id WHERE c.id = f.cadet_id), (SELECT id FROM users WHERE role = 'commander' ORDER BY id LIMIT 1)) IS NOT NULL`);
+}
+
+// the exams in the evaluation file as the course reaches them: the fitness threshold (the fitness
+// fields so far) and the readings exam always, the mid and final fitness tests and exams once added
+// for the whole course. A new course starts without them (the table is not carried over).
+const SCHEMA_V29 = `
+ALTER TABLE evaluation_files ADD COLUMN readings_a REAL;
+ALTER TABLE evaluation_files ADD COLUMN readings_b REAL;
+ALTER TABLE evaluation_files ADD COLUMN mid_run_result TEXT;
+ALTER TABLE evaluation_files ADD COLUMN mid_run_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN mid_pushups INTEGER;
+ALTER TABLE evaluation_files ADD COLUMN mid_pushups_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN end_run_result TEXT;
+ALTER TABLE evaluation_files ADD COLUMN end_run_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN end_pushups INTEGER;
+ALTER TABLE evaluation_files ADD COLUMN end_pushups_score REAL;
+
+CREATE TABLE evaluation_tests (
+  test TEXT PRIMARY KEY,
+  added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  added_at TEXT NOT NULL
+);
+INSERT INTO evaluation_tests(test, added_at)
+  SELECT 'midExam', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE EXISTS (SELECT 1 FROM evaluation_files WHERE mid_a IS NOT NULL OR mid_b IS NOT NULL);
+INSERT INTO evaluation_tests(test, added_at)
+  SELECT 'finalExam', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE EXISTS (SELECT 1 FROM evaluation_files WHERE final_a IS NOT NULL OR final_b IS NOT NULL);
+`;
+
+// a broad experience (התנסות רוחב, shared/experiences.ts): a staff role held alongside the course for
+// half of it or all of it - its kind of experience in role, which part of the course in span
+const SCHEMA_V30 = `
+ALTER TABLE experiences ADD COLUMN kind TEXT NOT NULL DEFAULT 'role' CHECK (kind IN ('role', 'broad'));
+ALTER TABLE experiences ADD COLUMN span TEXT CHECK (span IN ('first_half', 'second_half', 'full'));
+`;
+
+// grades from the course's grade sheet (grades.ts): a fitness test's overall score, and the course's
+// other grades (named as in the sheet) with each cadet's value. A new course starts without them.
+const SCHEMA_V31 = `
+ALTER TABLE evaluation_files ADD COLUMN fit_base_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN mid_fit_score REAL;
+ALTER TABLE evaluation_files ADD COLUMN end_fit_score REAL;
+
+CREATE TABLE grade_items (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE grade_values (
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  item_id INTEGER NOT NULL REFERENCES grade_items(id) ON DELETE CASCADE,
+  value REAL NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (cadet_id, item_id)
+);
+`;
+
+/** the course's tracks (צירים): a lead and goals each, and a track on every task - a task already in an area of the same name goes in its track */
+function V32_TRACKS(db: Db): void {
+  db.exec(`
+CREATE TABLE tracks (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  lead_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  goals TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+ALTER TABLE tasks ADD COLUMN track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL;
+CREATE INDEX idx_tasks_track ON tasks(track_id);
+`);
+  const now = new Date().toISOString();
+  for (const name of COURSE_TRACKS) db.run('INSERT INTO tracks(name, created_at) VALUES (?, ?)', name, now);
+  db.run('UPDATE tasks SET track_id = (SELECT id FROM tracks WHERE tracks.name = tasks.domain) WHERE track_id IS NULL');
+}
+
+/** the sociometric: rounds (סוציומטרי אמצע...), and each cadet's place, average and criteria in a round */
+const SCHEMA_V33 = `
+CREATE TABLE socio_rounds (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  held_on TEXT,
+  criteria TEXT NOT NULL DEFAULT '[]',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE socio_entries (
+  round_id INTEGER NOT NULL REFERENCES socio_rounds(id) ON DELETE CASCADE,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  team_rank INTEGER,
+  team_size INTEGER,
+  average REAL,
+  percentile REAL,
+  scores TEXT NOT NULL DEFAULT '{}',
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (round_id, cadet_id)
+);
+`;
+
+/** the weekly (שבועי) of each course week: when it was held, and what is brought to it - notes on the
+ * schedule, professional closures, topics to discuss and the commander's points */
+const SCHEMA_V34 = `
+CREATE TABLE weeklies (
+  week_id INTEGER PRIMARY KEY REFERENCES weeks(id) ON DELETE CASCADE,
+  held_at TEXT,
+  held_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE weekly_items (
+  id INTEGER PRIMARY KEY,
+  week_id INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('schedule', 'closure', 'topic', 'point')),
+  title TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  event_ref TEXT,
+  event_date TEXT,
+  owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  outcome TEXT NOT NULL DEFAULT '',
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  carried_from INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_weekly_items_week ON weekly_items(week_id, kind);
+`;
+
+/** the weekly debrief task each week's lead gets on the week's Tuesday: opened once per week
+ * (a task deleted is not opened again), and closed when the week's debrief is summed up */
+const SCHEMA_V35 = `
+CREATE TABLE week_debrief_tasks (
+  week_id INTEGER PRIMARY KEY REFERENCES weeks(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_week_debrief_tasks_task ON week_debrief_tasks(task_id);
+`;
+
+/** a notification leaves the bell once what it is about is finished (journal.ts FINISHED): what that is
+ * when it is not (only) its task - "request:12", "announcement:3", "weekly-item:7", "committee:2",
+ * "attendance:2026-10-09:3" - and when it was marked finished (said again by a newer one, lessons decided):
+ * the ones already said again are marked here. The indexes serve that marking and a task's notifications. */
+const SCHEMA_V36 = `
+ALTER TABLE notifications ADD COLUMN ref TEXT;
+ALTER TABLE notifications ADD COLUMN finished_at TEXT;
+CREATE INDEX notifications_user_type ON notifications(user_id, type, id);
+CREATE INDEX notifications_task ON notifications(task_id);
+UPDATE notifications SET finished_at = created_at WHERE finished_at IS NULL AND task_id IS NOT NULL
+  AND type IN ('task_assigned', 'deadline_changed', 'owner_changed', 'dependency_done', 'blocked', 'unblocked', 'approval_requested', 'returned',
+    'reopened', 'escalated', 'request_decided', 'carried', 'overdue', 'critical_overdue', 'reminder_24h', 'reminder_2h')
+  AND EXISTS (SELECT 1 FROM notifications n2 WHERE n2.user_id = notifications.user_id AND n2.task_id = notifications.task_id AND n2.type = notifications.type AND n2.id > notifications.id);
+UPDATE notifications SET finished_at = created_at WHERE finished_at IS NULL AND task_id IS NOT NULL AND type IN ('reminder_24h', 'reminder_2h')
+  AND EXISTS (SELECT 1 FROM notifications n2 WHERE n2.user_id = notifications.user_id AND n2.task_id = notifications.task_id
+    AND n2.type IN ('reminder_24h', 'reminder_2h', 'overdue') AND n2.id > notifications.id);
+UPDATE notifications SET finished_at = created_at WHERE finished_at IS NULL AND type IN ('attendance', 'brief')
+  AND EXISTS (SELECT 1 FROM notifications n2 WHERE n2.user_id = notifications.user_id AND n2.type = notifications.type AND n2.id > notifications.id);
+`;
+
+/** a migration is SQL, or a step that changes data the way SQL alone can't */
+/** what anyone adds to a week's debrief on the way (the bottom bar's "+") while the week has no weekly debrief
+ * yet: it waits here, and goes into the debrief once its lead opens it (debriefs.ts addWeekNote) */
+const SCHEMA_V37 = `
+CREATE TABLE debrief_contributions (
+  id INTEGER PRIMARY KEY,
+  week_id INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+  part TEXT NOT NULL,
+  body TEXT NOT NULL,
+  owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  due_date TEXT,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_debrief_contributions_week ON debrief_contributions(week_id);
+`;
+
+// the area of manpower (כוח אדם) - only it: an area the commander took out of the course's list before stays out
+function V38_MANPOWER(db: Db): void {
+  addDomains(db, ['כוח אדם']);
+}
+
+// the three-week plan (plans.ts): its bottom line in the commander's words and its approval, by its first week
+const SCHEMA_V39 = `
+CREATE TABLE plan_windows (
+  week_id INTEGER PRIMARY KEY REFERENCES weeks(id) ON DELETE CASCADE,
+  bluf TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'ready', 'approved')),
+  approved_by TEXT NOT NULL DEFAULT '',
+  approved_on TEXT,
+  approval_notes TEXT NOT NULL DEFAULT '',
+  approved_events TEXT,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+`;
+
+// the mentor's feedback task opens a week before an experience ends (cadets.ts): once for each experience.
+// Experiences already there got their task when they were made.
+const SCHEMA_V40 = `
+CREATE TABLE experience_feedback_tasks (
+  experience_id INTEGER PRIMARY KEY REFERENCES experiences(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+INSERT INTO experience_feedback_tasks(experience_id, task_id, created_at)
+  SELECT x.id, (SELECT min(t.id) FROM tasks t WHERE t.experience_id = x.id), strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM experiences x;
+`;
+
+// the feedback after an experience in the course's format (shared/experienceFeedback.ts): the general
+// reference and the points to keep and to improve, as JSON; its score is then out of 100. Feedback
+// given before has none - its score stays out of 5.
+const SCHEMA_V41 = `
+ALTER TABLE experiences ADD COLUMN feedback_form TEXT;
+`;
+
+// points for the next staff meeting (ישב"ס, meetings.ts): anyone on the staff adds one; the commander
+// ticks it in the meeting, which keeps it in its summary
+const SCHEMA_V42 = `
+CREATE TABLE meeting_points (
+  id INTEGER PRIMARY KEY,
+  body TEXT NOT NULL,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  raised_at TEXT,
+  raised_in INTEGER REFERENCES meetings(id) ON DELETE SET NULL
+);
+CREATE INDEX meeting_points_open ON meeting_points(raised_at);
+`;
+
+// the weekly debrief is approved by the commander: its lead sends it, and when, waits on the debrief
+const SCHEMA_V43 = `
+ALTER TABLE debriefs ADD COLUMN submitted_at TEXT;
+ALTER TABLE debriefs ADD COLUMN submitted_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+`;
+
+// two more tracks to give tasks in - training and evaluation. Both are areas already, so the tasks in
+// those areas without a track go in them.
+function V44_TRAINING_TRACKS(db: Db): void {
+  const now = new Date().toISOString();
+  for (const name of ADDED_TRACKS) db.run('INSERT OR IGNORE INTO tracks(name, created_at) VALUES (?, ?)', name, now);
+  const marks = ADDED_TRACKS.map(() => '?').join(', ');
+  db.run(`UPDATE tasks SET track_id = (SELECT id FROM tracks WHERE tracks.name = tasks.domain) WHERE track_id IS NULL AND domain IN (${marks})`, ...ADDED_TRACKS);
+}
+
+// visitors' entry to the base (entries.ts): asked for by the staff, sent on by the commander. Personal
+// details - kept only until a week after the visit (automation.ts, housekeeping). An id is never given
+// again, so a deleted request's notifications do not come back with a new one.
+const SCHEMA_V45 = `
+CREATE TABLE entry_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  visit_date TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  phone TEXT NOT NULL DEFAULT '',
+  visitor_kind TEXT NOT NULL DEFAULT 'civilian' CHECK (visitor_kind IN ('civilian', 'soldier')),
+  rank TEXT NOT NULL DEFAULT '',
+  clearance TEXT NOT NULL DEFAULT '',
+  id_number TEXT NOT NULL DEFAULT '',
+  escort INTEGER NOT NULL DEFAULT 0,
+  by_car INTEGER NOT NULL DEFAULT 0,
+  car_number TEXT NOT NULL DEFAULT '',
+  car_kind TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent')),
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  sent_at TEXT,
+  sent_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX entry_requests_date ON entry_requests(visit_date);
+`;
+
+// following the experiences (ExperiencesPage, the tracking table): a mark on each - by the cadet's team
+// commander, its mentor, the commander, or whoever the commander chose to follow the experiences
+const SCHEMA_V46 = `
+ALTER TABLE experiences ADD COLUMN marked_at TEXT;
+ALTER TABLE experiences ADD COLUMN marked_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+`;
+
+// a remark in the evaluation file may name traits from the course's catalog (shared/evaluationTraits.ts):
+// the groups chosen - axis, sub-axis, traits and words on them - as JSON beside its text
+const SCHEMA_V48 = `
+ALTER TABLE evaluation_entries ADD COLUMN traits TEXT NOT NULL DEFAULT '[]';
+`;
+
+// the calendar (the home page): an event all day, or over several days (all day too); a colour of its
+// own; and a repeating series - each of its events a whole event of its own, kept together by the series.
+// Added columns only: every event there is keeps its meaning (one day, its hours, the course's blue).
+const SCHEMA_V49 = `
+CREATE TABLE event_series (
+  id INTEGER PRIMARY KEY,
+  freq TEXT NOT NULL CHECK (freq IN ('daily', 'weekdays', 'weekly', 'monthly')),
+  interval INTEGER NOT NULL DEFAULT 1 CHECK (interval BETWEEN 1 AND 12),
+  until TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+ALTER TABLE events ADD COLUMN end_date TEXT;
+ALTER TABLE events ADD COLUMN all_day INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE events ADD COLUMN color TEXT;
+ALTER TABLE events ADD COLUMN series_id INTEGER REFERENCES event_series(id) ON DELETE SET NULL;
+CREATE INDEX events_series ON events(series_id);
+`;
+
+// a connected Google calendar's colour (calendar.ts): one of Google's, chosen by the commander - the
+// iCal address does not carry the colour it has in Google
+const SCHEMA_V50 = `
+ALTER TABLE calendar_sources ADD COLUMN color TEXT;
+`;
+
+// The calendar's events as Google Calendar keeps them (schedule.ts):
+// - a repeating event is a recurrence rule (RRULE: every N days/weeks/months/years, days of the week,
+//   "the last Thursday", until a day / N times / no end) with the days it skips; each of its days is a
+//   row of its own up to a rolling horizon, so preparation tasks, files and debriefs still belong to one
+//   day of it. A day changed alone is "detached": a change to the whole series passes it by.
+// - guests from the staff with their answers (yes / no / maybe), and what guests may do;
+// - reminders before it, and those already sent (each once);
+// - the calendar it is in (the course's, or one's own), busy or free, its visibility;
+// - the trash: a deleted event stays there 30 days and can be brought back.
+// The series of before (event_series) carry over as rules; every event keeps its meaning.
+function V51_GOOGLE_EVENTS(db: Db): void {
+  db.exec(`
+CREATE TABLE event_recurrences (
+  id INTEGER PRIMARY KEY,
+  rrule TEXT NOT NULL,
+  dtstart TEXT NOT NULL,
+  exdates TEXT NOT NULL DEFAULT '[]',
+  horizon TEXT NOT NULL,
+  template TEXT NOT NULL DEFAULT '{}',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT,
+  prev_rrule TEXT
+);
+ALTER TABLE events ADD COLUMN recurrence_id INTEGER REFERENCES event_recurrences(id) ON DELETE SET NULL;
+ALTER TABLE events ADD COLUMN original_date TEXT;
+ALTER TABLE events ADD COLUMN detached INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE events ADD COLUMN calendar TEXT NOT NULL DEFAULT 'course';
+ALTER TABLE events ADD COLUMN transparency TEXT NOT NULL DEFAULT 'opaque';
+ALTER TABLE events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'default';
+ALTER TABLE events ADD COLUMN reminders TEXT;
+ALTER TABLE events ADD COLUMN guests_can_modify INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE events ADD COLUMN guests_can_invite INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE events ADD COLUMN guests_can_see INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE events ADD COLUMN deleted_at TEXT;
+ALTER TABLE events ADD COLUMN deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX events_occurrence ON events(recurrence_id, original_date);
+CREATE INDEX events_deleted ON events(deleted_at);
+CREATE TABLE event_guests (
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  response TEXT NOT NULL DEFAULT 'needsAction' CHECK (response IN ('needsAction', 'accepted', 'declined', 'tentative')),
+  optional INTEGER NOT NULL DEFAULT 0,
+  responded_at TEXT,
+  PRIMARY KEY (event_id, user_id)
+);
+CREATE INDEX event_guests_user ON event_guests(user_id);
+CREATE TABLE event_reminders_sent (
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  minutes INTEGER NOT NULL,
+  starts_at TEXT NOT NULL,
+  sent_at TEXT NOT NULL,
+  PRIMARY KEY (event_id, user_id, minutes, starts_at)
+);
+`);
+  // the series of before, as rules: their days are all there already (each series had an end)
+  const series = db.all<{ id: number; freq: string; interval: number; until: string; created_by: number | null; created_at: string }>('SELECT * FROM event_series');
+  const WORKDAYS = 'SU,MO,TU,WE,TH';
+  const DAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+  for (const s of series) {
+    const rows = db.all<{ id: number; date: string; start_time: string; end_time: string | null; title: string; location: string; owner_id: number | null; notes: string; color: string | null; all_day: number; end_date: string | null }>(
+      'SELECT id, date, start_time, end_time, title, location, owner_id, notes, color, all_day, end_date FROM events WHERE series_id = ? ORDER BY date, id',
+      s.id,
+    );
+    if (!rows.length) continue;
+    const first = rows[0];
+    const weekday = DAY_CODES[new Date(`${first.date}T00:00:00Z`).getUTCDay()];
+    const parts = [`FREQ=${s.freq === 'daily' ? 'DAILY' : s.freq === 'monthly' ? 'MONTHLY' : 'WEEKLY'}`];
+    if (s.interval > 1 && s.freq !== 'weekdays') parts.push(`INTERVAL=${s.interval}`);
+    if (s.freq === 'weekdays') parts.push(`BYDAY=${WORKDAYS}`);
+    else if (s.freq === 'weekly') parts.push(`BYDAY=${weekday}`);
+    parts.push(`UNTIL=${s.until.replace(/-/g, '')}`);
+    const span = first.end_date ? Math.round((Date.parse(`${first.end_date}T00:00:00Z`) - Date.parse(`${first.date}T00:00:00Z`)) / 86_400_000) : 0;
+    const template = {
+      title: first.title,
+      location: first.location,
+      ownerId: first.owner_id,
+      notes: first.notes,
+      color: first.color,
+      allDay: !!first.all_day,
+      startTime: first.start_time,
+      endTime: first.end_time,
+      spanDays: span,
+      calendar: 'course',
+      transparency: 'opaque',
+      visibility: 'default',
+      reminders: null,
+      guests: [],
+      responses: {},
+      guestsCanModify: false,
+      guestsCanInvite: true,
+      guestsCanSee: true,
+    };
+    const last = rows[rows.length - 1].date;
+    const rec = db.run(
+      'INSERT INTO event_recurrences(rrule, dtstart, exdates, horizon, template, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      parts.join(';'),
+      first.date,
+      '[]',
+      s.until > last ? s.until : last,
+      JSON.stringify(template),
+      s.created_by,
+      s.created_at,
+      s.created_at,
+    ).id;
+    // two of a series moved to the same day before: the later one stays an event of its own
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (seen.has(r.date)) continue;
+      seen.add(r.date);
+      db.run('UPDATE events SET recurrence_id = ?, original_date = ? WHERE id = ?', rec, r.date, r.id);
+    }
+  }
+}
+
+// the team commander's takpatz (takpatz.ts): each cadet's goals, notes, third and rank; the experiences
+// planned week by week in the main plan and a second one; the tracking of each from its handing down to
+// its feedback; the course's catalog of experiences (the spreadsheet's planning by halves) and a short
+// history of the changes, by team. A link to Google Drive waits here for the few minutes of its sign-in.
+function V47_TAKPATZ(db: Db): void {
+  const cats = "'broad_company', 'broad_team', 'command_team', 'instruct_team', 'instruct_company'";
+  db.exec(`
+CREATE TABLE takpatz_profiles (
+  cadet_id INTEGER PRIMARY KEY REFERENCES cadets(id) ON DELETE CASCADE,
+  goal1 TEXT NOT NULL DEFAULT '',
+  goal2 TEXT NOT NULL DEFAULT '',
+  goal3 TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  ideas TEXT NOT NULL DEFAULT '',
+  third TEXT CHECK (third IN ('upper', 'middle', 'lower')),
+  rank INTEGER CHECK (rank > 0),
+  third_updated_at TEXT,
+  third_updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE TABLE takpatz_catalog (
+  id INTEGER PRIMARY KEY,
+  half INTEGER NOT NULL CHECK (half IN (1, 2)),
+  kind TEXT NOT NULL CHECK (kind IN (${cats}, 'role')),
+  name TEXT NOT NULL,
+  sort INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE takpatz_placements (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  board TEXT NOT NULL CHECK (board IN ('main', 'alt')),
+  category TEXT NOT NULL CHECK (category IN (${cats})),
+  catalog_id INTEGER REFERENCES takpatz_catalog(id) ON DELETE SET NULL,
+  label TEXT NOT NULL,
+  week_from INTEGER,
+  week_to INTEGER,
+  span INTEGER NOT NULL DEFAULT 1 CHECK (span > 0),
+  notes TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL,
+  CHECK ((week_from IS NULL AND week_to IS NULL) OR (week_from IS NOT NULL AND week_to IS NOT NULL AND week_to >= week_from))
+);
+CREATE INDEX takpatz_placements_cadet ON takpatz_placements(cadet_id, board);
+CREATE TABLE takpatz_tracking (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  placement_id INTEGER UNIQUE REFERENCES takpatz_placements(id) ON DELETE SET NULL,
+  label TEXT NOT NULL,
+  week INTEGER,
+  stages TEXT NOT NULL DEFAULT '{}',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX takpatz_tracking_cadet ON takpatz_tracking(cadet_id);
+CREATE TABLE takpatz_history (
+  id INTEGER PRIMARY KEY,
+  team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+  cadet_id INTEGER REFERENCES cadets(id) ON DELETE SET NULL,
+  actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  text TEXT NOT NULL,
+  at TEXT NOT NULL
+);
+CREATE INDEX takpatz_history_team ON takpatz_history(team_id, id);
+CREATE TABLE google_drive_requests (
+  state_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  verifier TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+`);
+  const now = new Date().toISOString();
+  DEFAULT_TAKPATZ_CATALOG.forEach((c, i) => db.run('INSERT INTO takpatz_catalog(half, kind, name, sort, created_at) VALUES (?, ?, ?, ?, ?)', c.half, c.kind, c.name, i, now));
+}
+
+// each person's calendar settings, as Google's (Settings - event settings): the reminder an event left as
+// it is gives them - none for a row whose default_reminder is NULL; no row: 30 minutes before (schedule.ts)
+const SCHEMA_V52 = `
+CREATE TABLE user_calendar_settings (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  default_reminder INTEGER CHECK (default_reminder IS NULL OR default_reminder >= 0),
+  updated_at TEXT NOT NULL
+);
+`;
+
+// an entry approval as the base's format has it (shared/entry.ts): a visit of several days ("30-31/10"), a
+// military vehicle or a private one, and the unit and camp as a pasted format said them ('' - the course's own)
+const SCHEMA_V53 = `
+ALTER TABLE entry_requests ADD COLUMN visit_end_date TEXT;
+ALTER TABLE entry_requests ADD COLUMN car_military INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE entry_requests ADD COLUMN unit TEXT NOT NULL DEFAULT '';
+ALTER TABLE entry_requests ADD COLUMN camp TEXT NOT NULL DEFAULT '';
+`;
+
+// writing events into Google Calendar (gcalSync.ts): the accounts connected (their token sealed), the
+// connecting under way, each event's copy in Google, and the Google calendar of a series
+const SCHEMA_V54 = `
+CREATE TABLE google_calendar_links (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL DEFAULT '',
+  refresh_token TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'ok',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE google_calendar_requests (
+  state_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  verifier TEXT NOT NULL,
+  back TEXT NOT NULL DEFAULT '/',
+  expires_at TEXT NOT NULL
+);
+CREATE TABLE google_event_links (
+  event_id INTEGER PRIMARY KEY,
+  calendar_id TEXT NOT NULL DEFAULT '',
+  calendar_name TEXT NOT NULL DEFAULT '',
+  owner_id INTEGER,
+  src TEXT NOT NULL DEFAULT 'event',
+  pushed_calendar TEXT,
+  pushed_owner INTEGER,
+  pushed_hash TEXT,
+  ical_uid TEXT,
+  state TEXT NOT NULL DEFAULT 'pending',
+  error TEXT,
+  tries INTEGER NOT NULL DEFAULT 0,
+  next_try TEXT,
+  synced_at TEXT
+);
+CREATE INDEX google_event_links_owner ON google_event_links(owner_id);
+CREATE TABLE google_series_targets (
+  recurrence_id INTEGER PRIMARY KEY REFERENCES event_recurrences(id) ON DELETE CASCADE,
+  calendar_id TEXT NOT NULL DEFAULT '',
+  calendar_name TEXT NOT NULL DEFAULT '',
+  owner_id INTEGER
+);
+`;
+
+// a task one staff member gives another waits for the other to take it on; the staff the commander lets
+// give tasks to the staff without that
+const SCHEMA_V55 = `
+ALTER TABLE users ADD COLUMN assigns_freely INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN awaiting_accept INTEGER NOT NULL DEFAULT 0;
+`;
+
+// Google sign-in: when each user last came in with Google, and the Google accounts that tried and are not
+// in the list yet - the commander adds them from the settings in a tap
+const SCHEMA_V56 = `
+ALTER TABLE users ADD COLUMN google_at TEXT;
+CREATE TABLE google_requests (
+  email TEXT PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT '',
+  first_at TEXT NOT NULL,
+  last_at TEXT NOT NULL,
+  tries INTEGER NOT NULL DEFAULT 1
+);
+`;
+
+// A course opened beside the current one (parallel.ts): its whole database, kept here as one value - saved with
+// this one, so the deployment's single shared copy holds both. A notification from it says which course it
+// is about, and the task there it is about.
+const SCHEMA_V57 = `
+CREATE TABLE course_slots (
+  -- never given again: a link or a choice kept from a course since deleted does not land in another
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  data BLOB NOT NULL,
+  token TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+ALTER TABLE notifications ADD COLUMN course_slot INTEGER;
+ALTER TABLE notifications ADD COLUMN slot_task_id INTEGER;
+`;
+
+// Discussions (discussions.ts): a planning discussion, a debrief, a situation assessment... - its subject, the
+// points it goes through (and what came up on each), its decisions, and the follow-up actions, each with the
+// person who owns it and when it is due - an action can become a task.
+const SCHEMA_V58 = `
+CREATE TABLE discussions (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  background TEXT NOT NULL DEFAULT '',
+  held_on TEXT NOT NULL,
+  held_at TEXT,
+  week_id INTEGER REFERENCES weeks(id) ON DELETE SET NULL,
+  lead_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  guests TEXT NOT NULL DEFAULT '',
+  decisions TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'summarized')),
+  summarized_at TEXT,
+  summarized_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX discussions_held ON discussions(held_on);
+CREATE TABLE discussion_participants (
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (discussion_id, user_id)
+);
+CREATE TABLE discussion_points (
+  id INTEGER PRIMARY KEY,
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  outcome TEXT NOT NULL DEFAULT '',
+  done INTEGER NOT NULL DEFAULT 0,
+  sort INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX discussion_points_of ON discussion_points(discussion_id, sort);
+CREATE TABLE discussion_actions (
+  id INTEGER PRIMARY KEY,
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  due_on TEXT,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  sort INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX discussion_actions_of ON discussion_actions(discussion_id, sort);
+CREATE INDEX discussion_actions_task ON discussion_actions(task_id);
+`;
+
+// A cadet's exceptional-weapon form (weaponForms.ts): what happened with the weapon, the weapon, the cadet's
+// version, the team commander's handling and the course commander's decision.
+const SCHEMA_V59 = `
+CREATE TABLE weapon_forms (
+  id INTEGER PRIMARY KEY,
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  occurred_on TEXT NOT NULL,
+  occurred_at TEXT,
+  place TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL,
+  kind_other TEXT NOT NULL DEFAULT '',
+  weapon_type TEXT NOT NULL DEFAULT '',
+  weapon_number TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  found_by TEXT NOT NULL DEFAULT '',
+  cadet_version TEXT NOT NULL DEFAULT '',
+  handling TEXT NOT NULL DEFAULT '',
+  decision TEXT NOT NULL DEFAULT '',
+  decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  decided_at TEXT,
+  author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX weapon_forms_cadet ON weapon_forms(cadet_id, occurred_on);
+`;
+
+// A discussion's participants from outside the staff (discussions.ts): a name, what they are, an email to send
+// the summary to. What was written of them before as one line becomes one of them.
+const SCHEMA_V60 = `
+CREATE TABLE discussion_guests (
+  id INTEGER PRIMARY KEY,
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  sort INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX discussion_guests_of ON discussion_guests(discussion_id, sort);
+INSERT INTO discussion_guests(discussion_id, name, sort) SELECT id, trim(guests), 1 FROM discussions WHERE trim(guests) <> '';
+UPDATE discussions SET guests = '' WHERE trim(guests) <> '';
+`;
+
+// The staff of a course, from cycle to cycle (courseStaff.ts): who is out of the course - in a course opened
+// beside the current one, who does not go on in it (and who took their place); in the current course, who is
+// new to the staff of the next one and waits for it.
+const SCHEMA_V61 = `
+CREATE TABLE course_staff_out (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  replaced_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  at TEXT NOT NULL
+);
+`;
+
+// A lesson of the company debrief can be on several - people, cadets, or groups (the staff, the company, the
+// team commanders...): kept as a list (debriefs.ts); owner_id stays the staff member the task is for.
+const SCHEMA_V62 = `
+ALTER TABLE debrief_items ADD COLUMN owners TEXT NOT NULL DEFAULT '';
+`;
+
+// A lesson's training track (debriefs.ts): it shows in the track - in this course, and in the same track of
+// the next cycle (tracks.ts).
+const SCHEMA_V63 = `
+ALTER TABLE debrief_items ADD COLUMN track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL;
+CREATE INDEX debrief_items_track ON debrief_items(track_id);
+`;
+
+/**
+ * The staff's checklist for each cadet (staffChecks.ts): the opening talk, the experience, the feedback... - a
+ * mark each, the assignment's with its grade, and whether the grade was written into the course's grade sheet
+ * in Google (gradeSheet.ts, its link here). And the team commanders' weekly ממ"ש tasks, in a course that has a
+ * staff already: on Tuesday the ממ"ש experience to go over with the cadet, on Thursday the ממ"ש plans to approve.
+ */
+// A team's number (teams.sort) is now set in the teams' dialog, and the teams - and their commanders - are listed
+// by it everywhere. Each course's teams take the numbers of the order they were shown in until now: by name, the
+// numbers in it in their order ("צוות 2" before "צוות 10") - so nothing moves.
+function V65_TEAM_NUMBERS(db: Db): void {
+  const teams = db.all<{ id: number; name: string }>('SELECT id, name FROM teams').sort((a, b) => byHe(a.name, b.name) || a.id - b.id);
+  teams.forEach((t, i) => db.run('UPDATE teams SET sort = ? WHERE id = ?', i + 1, t.id));
+}
+
+// A week's activity file (תיק פעילות, activityFiles.ts): where it is, and how far on its way - built, waiting for
+// the company commander, sent on to headquarters, approved.
+const SCHEMA_V66 = `
+CREATE TABLE activity_files (
+  id INTEGER PRIMARY KEY,
+  week_id INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+  title TEXT NOT NULL DEFAULT 'תיק פעילות',
+  status TEXT NOT NULL DEFAULT 'building' CHECK (status IN ('building', 'awaiting', 'sent', 'approved')),
+  link TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  status_at TEXT,
+  status_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX activity_files_week ON activity_files(week_id);
+`;
+
+function V64_STAFF_CHECKS(db: Db): void {
+  db.exec(`
+CREATE TABLE staff_checks (
+  cadet_id INTEGER NOT NULL REFERENCES cadets(id) ON DELETE CASCADE,
+  item TEXT NOT NULL,
+  done_at TEXT NOT NULL,
+  done_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  grade REAL,
+  sheet_state TEXT NOT NULL DEFAULT '',
+  sheet_note TEXT NOT NULL DEFAULT '',
+  sheet_at TEXT,
+  PRIMARY KEY (cadet_id, item)
+);
+CREATE TABLE grade_sheet (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  url TEXT NOT NULL DEFAULT '',
+  file_id TEXT NOT NULL DEFAULT '',
+  file_name TEXT NOT NULL DEFAULT '',
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  email TEXT NOT NULL DEFAULT '',
+  refresh_token TEXT NOT NULL DEFAULT '',
+  connected_at TEXT,
+  last_error TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE grade_sheet_requests (
+  state_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  verifier TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+`);
+  const by = db.get<{ id: number }>("SELECT id FROM users WHERE role = 'commander' AND active = 1 ORDER BY id LIMIT 1");
+  if (!by) return;
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  for (const [title, day] of [
+    ['הורדת התנסות ממ״ש', 2],
+    ['לעשות אישור תכניות ממ״ש', 4],
+  ] as const) {
+    if (db.get('SELECT 1 FROM recurring_rules WHERE title = ?', title)) continue;
+    db.run(
+      "INSERT INTO recurring_rules(title, description, frequency, weekdays, time, assignee, priority, domain, active, start_date, created_by, created_at) VALUES (?, '', 'weekly', ?, '18:00', 'team_commanders', 'normal', 'צוערים', 1, ?, ?, ?)",
+      title,
+      JSON.stringify([day]),
+      today,
+      by.id,
+      now,
+    );
+  }
+}
+
+// Staff submissions stay outside the official weekly debrief until its lead reviews each point.
+const SCHEMA_V67 = `
+CREATE TABLE debrief_submissions (
+  id INTEGER PRIMARY KEY,
+  debrief_id INTEGER NOT NULL REFERENCES debriefs(id) ON DELETE CASCADE,
+  author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  author_name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX debrief_submissions_of ON debrief_submissions(debrief_id, id);
+CREATE TABLE debrief_submission_points (
+  id INTEGER PRIMARY KEY,
+  submission_id INTEGER NOT NULL REFERENCES debrief_submissions(id) ON DELETE CASCADE,
+  question_id TEXT,
+  label TEXT NOT NULL,
+  value TEXT NOT NULL DEFAULT 'null',
+  lesson TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+  reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_by_name TEXT,
+  reviewed_at TEXT
+);
+CREATE INDEX debrief_submission_points_of ON debrief_submission_points(submission_id, status);
+`;
+
+// A track debrief is about a training track, independently of a course week.
+const SCHEMA_V68 = `
+ALTER TABLE debriefs ADD COLUMN track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL;
+CREATE INDEX debriefs_track ON debriefs(track_id);
+`;
+
+function V69_CARRYOVER(db: Db): void {
+  db.exec(`
+INSERT OR IGNORE INTO meta(key, value) VALUES ('course_uid', lower(hex(randomblob(16))));
+CREATE TABLE course_carryovers (
+  source_course TEXT NOT NULL,
+  source_name TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  source_id INTEGER NOT NULL,
+  source_token TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  copied_at TEXT NOT NULL,
+  PRIMARY KEY (source_course, entity, source_id, source_token)
+);
+CREATE INDEX course_carryovers_target ON course_carryovers(entity, target_id);
+CREATE TABLE course_entity_tokens (
+  entity TEXT NOT NULL,
+  entity_id INTEGER NOT NULL,
+  token TEXT NOT NULL,
+  PRIMARY KEY (entity, entity_id)
+);
+`);
+  // SQLite can reuse a deleted integer ID: preserve tombstones and retire its source identity.
+  for (const table of ['weeks', 'tracks', 'tasks', 'task_updates', 'attachments', 'events', 'debriefs', 'debrief_items', 'debrief_submissions', 'debrief_submission_points', 'discussions', 'discussion_guests', 'discussion_points', 'discussion_actions', 'weekly_items', 'absences', 'entry_requests']) {
+    db.exec(`CREATE TRIGGER carryover_delete_${table} AFTER DELETE ON ${table} BEGIN
+      UPDATE course_carryovers SET target_id = -target_id WHERE entity = '${table}' AND target_id = OLD.id;
+      DELETE FROM course_entity_tokens WHERE entity = '${table}' AND entity_id = OLD.id;
+    END;`);
+  }
+}
+
+/** Correct the confirmed year boundary: field week Dec 27 is 53, individual week Jan 3 is 1.
+ * A narrow match leaves other courses and their chosen numbering untouched. */
+function V70_WEEK_YEAR_BOUNDARY(db: Db): void {
+  const weeks = db.all<{ id: number; name: string; number: number; start_date: string }>('SELECT id, name, number, start_date FROM weeks ORDER BY start_date, id');
+  const topic = (name: string) => name.replace(/^\s*שבוע\s*(?:\d+\s*[-–—:]?\s*)?/, '').trim();
+  const field = weeks.findIndex(w => w.start_date === '2026-12-27' && topic(w.name) === 'שטח');
+  if (field < 0 || weeks[field + 1]?.start_date !== '2027-01-03' || topic(weeks[field + 1].name) !== 'פרט') return;
+  for (const w of weeks.slice(field)) {
+    const number = courseIsoWeekNumber(w.start_date);
+    const name = w.name.replace(new RegExp(`^(\\s*שבוע\\s+)${w.number}(?!\\d)`), `$1${number}`);
+    db.run('UPDATE weeks SET number = ?, name = ? WHERE id = ?', number, name, w.id);
+  }
+  db.run(`INSERT INTO settings(key, value) VALUES ('weekNumberingRule', '"iso"') ON CONFLICT(key) DO UPDATE SET value = excluded.value`);
+}
+
+/** The earlier repair required exact adjacent names, missing renamed and auto-created weeks. */
+function V71_WEEK_CHRONOLOGY(db: Db): void {
+  const weeks = db.all<{ id: number; name: string; number: number; start_date: string }>('SELECT id, name, number, start_date FROM weeks ORDER BY start_date, id');
+  const iso = db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'weekNumberingRule'")?.value === '"iso"';
+  const confirmed = weeks.some(w => w.start_date === '2026-12-27') && weeks.some(w => w.start_date === '2027-01-03') &&
+    weeks.some(w => (w.start_date === '2026-12-27' && w.name.includes('שטח')) || (w.start_date === '2027-01-03' && w.name.includes('פרט')));
+  const overflow = weeks.some(w => w.number > 53) && weeks.some(w => w.number >= 50 && w.number <= 53 && w.number === courseIsoWeekNumber(w.start_date));
+  if (!iso && !confirmed && !overflow) return;
+  for (const w of weeks) {
+    const number = courseIsoWeekNumber(w.start_date);
+    const name = w.name.replace(/^(\s*שבוע\s+)\d+(?!\d)/, `$1${number}`);
+    db.run('UPDATE weeks SET number = ?, name = ? WHERE id = ?', number, name, w.id);
+  }
+  db.run(`INSERT INTO settings(key, value) VALUES ('weekNumberingRule', '"iso"') ON CONFLICT(key) DO UPDATE SET value = excluded.value`);
+}
+
+/** Remove the unneeded week 48 from the confirmed course, without touching other cycles. */
+// The reservists (מילואים) in the contacts: people who come to the course from time to time - their number at
+// hand like the staff's and the cadets'. Not a course's own: they go on from course to course (reservists.ts).
+const SCHEMA_V73 = `
+CREATE TABLE IF NOT EXISTS reservists (
+  id INTEGER PRIMARY KEY,
+  full_name TEXT NOT NULL,
+  phone TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`;
+
+function V72_REMOVE_WEEK_48(db: Db): void {
+  db.exec(`CREATE TABLE week_auto_create_exclusions (
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    PRIMARY KEY (start_date, end_date)
+  )`);
+  if (!db.get("SELECT 1 FROM weeks WHERE number = 53 AND start_date = '2026-12-27'") ||
+      !db.get("SELECT 1 FROM weeks WHERE number = 1 AND start_date = '2027-01-03'")) return;
+  db.run("INSERT INTO week_auto_create_exclusions VALUES ('2026-11-22', '2026-11-28')");
+  // Task/event/debrief foreign keys use SET NULL; their content and deadlines survive.
+  db.run("DELETE FROM weeks WHERE number = 48 AND start_date BETWEEN '2026-11-22' AND '2026-11-28'");
+}
+
+const MIGRATIONS: (string | ((db: Db) => void))[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15, SCHEMA_V16, SCHEMA_V17, SCHEMA_V18, V19_DOMAINS, V20_WEEK_NUMBERS, SCHEMA_V21, SCHEMA_V22, SCHEMA_V23, SCHEMA_V24, SCHEMA_V25, SCHEMA_V26, SCHEMA_V27, V28_EVALUATION_FILE, SCHEMA_V29, SCHEMA_V30, SCHEMA_V31, V32_TRACKS, SCHEMA_V33, SCHEMA_V34, SCHEMA_V35, SCHEMA_V36, SCHEMA_V37, V38_MANPOWER, SCHEMA_V39, SCHEMA_V40, SCHEMA_V41, SCHEMA_V42, SCHEMA_V43, V44_TRAINING_TRACKS, SCHEMA_V45, SCHEMA_V46, V47_TAKPATZ, SCHEMA_V48, SCHEMA_V49, SCHEMA_V50, V51_GOOGLE_EVENTS, SCHEMA_V52, SCHEMA_V53, SCHEMA_V54, SCHEMA_V55, SCHEMA_V56, SCHEMA_V57, SCHEMA_V58, SCHEMA_V59, SCHEMA_V60, SCHEMA_V61, SCHEMA_V62, SCHEMA_V63, V64_STAFF_CHECKS, V65_TEAM_NUMBERS, SCHEMA_V66, SCHEMA_V67, SCHEMA_V68, V69_CARRYOVER, V70_WEEK_YEAR_BOUNDARY, V71_WEEK_CHRONOLOGY, V72_REMOVE_WEEK_48, SCHEMA_V73];
+
+/** Brings a database to the current schema (tests may stop at an earlier version). */
+export function migrate(db: Db, upTo = MIGRATIONS.length): void {
+  const hasMeta = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='meta'");
+  let version = 0;
+  if (hasMeta && hasMeta.n > 0) {
+    version = Number(db.get<{ value: string }>("SELECT value FROM meta WHERE key='schema_version'")?.value ?? 0);
+  }
+  for (let v = version; v < upTo; v++) {
+    db.tx(() => {
+      const step = MIGRATIONS[v];
+      if (typeof step === 'string') db.exec(step);
+      else step(db);
+      db.run("INSERT INTO meta(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", String(v + 1));
+    });
+  }
+}
+
+let current: Db | null = null;
+/** a request that reads an earlier course runs against that course's database (courses.ts) */
+const scoped = new AsyncLocalStorage<Db>();
+
+export function openDb(path: string, opts: { wal?: boolean } = {}): Db {
+  const db = new Db(path, opts);
+  migrate(db);
+  current = db;
+  return db;
+}
+
+/** the current course's database - also while a request runs against another course's */
+export function homeDb(): Db {
+  if (!current) throw new Error('Database not initialised');
+  return current;
+}
+
+export function db(): Db {
+  const inScope = scoped.getStore();
+  if (inScope) return inScope;
+  if (!current) throw new Error('Database not initialised');
+  return current;
+}
+
+/** runs fn (and everything it awaits) with db() returning `d` */
+export function withDb<T>(d: Db, fn: () => T): T {
+  return scoped.run(d, fn);
+}
+
+/** a course opened beside the current one, a request runs against (parallel.ts) */
+export interface SlotScope {
+  id: number;
+  name: string;
+  db: Db;
+}
+const slotScope = new AsyncLocalStorage<SlotScope>();
+
+/** the course beside the current one this runs in - null: the current course */
+export function currentSlot(): SlotScope | null {
+  return slotScope.getStore() ?? null;
+}
+
+/** runs fn (and everything it awaits) in that course: db() is its database */
+export function withSlot<T>(slot: SlotScope, fn: () => T): T {
+  return slotScope.run(slot, () => scoped.run(slot.db, fn));
+}

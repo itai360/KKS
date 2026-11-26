@@ -1,0 +1,354 @@
+// Sections 16, 38, 58: templates - week opening checklists and activity workflows.
+
+import { useState } from 'react';
+import { PRIORITIES, PRIORITY_LABELS, type Priority } from '@shared/constants';
+import { addDays, daysWord, shortDate, weekdayName } from '@shared/dates';
+import type { Template, TemplateItem } from '@shared/types';
+import { BulkCheck, BulkScope, BulkToggle, SwipeRow } from '../components/Bulk';
+import { Icon } from '../components/Icon';
+import { useToast } from '../components/Toasts';
+import { DateInput, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg, Select, TimeInput } from '../components/ui';
+import { api } from '../lib/api';
+import { todayKey } from '../lib/format';
+import { emitLocalChange } from '../lib/realtime';
+import { useSession } from '../lib/session';
+import { useApi } from '../lib/useApi';
+import { ask } from '../components/Confirm';
+
+const KIND_LABELS: Record<Template['kind'], string> = { week: 'פתיחת שבוע', activity: 'הכנת פעילות', general: 'כללית' };
+
+export function TemplatesPage() {
+  const { can, weeks, user } = useSession();
+  const isCommander = can('templates');
+  const { data, error, loading } = useApi<Template[]>('/api/templates', ['templates']);
+  const [editing, setEditing] = useState<Template | 'new' | null>(null);
+  const [applying, setApplying] = useState<Template | null>(null);
+  const leadsAWeek = weeks.some((w) => w.leadId === user.id);
+
+  return (
+    <BulkScope entity="templates" noun="תבניות" topics={['templates']} ids={isCommander ? (data ?? []).map((t) => t.id) : []} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} תבניות? משימות שכבר נוצרו מהן יישארו.' }]}>
+    <div className="page">
+      <PageHead
+        title="תבניות"
+        sub="רשימות קבועות שהופכות למשימות בלחיצה: פתיחת שבוע, הכנת פעילות, סיכום שבוע."
+        actions={
+          isCommander && (
+            <>
+              <BulkToggle />
+              <button className="btn btn-primary" onClick={() => setEditing('new')}>
+                <Icon name="plus" /> תבנית
+              </button>
+            </>
+          )
+        }
+      />
+      <ErrorBox error={error} />
+      {loading && !data ? (
+        <Loading rows={3} />
+      ) : !data?.length ? (
+        <Empty icon="template" title="אין תבניות" text={isCommander ? 'צרו תבנית "פתיחת שבוע" עם הסעיפים הקבועים.' : undefined} />
+      ) : (
+        <div className="grid-2 fade-in">
+          {data.map((t) => (
+            <SwipeRow key={t.id} itemId={t.id} label={t.name}>
+            <div className="card">
+              <div className="card-head">
+                <BulkCheck id={t.id} />
+                <div className="grow">
+                  <h3>{t.name}</h3>
+                  <div className="tiny muted">
+                    {KIND_LABELS[t.kind]} · {t.items.length} סעיפים
+                    {t.autoApplyDaysBefore !== null && ` · נפתחת אוטומטית ${daysWord(t.autoApplyDaysBefore)} לפני כל שבוע`}
+                  </div>
+                </div>
+                {(isCommander || leadsAWeek) && (
+                  <button className="btn btn-sm btn-primary" onClick={() => setApplying(t)}>
+                    צור משימות
+                  </button>
+                )}
+                {isCommander && (
+                  <button className="btn btn-sm btn-ghost" onClick={() => setEditing(t)} aria-label="עריכה">
+                    <Icon name="edit" />
+                  </button>
+                )}
+              </div>
+              <div className="card-body">
+                {t.description && <p className="small muted mb-12">{t.description}</p>}
+                <StepsLine items={t.items} kind={t.kind} />
+                <Steps items={t.items} />
+              </div>
+            </div>
+            </SwipeRow>
+          ))}
+        </div>
+      )}
+      {editing && <TemplateEditor template={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      {applying && <ApplyTemplate template={applying} onClose={() => setApplying(null)} />}
+    </div>
+    </BulkScope>
+  );
+}
+
+const offsetLabel = (o: number) => (o === 0 ? 'ביום' : o < 0 ? `${daysWord(o)} לפני` : `${daysWord(o)} אחרי`);
+const DAY_LABELS: Record<Template['kind'], string> = { week: 'תחילת השבוע', activity: 'יום הפעילות', general: 'היום' };
+
+/**
+ * A template's steps on a line of days, earliest first (on the right), with the day itself marked - how
+ * the work spreads out ahead of the week or the activity, at a glance. A point grows with the steps on it.
+ */
+function StepsLine({ items, kind }: { items: TemplateItem[]; kind: Template['kind'] }) {
+  if (items.length < 2) return null;
+  const offsets = items.map((i) => i.offsetDays);
+  const min = Math.min(0, ...offsets);
+  const max = Math.max(0, ...offsets);
+  const at = (o: number) => `${((o - min) / (max - min || 1)) * 100}%`;
+  const byDay = new Map<number, string[]>();
+  for (const it of items) byDay.set(it.offsetDays, [...(byDay.get(it.offsetDays) ?? []), it.title]);
+  return (
+    <div className="steps-line-wrap" role="img" aria-label={`${items.length} סעיפים, מ${offsetLabel(min)} עד ${offsetLabel(max)}`}>
+      <div className="steps-line">
+        <span className="steps-axis" />
+        <span className="steps-day" style={{ insetInlineStart: at(0) }} title={DAY_LABELS[kind]} />
+        {[...byDay.entries()].map(([o, titles]) => (
+          <span key={o} className="steps-dot" style={{ insetInlineStart: at(o), ['--n' as string]: Math.min(titles.length, 4) }} title={`${offsetLabel(o)}: ${titles.join(', ')}`} />
+        ))}
+      </div>
+      <div className="steps-line-ends tiny muted">
+        <span>{offsetLabel(min)}</span>
+        <span>{max > 0 ? offsetLabel(max) : DAY_LABELS[kind]}</span>
+      </div>
+    </div>
+  );
+}
+
+/** the steps, the first few in sight - the rest one press away, so the page reads at a glance */
+function Steps({ items }: { items: TemplateItem[] }) {
+  const [all, setAll] = useState(false);
+  const FIRST = 5;
+  const shown = all ? items : items.slice(0, FIRST);
+  return (
+    <div className="col gap-4">
+      {shown.map((it, i) => (
+        <div key={i} className="row small">
+          <span className="dot t-gray" />
+          {it.stage && <span className="badge">{it.stage}</span>}
+          <span className="grow">{it.title}</span>
+          <span className="mono tiny muted">{offsetLabel(it.offsetDays)}</span>
+        </div>
+      ))}
+      {items.length > FIRST && (
+        <button type="button" className="btn btn-ghost btn-sm steps-more" onClick={() => setAll(!all)} aria-expanded={all}>
+          {all ? 'פחות' : `עוד ${items.length - FIRST} סעיפים`}
+          <Icon name="chevronDown" size={14} className={all ? 'flip' : undefined} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TemplateEditor({ template, onClose }: { template: Template | null; onClose: () => void }) {
+  const toast = useToast();
+  const { settings, users } = useSession();
+  const [name, setName] = useState(template?.name ?? '');
+  const [description, setDescription] = useState(template?.description ?? '');
+  const [kind, setKind] = useState<Template['kind']>(template?.kind ?? 'week');
+  const [auto, setAuto] = useState<string>(template?.autoApplyDaysBefore != null ? String(template.autoApplyDaysBefore) : '');
+  const [items, setItems] = useState<TemplateItem[]>(template?.items ?? [{ title: '', offsetDays: -3, owner: 'week_lead' }]);
+  const [error, setError] = useState<string | null>(null);
+  const upd = (i: number, patch: Partial<TemplateItem>) => setItems(items.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+
+  const save = async () => {
+    setError(null);
+    const body = {
+      name,
+      description,
+      kind,
+      autoApplyDaysBefore: kind === 'week' && auto !== '' ? Number(auto) : null,
+      items: items.filter((i) => i.title.trim()).map((i) => ({ ...i, title: i.title.trim(), time: i.time || undefined })),
+    };
+    try {
+      if (template) await api.put(`/api/templates/${template.id}`, body);
+      else await api.post('/api/templates', body);
+      toast({ title: 'התבנית נשמרה', tone: 'green' });
+      emitLocalChange('templates');
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const remove = async () => {
+    if (!template || !(await ask({ title: `למחוק את התבנית "${template.name}"?`, body: 'משימות שכבר נוצרו ממנה יישארו.', confirm: 'מחיקה', danger: true }))) return;
+    await api.del(`/api/templates/${template.id}`);
+    emitLocalChange('templates');
+    onClose();
+  };
+  const anchorLabel = kind === 'activity' ? 'ימים ביחס לפעילות' : kind === 'week' ? 'ימים ביחס לתחילת השבוע' : 'ימים ביחס לתאריך';
+
+  return (
+    <Modal
+      title={template ? `עריכת ${template.name}` : 'תבנית חדשה'}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => void save()} disabled={!name.trim()}>
+            שמור
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+          {template && (
+            <button className="btn btn-danger" style={{ marginInlineStart: 'auto' }} onClick={() => void remove()}>
+              מחיקה
+            </button>
+          )}
+        </>
+      }
+    >
+      <div className="col gap-16">
+        <div className="form-grid">
+          <Field label="שם התבנית" required>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: פתיחת שבוע" />
+          </Field>
+          <Field label="סוג">
+            <Seg value={kind} onChange={setKind} options={(['week', 'activity', 'general'] as const).map((k) => ({ value: k, label: KIND_LABELS[k] }))} />
+          </Field>
+          <Field label="תיאור" className="span-2">
+            <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          {kind === 'week' && (
+            <Field label="פתיחה אוטומטית" hint="המערכת תיצור את המשימות לבד, X ימים לפני תחילת כל שבוע (השאירו ריק לפתיחה ידנית)">
+              <input className="input" type="number" min={0} max={60} value={auto} onChange={(e) => setAuto(e.target.value)} placeholder="לדוגמה: 14" style={{ maxWidth: 160 }} />
+            </Field>
+          )}
+        </div>
+        <div>
+          <div className="label-caps mb-12">סעיפים</div>
+          <div className="col gap-6">
+            {items.map((it, i) => (
+              <div key={i} className="card" style={{ padding: 10 }}>
+                <div className="row wrap gap-6">
+                  <input className="input grow" style={{ minWidth: 200 }} value={it.title} onChange={(e) => upd(i, { title: e.target.value })} placeholder="שם הסעיף / המשימה" />
+                  <input
+                    className="input"
+                    type="number"
+                    style={{ width: 90 }}
+                    value={it.offsetDays}
+                    onChange={(e) => upd(i, { offsetDays: Number(e.target.value) })}
+                    title={anchorLabel}
+                    aria-label={anchorLabel}
+                  />
+                  <TimeInput style={{ width: 110 }} value={it.time ?? ''} onChange={(v) => upd(i, { time: v })} aria-label="שעה" />
+                  <button className="icon-btn" aria-label="הסר סעיף" onClick={() => setItems(items.filter((_, j) => j !== i))}>
+                    <Icon name="x" size={16} />
+                  </button>
+                </div>
+                <div className="row wrap gap-6 mt-8">
+                  <Select className="select" style={{ width: 170, height: 34 }} value={it.owner ?? ''} onChange={(e) => upd(i, { owner: e.target.value })} aria-label="אחראי">
+                    <option value="">אחראי: לבחירה בהפעלה</option>
+                    {kind !== 'activity' && <option value="week_lead">אחראי השבוע</option>}
+                    {kind === 'activity' && <option value="event_owner">אחראי הפעילות</option>}
+                    {users.map((u) => (
+                      <option key={u.id} value={String(u.id)}>
+                        {u.displayName}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select className="select" style={{ width: 130, height: 34 }} value={it.domain ?? ''} onChange={(e) => upd(i, { domain: e.target.value })} aria-label="תחום">
+                    <option value="">תחום</option>
+                    {settings.domains.map((d) => (
+                      <option key={d}>{d}</option>
+                    ))}
+                  </Select>
+                  <Select className="select" style={{ width: 120, height: 34 }} value={it.priority ?? 'normal'} onChange={(e) => upd(i, { priority: e.target.value as Priority })} aria-label="עדיפות">
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p}>
+                        {PRIORITY_LABELS[p]}
+                      </option>
+                    ))}
+                  </Select>
+                  {kind === 'activity' && <input className="input" style={{ width: 130, height: 34 }} value={it.stage ?? ''} onChange={(e) => upd(i, { stage: e.target.value })} placeholder="שלב (תיאומים...)" />}
+                  <span className="tiny muted">{it.offsetDays === 0 ? 'ביום עצמו' : it.offsetDays < 0 ? `${daysWord(it.offsetDays)} לפני` : `${daysWord(it.offsetDays)} אחרי`}</span>
+                </div>
+              </div>
+            ))}
+            <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setItems([...items, { title: '', offsetDays: items[items.length - 1]?.offsetDays ?? -1, owner: kind === 'activity' ? 'event_owner' : 'week_lead' }])}>
+              <Icon name="plus" /> סעיף
+            </button>
+          </div>
+        </div>
+        <ErrorBox error={error} />
+      </div>
+    </Modal>
+  );
+}
+
+function ApplyTemplate({ template, onClose }: { template: Template; onClose: () => void }) {
+  const { weeks, can, user } = useSession();
+  const isCommander = can('templates');
+  const toast = useToast();
+  const myWeeks = isCommander ? weeks : weeks.filter((w) => w.leadId === user.id);
+  const upcoming = myWeeks.find((w) => w.endDate >= todayKey());
+  const [weekId, setWeekId] = useState<string>(upcoming ? String(upcoming.id) : '');
+  const [anchor, setAnchor] = useState(todayKey());
+  const [error, setError] = useState<string | null>(null);
+  const week = weeks.find((w) => String(w.id) === weekId);
+  const base = week ? week.startDate : anchor;
+
+  const apply = async () => {
+    try {
+      const r = await api.post<{ ids: number[] }>(`/api/templates/${template.id}/apply`, week ? { weekId: week.id } : { anchorDate: anchor });
+      toast({ title: `נפתחו ${r.ids.length} משימות`, tone: 'green' });
+      emitLocalChange('tasks', 'weeks');
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <Modal
+      title={`צור משימות: ${template.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => void apply()}>
+            צור {template.items.length} משימות
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-16">
+        <Field label="לאיזה שבוע?">
+          <Select className="select" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+            {isCommander && <option value="">ללא שבוע - לפי תאריך</option>}
+            {myWeeks.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name} ({shortDate(w.startDate)})
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {!week && (
+          <Field label="תאריך עוגן">
+            <DateInput value={anchor} onChange={(v) => setAnchor(v)} style={{ maxWidth: 200 }} />
+          </Field>
+        )}
+        <div className="col gap-4">
+          {template.items.map((it, i) => (
+            <div key={i} className="row small">
+              <span className="grow">{it.title}</span>
+              <span className="mono tiny muted">
+                {weekdayName(addDays(base, it.offsetDays))} {shortDate(addDays(base, it.offsetDays))} {it.time ?? ''}
+              </span>
+            </div>
+          ))}
+        </div>
+        <ErrorBox error={error} />
+      </div>
+    </Modal>
+  );
+}

@@ -1,0 +1,204 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { staffMay, type StaffAbility } from '@shared/permissions';
+import { sortHe, sortCourseWeeks } from '@shared/sort';
+import type { CourseSettings, Track, User, Week } from '@shared/types';
+import { api, setReauthHandler, setUnauthorizedHandler } from './api';
+import { setTimezone } from './format';
+import { setTitleCount, setTitleSuffix } from './title';
+import { connectRealtime, disconnectRealtime } from './realtime';
+import { setUnread as setUnreadCount, startNotifications, useUnread } from './notifications';
+import { clearApiCache, setApiCacheOwner, useApi } from './useApi';
+import { ReauthDialog } from '../components/Reauth';
+import { FirstPasswordDialog } from '../components/FirstPassword';
+import { clearDrafts } from './draft';
+import { setCourseHere } from './courses';
+import { hideSplash } from './splash';
+
+interface MeResponse {
+  user: User;
+  settings: CourseSettings;
+  unread: number;
+  /** signed in with a password someone else chose */
+  mustChangePassword?: boolean;
+  /** a previous course open for reading (the commander) */
+  course?: { id: number; name: string } | null;
+  /** backup codes left, with two-step sign-in on */
+  recoveryLeft?: number | null;
+  /** courses opened beside the current one (absent: none), and the one chosen to work in (null: the current) */
+  parallel?: Parallel;
+}
+
+export interface Parallel {
+  /** the current course's name */
+  main: string;
+  slot: { id: number; name: string } | null;
+  slots: { id: number; name: string }[];
+  /** new to the staff of the next course: not in the current one until it becomes it */
+  away?: boolean;
+}
+
+export interface Session {
+  user: User;
+  settings: CourseSettings;
+  users: User[];
+  staff: User[];
+  weeks: Week[];
+  /** the course's tracks (צירים), in alphabetical order */
+  tracks: Track[];
+  isCommander: boolean;
+  /** the commander - or the staff, where the commander lets them (settings - permissions) */
+  can: (ability: StaffAbility) => boolean;
+  /** a previous course open for reading: every screen shows it, and nothing can be changed */
+  viewing: { id: number; name: string } | null;
+  /** courses opened beside the current one, and the one worked in now - null when there are none */
+  parallel: Parallel | null;
+  /** backup codes left for two-step sign-in (null: it is off) */
+  recoveryLeft: number | null;
+  /** the course's people, weeks and settings have come in (until then the lists are empty, not "none") */
+  loaded: boolean;
+  unread: number;
+  setUnread: (n: number) => void;
+  refresh: () => Promise<void>;
+  logout: () => Promise<void>;
+  userName: (id: number | null | undefined) => string;
+}
+
+const Ctx = createContext<Session | null>(null);
+
+export function useSession(): Session {
+  const s = useContext(Ctx);
+  if (!s) throw new Error('useSession outside provider');
+  return s;
+}
+
+type State = { status: 'loading' } | { status: 'anon' } | { status: 'authed'; me: MeResponse };
+
+export function SessionGate({ anon, children }: { anon: (onLogin: () => void) => ReactNode; children: ReactNode }) {
+  const [state, setState] = useState<State>({ status: 'loading' });
+
+  const refresh = useCallback(async () => {
+    try {
+      const me = await api.get<MeResponse>('/api/auth/me');
+      // what screens kept from another person (or another course) is not shown to this one
+      setApiCacheOwner(`${me.user.id}:${me.course?.id ?? ''}:${me.parallel?.slot?.id ?? ''}`);
+      setCourseHere(me.parallel?.slot?.id ?? null, !!me.parallel);
+      setTimezone(me.settings.timezone);
+      setState({ status: 'authed', me });
+    } catch {
+      setState({ status: 'anon' });
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    setUnauthorizedHandler(() => {
+      disconnectRealtime();
+      clearApiCache();
+      setState({ status: 'anon' });
+    });
+  }, [refresh]);
+
+  // the opening screen (index.html: קק״ס coming together, its ס jumping) gives way once there is something to show:
+  // the app, or signing in. Only a fresh/long-idle installed-app opening holds the animation (lib/splash.ts).
+  useEffect(() => {
+    if (state.status !== 'loading') hideSplash();
+  }, [state.status]);
+
+  if (state.status === 'loading') return <div className="boot" aria-busy="true" />;
+  if (state.status === 'anon') return <>{anon(() => void refresh())}</>;
+  return (
+    <AuthedProvider
+      me={state.me}
+      refresh={refresh}
+      onLogout={() => {
+        disconnectRealtime();
+        startNotifications(0);
+        clearDrafts();
+        clearApiCache();
+        setState({ status: 'anon' });
+      }}
+    >
+      {children}
+    </AuthedProvider>
+  );
+}
+
+function AuthedProvider({ me, refresh, onLogout, children }: { me: MeResponse; refresh: () => Promise<void>; onLogout: () => void; children: ReactNode }) {
+  // the bell's count lives with the notifications themselves (notifications.ts), live
+  useState(() => startNotifications(me.unread));
+  const unread = useUnread();
+  const setUnread = setUnreadCount;
+  const [reauth, setReauth] = useState<((ok: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    setReauthHandler(() => new Promise<boolean>((resolve) => setReauth(() => resolve)));
+    return () => setReauthHandler(null);
+  }, []);
+  const reauthDone = (ok: boolean) => {
+    reauth?.(ok);
+    setReauth(null);
+    if (!ok) onLogout();
+  };
+  const users = useApi<User[]>('/api/users', ['users']);
+  const weeks = useApi<Week[]>('/api/weeks?course=1', ['weeks', 'tasks', 'settings']);
+  const tracks = useApi<Track[]>('/api/tracks', ['weeks', 'tasks']);
+  const settings = useApi<CourseSettings>('/api/settings', ['settings']);
+
+  useEffect(() => {
+    connectRealtime();
+  }, []);
+
+  useEffect(() => {
+    setUnread(me.unread);
+  }, [me.unread]);
+
+  const currentSettings = settings.data ?? me.settings;
+  useEffect(() => {
+    setTimezone(currentSettings.timezone);
+  }, [currentSettings.timezone]);
+  useEffect(() => {
+    setTitleSuffix(currentSettings.courseSymbol || currentSettings.courseName);
+  }, [currentSettings.courseSymbol, currentSettings.courseName]);
+  useEffect(() => {
+    setTitleCount(unread);
+    return () => setTitleCount(0);
+  }, [unread]);
+
+  const value = useMemo<Session>(() => {
+    // people and areas are offered in alphabetical order on every screen
+    const list = sortHe(users.data ?? [me.user], (u) => u.displayName);
+    const byId = new Map(list.map((u) => [u.id, u]));
+    // what was saved since signing in (my phone, a name the commander changed) comes with the people list
+    const self = { ...me.user, ...byId.get(me.user.id) };
+    return {
+      user: self,
+      settings: { ...currentSettings, domains: sortHe(currentSettings.domains) },
+      users: list,
+      staff: list.filter((u) => u.role === 'staff'),
+      weeks: sortCourseWeeks(weeks.data ?? []),
+      tracks: tracks.data ?? [],
+      isCommander: me.user.role === 'commander',
+      can: (ability) => me.user.role === 'commander' || staffMay(currentSettings.staffPermissions, ability),
+      viewing: me.course ?? null,
+      parallel: me.parallel ?? null,
+      recoveryLeft: me.recoveryLeft ?? null,
+      loaded: !!users.data && !!weeks.data && !!tracks.data && !!settings.data,
+      unread,
+      setUnread,
+      refresh,
+      logout: async () => {
+        await api.post('/api/auth/logout').catch(() => undefined);
+        onLogout();
+      },
+      userName: (id) => (id ? (byId.get(id)?.displayName ?? '') : ''),
+    };
+  }, [me, users.data, weeks.data, tracks.data, settings.data, currentSettings, unread, refresh, onLogout]);
+
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      {reauth && <ReauthDialog user={me.user} onDone={reauthDone} />}
+      {me.mustChangePassword && !reauth && <FirstPasswordDialog user={me.user} onDone={() => void refresh()} onLogout={() => void value.logout()} />}
+    </Ctx.Provider>
+  );
+}

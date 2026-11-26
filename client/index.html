@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- the phone's bars in the page's paper until the app sets them (lib/theme.ts) -->
+    <meta name="theme-color" content="#f3f2ef" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f0f0e" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="מערכת ניהול קורס - משימות, אחריות, דד-ליינים ותמונת מצב" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- an app on the phone's home screen (manifest.webmanifest; on an iPhone, Share - "הוספה למסך הבית") -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content='קק"ס' />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- what an iPhone shows while the app opens: the page's paper and קק״ס, as the opening screen below draws
+         it (its ס still), for each screen size -->
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1320x2868.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1260x2736.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1206x2622.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1290x2796.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1179x2556.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1284x2778.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1170x2532.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1125x2436.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/1242x2688.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/828x1792.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/750x1334.png" />
+    <title>ניהול קורס קק"ס</title>
+    <!-- Decide before the first paint. Keep this key/threshold aligned with lib/appSession.ts. -->
+    <script id="boot-policy">
+      (() => {
+        const key = 'kks.splash.last-active';
+        const day = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        let last = 0;
+        let available = true;
+        try { last = Number(sessionStorage.getItem(key)) || 0; } catch { available = false; }
+        const navigation = performance.getEntriesByType?.('navigation')[0]?.type;
+        let internal = false;
+        try { internal = !!document.referrer && new URL(document.referrer).origin === location.origin; } catch {}
+        try { sessionStorage.setItem(key, String(now)); } catch { available = false; }
+        const fresh = available ? last <= 0 : navigation !== 'reload' && navigation !== 'back_forward' && !internal;
+        document.documentElement.dataset.boot = fresh || (last > 0 && now - last > day) ? 'show' : 'skip';
+      })();
+    </script>
+    <!-- the opening screen, before the app's code is here: קק״ס coming together, and its ס jumping and turning in the air
+         (counterclockwise) while the app loads (lib/session.tsx takes it away once there is something to show; the
+         iPhone's launch images draw it still, public/splash) -->
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: grid;
+        place-items: center;
+        background: #f3f2ef;
+        transition: opacity 0.28s ease;
+      }
+      html[data-boot='skip'] #boot { display: none; }
+      #boot.is-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot .kks-logo {
+        width: 196px;
+        height: auto;
+        overflow: visible;
+      }
+      /* קק״ in the ink, the ס in a warm grey, a shadow under it (seen only while it moves) */
+      #boot .kks-k,
+      #boot .kks-shadow {
+        fill: #141413;
+      }
+      #boot .kks-s {
+        fill: #8a867f;
+      }
+      #boot .kks-shadow {
+        opacity: 0;
+      }
+      /* as it is read: the ק on the right rises into place, then the other, the gershayim drop in one by one,
+         and the ס falls from above and lands - then, while the app is on its way, it jumps, turns once in the air
+         (counterclockwise), and lands again, its shadow shrinking under it while it is up */
+      #boot .kks-q {
+        animation: kks-rise 0.52s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+      }
+      #boot .kks-q2 {
+        animation-delay: 0.08s;
+      }
+      #boot .kks-g {
+        animation: kks-tick 0.4s cubic-bezier(0.3, 1.5, 0.5, 1) 0.2s both;
+      }
+      /* and when the ס lands, the rest of the word feels it */
+      #boot .kks-k {
+        transform-origin: 3460px 2239px;
+        animation: kks-thud 1.6s ease-out 0.95s infinite;
+      }
+      #boot .kks-g2 {
+        animation-delay: 0.27s;
+      }
+      #boot .kks-hop {
+        transform-origin: 684px 1874px;
+        animation:
+          kks-fall 0.62s cubic-bezier(0.5, 0, 0.6, 1) 0.32s both,
+          kks-hop 1.6s ease-in-out 0.95s infinite;
+      }
+      #boot .kks-s {
+        transform-origin: 684px 1243.5px;
+        animation: kks-turn 1.6s cubic-bezier(0.45, 0, 0.3, 1) 0.95s infinite;
+      }
+      #boot .kks-shadow {
+        transform-origin: 684px 1934px;
+        animation:
+          kks-shadow-in 0.62s ease-out 0.32s both,
+          kks-shadow 1.6s ease-in-out 0.95s infinite;
+      }
+      @keyframes kks-rise {
+        from {
+          opacity: 0;
+          transform: translateY(300px);
+        }
+      }
+      @keyframes kks-tick {
+        from {
+          opacity: 0;
+          transform: translateY(-340px);
+        }
+      }
+      @keyframes kks-fall {
+        0% {
+          opacity: 0;
+          transform: translateY(-1100px);
+        }
+        20% {
+          opacity: 1;
+        }
+        68% {
+          transform: translateY(0) scale(1.14, 0.82);
+        }
+        84% {
+          transform: translateY(0) scale(0.96, 1.04);
+        }
+        100% {
+          transform: none;
+        }
+      }
+      @keyframes kks-hop {
+        0%,
+        100% {
+          transform: none;
+        }
+        10% {
+          transform: scale(1.1, 0.86);
+        }
+        20% {
+          transform: translateY(-340px) scale(0.93, 1.09);
+        }
+        38% {
+          transform: translateY(-1000px);
+        }
+        56% {
+          transform: translateY(-340px) scale(0.95, 1.06);
+        }
+        64% {
+          transform: scale(1.13, 0.84);
+        }
+        74% {
+          transform: scale(0.97, 1.03);
+        }
+        82% {
+          transform: none;
+        }
+      }
+      @keyframes kks-thud {
+        0%,
+        62%,
+        80%,
+        100% {
+          transform: none;
+        }
+        67% {
+          transform: translateY(26px) scale(1, 0.985);
+        }
+        72% {
+          transform: translateY(-8px);
+        }
+      }
+      /* counterclockwise, once, while it is up */
+      @keyframes kks-turn {
+        0%,
+        17% {
+          transform: rotate(0deg);
+        }
+        58%,
+        100% {
+          transform: rotate(-360deg);
+        }
+      }
+      @keyframes kks-shadow-in {
+        from {
+          opacity: 0;
+          transform: scale(0.3);
+        }
+        to {
+          opacity: 0.14;
+        }
+      }
+      @keyframes kks-shadow {
+        0%,
+        82%,
+        100% {
+          opacity: 0.14;
+          transform: none;
+        }
+        10% {
+          opacity: 0.16;
+          transform: scale(1.1, 1);
+        }
+        38% {
+          opacity: 0.04;
+          transform: scale(0.45, 1);
+        }
+        64% {
+          opacity: 0.18;
+          transform: scale(1.16, 1);
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme='light']) #boot {
+          background: #0f0f0e;
+        }
+        html:not([data-theme='light']) #boot .kks-k,
+        html:not([data-theme='light']) #boot .kks-shadow {
+          fill: #f3f2ef;
+        }
+        html:not([data-theme='light']) #boot .kks-s {
+          fill: #9a968e;
+        }
+      }
+      html[data-theme='dark'] #boot {
+        background: #0f0f0e;
+      }
+      html[data-theme='dark'] #boot .kks-k,
+      html[data-theme='dark'] #boot .kks-shadow {
+        fill: #f3f2ef;
+      }
+      html[data-theme='dark'] #boot .kks-s {
+        fill: #9a968e;
+      }
+      /* less motion: the word is there at once, and the ס breathes instead of jumping */
+      @media (prefers-reduced-motion: reduce) {
+        #boot .kks-logo * {
+          animation: none !important;
+        }
+        #boot .kks-s {
+          animation: kks-breathe 1.6s ease-in-out infinite !important;
+        }
+        @keyframes kks-breathe {
+          50% {
+            opacity: 0.45;
+          }
+        }
+      }
+    </style>
+
+  </head>
+  <body>
+    <div id="boot" aria-busy="true" aria-label="טוען">
+      <svg class="kks-logo" viewBox="51 189 5223 2050" role="img" aria-label="קק״ס"><ellipse class="kks-shadow" cx="684" cy="1934" rx="470" ry="42"/><g class="kks-k"><path class="kks-q kks-q1" d="M4491 1092V2239H4221V1092ZM4170 613H4788Q5042 613 5158 709.5Q5274 806 5274 1025Q5274 1310 5102 1536.5Q4930 1763 4608 1895V1608Q4796 1520 4898.5 1373.5Q5001 1227 5001 1057Q5001 945 4945 900Q4889 855 4749 855H4170Z"/><path class="kks-q kks-q2" d="M3152 1092V2239H2882V1092ZM2831 613H3449Q3703 613 3819 709.5Q3935 806 3935 1025Q3935 1310 3763 1536.5Q3591 1763 3269 1895V1608Q3457 1520 3559.5 1373.5Q3662 1227 3662 1057Q3662 945 3606 900Q3550 855 3410 855H2831Z"/><path class="kks-g kks-g1" d="M1825 824H1645L1782 189H2057Z"/><path class="kks-g kks-g2" d="M2272 824H2092L2229 189H2503Z"/></g><g class="kks-hop"><path class="kks-s" d="M133 1227Q133 1128 162.5 1020.5Q192 913 240 855H51V613H745Q1046 613 1181.5 740Q1317 867 1317 1149V1229Q1317 1548 1163 1711Q1009 1874 709 1874Q415 1874 274 1720.5Q133 1567 133 1258ZM475 855Q414 961 414 1211V1256Q414 1633 715 1633Q883 1633 958.5 1536Q1034 1439 1034 1221V1147Q1034 991 961.5 923Q889 855 725 855Z"/></g></svg>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

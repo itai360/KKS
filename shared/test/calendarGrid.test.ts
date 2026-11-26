@@ -1,0 +1,232 @@
+import { describe, expect, it } from 'vitest';
+import { APP_INDENT_PX, CASCADE_INDENT, eventSpan, fitLanes, fromMinutes, laneCount, layoutDay, layoutDayApp, layoutSpans, monthWeeks, movedSpan, resizedEnd, stepDate, viewDays, viewTitle, yearMonths } from '../calendarGrid';
+
+describe('calendar grid', () => {
+  it('reads event times as minutes', () => {
+    expect(eventSpan('08:30', '10:00')).toEqual({ start: 510, end: 600 });
+    expect(eventSpan('08:30', null)).toEqual({ start: 510, end: 570 });
+    expect(eventSpan('23:30', null)).toEqual({ start: 1410, end: 1440 });
+    expect(eventSpan('22:00', '01:00')).toEqual({ start: 1320, end: 1440 }); // past midnight: to the end of the day
+    expect(eventSpan('22:00', '23:59')).toEqual({ start: 1320, end: 1440 });
+    expect(fromMinutes(1440)).toBe('23:59');
+    expect(fromMinutes(65)).toBe('01:05');
+  });
+
+  it('shows a whole number of weeks in a month', () => {
+    const oct = monthWeeks('2026-10-15'); // 1.10.2026 is a Thursday, 31.10 a Saturday
+    expect(oct).toHaveLength(5);
+    expect(oct[0][0]).toBe('2026-09-27');
+    expect(oct[4][6]).toBe('2026-10-31');
+    const feb = monthWeeks('2026-02-10'); // 1.2.2026 is a Sunday, 28 days
+    expect(feb).toHaveLength(4);
+    expect(monthWeeks('2026-08-01')).toHaveLength(6); // starts on Saturday, 31 days
+  });
+
+  it('knows the days of each view', () => {
+    expect(viewDays('day', '2026-10-01')).toEqual(['2026-10-01']);
+    expect(viewDays('week', '2026-10-01')).toEqual(['2026-09-27', '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03']);
+    expect(viewDays('month', '2026-10-01')).toHaveLength(35);
+  });
+
+  it('steps by day, week and month', () => {
+    expect(stepDate('day', '2026-10-01', -1)).toBe('2026-09-30');
+    expect(stepDate('week', '2026-10-01', 1)).toBe('2026-10-08');
+    expect(stepDate('month', '2026-01-31', 1)).toBe('2026-02-28');
+    expect(stepDate('month', '2026-01-15', -1)).toBe('2025-12-15');
+    expect(stepDate('month', '2026-12-15', 1)).toBe('2027-01-15');
+  });
+
+  it('titles a view by its month', () => {
+    expect(viewTitle('month', '2026-10-15')).toBe('אוקטובר 2026');
+    expect(viewTitle('week', '2026-10-01')).toBe('ספטמבר - אוקטובר 2026');
+    expect(viewTitle('week', '2026-12-30')).toBe('דצמבר 2026 - ינואר 2027');
+    expect(viewTitle('day', '2026-10-01')).toBe('אוקטובר 2026');
+  });
+
+  it('lays a later event on the one under it, as Google draws them; events that start together sit side by side', () => {
+    const items = [
+      { id: 'drill', s: '06:00', e: '22:00' }, // a whole day's drill
+      { id: 'class', s: '08:00', e: '09:00' }, // starts two hours into it: lies on it
+      { id: 'brief', s: '08:15', e: '08:45' }, // starts with the class: beside it, on the drill
+      { id: 'talk', s: '13:00', e: '14:00' }, // on the drill again
+      { id: 'late', s: '13:45', e: '15:00' }, // on the talk
+      { id: 'alone', s: '05:00', e: '05:30' },
+      { id: 'short', s: '23:00', e: '23:10' }, // shown 30 minutes tall...
+      { id: 'e', s: '23:20', e: '23:50' }, // ...so it is beside this one, which starts within it
+    ];
+    const placed = Object.fromEntries(layoutDay(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
+    expect(placed.drill).toMatchObject({ depth: 0, col: 0, cols: 1, left: 0, width: 1 });
+    expect(placed.class).toMatchObject({ depth: 1, col: 0, cols: 2 });
+    expect(placed.brief).toMatchObject({ depth: 1, col: 1, cols: 2 });
+    expect(placed.talk).toMatchObject({ depth: 1, col: 0, cols: 1 });
+    expect(placed.late.depth).toBe(2);
+    // each inside the one under it, moved in from the start side; the two that started together share that room
+    expect(placed.class.left).toBeCloseTo(CASCADE_INDENT);
+    expect(placed.brief.left).toBeCloseTo(placed.class.left + placed.class.width);
+    expect(placed.brief.left + placed.brief.width).toBeCloseTo(1);
+    expect(placed.talk).toMatchObject({ left: expect.closeTo(CASCADE_INDENT), width: expect.closeTo(1 - CASCADE_INDENT) });
+    expect(placed.late.left).toBeCloseTo(placed.talk.left + placed.talk.width * CASCADE_INDENT);
+    expect(placed.alone).toMatchObject({ depth: 0, left: 0, width: 1 });
+    expect([placed.short.col, placed.e.col, placed.e.cols, placed.e.depth]).toEqual([0, 1, 2, 0]);
+  });
+
+  it('puts events starting less than half an hour apart side by side, and one after a free column in it', () => {
+    const items = [
+      { id: 'a', s: '08:00', e: '10:00' },
+      { id: 'b', s: '08:20', e: '09:00' }, // with a
+      { id: 'c', s: '09:00', e: '09:45' }, // b has ended: its column is free, so c takes it rather than lying on a
+      { id: 'd', s: '12:00', e: '13:00' }, // alone
+    ];
+    const placed = Object.fromEntries(layoutDay(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
+    expect([placed.a.col, placed.a.cols, placed.a.depth]).toEqual([0, 2, 0]);
+    expect([placed.b.col, placed.b.cols, placed.b.depth]).toEqual([1, 2, 0]);
+    expect([placed.c.col, placed.c.cols, placed.c.depth]).toEqual([1, 2, 0]);
+    expect(placed.a).toMatchObject({ left: 0, width: 0.5 });
+    expect(placed.c).toMatchObject({ left: 0.5, width: 0.5 });
+    expect(placed.d).toMatchObject({ col: 0, cols: 1, depth: 0, left: 0, width: 1 });
+  });
+
+  it('stretches an event over the columns that are free during it', () => {
+    const items = [
+      { id: 'long', s: '08:00', e: '12:00' },
+      { id: 'x', s: '08:00', e: '09:00' },
+      { id: 'y', s: '08:00', e: '09:00' },
+      { id: 'w', s: '10:00', e: '11:00' }, // takes x's column, and y's is free by then
+    ];
+    const placed = Object.fromEntries(layoutDay(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
+    expect([placed.long.col, placed.long.span, placed.long.cols]).toEqual([0, 1, 3]);
+    expect([placed.x.col, placed.x.span]).toEqual([1, 1]);
+    expect([placed.w.col, placed.w.span]).toEqual([1, 2]);
+  });
+
+  it("lays out a day as Google Calendar's phone app does (a real day of the course, as the app showed it)", () => {
+    const items = [
+      { id: 'arrive', s: '07:30', e: '10:00' },
+      { id: 'staff', s: '07:40', e: '08:10' }, // with arrive: beside it
+      { id: 'gantt', s: '09:30', e: '10:00' }, // two hours into arrive: lies on it - not in staff's free column - and reaches the end
+      { id: 'p', s: '10:00', e: '10:30' },
+      { id: 'company', s: '12:30', e: '13:30' },
+      { id: 'prayer', s: '12:45', e: '13:00' }, // drawn 20 minutes tall: it touches weekly
+      { id: 'weekly', s: '13:00', e: '14:00' }, // half an hour after company: still beside it
+      { id: 'break', s: '13:30', e: '14:00' }, // half an hour after weekly: beside it, over the two free columns
+    ];
+    const placed = Object.fromEntries(layoutDayApp(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
+    expect(placed.arrive).toMatchObject({ col: 0, cols: 2, depth: 0, left: 0, width: 0.5, leftPx: 0, widthPx: 0 });
+    expect(placed.staff).toMatchObject({ col: 1, cols: 2, depth: 0, left: 0.5, width: 0.5 });
+    expect(placed.gantt).toMatchObject({ depth: 1, left: 0, leftPx: APP_INDENT_PX, width: 1, widthPx: -APP_INDENT_PX });
+    expect(placed.p).toMatchObject({ depth: 0, left: 0, width: 1 });
+    // the longest first, the later of two as long first: weekly, company, then the prayer in the third column
+    expect([placed.weekly.col, placed.company.col, placed.prayer.col, placed.break.col]).toEqual([0, 1, 2, 1]);
+    expect(placed.weekly).toMatchObject({ cols: 3, span: 1, left: 0, width: expect.closeTo(1 / 3) });
+    expect(placed.break).toMatchObject({ span: 2, left: expect.closeTo(1 / 3), width: expect.closeTo(2 / 3) });
+    expect(placed.prayer.left).toBeCloseTo(2 / 3);
+  });
+
+  it("the phone's layout: a later event reaches only as far as the columns beside it are free; one lies on one lying", () => {
+    const items = [
+      { id: 'a', s: '08:00', e: '12:00' },
+      { id: 'b', s: '08:10', e: '11:00' }, // beside a, to 11:00
+      { id: 'c', s: '09:00', e: '10:00' }, // on b (the latest it overlaps): b's column only - nothing beside b is free
+      { id: 'd', s: '09:40', e: '09:50' }, // on c
+      { id: 'e', s: '11:30', e: '11:45' }, // on a, and b's column is free by then: on to the end
+    ];
+    const placed = Object.fromEntries(layoutDayApp(items, (i) => eventSpan(i.s, i.e)).map((p) => [p.item.id, p]));
+    expect(placed.c).toMatchObject({ depth: 1, left: 0.5, leftPx: APP_INDENT_PX, width: 0.5, widthPx: -APP_INDENT_PX });
+    expect(placed.d).toMatchObject({ depth: 2, left: 0.5, leftPx: 2 * APP_INDENT_PX, width: 0.5, widthPx: -2 * APP_INDENT_PX });
+    expect(placed.e).toMatchObject({ depth: 1, left: 0, leftPx: APP_INDENT_PX, width: 1, widthPx: -APP_INDENT_PX });
+  });
+
+  it("the phone's layout, a crowded hour: never narrower than can be read - the rest go over what began longest before", () => {
+    const items = [
+      { id: 'long', s: '09:30', e: '11:45' },
+      { id: 'a', s: '09:15', e: '10:15' },
+      { id: 'b', s: '09:00', e: '10:00' },
+      { id: 'c', s: '10:00', e: '11:00' },
+      { id: 'd', s: '10:00', e: '10:30' },
+      { id: 'e', s: '10:05', e: '10:20' },
+      { id: 'f', s: '10:10', e: '10:30' },
+      { id: 'g', s: '09:30', e: '10:00' },
+    ];
+    const fit = { colPx: 340, minPx: 58 };
+    const placed = layoutDayApp(items, (i) => eventSpan(i.s, i.e), undefined, undefined, fit);
+    const px = (p: (typeof placed)[number]) => p.width * fit.colPx + (p.widthPx ?? 0);
+    // without the fit, the same hour splits into columns too narrow for a word
+    expect(Math.min(...layoutDayApp(items, (i) => eventSpan(i.s, i.e)).map((p) => p.width * fit.colPx + (p.widthPx ?? 0)))).toBeLessThan(fit.minPx);
+    for (const p of placed) expect(px(p)).toBeGreaterThanOrEqual(fit.minPx - 0.5);
+    // what does not fit beside the others lies over what began longest before it, its title in sight above
+    const by = Object.fromEntries(placed.map((p) => [p.item.id, p]));
+    const under = placed.filter((q) => q !== by.e && Math.abs(q.left - by.e.left) < 1e-9 && q.start < by.e.end && by.e.start < q.end);
+    expect(Math.max(...under.map((q) => q.start))).toBeLessThanOrEqual(by.e.start - 30);
+  });
+
+  it('moves and resizes in whole steps inside the day', () => {
+    expect(movedSpan(480, 540, 37)).toEqual({ start: 510, end: 570 });
+    expect(movedSpan(480, 540, -600)).toEqual({ start: 0, end: 60 });
+    expect(movedSpan(1380, 1440, 120)).toEqual({ start: 1380, end: 1440 });
+    expect(resizedEnd(480, 540, -200)).toBe(495);
+    expect(resizedEnd(480, 540, 55)).toBe(600);
+    expect(resizedEnd(480, 540, 52)).toBe(585);
+    expect(resizedEnd(480, 540, 2000)).toBe(1440);
+  });
+
+  it('shows four days, and a year', () => {
+    expect(viewDays('four', '2026-10-30')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
+    expect(stepDate('four', '2026-10-30', 1)).toBe('2026-11-03');
+    expect(viewTitle('four', '2026-10-30')).toBe('אוקטובר - נובמבר 2026');
+    const year = viewDays('year', '2026-06-15');
+    expect(year).toHaveLength(365);
+    expect([year[0], year[364]]).toEqual(['2026-01-01', '2026-12-31']);
+    expect(viewDays('year', '2028-03-01')).toHaveLength(366);
+    expect(yearMonths('2026-06-15')).toEqual(Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}-01`));
+    expect(stepDate('year', '2028-02-29', 1)).toBe('2029-02-28');
+    expect(stepDate('year', '2026-06-15', -1)).toBe('2025-06-15');
+    expect(viewTitle('year', '2026-06-15')).toBe('2026');
+  });
+
+  it('lays things of a day or more in rows over the days shown', () => {
+    const week = viewDays('week', '2026-10-25'); // 25.10 - 31.10
+    const items = [
+      { id: 'week', startDate: '2026-10-25', endDate: '2026-10-29' },
+      { id: 'leave', startDate: '2026-10-20', endDate: '2026-10-26' }, // began the week before
+      { id: 'task', startDate: '2026-10-27', endDate: '2026-10-27' },
+      { id: 'trip', startDate: '2026-10-30', endDate: '2026-11-03' }, // goes on into the next week
+      { id: 'later', startDate: '2026-11-08', endDate: '2026-11-08' }, // not in this week
+    ];
+    const lanes = Object.fromEntries(layoutSpans(items, week, (i) => i).map((l) => [l.item.id, l]));
+    expect(lanes.later).toBeUndefined();
+    expect([lanes.week.start, lanes.week.end, lanes.week.lane]).toEqual([0, 4, 0]); // the longer of the two first
+    expect([lanes.leave.start, lanes.leave.end, lanes.leave.lane, lanes.leave.cutStart]).toEqual([0, 1, 1, true]);
+    expect([lanes.task.start, lanes.task.lane]).toEqual([2, 1]); // the leave is over by then
+    expect([lanes.trip.start, lanes.trip.end, lanes.trip.lane, lanes.trip.cutEnd]).toEqual([5, 6, 0, true]);
+    expect(laneCount(Object.values(lanes))).toBe(2);
+  });
+
+  it('puts what does not fit in a day under "more"', () => {
+    const days = viewDays('week', '2026-10-25');
+    const one = (id: string, d: string) => ({ id, startDate: d, endDate: d });
+    const items = [one('a', '2026-10-26'), one('b', '2026-10-26'), one('c', '2026-10-26'), one('d', '2026-10-26'), { id: 'span', startDate: '2026-10-25', endDate: '2026-10-27' }, one('e', '2026-10-28')];
+    const lanes = layoutSpans(items, days, (i) => i);
+    const { shown, more } = fitLanes(lanes, days.length, 3);
+    // the 26th has five: the span (in the first row, it started earlier), one more and "עוד 3"
+    expect(more).toEqual([0, 3, 0, 0, 0, 0, 0]);
+    expect(shown.map((l) => l.item.id).sort()).toEqual(['a', 'e', 'span']);
+    // with room for all, nothing is hidden
+    expect(fitLanes(lanes, days.length, 6).more.every((n) => n === 0)).toBe(true);
+  });
+
+  it('hides a thing on all its days when it does not fit on one of them', () => {
+    const days = viewDays('week', '2026-10-25');
+    const span = (id: string, a: string, b: string) => ({ id, startDate: a, endDate: b });
+    const items = [
+      span('A', '2026-10-25', '2026-10-27'),
+      span('B', '2026-10-25', '2026-10-27'),
+      span('T', '2026-10-27', '2026-10-28'), // third row on the 27th, which is full
+      span('u', '2026-10-27', '2026-10-27'),
+      span('v', '2026-10-27', '2026-10-27'),
+    ];
+    const { shown, more } = fitLanes(layoutSpans(items, days, (i) => i), days.length, 3);
+    expect(shown.map((l) => l.item.id).sort()).toEqual(['A', 'B']);
+    // on the 28th T would fit, but it is one thing: counted there as well
+    expect(more).toEqual([0, 0, 3, 1, 0, 0, 0]);
+  });
+});

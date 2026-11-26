@@ -1,0 +1,1287 @@
+import { CourseOrigin } from './CourseOrigin';
+// A debrief filled in as a form - the weekly debrief, or an intensive event (a march, a
+// final exercise): numbered sections that save as they are typed, lessons with an owner
+// and a date, and one button that sums it up - this cycle's lessons become tasks, the next
+// cycle's are kept in the lessons bank for the same week or event.
+
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type TextareaHTMLAttributes } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { ROLE_LABELS, STATUS_LABELS } from '@shared/constants';
+import { addDays, shortDate } from '@shared/dates';
+import {
+  answered,
+  DEBRIEF_KIND_HINTS,
+  DEBRIEF_KIND_LABELS,
+  formFor,
+  GOAL_STATUS_LABELS,
+  groupOf,
+  groupOwner,
+  isWeekDebrief,
+  isStaffDebrief,
+  NEXT_CYCLE_GROUPS,
+  OWNER_GROUP_LABELS,
+  OWNER_GROUPS,
+  ownerKey,
+  ownerNames,
+  LESSON_HORIZON_LABELS,
+  LESSON_REQUIRED,
+  needsAPoint,
+  proposalRows,
+  type OwnerPool,
+  type ProposalAnswer,
+  type ProposalOwner,
+  type DebriefAnswers,
+  type DebriefQuestion,
+  type DebriefSection,
+  type GoalAnswer,
+  type LessonHorizon,
+} from '@shared/debriefForms';
+import type { Cadet, DebriefDetail, DebriefItem } from '@shared/types';
+import { ask } from './Confirm';
+import { Icon } from './Icon';
+import { SectionRail, useCurrentSection, type RailItem } from './SectionRail';
+import { KIND_TONES, PriorLessons } from './DebriefBits';
+import { OpenTaskList } from './TaskRow';
+import { useToast } from './Toasts';
+import { Bar, DateInput, PageHead, Select } from './ui';
+import { api } from '../lib/api';
+import { fmtAgo, todayKey } from '../lib/format';
+import { haptic } from '../lib/haptics';
+import { emitLocalChange } from '../lib/realtime';
+import { useSession } from '../lib/session';
+import { useApi } from '../lib/useApi';
+import { sortHe } from '@shared/sort';
+import { WordButton } from './DocNav';
+import { DebriefContributions } from './DebriefContributions';
+import { DebriefImportDialog, downloadTemplate, TemplateButton } from './DebriefImport';
+
+type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+
+/**
+ * The answers as typed: each change waits a moment and is sent with the others typed
+ * meanwhile. What was typed shows until the server has it, so a refresh from someone
+ * else filling another part of the form never overwrites it. One save at a time: two
+ * in flight could reach the server (several instances in the cloud) in the wrong order,
+ * and the older one would overwrite the newer.
+ */
+function useAnswers(id: number, server: DebriefAnswers, onSaved: (d: DebriefDetail) => void) {
+  const [local, setLocal] = useState<DebriefAnswers>({});
+  const [state, setState] = useState<SaveState>('idle');
+  const pending = useRef<DebriefAnswers>({});
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inflight = useRef<Promise<void> | null>(null);
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
+
+  const flush = useCallback(async () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    while (inflight.current) await inflight.current;
+    const body = pending.current;
+    if (!Object.keys(body).length) return true;
+    pending.current = {};
+    setState('saving');
+    const save = (async () => {
+      try {
+        const res = await api.patch<DebriefDetail>(`/api/debriefs/${id}`, { answers: body });
+        onSavedRef.current(res);
+        setLocal((l) => {
+          const n = { ...l };
+          for (const k of Object.keys(body)) if (n[k] === body[k] && !(k in pending.current)) delete n[k];
+          return n;
+        });
+        setState(Object.keys(pending.current).length ? 'pending' : 'saved');
+      } catch {
+        // kept, and sent with the next change or "try again"
+        pending.current = { ...body, ...pending.current };
+        setState('error');
+      }
+    })();
+    inflight.current = save;
+    await save;
+    inflight.current = null;
+    return Object.keys(pending.current).length === 0;
+  }, [id]);
+
+  const set = (key: string, value: unknown) => {
+    setLocal((l) => ({ ...l, [key]: value }));
+    pending.current[key] = value;
+    setState('pending');
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => void flush(), 900);
+  };
+
+  // leaving the screen sends what was typed; closing the tab asks first
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (Object.keys(pending.current).length) e.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => {
+      window.removeEventListener('beforeunload', warn);
+      void flush();
+    };
+  }, [flush]);
+
+  const all: DebriefAnswers = { ...server, ...local };
+  return { all, set, flush, state };
+}
+
+const ANCHOR = (s: string) => `dsec-${s}`;
+
+/** someone a topic can be put on, as a choice in the list */
+interface OwnerChoice {
+  key: string;
+  label: string;
+  owner: ProposalOwner;
+}
+interface OwnerPools {
+  /** סגל, פלוגה, סגל רוחב, ממ"שים, מעבירי התנסויות, מפק"צים */
+  groups: OwnerChoice[];
+  staff: OwnerChoice[];
+  broadStaff: OwnerChoice[];
+  cadets: OwnerChoice[];
+}
+const OwnersContext = createContext<OwnerPools>({ groups: [], staff: [], broadStaff: [], cadets: [] });
+const GROUP_CHOICES: OwnerChoice[] = OWNER_GROUPS.map((g) => ({ key: ownerKey(groupOwner(g)), label: OWNER_GROUP_LABELS[g], owner: groupOwner(g) }));
+/** whom a list offers: a question's pool, or the company debrief's points to handle now / lessons for the next cycle */
+type Pool = OwnerPool | 'now' | 'next';
+
+/**
+ * Whom the company debrief can put a topic on: the staff (the commander first), the cadets holding a
+ * broad role then (one row each, with their roles), and - while it is filled in - every cadet.
+ */
+function useOwnerPools(data: DebriefDetail, editable: boolean): OwnerPools {
+  const { users } = useSession();
+  const company = data.debrief.kind === 'company';
+  const cadets = useApi<Cadet[]>(company && editable ? '/api/cadets' : null, ['cadets']).data;
+  const holders = data.broadStaff;
+  return useMemo(() => {
+    if (!company) return { groups: [], staff: [], broadStaff: [], cadets: [] };
+    const staff = [...users.filter((u) => u.role === 'commander'), ...users.filter((u) => u.role !== 'commander')].map((u) => {
+      const title = u.title || (u.role === 'commander' ? ROLE_LABELS.commander : '');
+      return { key: ownerKey({ kind: 'user', id: u.id }), label: title ? `${u.displayName} · ${title}` : u.displayName, owner: { kind: 'user' as const, id: u.id, name: u.displayName } };
+    });
+    const roles = new Map<number, { name: string; roles: string[] }>();
+    for (const h of holders ?? []) {
+      const r = roles.get(h.cadetId) ?? { name: h.name, roles: [] };
+      if (h.role && !r.roles.includes(h.role)) r.roles.push(h.role);
+      roles.set(h.cadetId, r);
+    }
+    const broadStaff = [...roles].map(([id, r]) => ({
+      key: ownerKey({ kind: 'cadet', id }),
+      label: r.roles.length ? `${r.name} · ${r.roles.join(', ')}` : r.name,
+      owner: { kind: 'cadet' as const, id, name: r.name },
+    }));
+    const rest = sortHe((cadets ?? []).filter((c) => !roles.has(c.id)), (c) => c.fullName).map((c) => ({
+      key: ownerKey({ kind: 'cadet', id: c.id }),
+      label: c.teamName ? `${c.fullName} · ${c.teamName}` : c.fullName,
+      owner: { kind: 'cadet' as const, id: c.id, name: c.fullName },
+    }));
+    return { groups: GROUP_CHOICES, staff, broadStaff, cadets: rest };
+  }, [company, users, holders, cadets]);
+}
+
+export function DebriefFormView({ data, setData, onEdit }: { data: DebriefDetail; setData: (d: DebriefDetail) => void; onEdit: () => void }) {
+  const d = data.debrief;
+  const toast = useToast();
+  const navigate = useNavigate();
+  const sections = formFor(d.kind);
+  const { all, set, flush, state } = useAnswers(d.id, d.answers, setData);
+  const editable = d.canEdit && d.status === 'draft';
+  const { isCommander } = useSession();
+  const [busy, setBusy] = useState(false);
+  const owners = useOwnerPools(data, editable);
+  // the debrief filled in a file (its template, or a company's own document), read into it
+  const [importing, setImporting] = useState(false);
+
+  const lessons = data.items.filter((i) => i.kind === 'lesson');
+  const ofHorizon = (h: LessonHorizon) => lessons.filter((l) => (l.horizon ?? 'now') === h);
+  const unowned = ofHorizon('now').filter((l) => !l.taskId && (!hasOwner(l) || !l.dueDate));
+
+  // the same check the server makes before summing up, shown while filling in
+  const needLesson = LESSON_REQUIRED[d.kind];
+  const missing: { label: string; anchor: string }[] = [
+    ...sections.filter((s) => s.questions.some((q) => q.required && !answered(q, all))).map((s) => ({ label: s.title, anchor: ANCHOR(s.id) })),
+    ...(needsAPoint(d.kind, all) ? [{ label: 'נושא אחד לפחות', anchor: ANCHOR(sections[0].id) }] : []),
+    ...(lessons.length || !needLesson ? [] : [{ label: 'לקח אחד לפחות', anchor: ANCHOR('now') }]),
+    ...(unowned.length ? [{ label: unowned.length === 1 ? 'אחראי ותאריך ללקח' : `אחראי ותאריך ל-${unowned.length} לקחים`, anchor: ANCHOR('now') }] : []),
+  ];
+  const questions = sections.flatMap((s) => s.questions);
+  const done = questions.filter((q) => answered(q, all)).length + (needLesson && lessons.length ? 1 : 0);
+  const total = questions.length + (needLesson ? 1 : 0);
+  // the form's parts, each with its state - for the side list on a wide screen and the floating strip on others
+  const parts: RailItem[] = [
+    ...sections.map((s, i) => {
+      const ok = s.questions.some((q) => answered(q, all));
+      const need = s.questions.some((q) => q.required && !answered(q, all));
+      return { id: ANCHOR(s.id), n: i + 1, label: s.title, state: ok && !need ? ('ok' as const) : need ? ('need' as const) : null };
+    }),
+    ...(['now', 'next'] as const).map((h, i) => {
+      const n = ofHorizon(h).length;
+      const need = h === 'now' ? (needLesson && !lessons.length) || unowned.length > 0 : false;
+      return { id: ANCHOR(h), n: sections.length + i + 1, label: LESSON_HORIZON_LABELS[d.kind][h].title, state: n && !need ? ('ok' as const) : need ? ('need' as const) : null, count: n ? String(n) : undefined };
+    }),
+  ];
+  const here = useCurrentSection(parts.map((p) => p.id));
+  // summed up while the page is open: the form says so for a moment
+  const wasFinal = useRef(d.status);
+  const [justFinal, setJustFinal] = useState(false);
+  useEffect(() => {
+    const before = wasFinal.current;
+    wasFinal.current = d.status;
+    const now = before === 'draft' && d.status === 'final';
+    setJustFinal(now);
+    if (now) haptic('success');
+  }, [d.status]);
+
+  const run = async (fn: () => Promise<DebriefDetail>, ok?: string) => {
+    try {
+      setData(await fn());
+      if (ok) toast({ title: ok, tone: 'green' });
+      emitLocalChange('debriefs', 'tasks');
+      return true;
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+      return false;
+    }
+  };
+
+  const goTo = (anchor: string) => {
+    const el = document.getElementById(anchor);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el?.querySelector<HTMLElement>('input, textarea, select, button')?.focus({ preventScroll: true });
+  };
+
+  // the weekly debrief is approved by the commander: its lead sends it, and the approval sums it up
+  const sending = !d.canSumUp;
+  const approving = !sending && !!d.submittedAt;
+  const sumUp = async () => {
+    if (missing.length) {
+      toast({ title: `${sending ? 'כדי לשלוח לאישור' : 'כדי לסכם'} חסר: ${missing.map((m) => m.label).join(', ')}`, tone: 'red' });
+      goTo(missing[0].anchor);
+      return;
+    }
+    const toOpen = ofHorizon('now').filter((l) => !l.taskId).length;
+    const kept = ofHorizon('next').length;
+    const outcome = [toOpen ? `${toOpen === 1 ? 'לקח אחד ייפתח כמשימה' : `${toOpen} לקחים ייפתחו כמשימות`} לאחראים, לפי התאריכים שנקבעו.` : '', kept ? `${kept === 1 ? 'לקח אחד יישמר' : `${kept} לקחים יישמרו`} בבנק הלקחים למחזור הבא.` : ''];
+    const ok = await ask(
+      sending
+        ? {
+            title: 'לשלוח את התחקיר לאישור מפקד הקורס?',
+            body: ['מפקד הקורס יקבל התראה, ובאישור שלו התחקיר יסוכם:', ...outcome, 'עד אז אפשר להמשיך לעדכן אותו.'].filter(Boolean).join(' '),
+            confirm: 'שליחה לאישור',
+          }
+        : {
+            title: approving ? 'לאשר ולסכם את התחקיר?' : 'לסכם את התחקיר?',
+            body: [...outcome, all.safetyEvent === true ? 'מפקד הקורס יקבל התראה על אירוע הבטיחות.' : ''].filter(Boolean).join(' '),
+            confirm: approving ? 'אישור וסיכום' : 'סיכום התחקיר',
+          },
+    );
+    if (!ok) return;
+    setBusy(true);
+    if (!await flush()) {
+      toast({ title: 'יש שינויים שלא נשמרו. נסו שוב לפני שליחה או אישור.', tone: 'red' });
+      setBusy(false);
+      return;
+    }
+    await run(
+      () => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'final' }),
+      sending ? 'התחקיר נשלח לאישור מפקד הקורס' : toOpen ? `התחקיר סוכם · ${toOpen === 1 ? 'נפתחה משימה אחת' : `נפתחו ${toOpen} משימות`}` : 'התחקיר סוכם',
+    );
+    setBusy(false);
+  };
+  const waiting = d.status === 'draft' && !!d.submittedAt;
+
+  const about = d.kind === 'track' ? (d.trackName ? `ציר ${d.trackName}` : 'ציר שנמחק — יש לבחור ציר בפרטי התחקיר') : isWeekDebrief(d.kind) ? (data.week ? `שבוע ${data.week.number} · ${data.week.name}` : d.weekName) : d.eventTitle;
+  // what earlier cycles kept for this week or event - decided about on the week page, or here by the commander
+  const prior = isWeekDebrief(d.kind) && d.weekId ? { weekId: d.weekId } : d.kind === 'event' && d.eventId ? { eventId: d.eventId } : null;
+  const tone = KIND_TONES[d.kind];
+
+  return (
+    <div className="page dform-page">
+      <CourseOrigin course={d.originCourse} />
+      <PageHead
+        eyebrow={
+          <Link to="/debriefs" className="muted">
+            תחקירים
+          </Link>
+        }
+        title={d.title}
+        sub={[
+          DEBRIEF_KIND_LABELS[d.kind],
+          about,
+          shortDate(d.occurredOn),
+          d.presenterName && `מעביר: ${d.presenterName}`,
+          d.facilitatorName && `${d.kind === 'company' ? 'אחראי מהסגל' : 'מנחה'}: ${d.facilitatorName}`,
+          d.status === 'final' ? 'סוכם' : waiting ? 'ממתין לאישור מפקד הקורס' : 'טיוטה',
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+        actions={
+          <>
+            {d.canContribute && <Link className="btn btn-primary" to={`/debriefs/${d.id}?contribute=1`}><Icon name="plus" /> הוספת התחקיר שלי</Link>}
+            <button className="btn" onClick={() => window.print()} aria-label="הדפסה">
+              <Icon name="print" />
+              <span className="hide-mobile">הדפסה</span>
+            </button>
+            <WordButton title={d.title} target=".dform-page" />
+            {editable && (
+              // on a phone they are rows of "עוד", with their names
+              <>
+                <TemplateButton data={data} />
+                <button className="btn" onClick={() => setImporting(true)}>
+                  <Icon name="upload" /> ייבוא מקובץ
+                </button>
+              </>
+            )}
+            {d.canEdit && (
+              <>
+                <button className="btn" onClick={onEdit}>
+                  <Icon name="edit" /> פרטים
+                </button>
+                {/* taking an approved weekly debrief back is the commander's */}
+                {d.status === 'final' && d.canSumUp && (
+                  <button className="btn" onClick={() => void run(() => api.patch<DebriefDetail>(`/api/debriefs/${d.id}`, { status: 'draft' }), 'התחקיר חזר לטיוטה')}>
+                    החזר לטיוטה
+                  </button>
+                )}
+                <button
+                  className="btn btn-ghost text-red"
+                  aria-label="מחיקה"
+                  onClick={async () =>
+                    (await ask({ title: 'למחוק את התחקיר?', body: 'התשובות והלקחים שבו יימחקו. משימות שנפתחו ממנו יישארו.', confirm: 'מחיקה', danger: true })) &&
+                    void api.del(`/api/debriefs/${d.id}`).then(() => {
+                      emitLocalChange('debriefs');
+                      navigate('/debriefs');
+                    })
+                  }
+                >
+                  <Icon name="trash" />
+                </button>
+              </>
+            )}
+          </>
+        }
+      />
+
+      <div className="dform">
+        <div className="col gap-16 dform-main">
+          <div className={`card card-pad dform-intro ${tone}${justFinal ? ' just-cleared' : ''}`}>
+            <div className="row wrap gap-6">
+              <span className={`badge ${tone}`}>{DEBRIEF_KIND_LABELS[d.kind]}</span>
+              {d.status === 'final' ? <span className="badge t-green">סוכם</span> : waiting ? <span className="badge t-blue">ממתין לאישור</span> : <span className="badge t-yellow">טיוטה</span>}
+              <span className="grow" />
+              <span className="tiny muted mono">
+                {done}/{total}
+              </span>
+            </div>
+            <Bar value={(done / total) * 100} tone={done === total ? 'green' : 'blue'} label="התקדמות מילוי הטופס" />
+            <p className="small muted">{d.status === 'final' ? 'התחקיר סוכם: הלקחים להמשך המחזור נפתחו כמשימות, והלקחים למחזור הבא שמורים בבנק הלקחים.' : DEBRIEF_KIND_HINTS[d.kind]}</p>
+            {waiting && (
+              <div className="dform-waiting small" role="status">
+                <Icon name="shield" size={15} />
+                <span>
+                  {approving
+                    ? `${d.submittedByName ?? 'המפק"צ'} שלח את התחקיר לאישורך ${fmtAgo(d.submittedAt!)}. באישור - הלקחים להמשך המחזור נפתחים כמשימות.`
+                    : `נשלח לאישור מפקד הקורס ${fmtAgo(d.submittedAt!)}${d.submittedByName ? ` (${d.submittedByName})` : ''}. אפשר להמשיך לעדכן אותו עד שיאושר.`}
+                </span>
+              </div>
+            )}
+            {d.kind === 'company' && (
+              <div className="small">
+                {d.presenterName ? (
+                  <>
+                    <span className="muted">מעביר התחקיר (קה"ד רוחבי): </span>
+                    <span className="strong">{d.presenterName}</span>
+                  </>
+                ) : (
+                  <span className="muted">
+                    לא נקבע מי מעביר את התחקיר.{' '}
+                    {d.canEdit && (
+                      <button type="button" className="link-btn" onClick={onEdit}>
+                        בחירת הקה"ד הרוחבי
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
+            {editable && !questions.some((q) => answered(q, all)) && (
+              <div className="small dform-import-hint">
+                <Icon name="file" size={15} />
+                <span>
+                  {d.kind === 'company' ? 'סיכום התחק"ש כבר כתוב בקובץ Word? ' : 'נוח יותר למלא בקובץ? '}
+                  <button type="button" className="link-btn" onClick={() => downloadTemplate(data)}>
+                    תבנית למילוי
+                  </button>
+                  {' - ממלאים ב-Word או ב-Google Docs, ו'}
+                  <button type="button" className="link-btn" onClick={() => setImporting(true)}>
+                    ייבוא מקובץ
+                  </button>
+                  {' מכניס כל חלק למקומו.'}
+                </span>
+              </div>
+            )}
+            {(d.participants || d.summary) && (
+              <div className="small">
+                {d.participants && <div className="muted">משתתפים: {d.participants}</div>}
+                {d.summary && <p className="prewrap mt-8">{d.summary}</p>}
+              </div>
+            )}
+          </div>
+
+          {isStaffDebrief(d.kind) && <DebriefContributions
+            data={data} setData={setData} beforeReview={flush} sections={sections}
+            renderSection={(section, n, answers, onChange) => <Section key={section.id} section={{ ...section, questions: section.questions.map((q) => ({ ...q, required: false })) }} n={n + 1} answers={answers} editable onChange={onChange} onDone={() => {}} idPrefix="contribution-" />}
+            renderPoint={(point) => {
+              const q = sections.flatMap((s) => s.questions).find((q) => q.id === point.questionId);
+              if (!q) return <p className="prewrap">{typeof point.value === 'string' ? point.value : ''}</p>;
+              return <Question hideLabel q={{ ...q, required: false }} value={q.type === 'list' || q.type === 'goals' ? [point.value] : point.value} editable={false} onChange={() => {}} onDone={() => {}} alert={false} idPrefix={`contribution-point-${point.id}-`} />;
+            }}
+          />}
+
+          <SectionRail label="סעיפי הטופס" items={parts} />
+
+          {prior && (
+            <PriorLessons
+              title={isWeekDebrief(d.kind) ? 'מה המחזור הקודם למד על השבוע הזה' : 'מה למדנו במופעים קודמים'}
+              context={{ ...prior, canDecide: isCommander && editable, owner: null, due: addDays(d.occurredOn, 3) }}
+            />
+          )}
+
+          <OwnersContext.Provider value={owners}>
+            {sections.map((s, i) => (
+              <Section key={s.id} section={s} n={i + 1} answers={all} editable={editable} onChange={set} onDone={() => void flush()} />
+            ))}
+
+            {/* the lessons too: in the company debrief they are on the same people and groups */}
+            {(['now', 'next'] as const).map((h, i) => (
+              <LessonsCard key={h} n={sections.length + i + 1} horizon={h} data={data} items={ofHorizon(h)} editable={editable} run={run} />
+            ))}
+          </OwnersContext.Provider>
+
+          <div className="card">
+            <div className="card-head">
+              <Icon name="tasks" />
+              <h3 className="grow">משימות בעקבות התחקיר</h3>
+              <span className="mono tiny muted">{data.tasks.length}</span>
+            </div>
+            <div className="card-body">
+              <OpenTaskList tasks={data.tasks} drawerId="debrief-tasks-done" empty={<p className="small muted">בסיכום התחקיר כל לקח להמשך המחזור נפתח כאן כמשימה לאחראי שלו.</p>} />
+            </div>
+          </div>
+        </div>
+
+        <nav className="dform-toc no-print" aria-label="סעיפי הטופס">
+          <div className="label-caps">סעיפים</div>
+          {/* the part on the screen now is marked as the page scrolls */}
+          {parts.map((p) => (
+            <a key={p.id} href={`#${p.id}`} onClick={(e) => (e.preventDefault(), goTo(p.id))} className={p.state ?? ''} aria-current={here === p.id ? 'location' : undefined}>
+              <span className="dsec-num">{p.state === 'ok' ? <Icon name="check" size={12} /> : p.n}</span>
+              {p.label}
+              {p.count && <span className="mono tiny muted"> {p.count}</span>}
+            </a>
+          ))}
+        </nav>
+      </div>
+
+      {importing && <DebriefImportDialog data={data} answers={all} set={set} flush={async () => {
+        if (!(await flush())) throw new Error('לא הצלחנו לשמור את מה שכתבת. התוכן נשאר במסך; נסו שוב לפני הייבוא.');
+      }} onApplied={setData} onClose={() => setImporting(false)} />}
+
+      {editable && (
+        <div className="fab-dock page-fab no-print">
+          <SaveIndicator state={state} retry={() => void flush()} />
+          {missing.length > 0 && (
+            <button type="button" className="fab-missing" onClick={() => goTo(missing[0].anchor)}>
+              חסר: {missing.map((m) => m.label).join(', ')}
+            </button>
+          )}
+          <button className={`btn btn-primary fab-send${missing.length ? ' incomplete' : ''}`} onClick={() => void sumUp()} disabled={busy}>
+            <Icon name={sending ? 'shield' : 'check'} /> {busy ? (sending ? 'שולח...' : 'מסכם...') : sending ? (waiting ? 'שליחה שוב לאישור' : 'שליחה לאישור מפקד הקורס') : approving ? 'אישור וסיכום התחקיר' : 'סיכום התחקיר'}
+            {missing.length > 0 && <span className="fab-count">חסרים {missing.length}</span>}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SaveIndicator({ state, retry }: { state: SaveState; retry: () => void }) {
+  if (state === 'error')
+    return (
+      <span className="save-state error fab-hint" role="status">
+        <Icon name="alert" size={14} /> לא נשמר
+        <button className="btn btn-sm" onClick={retry}>
+          נסו שוב
+        </button>
+      </span>
+    );
+  return (
+    <span className={`save-state fab-hint tiny muted${state === 'idle' ? ' quiet' : ''}`} role="status">
+      {state === 'saving' || state === 'pending' ? 'שומר...' : state === 'saved' ? (
+        <>
+          <Icon name="check" size={13} /> נשמר
+        </>
+      ) : (
+        'כל שינוי נשמר מעצמו'
+      )}
+    </span>
+  );
+}
+
+function Section({
+  section,
+  n,
+  answers,
+  editable,
+  onChange,
+  onDone,
+  idPrefix = '',
+}: {
+  idPrefix?: string;
+  section: DebriefSection;
+  n: number;
+  answers: DebriefAnswers;
+  editable: boolean;
+  onChange: (key: string, value: unknown) => void;
+  onDone: () => void;
+}) {
+  const alert = section.alert && answers.safetyEvent === true;
+  const ok = section.questions.some((q) => answered(q, answers)) && !section.questions.some((q) => q.required && !answered(q, answers));
+  // complete just now (not on opening the form): its check comes in
+  const wasOk = useRef(ok);
+  const [justOk, setJustOk] = useState(false);
+  useEffect(() => {
+    const before = wasOk.current;
+    wasOk.current = ok;
+    if (ok !== before) setJustOk(ok);
+  }, [ok]);
+  return (
+    <section id={ANCHOR(idPrefix + section.id)} className={`card dsec${alert ? ' alert' : ''}`} aria-labelledby={`${ANCHOR(idPrefix + section.id)}-h`}>
+      <div className="card-head">
+        <span className="dsec-num">{n}</span>
+        <h2 className="grow" id={`${ANCHOR(idPrefix + section.id)}-h`}>
+          {section.title}
+        </h2>
+        {ok && <Icon name="check" size={16} className={justOk ? 'dsec-ok-in' : undefined} />}
+      </div>
+      <div className="card-body col gap-16">
+        {section.hint && <p className="small muted">{section.hint}</p>}
+        {section.questions.map((q) => (
+          <Question key={q.id} idPrefix={idPrefix} q={q} value={answers[q.id]} editable={editable} onChange={(v) => onChange(q.id, v)} onDone={onDone} alert={!!alert} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Question({ q, value, editable, onChange, onDone, alert, idPrefix = '', hideLabel = false }: { hideLabel?: boolean; idPrefix?: string; q: DebriefQuestion; value: unknown; editable: boolean; onChange: (v: unknown) => void; onDone: () => void; alert: boolean }) {
+  const id = `${idPrefix}q-${q.id}`;
+  const head = (
+    <span className={`dq-label${hideLabel ? ' sr-only' : ''}`} id={`${id}-l`}>
+      {q.label}
+      {q.required && <span className="req"> *</span>}
+      {q.hint && <span className="tiny muted"> · {q.hint}</span>}
+    </span>
+  );
+  // a single field takes its label; several controls are a group named by it
+  if (q.type === 'text')
+    return (
+      <label className="dq" htmlFor={id}>
+        {head}
+        {editable ? (
+          <textarea id={id} className="textarea dq-text" value={typeof value === 'string' ? value : ''} onChange={(e) => onChange(e.target.value)} onBlur={onDone} />
+        ) : (
+          <Read text={typeof value === 'string' ? value : ''} />
+        )}
+      </label>
+    );
+  return (
+    <div className="dq" role="group" aria-labelledby={`${id}-l`}>
+      {head}
+      {q.type === 'list' && <ListInput value={Array.isArray(value) ? (value as string[]) : []} editable={editable} onChange={onChange} onDone={onDone} label={q.label} />}
+      {q.type === 'proposals' && <ProposalsInput value={proposalRows(value)} editable={editable} onChange={onChange} onDone={onDone} label={q.label} pool={q.owners} />}
+      {q.type === 'rating' && <Rating value={typeof value === 'number' ? value : 0} editable={editable} onChange={(v) => (onChange(v), onDone())} />}
+      {q.type === 'goals' && <Goals value={Array.isArray(value) ? (value as GoalAnswer[]) : []} editable={editable} onChange={onChange} onDone={onDone} />}
+      {q.type === 'numbers' && <Numbers fields={q.fields ?? []} value={value && typeof value === 'object' ? (value as Record<string, number>) : {}} editable={editable} onChange={onChange} onDone={onDone} />}
+      {q.type === 'flag' && (
+        <>
+          <Choice
+            value={value === true ? 'yes' : value === false ? 'no' : ''}
+            editable={editable}
+            options={[
+              { value: 'no', label: 'לא', tone: 'green' },
+              { value: 'yes', label: 'כן', tone: 'red' },
+            ]}
+            onChange={(v) => (onChange(v === 'yes' ? true : v === 'no' ? false : null), onDone())}
+            label={q.label}
+          />
+          {alert && <p className="small text-red">בסיכום התחקיר מפקד הקורס יקבל התראה על האירוע. פרטו מה קרה ומה נעשה.</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Read({ text }: { text: string }) {
+  return text.trim() ? <p className="prewrap dq-read">{text}</p> : <p className="muted">-</p>;
+}
+
+/** buttons that pick one value; clicking the chosen one clears it */
+function Choice<T extends string>({ value, options, editable, onChange, label }: { value: T | ''; options: { value: T; label: string; tone: string }[]; editable: boolean; onChange: (v: T | '') => void; label: string }) {
+  if (!editable) {
+    const o = options.find((x) => x.value === value);
+    return o ? <span className={`badge t-${o.tone}`}>{o.label}</span> : <span className="muted">-</span>;
+  }
+  return (
+    <div className="dq-choice" role="group" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.value} type="button" className={`t-${o.tone}`} aria-pressed={value === o.value} onClick={() => onChange(value === o.value ? '' : o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Rating({ value, editable, onChange }: { value: number; editable: boolean; onChange: (v: number | null) => void }) {
+  const tone = (n: number) => (n <= 2 ? 'red' : n === 3 ? 'yellow' : 'green');
+  if (!editable) return value ? <span className={`badge t-${tone(value)}`}>{value} / 5</span> : <span className="muted">-</span>;
+  return (
+    <div className="dq-rating">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" className={`t-${tone(n)}`} aria-pressed={value === n} aria-label={`${n} מתוך 5`} onClick={() => onChange(value === n ? null : n)}>
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** a list of short items: Enter moves to the next row, an emptied row goes away */
+function ListInput({ value, editable, onChange, onDone, label }: { value: string[]; editable: boolean; onChange: (v: string[]) => void; onDone: () => void; label: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  if (!editable) {
+    const items = value.filter((v) => v.trim());
+    return items.length ? (
+      <ul className="dq-list-read">
+        {items.map((v, i) => (
+          <li key={i}>{v}</li>
+        ))}
+      </ul>
+    ) : (
+      <p className="muted">-</p>
+    );
+  }
+  const rows = [...value, ''];
+  const focusRow = (i: number) => box.current?.querySelectorAll<HTMLTextAreaElement>('textarea')[i]?.focus();
+  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>, i: number) => {
+    if (enterOnly(e)) {
+      e.preventDefault();
+      if (rows[i].trim()) focusRow(i + 1);
+    } else if (e.key === 'Backspace' && !rows[i] && i > 0) {
+      e.preventDefault();
+      if (i < value.length) onChange(value.filter((_, j) => j !== i));
+      focusRow(i - 1);
+    }
+  };
+  return (
+    <div className="dq-list" ref={box}>
+      {rows.map((v, i) => (
+        <div key={i} className="dq-list-row">
+          <span className="dq-bullet" aria-hidden="true">
+            {i + 1}
+          </span>
+          {/* a long line wraps (a line of a document is often longer than the box) */}
+          <GrowText
+            className="input dq-grow"
+            value={v}
+            aria-label={`${label} ${i + 1}`}
+            enterKeyHint="next"
+            placeholder={i === value.length ? (i ? 'עוד אחד...' : 'כתבו ולחצו Enter') : undefined}
+            onChange={(e) => {
+              const next = [...value];
+              next[i] = e.target.value;
+              onChange(next);
+            }}
+            onKeyDown={(e) => onKey(e, i)}
+            onBlur={() => {
+              if (value.some((x) => !x.trim())) onChange(value.filter((x) => x.trim()));
+              onDone();
+            }}
+          />
+          {i < value.length && (
+            <button type="button" className="icon-btn" aria-label="הסרה" onClick={() => (onChange(value.filter((_, j) => j !== i)), onDone())}>
+              <Icon name="x" size={14} />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The choices of a pool, in its groups: the groups first (סגל, פלוגה...), then the people the section is
+ * about. A lesson for the next cycle: not this cycle's company or its broad staff.
+ */
+function useOwnerGroups(pool: Pool): { label: string; list: OwnerChoice[] }[] {
+  const p = useContext(OwnersContext);
+  const groups = { label: 'קבוצות', list: pool === 'next' ? p.groups.filter((g) => NEXT_CYCLE_GROUPS.includes(groupOf(g.owner)!)) : p.groups };
+  const staff = { label: 'הסגל', list: p.staff };
+  const broad = { label: 'סגל רוחב - בעלי התפקידים', list: p.broadStaff };
+  if (pool === 'next') return [groups, staff];
+  if (pool === 'now' || pool === 'staff') return [groups, staff, broad];
+  if (pool === 'broadStaff') return [groups, broad, staff];
+  return [groups, broad, { label: 'צוערים', list: p.cadets }, staff];
+}
+
+/** who a topic is on, as the list names them now (with a broad role) - or as it was when chosen */
+function OwnerName({ owner }: { owner: ProposalOwner }) {
+  const p = useContext(OwnersContext);
+  const key = ownerKey(owner);
+  const found = [...p.groups, ...p.staff, ...p.broadStaff, ...p.cadets].find((o) => o.key === key);
+  return <>{found?.label ?? owner.name}</>;
+}
+
+/** who it is on - one or more: each a chip, and a list to add another */
+function OwnersPick({ pool, value, onChange, label, required }: { pool: Pool; value: ProposalOwner[]; onChange: (o: ProposalOwner[]) => void; label: string; required?: boolean }) {
+  const groups = useOwnerGroups(pool);
+  const all = groups.flatMap((g) => g.list);
+  const chosen = new Set(value.map(ownerKey));
+  const left = groups.map((g) => ({ ...g, list: g.list.filter((o) => !chosen.has(o.key)) })).filter((g) => g.list.length);
+  return (
+    <div className={`owners-pick${required && !value.length ? ' missing' : ''}`}>
+      {value.map((o) => (
+        <span key={ownerKey(o)} className="owner-chip">
+          <OwnerName owner={o} />
+          <button type="button" className="owner-chip-x" aria-label={`הסרת ${o.name} מהאחראים`} onClick={() => onChange(value.filter((x) => ownerKey(x) !== ownerKey(o)))}>
+            <Icon name="x" size={12} />
+          </button>
+        </span>
+      ))}
+      {left.length > 0 && (
+        <Select
+          className="select owners-add"
+          value=""
+          aria-label={label}
+          aria-invalid={required && !value.length}
+          searchable={all.length > 6}
+          onChange={(e) => {
+            const o = all.find((x) => x.key === e.target.value)?.owner;
+            if (o) onChange([...value, o]);
+          }}
+        >
+          <option value="">{value.length ? '+ עוד אחראי' : required ? 'אחראי...' : 'באחריות...'}</option>
+          {left.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.list.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </Select>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A box of text that grows with its lines - a topic read from a document keeps every line of it. The browser
+ * sizes it by itself where it can (field-sizing); elsewhere its height follows its text.
+ */
+function GrowText(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || (typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content'))) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [props.value]);
+  return <textarea ref={ref} rows={1} {...props} />;
+}
+
+/** Enter moves on (Shift+Enter is a new line in the text) */
+const enterOnly = (e: KeyboardEvent<HTMLTextAreaElement>) => e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing;
+
+/**
+ * Topics raised, each with what is proposed for it and who it is on (the company debrief) - and what has been
+ * done about it since, when told (a document's progress column, or added here).
+ */
+function ProposalsInput({ value, editable, onChange, onDone, label, pool }: { value: ProposalAnswer[]; editable: boolean; onChange: (v: ProposalAnswer[]) => void; onDone: () => void; label: string; pool?: OwnerPool }) {
+  const box = useRef<HTMLDivElement>(null);
+  // the rows whose progress field was opened here
+  const [progressOpen, setProgressOpen] = useState<Set<number>>(() => new Set());
+  const hasText = (v: string | undefined) => !!v?.trim();
+  if (!editable) {
+    const items = value.filter((r) => hasText(r.topic) || hasText(r.proposal) || hasText(r.progress) || hasText(r.ownerText));
+    return items.length ? (
+      <ol className="dq-proposals-read">
+        {items.map((r, i) => (
+          <li key={i}>
+            <div className="prewrap">{r.topic || '-'}</div>
+            {hasText(r.proposal) && (
+              <div className="small dq-proposal-read prewrap">
+                <span className="strong">הצעה: </span>
+                {r.proposal}
+              </div>
+            )}
+            {(r.owner || hasText(r.ownerText)) && (
+              <div className="small dq-proposal-read">
+                <span className="strong">באחריות: </span>
+                {r.owner
+                  ? (r.owners ?? [r.owner]).map((o, k) => (
+                      <span key={ownerKey(o)}>
+                        {k > 0 && ', '}
+                        <OwnerName owner={o} />
+                      </span>
+                    ))
+                  : r.ownerText}
+              </div>
+            )}
+            {hasText(r.progress) && (
+              <div className="small dq-proposal-read prewrap">
+                <span className="strong">התקדמות: </span>
+                {r.progress}
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+    ) : (
+      <p className="muted">-</p>
+    );
+  }
+  const rows: ProposalAnswer[] = [...value, { topic: '', proposal: '', owner: null }];
+  const focus = (i: number, part: 'topic' | 'proposal' | 'progress') =>
+    requestAnimationFrame(() => box.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-part="${part}"]`)?.focus());
+  const set = (i: number, patch: Partial<ProposalAnswer>) => {
+    const next = [...value];
+    next[i] = { ...rows[i], ...patch };
+    onChange(next);
+  };
+  const empty = (r: ProposalAnswer) => !hasText(r.topic) && !hasText(r.proposal) && !hasText(r.progress) && !hasText(r.ownerText) && !r.owner && !r.owners?.length;
+  const tidy = () => {
+    if (value.some(empty)) onChange(value.filter((r) => !empty(r)));
+    onDone();
+  };
+  return (
+    <div className="dq-list" ref={box}>
+      {rows.map((r, i) => (
+        <div key={i} className="dq-proposal-row">
+          <span className="dq-bullet" aria-hidden="true">
+            {i + 1}
+          </span>
+          <div className="dq-proposal-fields">
+            <GrowText
+              className="input dq-grow"
+              value={r.topic}
+              data-row={i}
+              data-part="topic"
+              aria-label={`${label} - נושא ${i + 1}`}
+              enterKeyHint="next"
+              placeholder={i === value.length ? (i ? 'נושא נוסף...' : 'נושא - כתבו ולחצו Enter') : undefined}
+              onChange={(e) => set(i, { topic: e.target.value })}
+              onKeyDown={(e) => {
+                if (enterOnly(e)) {
+                  e.preventDefault();
+                  // the topic written: on to its proposal
+                  if (r.topic.trim()) focus(i, 'proposal');
+                } else if (e.key === 'Backspace' && empty(r) && i > 0) {
+                  e.preventDefault();
+                  if (i < value.length) onChange(value.filter((_, j) => j !== i));
+                  focus(i - 1, 'proposal');
+                }
+              }}
+              onBlur={tidy}
+            />
+            {i < value.length && (
+              <label className="dq-proposal">
+                <span className="dq-proposal-tag">הצעה</span>
+                <GrowText
+                  className="input dq-grow"
+                  value={r.proposal}
+                  data-row={i}
+                  data-part="proposal"
+                  aria-label={`${label} - הצעה לנושא ${i + 1}`}
+                  enterKeyHint="next"
+                  placeholder="מה מציעים?"
+                  onChange={(e) => set(i, { proposal: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (enterOnly(e)) {
+                      e.preventDefault();
+                      focus(i + 1, 'topic');
+                    }
+                  }}
+                  onBlur={tidy}
+                />
+              </label>
+            )}
+            {i < value.length && pool && (
+              <div className="dq-proposal">
+                <span className="dq-proposal-tag" aria-hidden="true">
+                  באחריות
+                </span>
+                <OwnersPick
+                  pool={pool}
+                  value={r.owners ?? (r.owner ? [r.owner] : [])}
+                  label={`${label} - באחריות מי, נושא ${i + 1}`}
+                  onChange={(list) => (set(i, { owner: list[0] ?? null, owners: list, ...(list.length ? { ownerText: undefined } : {}) }), onDone())}
+                />
+                {!hasText(r.progress) && !progressOpen.has(i) && (
+                  <button
+                    type="button"
+                    className="link-btn tiny dq-progress-add"
+                    onClick={() => {
+                      setProgressOpen((s) => new Set(s).add(i));
+                      focus(i, 'progress');
+                    }}
+                  >
+                    + התקדמות
+                  </button>
+                )}
+                {/* who it is on as the document wrote it, until someone is chosen */}
+                {!r.owner && hasText(r.ownerText) && <span className="dq-owner-text tiny muted">בקובץ: {r.ownerText}</span>}
+              </div>
+            )}
+            {i < value.length && (hasText(r.progress) || progressOpen.has(i)) && (
+              <label className="dq-proposal">
+                <span className="dq-proposal-tag">התקדמות</span>
+                <GrowText
+                  className="input dq-grow"
+                  value={r.progress ?? ''}
+                  data-row={i}
+                  data-part="progress"
+                  aria-label={`${label} - תיעוד התקדמות לנושא ${i + 1}`}
+                  placeholder="מה נעשה מאז?"
+                  onChange={(e) => set(i, { progress: e.target.value })}
+                  onBlur={tidy}
+                />
+              </label>
+            )}
+          </div>
+          {i < value.length && (
+            <button type="button" className="icon-btn" aria-label={`הסרת נושא ${i + 1}`} onClick={() => (onChange(value.filter((_, j) => j !== i)), onDone())}>
+              <Icon name="x" size={14} />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const GOAL_TONES = { met: 'green', partial: 'yellow', missed: 'red' } as const;
+
+function Goals({ value, editable, onChange, onDone }: { value: GoalAnswer[]; editable: boolean; onChange: (v: GoalAnswer[]) => void; onDone: () => void }) {
+  // nothing to start from: one empty row to type the first goal in
+  const rows: GoalAnswer[] = value.length || !editable ? value : [{ goal: '', status: '', note: '' }];
+  const patch = (i: number, p: Partial<GoalAnswer>) => onChange(rows.map((g, j) => (j === i ? { ...g, ...p } : g)));
+  if (!rows.length) return <p className="muted">-</p>;
+  return (
+    <div className="dq-goals">
+      {rows.map((g, i) => (
+        <div key={i} className="goal-row">
+          {editable ? (
+            <input className="input goal-name" value={g.goal} placeholder="המטרה" aria-label={`מטרה ${i + 1}`} onChange={(e) => patch(i, { goal: e.target.value })} onBlur={onDone} />
+          ) : (
+            <span className="goal-name strong">{g.goal}</span>
+          )}
+          <Choice
+            value={g.status}
+            editable={editable}
+            label={`האם הושגה: ${g.goal || `מטרה ${i + 1}`}`}
+            options={(['met', 'partial', 'missed'] as const).map((s) => ({ value: s, label: GOAL_STATUS_LABELS[s], tone: GOAL_TONES[s] }))}
+            onChange={(s) => (patch(i, { status: s }), onDone())}
+          />
+          {editable ? (
+            <input className="input goal-note" value={g.note} placeholder="למה? (משפט אחד)" aria-label={`הסבר למטרה ${i + 1}`} onChange={(e) => patch(i, { note: e.target.value })} onBlur={onDone} />
+          ) : (
+            g.note && <span className="goal-note small muted">{g.note}</span>
+          )}
+          {editable && i < value.length && (
+            <button type="button" className="icon-btn goal-del" aria-label={`הסרת מטרה ${i + 1}`} onClick={() => (onChange(value.filter((_, j) => j !== i)), onDone())}>
+              <Icon name="x" size={14} />
+            </button>
+          )}
+        </div>
+      ))}
+      {editable && (
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => onChange([...rows, { goal: '', status: '', note: '' }])}>
+          <Icon name="plus" /> מטרה
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Numbers({ fields, value, editable, onChange, onDone }: { fields: { id: string; label: string }[]; value: Record<string, number>; editable: boolean; onChange: (v: Record<string, number>) => void; onDone: () => void }) {
+  const rate = value.started > 0 && typeof value.finished === 'number' ? Math.round((value.finished / value.started) * 100) : null;
+  return (
+    <div className="dq-numbers">
+      {fields.map((f) => (
+        <label key={f.id} className="field">
+          <span>{f.label}</span>
+          {editable ? (
+            <input
+              className="input mono"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={9999}
+              value={value[f.id] ?? ''}
+              onChange={(e) => {
+                const next = { ...value };
+                if (e.target.value === '') delete next[f.id];
+                else next[f.id] = Math.max(0, Math.round(Number(e.target.value)));
+                onChange(next);
+              }}
+              onBlur={onDone}
+            />
+          ) : (
+            <span className="dq-big mono">{value[f.id] ?? '-'}</span>
+          )}
+        </label>
+      ))}
+      {rate !== null && (
+        <div className="dq-rate">
+          <span className="label-caps">סיימו</span>
+          <span className={`dq-big mono ${rate >= 90 ? 'text-green' : rate < 75 ? 'text-red' : ''}`}>{rate}%</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LessonsCard({
+  n,
+  horizon,
+  data,
+  items,
+  editable,
+  run,
+}: {
+  n: number;
+  horizon: LessonHorizon;
+  data: DebriefDetail;
+  items: DebriefItem[];
+  editable: boolean;
+  run: (fn: () => Promise<DebriefDetail>, ok?: string) => Promise<boolean>;
+}) {
+  const d = data.debrief;
+  const { title, hint } = LESSON_HORIZON_LABELS[d.kind][horizon];
+  const now = horizon === 'now';
+  // the company debrief: several owners, groups too (for the next cycle - not the company or its broad staff)
+  const pool: Pool | null = d.kind === 'company' ? horizon : null;
+  return (
+    <section id={ANCHOR(horizon)} className={`card dsec dsec-lessons ${now ? 't-orange' : 't-blue'}`} aria-labelledby={`${ANCHOR(horizon)}-h`}>
+      <div className="card-head">
+        <span className="dsec-num">{n}</span>
+        <h2 className="grow" id={`${ANCHOR(horizon)}-h`}>
+          {title}
+        </h2>
+        <span className="mono tiny muted">{items.length}</span>
+      </div>
+      <div className="card-body col lessons-body">
+        {hint && <p className="small muted">{hint}</p>}
+        {items.map((l) => (
+          <LessonRow key={l.id} lesson={l} now={now} pool={pool} editable={editable} run={run} />
+        ))}
+        {!items.length && !editable && <p className="muted">-</p>}
+        {editable && <AddLesson debriefId={d.id} defaultTrackId={d.trackId} horizon={horizon} pool={pool} run={run} first={!items.length} />}
+      </div>
+    </section>
+  );
+}
+
+function OwnerSelect({ value, onChange, required, label }: { value: number | null; onChange: (v: number | null) => void; required: boolean; label: string }) {
+  const { users } = useSession();
+  return (
+    <Select className={`select${required && !value ? ' missing' : ''}`} value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)} aria-label={label} aria-invalid={required && !value}>
+      <option value="">{required ? 'אחראי...' : 'אחראי (לא חובה)'}</option>
+      {users.map((u) => (
+        <option key={u.id} value={u.id}>
+          {u.displayName}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+/** a lesson's training track: it shows in the track, and in the same track of the next cycle */
+function TrackSelect({ value, onChange, label }: { value: number | null; onChange: (v: number | null) => void; label: string }) {
+  const { tracks } = useSession();
+  if (!tracks.length) return null;
+  return (
+    <Select className="select lesson-track" value={value ?? ''} aria-label={label} title="ציר הכשרה - הלקח יופיע בציר, ובציר הזה במחזור הבא" onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <option value="">ציר הכשרה...</option>
+      {tracks.map((t) => (
+        <option key={t.id} value={t.id}>
+          ציר {t.name}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+/** someone is on it: its owner, or (the company debrief) one of its owners */
+const hasOwner = (l: DebriefItem) => !!l.ownerId || l.owners.length > 0;
+
+function LessonRow({
+  lesson: l,
+  now,
+  pool,
+  editable,
+  run,
+}: {
+  lesson: DebriefItem;
+  now: boolean;
+  pool: Pool | null;
+  editable: boolean;
+  run: (fn: () => Promise<DebriefDetail>, ok?: string) => Promise<boolean>;
+}) {
+  const [body, setBody] = useState(l.body);
+  // someone else edited it: show theirs unless this one is being typed
+  const typing = useRef(false);
+  useEffect(() => {
+    if (!typing.current) setBody(l.body);
+  }, [l.body]);
+  const patch = (p: Record<string, unknown>) => run(() => api.patch<DebriefDetail>(`/api/debrief-items/${l.id}`, p));
+  const locked = !editable || !!l.taskId;
+  return (
+    <div className={`lesson-row${now && !l.taskId && (!hasOwner(l) || !l.dueDate) ? ' incomplete' : ''}`}>
+      {locked ? (
+        <div className="lesson-body prewrap">{l.body}</div>
+      ) : (
+        <textarea
+          className="textarea lesson-body"
+          value={body}
+          aria-label="הלקח"
+          onFocus={() => (typing.current = true)}
+          onChange={(e) => setBody(e.target.value)}
+          onBlur={() => {
+            typing.current = false;
+            if (body.trim() && body.trim() !== l.body) void patch({ body: body.trim() });
+            else setBody(l.body);
+          }}
+        />
+      )}
+      <div className="lesson-meta">
+        {l.taskId ? (
+          <Link to={`/tasks/${l.taskId}`} className="badge t-blue">
+            <Icon name="tasks" size={11} /> משימה · {l.ownerName} · {l.taskStatus ? STATUS_LABELS[l.taskStatus] : ''}
+          </Link>
+        ) : locked ? (
+          <span className="tiny muted">
+            {[(l.owners.length || l.ownerName) && `באחריות: ${l.owners.length ? ownerNames(l.owners) : l.ownerName}`, l.dueDate && `עד ${shortDate(l.dueDate)}`, l.trackName && `ציר ${l.trackName}`, !now && l.target && `יוצג ב: ${l.target}`]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        ) : (
+          <>
+            {pool ? (
+              <OwnersPick pool={pool} value={l.owners} onChange={(list) => void patch({ owners: list })} required={now} label="אחראי ללקח" />
+            ) : (
+              <OwnerSelect value={l.ownerId} onChange={(v) => void patch({ ownerId: v })} required={now} label="אחראי ללקח" />
+            )}
+            {now && (
+              <DateInput
+                className={`input mono${l.dueDate ? '' : ' missing'}`}
+                value={l.dueDate ?? ''}
+                min={todayKey()}
+                aria-label="עד מתי"
+                aria-invalid={!l.dueDate}
+                onChange={(v) => void patch({ dueDate: v || null })}
+              />
+            )}
+            <TrackSelect value={l.trackId} onChange={(v) => void patch({ trackId: v })} label="ציר הכשרה ללקח" />
+            {!now && l.target && <span className="tiny muted">יוצג ב: {l.target}</span>}
+          </>
+        )}
+        {editable && (
+          <button className="icon-btn lesson-del" aria-label="מחיקת הלקח" onClick={async () => (await ask({ title: 'למחוק את הלקח?', body: l.taskId ? 'המשימה שנפתחה ממנו תישאר.' : undefined, confirm: 'מחיקה', danger: true })) && void run(() => api.del<DebriefDetail>(`/api/debrief-items/${l.id}`))}>
+            <Icon name="trash" size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AddLesson({
+  debriefId,
+  defaultTrackId,
+  horizon,
+  pool,
+  run,
+  first,
+}: {
+  debriefId: number;
+  defaultTrackId: number | null;
+  horizon: LessonHorizon;
+  pool: Pool | null;
+  run: (fn: () => Promise<DebriefDetail>, ok?: string) => Promise<boolean>;
+  first: boolean;
+}) {
+  const now = horizon === 'now';
+  const [body, setBody] = useState('');
+  const [owner, setOwner] = useState<number | null>(null);
+  const [owners, setOwners] = useState<ProposalOwner[]>([]);
+  const [chosenTrack, setTrack] = useState<number | null | undefined>(undefined);
+  const track = chosenTrack === undefined ? defaultTrackId : chosenTrack;
+  const [due, setDue] = useState(addDays(todayKey(), 7));
+  const [busy, setBusy] = useState(false);
+  const add = async () => {
+    if (!body.trim() || busy) return;
+    setBusy(true);
+    const who = pool ? { owners } : { ownerId: owner };
+    const ok = await run(() => api.post<DebriefDetail>(`/api/debriefs/${debriefId}/items`, { kind: 'lesson', horizon, body: body.trim(), ...who, trackId: track, dueDate: now ? due || null : null }));
+    setBusy(false);
+    if (ok) {
+      setBody('');
+      setOwner(null);
+      setOwners([]);
+      setTrack(undefined);
+    }
+  };
+  return (
+    <form
+      className="lesson-row lesson-new"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void add();
+      }}
+    >
+      <textarea
+        className="textarea lesson-body"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            void add();
+          }
+        }}
+        placeholder={now ? (first ? 'מה עושים אחרת מעכשיו? לדוגמה: תדריך בטיחות יום לפני כל תרגיל' : 'לקח נוסף...') : first ? 'מה כדאי שהמחזור הבא יידע? לדוגמה: להקדים את התרגיל ליום שני' : 'לקח נוסף...'}
+        aria-label={now ? 'לקח חדש להמשך המחזור' : 'לקח חדש למחזור הבא'}
+        data-transient
+      />
+      <div className="lesson-meta">
+        {pool ? (
+          <OwnersPick pool={pool} value={owners} onChange={setOwners} label="אחראי ללקח החדש" />
+        ) : (
+          <OwnerSelect value={owner} onChange={setOwner} required={false} label="אחראי ללקח החדש" />
+        )}
+        {now && <DateInput value={due} min={todayKey()} onChange={(v) => setDue(v)} aria-label="עד מתי" />}
+        <TrackSelect value={track} onChange={setTrack} label="ציר הכשרה ללקח החדש" />
+        <button className="btn btn-sm" disabled={!body.trim() || busy}>
+          <Icon name="plus" /> הוספה
+        </button>
+      </div>
+    </form>
+  );
+}

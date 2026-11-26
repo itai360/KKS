@@ -1,0 +1,468 @@
+// The debrief forms: a weekly debrief (improve this cycle, and the same week in
+// the next one), a debrief of an intensive event (a march, a final exercise), and
+// the company's weekly debrief (תחק"ש פלוגתי) - the cadets' points, brought by the
+// cadet who holds the broad experience of training officer (הקה"ד הרוחבי).
+// One definition serves the screen and the server's check before summing up.
+
+import { appendImportedRows, appendImportedText, importTextKey } from './importMerge';
+
+export const DEBRIEF_KINDS = ['general', 'weekly', 'track', 'event', 'company'] as const;
+export type DebriefKind = (typeof DEBRIEF_KINDS)[number];
+
+export const DEBRIEF_KIND_LABELS: Record<DebriefKind, string> = {
+  general: 'תחקיר פעילות',
+  weekly: 'תחקיר שבועי',
+  track: 'תחקיר ציר',
+  event: 'תחקיר מופע עצים',
+  company: 'תחק"ש פלוגתי',
+};
+
+export const DEBRIEF_KIND_HINTS: Record<DebriefKind, string> = {
+  weekly: 'בסוף כל שבוע: מה הושג, מה לשמר ומה לשפר - ולקחים עם אחראי לשבוע הבא ולאותו שבוע במחזור הבא.',
+  track: 'בוחרים ציר הכשרה ומתבוננים במטרות, במה לשמר ובמה לשפר - באותו מבנה של התחקיר השבועי, עם לקחים להמשך ולמחזור הבא.',
+  event: 'אחרי מופע עצים (מארס, תרגיל מסכם, ניווט לילה): מטרות, ציר זמן, בטיחות, לוגיסטיקה וכוח אדם - ולקחים למופע הבא.',
+  general: 'עובדות, ממצאים, מסקנות ולקחים - לכל פעילות אחרת.',
+  company: 'הקה"ד הרוחבי מעביר את התחקיר מול הצוערים: נושאים מול הסגל (על השבוע שעבר, על תרגיל העצים וכללי), מול סגל הרוחב ומול הפלוגה - ולכל נושא הצעה ובאחריות מי.',
+};
+
+/** the broad experience whose cadet brings the company debrief */
+export const COMPANY_DEBRIEF_ROLE = 'קה"ד';
+
+/** a debrief about a week (the week is chosen, not read from the date) */
+export const isWeekDebrief = (kind: DebriefKind): boolean => kind === 'weekly' || kind === 'company';
+
+/** The weekly and track forms share staff contributions and commander approval. */
+export const isStaffDebrief = (kind: DebriefKind): boolean => kind === 'weekly' || kind === 'track';
+
+/** a form made of points (the company debrief) sums up with lessons or without; the others need one */
+export const LESSON_REQUIRED: Record<DebriefKind, boolean> = { general: false, weekly: true, track: true, event: true, company: false };
+
+export type QuestionType = 'text' | 'list' | 'proposals' | 'rating' | 'goals' | 'numbers' | 'flag';
+
+export interface DebriefQuestion {
+  id: string;
+  label: string;
+  hint?: string;
+  type: QuestionType;
+  /** numbers: the counts asked for */
+  fields?: { id: string; label: string }[];
+  /** the form can't be summed up while this is empty */
+  required?: boolean;
+  /** proposals: who a topic can be put on (the company debrief) */
+  owners?: OwnerPool;
+}
+
+/**
+ * Who a topic of the company debrief can be put on: before the staff - every staff member, the
+ * commander too; before the broad staff - the cadets holding a broad role then; before the
+ * company - those, or any cadet.
+ */
+export type OwnerPool = 'staff' | 'broadStaff' | 'company';
+
+export interface DebriefSection {
+  id: string;
+  title: string;
+  hint?: string;
+  questions: DebriefQuestion[];
+  /** shown in red when filled (a safety event) */
+  alert?: boolean;
+}
+
+/** a goal and whether it was met */
+export interface GoalAnswer {
+  goal: string;
+  status: '' | 'met' | 'partial' | 'missed';
+  note: string;
+}
+
+/**
+ * Who a point of the company debrief can be on besides one person: a group (the staff, the company, its broad
+ * staff, its ממ"שים, those who run the experiences, the team commanders).
+ */
+export const OWNER_GROUPS = ['staff', 'company', 'broadStaff', 'mamash', 'instructors', 'teamCommanders'] as const;
+export type OwnerGroup = (typeof OWNER_GROUPS)[number];
+export const OWNER_GROUP_LABELS: Record<OwnerGroup, string> = {
+  staff: 'סגל',
+  company: 'פלוגה',
+  broadStaff: 'סגל רוחב',
+  mamash: 'ממ״שים',
+  instructors: 'מעבירי התנסויות',
+  teamCommanders: 'מפק״צים',
+};
+/** a lesson for the next cycle is not on this cycle's company or its broad staff (they are its cadets) */
+export const NEXT_CYCLE_GROUPS: OwnerGroup[] = ['staff', 'mamash', 'instructors', 'teamCommanders'];
+
+/** who a topic is put on: a staff member, a cadet or a group (its id: its place in OWNER_GROUPS, from 1), with the name as it was when chosen */
+export interface ProposalOwner {
+  kind: 'user' | 'cadet' | 'group';
+  id: number;
+  name: string;
+}
+
+/** a group as an owner */
+export const groupOwner = (g: OwnerGroup): ProposalOwner => ({ kind: 'group', id: OWNER_GROUPS.indexOf(g) + 1, name: OWNER_GROUP_LABELS[g] });
+/** the group an owner is (null: a person) */
+export const groupOf = (o: Pick<ProposalOwner, 'kind' | 'id'>): OwnerGroup | null => (o.kind === 'group' ? (OWNER_GROUPS[o.id - 1] ?? null) : null);
+export const ownerKey = (o: Pick<ProposalOwner, 'kind' | 'id'>) => `${o.kind === 'user' ? 'u' : o.kind === 'cadet' ? 'c' : 'g'}:${o.id}`;
+
+/** a topic raised, what is proposed for it, and who it is on (the company debrief) */
+export interface ProposalAnswer {
+  topic: string;
+  proposal: string;
+  /** the first of the owners (as kept before a topic had several) */
+  owner?: ProposalOwner | null;
+  /** who it is on - one or more */
+  owners?: ProposalOwner[];
+  /** who it is on as a document wrote it, when that is no one in the course's lists - kept until someone is chosen */
+  ownerText?: string;
+  /** what has been done about it since (תיעוד התקדמות) */
+  progress?: string;
+}
+
+export function ownerOf(v: unknown): ProposalOwner | null {
+  const o = v as Partial<ProposalOwner> | null | undefined;
+  if (!o || (o.kind !== 'user' && o.kind !== 'cadet' && o.kind !== 'group') || !Number.isInteger(o.id) || (o.id as number) <= 0) return null;
+  if (o.kind === 'group') {
+    const g = groupOf({ kind: 'group', id: o.id as number });
+    return g ? groupOwner(g) : null;
+  }
+  return { kind: o.kind, id: o.id as number, name: typeof o.name === 'string' ? o.name.slice(0, 120) : '' };
+}
+
+/** the owners of a row, a lesson: a list of them, or the one kept before there could be several - each once */
+export function ownersOf(list: unknown, one?: unknown): ProposalOwner[] {
+  const raw = Array.isArray(list) ? list : one ? [one] : [];
+  const out: ProposalOwner[] = [];
+  for (const x of raw) {
+    const o = ownerOf(x);
+    if (o && !out.some((y) => ownerKey(y) === ownerKey(o))) out.push(o);
+  }
+  return out.slice(0, 12);
+}
+
+/** the owners' names, as one line */
+export const ownerNames = (list: ProposalOwner[]) => list.map((o) => o.name).filter(Boolean).join(', ');
+
+const textOf = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** a proposals answer as rows - also one written before proposals existed, as topics alone */
+export function proposalRows(v: unknown): ProposalAnswer[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => {
+    if (typeof x === 'string') return { topic: x, proposal: '', owner: null };
+    const owners = ownersOf(x?.owners, x?.owner);
+    const row: ProposalAnswer = { topic: textOf(x?.topic), proposal: textOf(x?.proposal), owner: owners[0] ?? null };
+    if (owners.length) row.owners = owners;
+    // the name as written goes once someone is chosen
+    const ownerText = textOf(x?.ownerText).slice(0, 300);
+    if (ownerText.trim() && !row.owner) row.ownerText = ownerText;
+    const progress = textOf(x?.progress);
+    if (progress.trim()) row.progress = progress;
+    return row;
+  });
+}
+
+/** the answers as kept: each topic's owner in its known shape */
+export function tidyAnswers(kind: DebriefKind, a: DebriefAnswers): DebriefAnswers {
+  const out = { ...a };
+  for (const s of formFor(kind)) for (const q of s.questions) if (q.type === 'proposals' && q.id in out) out[q.id] = proposalRows(out[q.id]);
+  return out;
+}
+
+/** what a company debrief's own document fills: read on the server, added to the form by the screen */
+export interface DebriefImport {
+  answers: {
+    company?: ProposalAnswer[];
+    staffGeneral?: ProposalAnswer[];
+    mood?: string[];
+    unsolved?: string[];
+    staffPoints?: string;
+    more?: string;
+  };
+  /** who the topics are on: found by name in the course, or kept as written */
+  owners: { named: number; asWritten: number };
+}
+
+const sameText = (a: string, b: string) => importTextKey(a) === importTextKey(b);
+
+/** Keep different proposals, responsibilities and progress as separate rows, even for the same topic. */
+export function appendImportedProposals(current: unknown, incoming: ProposalAnswer[]): ProposalAnswer[] {
+  return appendImportedRows(proposalRows(current), proposalRows(incoming), (had, read) =>
+    sameText(had.topic, read.topic) && sameText(had.proposal, read.proposal) &&
+    (!read.progress?.trim() || sameText(had.progress ?? '', read.progress)) &&
+    (!read.ownerText?.trim() || sameText(had.ownerText ?? '', read.ownerText)) &&
+    ownersOf(read.owners, read.owner).every((owner) => ownersOf(had.owners, had.owner).some((h) => ownerKey(h) === ownerKey(owner)))
+  );
+}
+
+/**
+ * A document's answers added to the form's - what changes, by question: rows and lines not in it already
+ * after its own, a text after the text there. Nothing in the form is taken out, and the same document twice
+ * adds nothing the second time.
+ */
+export function withImported(current: DebriefAnswers, read: DebriefImport['answers']): DebriefAnswers {
+  const out: DebriefAnswers = {};
+  for (const key of ['company', 'staffGeneral'] as const) {
+    const have = proposalRows(current[key]);
+    const next = appendImportedProposals(have, read[key] ?? []);
+    if (next.length > have.length) out[key] = next;
+  }
+  for (const key of ['mood', 'unsolved'] as const) {
+    const cur = current[key];
+    const have = Array.isArray(cur) ? cur.filter((x): x is string => typeof x === 'string') : [];
+    const next = appendImportedRows(have, read[key] ?? [], sameText);
+    if (next.length > have.length) out[key] = next;
+  }
+  for (const key of ['staffPoints', 'more'] as const) {
+    const text = read[key]?.trim();
+    const cur = current[key];
+    const have = typeof cur === 'string' ? cur : '';
+    const next = appendImportedText(have, text ?? '');
+    if (next !== have) out[key] = next;
+  }
+  return out;
+}
+
+export const GOAL_STATUS_LABELS: Record<Exclude<GoalAnswer['status'], ''>, string> = {
+  met: 'הושג',
+  partial: 'חלקית',
+  missed: 'לא הושג',
+};
+
+export type DebriefAnswers = Record<string, unknown>;
+
+export const WEEKLY_FORM: DebriefSection[] = [
+  {
+    id: 'goals',
+    title: 'מטרות השבוע',
+    hint: 'לכל מטרה - האם הושגה, ובמשפט למה.',
+    questions: [{ id: 'goals', label: 'מטרות', type: 'goals', required: true }],
+  },
+  {
+    id: 'overall',
+    title: 'תמונה כללית',
+    questions: [
+      { id: 'rating', label: 'ציון לשבוע', hint: '1 - לא עבד, 5 - מצוין', type: 'rating', required: true },
+      { id: 'headline', label: 'במשפט אחד - איך היה השבוע?', type: 'text' },
+    ],
+  },
+  {
+    id: 'sustain',
+    title: 'לשימור',
+    hint: 'מה עבד טוב ושווה לעשות שוב בדיוק כך.',
+    questions: [{ id: 'sustain', label: 'מה עבד', type: 'list' }],
+  },
+  {
+    id: 'improve',
+    title: 'לשיפור',
+    hint: 'מה לא עבד - עובדות, לא האשמות.',
+    questions: [{ id: 'improve', label: 'מה לא עבד', type: 'list' }],
+  },
+  {
+    id: 'pace',
+    title: 'לו"ז ועומס',
+    questions: [
+      { id: 'schedule', label: 'האם הלו"ז היה ריאלי? מה זז, מה בוטל ולמה?', type: 'text' },
+      { id: 'load', label: 'איפה היה עומס - על הסגל או על הצוערים?', type: 'text' },
+    ],
+  },
+  {
+    id: 'cadets',
+    title: 'הצוערים',
+    questions: [{ id: 'cadets', label: 'מה עלה מהצוערים השבוע? (משוב, מצב רוח, צוערים במעקב)', type: 'text' }],
+  },
+];
+
+export const EVENT_FORM: DebriefSection[] = [
+  {
+    id: 'numbers',
+    title: 'המופע במספרים',
+    questions: [
+      {
+        id: 'numbers',
+        label: 'צוערים',
+        type: 'numbers',
+        fields: [
+          { id: 'started', label: 'התחילו' },
+          { id: 'finished', label: 'סיימו' },
+          { id: 'evacuated', label: 'פונו / פרשו' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'goals',
+    title: 'מטרות המופע',
+    hint: 'מה המופע נועד להשיג, והאם הושג.',
+    questions: [{ id: 'goals', label: 'מטרות', type: 'goals', required: true }],
+  },
+  {
+    id: 'timeline',
+    title: 'תכנון מול ביצוע',
+    questions: [{ id: 'timeline', label: 'ציר הזמן: איפה סטינו מהתכנון, ולמה?', type: 'text' }],
+  },
+  {
+    id: 'safety',
+    title: 'בטיחות ורפואה',
+    alert: true,
+    questions: [
+      { id: 'safetyEvent', label: 'היה אירוע בטיחות חריג (פציעה, פינוי, כמעט-תאונה)', type: 'flag' },
+      { id: 'safety', label: 'מה קרה, מה עשינו, ומה ימנע את זה בפעם הבאה', type: 'text' },
+    ],
+  },
+  {
+    id: 'logistics',
+    title: 'לוגיסטיקה, משאבים וכוח אדם',
+    questions: [{ id: 'logistics', label: 'ציוד, מים ומזון, הסעות, קשר וכוח אדם (סגל, מדריכים, חובשים) - מה חסר ומה היה מיותר', type: 'text' }],
+  },
+  {
+    id: 'command',
+    title: 'פיקוד ושליטה',
+    questions: [{ id: 'command', label: 'תדריך, חלוקת תפקידים, שליטה בשטח - מה עבד ומה לא', type: 'text' }],
+  },
+  {
+    id: 'feedback',
+    title: 'משוב צוערים',
+    questions: [{ id: 'cadetFeedback', label: 'מה הצוערים אמרו על המופע', type: 'text' }],
+  },
+  {
+    id: 'verdict',
+    title: 'שורה תחתונה',
+    questions: [
+      { id: 'rating', label: 'ציון למופע', hint: '1 - לא עבד, 5 - מצוין', type: 'rating', required: true },
+      { id: 'sustain', label: 'לשימור', type: 'list' },
+      { id: 'improve', label: 'לשיפור', type: 'list' },
+    ],
+  },
+];
+
+/** the company debrief, as the training officer brings it: before the staff, the broad staff, the company */
+export const COMPANY_FORM: DebriefSection[] = [
+  {
+    id: 'staff',
+    title: 'מול הסגל',
+    questions: [
+      { id: 'staffWeek', label: 'על השבוע שעבר', type: 'proposals', owners: 'staff' },
+      { id: 'staffWoods', label: 'על תרגיל העצים', hint: 'אם היה תרגיל עצים', type: 'proposals', owners: 'staff' },
+      { id: 'staffGeneral', label: 'כללי', type: 'proposals', owners: 'staff' },
+    ],
+  },
+  {
+    id: 'broadStaff',
+    title: 'מול סגל רוחב',
+    questions: [{ id: 'broadStaff', label: 'נושאים מול סגל הרוחב', type: 'proposals', owners: 'broadStaff' }],
+  },
+  {
+    id: 'company',
+    title: 'מול הפלוגה',
+    questions: [{ id: 'company', label: 'נושאים מול הפלוגה', type: 'proposals', owners: 'company' }],
+  },
+  {
+    id: 'wrap',
+    title: 'סיכום התחק"ש',
+    hint: 'מה עוד עלה: התחושות בזמן התחקיר, מה נשאר בלי פתרון, ומה הסגל אמר לפלוגה.',
+    questions: [
+      { id: 'mood', label: 'הלך רוח - תחושות בזמן התחק"ש', type: 'list' },
+      { id: 'unsolved', label: 'מסרים / פערים שלא מצאנו להם פתרון', type: 'list' },
+      { id: 'staffPoints', label: 'נקודות של הסגל', hint: 'מה הסגל אמר לפלוגה', type: 'text' },
+      { id: 'more', label: 'דברי המ״פ', type: 'text' },
+    ],
+  },
+];
+
+/** Same questions and answer shapes as the weekly form, phrased for a training track. */
+export const TRACK_FORM: DebriefSection[] = WEEKLY_FORM.map((section) => ({
+  ...section,
+  title: section.id === 'goals' ? 'מטרות הציר' : section.title,
+  questions: section.questions.map((question) => ({
+    ...question,
+    label: question.id === 'rating' ? 'ציון לציר' : question.id === 'headline' ? 'במשפט אחד - איך התקדם הציר?' : question.id === 'cadets' ? 'מה עלה מהצוערים בציר? (משוב, מצב רוח, צוערים במעקב)' : question.label,
+  })),
+}));
+
+export function formFor(kind: DebriefKind): DebriefSection[] {
+  return kind === 'weekly' ? WEEKLY_FORM : kind === 'track' ? TRACK_FORM : kind === 'event' ? EVENT_FORM : kind === 'company' ? COMPANY_FORM : [];
+}
+
+/**
+ * A form of points only (no question must be answered): summing up needs one point at least - a topic, in a
+ * form of topics (the company debrief's summing up lines alone are not one).
+ */
+export function needsAPoint(kind: DebriefKind, a: DebriefAnswers): boolean {
+  const form = formFor(kind);
+  const questions = form.flatMap((s) => s.questions);
+  const topics = questions.filter((q) => q.type === 'proposals');
+  return form.length > 0 && !questions.some((q) => q.required) && !(topics.length ? topics : questions).some((q) => answered(q, a));
+}
+
+/** the two horizons of a lesson: this cycle (a task now) or the next cycle (kept in the lessons bank) */
+export const LESSON_HORIZONS = ['now', 'next'] as const;
+export type LessonHorizon = (typeof LESSON_HORIZONS)[number];
+
+export const LESSON_HORIZON_LABELS: Record<DebriefKind, Record<LessonHorizon, { title: string; hint: string }>> = {
+  weekly: {
+    now: { title: 'לקחים להמשך המחזור', hint: 'כל לקח עם אחראי ותאריך - בסיכום התחקיר הוא נפתח כמשימה.' },
+    next: { title: 'לקחים לשבוע הזה במחזור הבא', hint: 'נשמרים בבנק הלקחים ויוצגו כשהשבוע הזה יגיע במחזור הבא.' },
+  },
+  track: {
+    now: { title: 'לקחים להמשך המחזור', hint: 'כל לקח עם אחראי ותאריך - לאחר אישור מפקד הקורס הוא נפתח כמשימה בציר שנבחר.' },
+    next: { title: 'לקחים לציר במחזור הבא', hint: 'נשמרים בבנק הלקחים ובציר ההכשרה, גם למחזור הבא.' },
+  },
+  event: {
+    now: { title: 'לקחים לביצוע עכשיו', hint: 'כל לקח עם אחראי ותאריך - בסיכום התחקיר הוא נפתח כמשימה.' },
+    next: { title: 'לקחים למופע הבא', hint: 'נשמרים בבנק הלקחים ויוצגו כשמופע בשם הזה יופיע שוב בלו"ז.' },
+  },
+  company: {
+    now: { title: 'נקודות לטיפול', hint: 'נקודה שהסגל לוקח לטיפול - עם אחראי ותאריך; בסיכום התחקיר היא נפתחת כמשימה. לא חובה.' },
+    next: { title: 'לקחים לשבוע הזה במחזור הבא', hint: 'נשמרים בבנק הלקחים ויוצגו כשהשבוע הזה יגיע במחזור הבא.' },
+  },
+  general: {
+    now: { title: 'לקחים', hint: '' },
+    next: { title: 'לקחים לפעם הבאה', hint: '' },
+  },
+};
+
+/**
+ * What anyone adds to the week's weekly debrief on the way (the bottom bar's "+"): a line to keep or to
+ * improve, or a lesson - for the rest of the cycle, or for this week in the next cycle.
+ */
+export const WEEK_NOTE_PARTS = ['sustain', 'improve', 'now', 'next'] as const;
+export type WeekNotePart = (typeof WEEK_NOTE_PARTS)[number];
+export const WEEK_NOTE_PART_LABELS: Record<WeekNotePart, string> = {
+  sustain: 'לשימור',
+  improve: 'לשיפור',
+  now: 'לקח להמשך המחזור',
+  next: 'לקח לשבוע הזה במחזור הבא',
+};
+
+/** has a question been answered (for the form's progress, and the check before summing up) */
+export function answered(q: DebriefQuestion, a: DebriefAnswers): boolean {
+  const v = a[q.id];
+  if (q.type === 'rating') return typeof v === 'number' && v >= 1;
+  if (q.type === 'flag') return v === true || v === false;
+  if (q.type === 'list') return Array.isArray(v) && v.some((x) => typeof x === 'string' && x.trim());
+  if (q.type === 'proposals') return proposalRows(v).some((r) => r.topic.trim());
+  if (q.type === 'goals') return Array.isArray(v) && v.some((g) => (g as GoalAnswer)?.goal?.trim() && (g as GoalAnswer).status);
+  if (q.type === 'numbers') return !!v && typeof v === 'object' && Object.values(v as object).some((n) => typeof n === 'number');
+  return typeof v === 'string' && !!v.trim();
+}
+
+/** the goals a week set (one per line), as the starting rows of its form */
+export function goalsFromText(text: string): GoalAnswer[] {
+  return text
+    .split('\n')
+    .map((l) => l.replace(/^\s*(?:[-*•·]|\d+[.)])\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, 12)
+    .map((goal) => ({ goal, status: '', note: '' }));
+}
+
+/** what was decided about a lesson an earlier cycle kept, when its week or event comes round */
+export const LESSON_DECISIONS = ['task', 'applied', 'skip'] as const;
+export type LessonDecision = (typeof LESSON_DECISIONS)[number];
+
+export const LESSON_DECISION_LABELS: Record<LessonDecision, string> = {
+  task: 'נפתחה משימה',
+  applied: 'יושם',
+  skip: 'לא רלוונטי',
+};

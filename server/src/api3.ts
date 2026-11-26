@@ -1,0 +1,867 @@
+// Routes for version 3 (cadets, experiences, debriefs, documents), push and backup.
+// Mounted inside the authenticated API router.
+
+import { unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import express, { Router, type Request } from 'express';
+import { z } from 'zod';
+import { requireCommander, type UserRow } from './auth';
+import { isCommander } from './taskRepo';
+import {
+  addExemption,
+  addRecord,
+  cadetDetail,
+  createCadet,
+  createExperience,
+  deleteCadet,
+  deleteExemption,
+  deleteExperience,
+  deleteRecord,
+  disciplinePreview,
+  reportProcedure,
+  procedureOverview,
+  talkCadet,
+  updateTalk,
+  deleteTeam,
+  assertFeedbackGiver,
+  feedbackAxes,
+  giveFeedback,
+  importCadets,
+  markExperience,
+  listCadets,
+  listExemptions,
+  listExperiences,
+  listTeams,
+  saveTeam,
+  updateCadet,
+  updateExperience,
+} from './cadets';
+import { badRequest, clock, config, notFound, tz } from './core';
+import { createEntry, deleteEntry, listEntries, markEntrySent, updateEntry } from './entries';
+import { db } from './db';
+import {
+  addItem,
+  addWeekNote,
+  debriefContributions,
+  submitDebriefContribution,
+  reviewDebriefContributions,
+  debriefToFill,
+  companyPresenter,
+  createDebrief,
+  debriefDetail,
+  lessonBank,
+  reviewLesson,
+  deleteDebrief,
+  deleteItem,
+  itemToRecurring,
+  itemToTask,
+  itemToTemplate,
+  listDebriefs,
+  updateDebrief,
+  updateItem,
+  weekNoteTarget,
+} from './debriefs';
+import {
+  addDynamics,
+  addExamTest,
+  addNote,
+  addPoint,
+  cancelCommittee,
+  committeeDetail,
+  decideCommittee,
+  deleteDynamics,
+  deleteNote,
+  deletePoint,
+  evaluationFile,
+  evaluationHistory,
+  listEvaluations,
+  referToCommittee,
+  refreshCommitteeVersion,
+  removeExamTest,
+  updateEvaluationFields,
+  updateNote,
+  updatePoint,
+} from './evaluations';
+import { importGrades, previewGrades, readGradeSheets, removeGradeItem } from './grades';
+import { createFileDocument, createLinkDocument, deleteDocument, documentRow, listDocuments, updateDocument } from './documents';
+import { getFile, sendStoredFile, uploadName } from './files';
+import { cadetsFromSpreadsheet, downloadGoogleSheet, downloadGoogleSheetNamed } from './sheets';
+import { deleteSocioRound, importSocio, previewSocio, readSocioSheets, socioOfCadet, socioRound, updateSocioRound } from './sociometric';
+import { addWeeklyItem, addWeeklyItems, deleteWeeklyItem, holdWeekly, reopenWeekly, updateWeeklyItem, weeklyTarget, weeklyView } from './weekly';
+import { deleteGuide, disciplineLog, disciplineOverview, fetchDocument, getGuide, guideFromFile, guideFromLink, saveGuide } from './discipline';
+import { importDocument } from './debriefTemplate';
+import { bulkSchema, runBulk } from './bulk';
+import { addAbsence, deleteAbsence, listAbsences, reasonSeenBy, staffLoad } from './absences';
+import { deleteAnnouncement, listAnnouncements, markAnnouncement, postAnnouncement, remindAnnouncement } from './announcements';
+import { listSnapshots, restoreSnapshot, snapshotBefore, takeSnapshot } from './snapshots';
+import { copyPreviousCycleTasks, coursesOverview, previousCycleWeek, promoteParallelCourse, startNewCourse, viewCourse, viewingCourse } from './courses';
+import {
+  addAction,
+  addPoint as addDiscussionPoint,
+  createDiscussion,
+  deleteAction,
+  deleteDiscussion,
+  deletePoint as deleteDiscussionPoint,
+  discussionDetail,
+  listDiscussions,
+  openActionTask,
+  openActionTasks,
+  orderPoints,
+  reopenDiscussion,
+  summarizeDiscussion,
+  updateAction,
+  updateDiscussion,
+  updatePoint as updateDiscussionPoint,
+} from './discussions';
+import { createWeaponForm, decideWeaponForm, deleteWeaponForm, updateWeaponForm, weaponForm } from './weaponForms';
+import { COPY_AREAS, copyIntoSlot, copySource, deleteSlot, inSlot, openParallelCourse, parallelCourses, slotOf, switchSlot } from './parallel';
+import { addNewcomer, applyStaffChanges, courseStaff } from './courseStaff';
+import { markStaffCheck, retryAllSheet, retrySheet, staffChecksBoard } from './staffChecks';
+import { activityFiles, createActivityFile, deleteActivityFile, updateActivityFile, weekIdOf } from './activityFiles';
+import { addReservist, deleteReservist, listReservists, updateReservist } from './reservists';
+import { isPushEndpoint } from './netguard';
+import { alignmentFeed, deleteMessage, exportText, importAlignment, markSeen, pinMessage, unseenCount } from './alignment';
+import { sendPush, subscribe, subscriptionCount, unsubscribe, vapidPublicKey } from './push';
+import { changed } from './journal';
+import { requireAbility } from './abilities';
+import { MAX_PART_BYTES, MAX_TRANSCRIPT_CHARS, summarizeTalk, talkAiStatus, transcribePart } from './talkAi';
+import { suggestTraits } from './traitAi';
+import { analyzeSmart, applySmart, checkSmart, smartStatus } from './smartEntry';
+import { SUGGEST_MAX_CHARS } from '../../shared/traitSuggest';
+import { TALK_TYPES } from '../../shared/constants';
+import { isDateKey, localDateKey } from '../../shared/dates';
+import { addKeyEvents, approvePlan, approveThreeWeek, planDocument, plansOverview, removeKeyEvent, savePlan, saveThreeWeek, threeWeekCandidates, threeWeekPlan } from './plans';
+
+const id = (v: unknown): number => {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) throw badRequest('מזהה לא תקין');
+  return n;
+};
+const me = (req: Request): UserRow => req.user!;
+const num = (v: unknown): number | undefined => (v === undefined || v === '' ? undefined : Number(v) || undefined);
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length ? v : undefined);
+
+export function v3Router(): Router {
+  const r = Router();
+
+  // ---------------- teams & cadets ----------------
+
+  r.get('/teams', (_req, res) => res.json(listTeams()));
+  r.post('/teams', requireAbility('teams'), (req, res) => {
+    saveTeam(me(req), req.body);
+    res.json(listTeams());
+  });
+  r.put('/teams/:id', requireAbility('teams'), (req, res) => {
+    saveTeam(me(req), req.body, id(req.params.id));
+    res.json(listTeams());
+  });
+  r.delete('/teams/:id', requireCommander, (req, res) => {
+    deleteTeam(id(req.params.id));
+    res.json(listTeams());
+  });
+
+  r.get('/cadets', (req, res) =>
+    res.json(listCadets(me(req), { teamId: num(req.query.team), status: str(req.query.status) ?? 'active', q: str(req.query.q) })),
+  );
+  r.post('/cadets', (req, res) => res.json(cadetDetail(me(req), createCadet(me(req), req.body))));
+  r.post('/cadets/import', requireAbility('imports'), (req, res) => res.json(importCadets(me(req), req.body)));
+  // a spreadsheet becomes the text of the paste import, which the commander reviews before importing
+  r.post('/cadets/import/file', requireAbility('imports'), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(cadetsFromSpreadsheet(req.body));
+  });
+  r.post('/cadets/import/link', requireAbility('imports'), async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    res.json(cadetsFromSpreadsheet(await downloadGoogleSheet(url, config.maxUploadMb * 1024 * 1024)));
+  });
+  r.get('/cadets/:id', (req, res) => res.json(cadetDetail(me(req), id(req.params.id))));
+  r.patch('/cadets/:id', (req, res) => {
+    updateCadet(me(req), id(req.params.id), req.body);
+    res.json(cadetDetail(me(req), id(req.params.id)));
+  });
+  r.delete('/cadets/:id', requireCommander, (req, res) => {
+    deleteCadet(id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.post('/cadets/:id/records', (req, res) => {
+    addRecord(me(req), id(req.params.id), req.body);
+    res.json(cadetDetail(me(req), id(req.params.id)));
+  });
+  r.get('/cadets/:id/discipline-preview', (req, res) => res.json(disciplinePreview(id(req.params.id), str(req.query.offense)?.slice(0, 300) ?? '')));
+  // not keeping to procedures (the "+"): into the cadet's discipline record
+  r.post('/procedures', (req, res) => res.json(reportProcedure(me(req), req.body)));
+  // every report the user may see, for the overview by cadet
+  r.get('/procedures', (req, res) => res.json(procedureOverview(me(req))));
+  r.get('/exemptions', (req, res) => res.json(listExemptions(me(req))));
+  r.post('/cadets/:id/exemptions', (req, res) => {
+    addExemption(me(req), id(req.params.id), req.body);
+    res.json(cadetDetail(me(req), id(req.params.id)));
+  });
+  r.delete('/exemptions/:id', (req, res) => res.json(cadetDetail(me(req), deleteExemption(me(req), id(req.params.id)))));
+  r.patch('/records/:id', (req, res) => res.json(cadetDetail(me(req), updateTalk(me(req), id(req.params.id), req.body))));
+
+  // ---------------- a personal talk from its recording (talkAi.ts) ----------------
+
+  // what the site can do: write out a recording, sum up a transcript
+  r.get('/talks/ai', (_req, res) => res.json(talkAiStatus()));
+  // one short part of the recording (WAV from the browser), written out; nothing of it is kept
+  r.post('/talks/ai/transcribe', express.raw({ type: () => true, limit: MAX_PART_BYTES }), async (req, res) => {
+    talkCadet(me(req), num(req.query.cadet));
+    res.json({ text: await transcribePart(req.body as Buffer, String(req.headers['content-type'] ?? '')) });
+  });
+  // the transcript summed up in the fields of the talk's form, for the commander to correct and save
+  r.post('/talks/ai/summarize', async (req, res) => {
+    const p = z
+      .object({ cadetId: z.number().int().positive(), type: z.enum(TALK_TYPES), transcript: z.string().max(MAX_TRANSCRIPT_CHARS, 'התמליל ארוך מדי לסיכום אחד') })
+      .parse(req.body);
+    const c = talkCadet(me(req), p.cadetId);
+    res.json({ answers: await summarizeTalk(p.type, p.transcript, c.first_name) });
+  });
+  r.delete('/records/:id', (req, res) => {
+    deleteRecord(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // ---------------- smart entry: free text read into the right places (smartEntry.ts) ----------------
+
+  // whether Claude reads the text (otherwise the built-in reading)
+  r.get('/smart/status', (_req, res) => res.json(smartStatus()));
+  // the text read into items - nothing is filed yet
+  r.post('/smart/analyze', async (req, res) => res.json(await analyzeSmart(me(req), req.body?.text)));
+  // the ladder and the permissions again, for items the writer changed
+  r.post('/smart/check', (req, res) => res.json({ items: checkSmart(me(req), req.body) }));
+  // the items the writer confirmed, each filed through its screen's own rules
+  r.post('/smart/apply', (req, res) => res.json({ results: applySmart(me(req), req.body) }));
+
+  // ---------------- enforcement ladder (from the course's document) ----------------
+
+  r.get('/discipline/guide', (_req, res) => res.json(getGuide()));
+  r.get('/discipline/overview', (req, res) => res.json(disciplineOverview(me(req))));
+  r.get('/discipline/log', (req, res) => {
+    const day = (v: unknown) => (isDateKey(v) ? v : undefined);
+    res.json(disciplineLog(me(req), day(req.query.from), day(req.query.to)));
+  });
+  r.post('/discipline/guide/link', requireAbility('imports'), async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    res.json(saveGuide(me(req), await guideFromLink(url, config.maxUploadMb * 1024 * 1024), url));
+  });
+  // a Word file, or the document pasted (its HTML)
+  r.post('/discipline/guide/file', requireAbility('imports'), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    const name = req.headers['x-filename'] ? uploadName(req.headers['x-filename']) : '';
+    res.json(saveGuide(me(req), guideFromFile(req.body), name && name !== 'pasted.html' ? `קובץ: ${name}` : 'הדבקה מהמסמך'));
+  });
+  r.delete('/discipline/guide', requireCommander, (req, res) => {
+    deleteGuide(me(req));
+    res.json({ ok: true });
+  });
+
+  // ---------------- many items at once ----------------
+
+  r.post('/bulk', async (req, res) => {
+    // deleting many items at once can be undone from a snapshot taken just before
+    const parsed = bulkSchema.safeParse(req.body);
+    if (parsed.success && parsed.data.action === 'delete' && new Set(parsed.data.ids).size >= 5) await snapshotBefore('before_delete');
+    res.json(runBulk(me(req), req.body));
+  });
+
+  // ---------------- evaluation files ----------------
+  // every change answers with the cadet's file as the user may see it
+
+  r.get('/evaluations', (req, res) => res.json(listEvaluations(me(req))));
+  // the grade sheet, after an exam or a fitness test: read it, see what it changes, import it
+  r.post('/evaluations/grades/file', requireAbility('imports'), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(readGradeSheets(me(req), req.body));
+  });
+  r.post('/evaluations/grades/link', requireAbility('imports'), async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    res.json(readGradeSheets(me(req), await downloadGoogleSheet(url, config.maxUploadMb * 1024 * 1024)));
+  });
+  r.post('/evaluations/grades/preview', requireAbility('imports'), (req, res) => res.json(previewGrades(me(req), req.body)));
+  r.post('/evaluations/grades/import', requireAbility('imports'), (req, res) => res.json(importGrades(me(req), req.body)));
+  r.delete('/evaluations/grade-items/:id', requireCommander, (req, res) => {
+    removeGradeItem(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  // ---------------- the sociometric ----------------
+  // each team's sheet into a round; the results for the commander, a team's for its commander
+  r.get('/sociometric', (req, res) => res.json(socioRound(me(req), req.query.round ? id(String(req.query.round)) : undefined)));
+  r.post('/sociometric/file', requireAbility('cadetFiles'), express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(readSocioSheets(me(req), req.body));
+  });
+  r.post('/sociometric/link', requireAbility('cadetFiles'), async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    const { buf, name } = await downloadGoogleSheetNamed(url, config.maxUploadMb * 1024 * 1024);
+    res.json({ name, sheets: readSocioSheets(me(req), buf) });
+  });
+  r.post('/sociometric/preview', requireAbility('cadetFiles'), (req, res) => res.json(previewSocio(me(req), req.body)));
+  r.post('/sociometric/import', requireAbility('cadetFiles'), (req, res) => res.json(importSocio(me(req), req.body)));
+  r.patch('/sociometric/rounds/:id', requireAbility('cadetFiles'), (req, res) => {
+    updateSocioRound(me(req), id(req.params.id), req.body);
+    res.json({ ok: true });
+  });
+  r.delete('/sociometric/rounds/:id', requireCommander, (req, res) => {
+    deleteSocioRound(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.get('/cadets/:id/sociometric', (req, res) => res.json(socioOfCadet(me(req), id(req.params.id))));
+
+  // ---------------- visitors' entry to the base (אישור כניסה) ----------------
+  r.get('/entries', (req, res) => res.json(listEntries(me(req))));
+  r.post('/entries', (req, res) => res.json({ id: createEntry(me(req), req.body) }));
+  r.patch('/entries/:id', (req, res) => {
+    updateEntry(me(req), id(req.params.id), req.body);
+    res.json({ ok: true });
+  });
+  r.post('/entries/:id/sent', requireCommander, (req, res) => {
+    markEntrySent(me(req), id(req.params.id), z.object({ sent: z.boolean().optional().default(true) }).parse(req.body ?? {}).sent);
+    res.json({ ok: true });
+  });
+  r.delete('/entries/:id', (req, res) => {
+    deleteEntry(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // ---------------- the weekly (שבועי) ----------------
+  // each course week's staff meeting: anyone adds to it during the week, the commander holds it
+  r.get('/weekly/target', (req, res) => res.json(weeklyTarget(me(req))));
+  r.get('/weekly/:weekId', (req, res) => res.json(weeklyView(me(req), id(req.params.weekId))));
+  r.post('/weekly/items', (req, res) => res.json(addWeeklyItem(me(req), req.body)));
+  r.post('/weekly/items/batch', (req, res) => res.json(addWeeklyItems(me(req), req.body)));
+  r.patch('/weekly/items/:id', (req, res) => {
+    updateWeeklyItem(me(req), id(req.params.id), req.body);
+    res.json({ ok: true });
+  });
+  r.delete('/weekly/items/:id', (req, res) => {
+    deleteWeeklyItem(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.post('/weekly/:weekId/hold', requireCommander, (req, res) => res.json(holdWeekly(me(req), id(req.params.weekId), req.body)));
+  r.post('/weekly/:weekId/reopen', requireCommander, (req, res) => {
+    reopenWeekly(me(req), id(req.params.weekId));
+    res.json({ ok: true });
+  });
+
+  r.get('/evaluations/committees/:id', (req, res) => res.json(committeeDetail(me(req), id(req.params.id))));
+  r.post('/evaluations/committees/:id/refresh', requireCommander, (req, res) => res.json(evaluationFile(me(req), refreshCommitteeVersion(me(req), id(req.params.id)))));
+  r.post('/evaluations/committees/:id/decision', requireCommander, (req, res) => res.json(evaluationFile(me(req), decideCommittee(me(req), id(req.params.id), req.body))));
+  r.delete('/evaluations/committees/:id', requireCommander, (req, res) => res.json(evaluationFile(me(req), cancelCommittee(me(req), id(req.params.id)))));
+  r.get('/evaluations/:cadetId', (req, res) => res.json(evaluationFile(me(req), id(req.params.cadetId))));
+  r.get('/evaluations/:cadetId/history', (req, res) => res.json(evaluationHistory(me(req), id(req.params.cadetId))));
+  r.patch('/evaluations/:cadetId', (req, res) => {
+    updateEvaluationFields(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  // a test added (or taken away) from one file is in the files of the whole course
+  r.post('/evaluations/:cadetId/tests', (req, res) => {
+    addExamTest(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  r.delete('/evaluations/:cadetId/tests/:test', (req, res) => {
+    removeExamTest(me(req), id(req.params.cadetId), String(req.params.test));
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  r.post('/evaluations/:cadetId/dynamics', (req, res) => {
+    addDynamics(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  r.delete('/evaluations/dynamics/:id', (req, res) => res.json(evaluationFile(me(req), deleteDynamics(me(req), id(req.params.id)))));
+  r.post('/evaluations/:cadetId/notes', (req, res) => {
+    addNote(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  r.patch('/evaluations/notes/:id', (req, res) => res.json(evaluationFile(me(req), updateNote(me(req), id(req.params.id), req.body))));
+  r.delete('/evaluations/notes/:id', (req, res) => res.json(evaluationFile(me(req), deleteNote(me(req), id(req.params.id)))));
+  r.post('/evaluations/:cadetId/points', (req, res) => {
+    addPoint(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+  r.patch('/evaluations/points/:id', (req, res) => res.json(evaluationFile(me(req), updatePoint(me(req), id(req.params.id), req.body))));
+  r.delete('/evaluations/points/:id', (req, res) => res.json(evaluationFile(me(req), deletePoint(me(req), id(req.params.id)))));
+  r.post('/evaluations/:cadetId/committees', requireCommander, (req, res) => {
+    referToCommittee(me(req), id(req.params.cadetId), req.body);
+    res.json(evaluationFile(me(req), id(req.params.cadetId)));
+  });
+
+  // ---------------- experiences ----------------
+
+  r.get('/experiences', (req, res) =>
+    res.json(
+      listExperiences(me(req), {
+        cadetId: num(req.query.cadet),
+        mentorId: req.query.mine === '1' ? me(req).id : num(req.query.mentor),
+        weekId: num(req.query.week),
+      }),
+    ),
+  );
+  // the axes already given to feedback points, offered when the next feedback is written
+  r.get('/experiences/feedback-axes', (_req, res) => res.json(feedbackAxes()));
+  r.post('/experiences', (req, res) => {
+    const newId = createExperience(me(req), req.body);
+    res.json(listExperiences(me(req)).find((x) => x.id === newId));
+  });
+  r.patch('/experiences/:id', (req, res) => {
+    updateExperience(me(req), id(req.params.id), req.body);
+    res.json(listExperiences(me(req)).find((x) => x.id === id(req.params.id)));
+  });
+  // the axis and the trait (אופן המימוש) a point's words speak of - Claude when set up, else the built-in matcher
+  r.post('/experiences/:id/feedback/suggest', async (req, res) => {
+    assertFeedbackGiver(me(req), id(req.params.id));
+    const p = z.object({ text: z.string().max(SUGGEST_MAX_CHARS * 2, 'הפירוט ארוך מדי להמלצה'), kind: z.enum(['keep', 'improve']) }).parse(req.body ?? {});
+    res.json(await suggestTraits(p.text, p.kind));
+  });
+  r.post('/experiences/:id/feedback', (req, res) => {
+    giveFeedback(me(req), id(req.params.id), req.body);
+    res.json(listExperiences(me(req)).find((x) => x.id === id(req.params.id)));
+  });
+  // the tracking table's mark
+  r.post('/experiences/:id/mark', (req, res) => {
+    markExperience(me(req), id(req.params.id), z.object({ marked: z.boolean() }).parse(req.body ?? {}).marked);
+    res.json({ ok: true });
+  });
+  r.delete('/experiences/:id', (req, res) => {
+    deleteExperience(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // ---------------- announcements to the staff ----------------
+
+  r.get('/announcements', (req, res) => res.json(listAnnouncements(me(req), { pending: req.query.pending === '1' })));
+  r.post('/announcements', (req, res) => {
+    postAnnouncement(me(req), req.body);
+    res.json(listAnnouncements(me(req)));
+  });
+  r.post('/announcements/:id/read', (req, res) => {
+    markAnnouncement(me(req), id(req.params.id), req.body?.ack === true);
+    res.json(listAnnouncements(me(req)));
+  });
+  r.post('/announcements/:id/remind', (req, res) => res.json({ reminded: remindAnnouncement(me(req), id(req.params.id)) }));
+  r.delete('/announcements/:id', (req, res) => {
+    deleteAnnouncement(me(req), id(req.params.id));
+    res.json(listAnnouncements(me(req)));
+  });
+
+  // ---------------- availability ----------------
+
+  r.get('/absences', (req, res) =>
+    res.json(
+      // who is away is for everyone; what they wrote about it is for them and the commander, and a sick
+      // day reads as an absence to the rest (reasonSeenBy) - in the calendar and anywhere else
+      listAbsences({ userId: num(req.query.user), from: isDateKey(req.query.from) ? req.query.from : undefined, to: isDateKey(req.query.to) ? req.query.to : undefined }).map((a) =>
+        isCommander(me(req)) || a.userId === me(req).id ? a : { ...a, note: '', reason: reasonSeenBy(me(req), a.userId, a.reason) },
+      ),
+    ),
+  );
+  r.post('/absences', (req, res) => res.json(addAbsence(me(req), req.body)));
+  r.delete('/absences/:id', (req, res) => {
+    deleteAbsence(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  // who to give a task to: everyone's load, and who is away on its day
+  r.get('/load', (req, res) =>
+    res.json(staffLoad(isDateKey(req.query.date) ? req.query.date : undefined).map((l) => (l.away ? { ...l, away: { ...l.away, reason: reasonSeenBy(me(req), l.userId, l.away.reason) } } : l))),
+  );
+
+  // ---------------- debriefs ----------------
+
+  r.get('/debriefs', (req, res) => res.json(listDebriefs(me(req), { weekId: num(req.query.week), eventId: num(req.query.event) })));
+  r.post('/debriefs', (req, res) => res.json(debriefDetail(me(req), createDebrief(me(req), req.body))));
+  // who brings the company debrief on a day (the cadet in the broad experience of training officer)
+  r.get('/debriefs/presenter', (req, res) => {
+    const date = str(req.query.date);
+    if (!date || !isDateKey(date)) throw badRequest('תאריך לא תקין');
+    res.json(companyPresenter(date));
+  });
+  // on the way: a note for the week's weekly debrief (the bottom bar's "+")
+  r.get('/debriefs/week-notes', (_req, res) => res.json(weekNoteTarget()));
+  r.post('/debriefs/week-notes', (req, res) => res.json(addWeekNote(me(req), req.body)));
+  r.get('/debriefs/:id/contributions', (req, res) => res.json(debriefContributions(me(req), id(req.params.id))));
+  r.post('/debriefs/:id/contributions', (req, res) => {
+    submitDebriefContribution(me(req), id(req.params.id), req.body);
+    res.json(debriefContributions(me(req), id(req.params.id)));
+  });
+  r.post('/debriefs/:id/contributions/review', (req, res) => {
+    reviewDebriefContributions(me(req), id(req.params.id), req.body);
+    res.json(debriefDetail(me(req), id(req.params.id)));
+  });
+  r.get('/debriefs/:id', (req, res) => res.json(debriefDetail(me(req), id(req.params.id))));
+  r.patch('/debriefs/:id', (req, res) => {
+    updateDebrief(me(req), id(req.params.id), req.body);
+    res.json(debriefDetail(me(req), id(req.params.id)));
+  });
+  // a debrief's template filled in (a Word file, the document pasted, or its link): each part into its place
+  // (debriefTemplate.ts) - or a company debrief's own document, read for the screen to add to the form
+  r.post('/debriefs/:id/import/file', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(importDocument(me(req), id(req.params.id), req.body));
+  });
+  r.post('/debriefs/:id/import/link', async (req, res) => {
+    const { url } = z.object({ url: z.string().trim().min(10, 'הדביקו קישור').max(2000) }).parse(req.body);
+    // who may fill it, before anything is fetched
+    debriefToFill(me(req), id(req.params.id));
+    res.json(importDocument(me(req), id(req.params.id), await fetchDocument(url, config.maxUploadMb * 1024 * 1024)));
+  });
+  r.delete('/debriefs/:id', (req, res) => {
+    deleteDebrief(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.post('/debriefs/:id/items', (req, res) => {
+    addItem(me(req), id(req.params.id), req.body);
+    res.json(debriefDetail(me(req), id(req.params.id)));
+  });
+
+  const itemDebrief = (itemId: number) => {
+    const row = db().get<{ debrief_id: number }>('SELECT debrief_id FROM debrief_items WHERE id = ?', itemId);
+    if (!row) throw notFound('הפריט לא נמצא');
+    return row.debrief_id;
+  };
+  r.patch('/debrief-items/:id', (req, res) => {
+    const did = itemDebrief(id(req.params.id));
+    updateItem(me(req), id(req.params.id), req.body);
+    res.json(debriefDetail(me(req), did));
+  });
+  // lessons kept for the next cycle: all, or those for a week or an event
+  r.get('/lessons', (req, res) => res.json(lessonBank({ weekId: num(req.query.week), eventId: num(req.query.event) })));
+  // on its week or event: a task, applied, or not relevant
+  r.post('/lessons/:id/review', (req, res) => {
+    reviewLesson(me(req), id(req.params.id), req.body);
+    res.json(lessonBank({ weekId: req.body?.weekId, eventId: req.body?.eventId }));
+  });
+  r.delete('/debrief-items/:id', (req, res) => {
+    const did = itemDebrief(id(req.params.id));
+    deleteItem(me(req), id(req.params.id));
+    res.json(debriefDetail(me(req), did));
+  });
+  r.post('/debrief-items/:id/task', (req, res) => {
+    const did = itemDebrief(id(req.params.id));
+    itemToTask(me(req), id(req.params.id), req.body);
+    res.json(debriefDetail(me(req), did));
+  });
+  r.post('/debrief-items/:id/recurring', (req, res) => {
+    const did = itemDebrief(id(req.params.id));
+    itemToRecurring(me(req), id(req.params.id), req.body);
+    res.json(debriefDetail(me(req), did));
+  });
+  r.post('/debrief-items/:id/template', (req, res) => {
+    const did = itemDebrief(id(req.params.id));
+    itemToTemplate(me(req), id(req.params.id), req.body);
+    res.json(debriefDetail(me(req), did));
+  });
+
+  // ---------------- documents ----------------
+
+  r.get('/documents', (req, res) => res.json(listDocuments(me(req), { category: str(req.query.category), weekId: num(req.query.week), q: str(req.query.q) })));
+  r.post('/documents', (req, res) => {
+    createLinkDocument(me(req), req.body);
+    res.json(listDocuments(me(req)));
+  });
+  r.post('/documents/file', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), async (req, res) => {
+    const buf = req.body as Buffer;
+    if (!Buffer.isBuffer(buf)) throw badRequest('הקובץ ריק');
+    const name = uploadName(req.headers['x-filename']);
+    const q = req.query;
+    await createFileDocument(
+      me(req),
+      {
+        title: str(q.title) ?? name,
+        category: str(q.category) ?? 'אחר',
+        description: str(q.description) ?? '',
+        weekId: num(q.weekId) ?? null,
+        restricted: q.restricted === '1',
+        pinned: q.pinned === '1',
+      },
+      { buf, name, mime: String(req.headers['content-type'] ?? 'application/octet-stream').slice(0, 100) },
+    );
+    res.json(listDocuments(me(req)));
+  });
+  r.patch('/documents/:id', (req, res) => {
+    updateDocument(me(req), id(req.params.id), req.body);
+    res.json(listDocuments(me(req)));
+  });
+  r.delete('/documents/:id', (req, res) => {
+    deleteDocument(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.get('/documents/:id/file', async (req, res) => {
+    const d = documentRow(me(req), id(req.params.id));
+    if (d.kind !== 'file' || !d.url) throw notFound();
+    const data = await getFile(d.url);
+    if (!data) throw notFound('הקובץ לא נמצא');
+    sendStoredFile(res, data, d.mime, d.file_name);
+  });
+
+  // ---------------- push ----------------
+
+  const subSchema = z.object({
+    endpoint: z.string().url().max(2000).refine(isPushEndpoint, 'כתובת התראות לא מוכרת'),
+    keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(4).max(100) }),
+  });
+  r.get('/push/key', (req, res) => res.json({ publicKey: vapidPublicKey(), subscriptions: subscriptionCount(me(req).id) }));
+  // the commander's list of the staff shows who gets them on the phone: it follows at once
+  r.post('/push/subscribe', (req, res) => {
+    subscribe(me(req).id, subSchema.parse(req.body), String(req.headers['user-agent'] ?? ''));
+    changed('users');
+    res.json({ subscriptions: subscriptionCount(me(req).id) });
+  });
+  r.post('/push/unsubscribe', (req, res) => {
+    const { endpoint } = z.object({ endpoint: z.string().max(2000) }).parse(req.body);
+    unsubscribe(me(req).id, endpoint);
+    changed('users');
+    res.json({ subscriptions: subscriptionCount(me(req).id) });
+  });
+  r.post('/push/test', async (req, res) => {
+    const sent = await sendPush(me(req).id, { id: 0, title: 'התראת בדיקה', body: 'ההתראות לטלפון פועלות', link: '/notifications', category: 'action' });
+    res.json({ sent });
+  });
+
+  // ---------------- "יישור קו" (the staff's WhatsApp group) ----------------
+
+  r.get('/alignment', (req, res) =>
+    res.json(alignmentFeed({ q: typeof req.query.q === 'string' ? req.query.q : undefined, before: typeof req.query.before === 'string' ? req.query.before : undefined, beforeId: num(req.query.id) })),
+  );
+  r.get('/alignment/unseen', (req, res) => res.json({ n: unseenCount(me(req).id) }));
+  r.post('/alignment/seen', (req, res) => {
+    markSeen(me(req).id);
+    res.json({ ok: true });
+  });
+  r.post('/alignment/import', (req, res) => {
+    const { text } = z.object({ text: z.string().min(1, 'הדביקו את ההודעות').max(900_000) }).parse(req.body);
+    res.json(importAlignment(me(req), text));
+  });
+  r.post('/alignment/import/file', express.raw({ type: () => true, limit: `${config.maxUploadMb}mb` }), (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('לא התקבל קובץ');
+    res.json(importAlignment(me(req), exportText(req.body)));
+  });
+  r.post('/alignment/:id/pin', requireAbility('alignment'), (req, res) => {
+    pinMessage(id(req.params.id), req.body);
+    res.json({ ok: true });
+  });
+  r.delete('/alignment/:id', requireAbility('alignment'), (req, res) => {
+    deleteMessage(id(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // ---------------- previous courses ----------------
+
+  r.get('/courses', requireCommander, (req, res) => res.json(coursesOverview(viewingCourse(req))));
+  // the same week in the previous course: what was done, and repeating it here
+  r.get('/weeks/:id/previous-cycle', async (req, res) => res.json(await previousCycleWeek(id(req.params.id), me(req))));
+  r.post('/weeks/:id/previous-cycle/copy', async (req, res) => res.json(await copyPreviousCycleTasks(me(req), id(req.params.id), req.body)));
+  r.post('/courses/new', requireCommander, async (req, res) => {
+    const archive = await startNewCourse(me(req), req.body);
+    viewCourse(res, null);
+    res.json(archive);
+  });
+  r.post('/courses/view', requireCommander, (req, res) => {
+    const { id } = z.object({ id: z.number().int().positive().nullable() }).parse(req.body);
+    viewCourse(res, id);
+    res.json({ ok: true });
+  });
+
+  // ---------------- a cadet's exceptional-weapon form (weaponForms.ts) ----------------
+
+  r.post('/cadets/:id/weapon-forms', (req, res) => res.json(weaponForm(me(req), createWeaponForm(me(req), id(req.params.id), req.body))));
+  r.get('/weapon-forms/:id', (req, res) => res.json(weaponForm(me(req), id(req.params.id))));
+  r.patch('/weapon-forms/:id', (req, res) => {
+    updateWeaponForm(me(req), id(req.params.id), req.body);
+    res.json(weaponForm(me(req), id(req.params.id)));
+  });
+  r.post('/weapon-forms/:id/decision', (req, res) => {
+    decideWeaponForm(me(req), id(req.params.id), req.body);
+    res.json(weaponForm(me(req), id(req.params.id)));
+  });
+  r.delete('/weapon-forms/:id', (req, res) => res.json({ ok: true, cadetId: deleteWeaponForm(me(req), id(req.params.id)) }));
+
+  // ---------------- discussions (discussions.ts) ----------------
+
+  r.get('/discussions', (req, res) => res.json(listDiscussions(me(req), { kind: typeof req.query.kind === 'string' ? req.query.kind : undefined })));
+  r.post('/discussions', (req, res) => res.json(discussionDetail(me(req), createDiscussion(me(req), req.body))));
+  r.get('/discussions/:id', (req, res) => res.json(discussionDetail(me(req), id(req.params.id))));
+  r.patch('/discussions/:id', (req, res) => {
+    updateDiscussion(me(req), id(req.params.id), req.body);
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+  r.delete('/discussions/:id', (req, res) => {
+    deleteDiscussion(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.post('/discussions/:id/points', (req, res) => {
+    addDiscussionPoint(me(req), id(req.params.id), req.body);
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+  r.post('/discussions/:id/points/order', (req, res) => {
+    orderPoints(me(req), id(req.params.id), req.body);
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+  r.patch('/discussion-points/:id', (req, res) => res.json(discussionDetail(me(req), updateDiscussionPoint(me(req), id(req.params.id), req.body))));
+  r.delete('/discussion-points/:id', (req, res) => res.json(discussionDetail(me(req), deleteDiscussionPoint(me(req), id(req.params.id)))));
+  r.post('/discussions/:id/actions', (req, res) => {
+    addAction(me(req), id(req.params.id), req.body);
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+  r.patch('/discussion-actions/:id', (req, res) => res.json(discussionDetail(me(req), updateAction(me(req), id(req.params.id), req.body))));
+  r.delete('/discussion-actions/:id', (req, res) => res.json(discussionDetail(me(req), deleteAction(me(req), id(req.params.id)))));
+  r.post('/discussion-actions/:id/task', (req, res) => res.json(discussionDetail(me(req), openActionTask(me(req), id(req.params.id)))));
+  r.post('/discussions/:id/tasks', (req, res) => {
+    const result = openActionTasks(me(req), id(req.params.id));
+    res.json({ ...result, discussion: discussionDetail(me(req), id(req.params.id)) });
+  });
+  r.post('/discussions/:id/summarize', (req, res) => {
+    const result = summarizeDiscussion(me(req), id(req.params.id), req.body);
+    res.json({ ...result, discussion: discussionDetail(me(req), id(req.params.id)) });
+  });
+  r.post('/discussions/:id/reopen', (req, res) => {
+    reopenDiscussion(me(req), id(req.params.id));
+    res.json(discussionDetail(me(req), id(req.params.id)));
+  });
+
+  // ---------------- the staff's checklist for each cadet (staffChecks.ts) ----------------
+
+  r.get('/staff-checks', (req, res) => res.json(staffChecksBoard(me(req))));
+  r.post('/staff-checks/sheet/retry', requireCommander, async (req, res) => res.json(await retryAllSheet(me(req))));
+  r.put('/staff-checks/:cadetId/:item', async (req, res) => res.json({ mark: await markStaffCheck(me(req), id(req.params.cadetId), String(req.params.item), req.body) }));
+  r.post('/staff-checks/:cadetId/:item/sheet', async (req, res) => res.json({ mark: await retrySheet(me(req), id(req.params.cadetId), String(req.params.item)) }));
+
+  // ---------------- a course opened beside the current one (parallel.ts) ----------------
+
+  r.get('/courses/parallel', requireCommander, (req, res) => res.json({ courses: parallelCourses(), in: slotOf(req) }));
+  r.post('/courses/parallel', requireCommander, (req, res) => {
+    const course = openParallelCourse(me(req), req.body);
+    changed('settings');
+    res.json(course);
+  });
+  // moving between the courses: everyone works in the one they chose (null: the current course)
+  r.post('/courses/switch', (req, res) => {
+    const { id } = z.object({ id: z.number().int().positive().nullable() }).parse(req.body);
+    switchSlot(res, id, me(req).id);
+    res.json({ ok: true });
+  });
+  // a link from a notification: into the course it is about, then the screen
+  r.get('/courses/open', (req, res) => {
+    const c = String(req.query.c ?? '');
+    const to = String(req.query.to ?? '/');
+    const m = /^s(\d+)$/.exec(c);
+    try {
+      switchSlot(res, m ? Number(m[1]) : null, me(req).id);
+    } catch {
+      switchSlot(res, null); // a course since deleted, or become the current one
+    }
+    // only a screen of this app - never an address elsewhere (no "//", backslash, spaces or control characters)
+    res.redirect(302, /^\/(?![/\\])[^\s\\]*$/.test(to) && !to.startsWith('/api/') ? to : '/');
+  });
+  r.get('/courses/parallel/:id/copy/:area', requireCommander, (req, res) => {
+    const area = z.enum(COPY_AREAS as [string, ...string[]]).parse(req.params.area) as (typeof COPY_AREAS)[number];
+    res.json(copySource(id(req.params.id), area, me(req)));
+  });
+  r.post('/courses/parallel/:id/copy', requireCommander, (req, res) => res.json(copyIntoSlot(id(req.params.id), req.body, me(req))));
+  r.post('/courses/parallel/:id/promote', requireCommander, async (req, res) => {
+    const archive = await promoteParallelCourse(me(req), id(req.params.id), req.body);
+    switchSlot(res, null);
+    res.json(archive);
+  });
+  // the staff, from cycle to cycle (courseStaff.ts): in a course beside the current one, and in the current one
+  r.get('/courses/parallel/:id/staff', requireCommander, (req, res) => res.json(inSlot(id(req.params.id), courseStaff)));
+  r.post('/courses/parallel/:id/staff', requireCommander, (req, res) => {
+    const moved = inSlot(id(req.params.id), () => applyStaffChanges(me(req), req.body));
+    res.json({ moved, staff: inSlot(id(req.params.id), courseStaff) });
+  });
+  r.post('/courses/parallel/:id/staff/new', requireCommander, (req, res) => {
+    inSlot(id(req.params.id), () => null); // the course is there
+    const userId = addNewcomer(me(req), req.body, true);
+    res.json({ id: userId, staff: inSlot(id(req.params.id), courseStaff) });
+  });
+  r.get('/courses/staff', requireCommander, (_req, res) => res.json(courseStaff()));
+  r.post('/courses/staff', requireCommander, (req, res) => {
+    const moved = applyStaffChanges(me(req), req.body);
+    res.json({ moved, staff: courseStaff() });
+  });
+  r.post('/courses/staff/new', requireCommander, (req, res) => {
+    const userId = addNewcomer(me(req), req.body, false);
+    res.json({ id: userId, staff: courseStaff() });
+  });
+  r.delete('/courses/parallel/:id', requireCommander, (req, res) => {
+    deleteSlot(id(req.params.id));
+    changed('settings');
+    if (slotOf(req) === id(req.params.id)) switchSlot(res, null);
+    res.json({ ok: true });
+  });
+
+  // ---------------- plan approval: the commander's documents for the commander above ----------------
+
+  // the reservists in the contacts (reservists.ts): everyone sees them and adds; the commander and whoever added removes
+  r.get('/reservists', (req, res) => res.json(listReservists(me(req))));
+  r.post('/reservists', (req, res) => res.json(addReservist(me(req), req.body)));
+  r.patch('/reservists/:id', (req, res) => res.json(updateReservist(me(req), id(req.params.id), req.body)));
+  r.delete('/reservists/:id', (req, res) => {
+    deleteReservist(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  // the weeks' activity files (activityFiles.ts): everyone sees them; their people and the commander move them on
+  r.get('/activity-files', (req, res) => res.json(activityFiles(me(req), weekIdOf(req.query.week))));
+  r.post('/activity-files', (req, res) => res.json(createActivityFile(me(req), req.body)));
+  r.patch('/activity-files/:id', (req, res) => res.json(updateActivityFile(me(req), id(req.params.id), req.body)));
+  r.delete('/activity-files/:id', (req, res) => {
+    deleteActivityFile(me(req), id(req.params.id));
+    res.json({ ok: true });
+  });
+  r.get('/plans', requireAbility('plans'), async (_req, res) => res.json(await plansOverview()));
+  r.get('/plans/:weekId', requireAbility('plans'), async (req, res) => res.json(await planDocument(id(req.params.weekId))));
+  r.patch('/plans/:weekId', requireAbility('plans'), async (req, res) => {
+    savePlan(me(req), id(req.params.weekId), req.body);
+    res.json(await planDocument(id(req.params.weekId)));
+  });
+  r.post('/plans/:weekId/approve', requireCommander, async (req, res) => {
+    await approvePlan(me(req), id(req.params.weekId), req.body);
+    res.json(await planDocument(id(req.params.weekId)));
+  });
+  // the three-week plan: the week now and the three after it (or from a given week)
+  r.get('/three-week', requireAbility('plans'), async (_req, res) => res.json(await threeWeekPlan(null)));
+  r.get('/three-week/:weekId', requireAbility('plans'), async (req, res) => res.json(await threeWeekPlan(id(req.params.weekId))));
+  r.patch('/three-week/:weekId', requireAbility('plans'), async (req, res) => {
+    saveThreeWeek(me(req), id(req.params.weekId), req.body);
+    res.json(await threeWeekPlan(id(req.params.weekId)));
+  });
+  // the key schedule by hand: what else of the schedule can be added to it, added, and any of it taken out
+  r.get('/three-week/:weekId/candidates', requireAbility('plans'), async (req, res) => res.json(await threeWeekCandidates(id(req.params.weekId))));
+  r.post('/plan-key-events', requireAbility('plans'), (req, res) => {
+    addKeyEvents(req.body);
+    res.json({ ok: true });
+  });
+  r.post('/plan-key-events/remove', requireAbility('plans'), (req, res) => {
+    removeKeyEvent(req.body);
+    res.json({ ok: true });
+  });
+  r.post('/three-week/:weekId/approve', requireCommander, async (req, res) => {
+    await approveThreeWeek(me(req), id(req.params.weekId), req.body);
+    res.json(await threeWeekPlan(id(req.params.weekId)));
+  });
+
+  // ---------------- backup ----------------
+
+  r.get('/admin/snapshots', requireCommander, async (_req, res) => res.json(await listSnapshots()));
+  r.post('/admin/snapshots', requireCommander, async (_req, res) => {
+    await takeSnapshot('manual');
+    res.json({ ok: true });
+  });
+  r.post('/admin/snapshots/:id/restore', requireCommander, async (req, res) => {
+    await restoreSnapshot(String(req.params.id));
+    res.json({ ok: true });
+  });
+
+  r.get('/admin/backup', requireCommander, (_req, res) => {
+    const file = join(config.dataDir, `backup-${Date.now()}.db`);
+    db().exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
+    const name = `kks-backup-${localDateKey(clock.now(), tz())}.db`;
+    res.download(file, name, () => {
+      try {
+        unlinkSync(file);
+      } catch {
+        /* ignore */
+      }
+    });
+  });
+
+  return r;
+}

@@ -1,0 +1,216 @@
+import { Suspense, useEffect } from 'react';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router';
+import { Layout } from './components/Layout';
+import { NewTaskProvider } from './components/NewTask';
+import { WeekDebriefAddHost } from './components/WeekDebriefAdd';
+import { EntryAddHost } from './components/EntryAdd';
+import { ProcedureReportHost } from './components/ProcedureReport';
+import { SmartEntryHost } from './components/SmartEntry';
+import { WeeklyAddHost } from './components/WeeklyAdd';
+import { ToastProvider } from './components/Toasts';
+import { Empty, Loading } from './components/ui';
+import { useOpenings } from './lib/launch';
+import { SessionGate, useSession } from './lib/session';
+import { LoginPage } from './pages/LoginPage';
+import { MyTasksPage } from './pages/MyTasksPage';
+import { SchedulePage } from './pages/SchedulePage';
+import { lazyPage, prefetchPages } from './lib/lazyPage';
+import { ConfirmHost } from './components/Confirm';
+import { usePageTitle } from './lib/title';
+
+// The first screens come with the app; every other screen loads when it is
+// first opened, so a phone downloads far less up front (and after an update).
+const BriefingPage = lazyPage(() => import('./pages/BriefingPage'), 'BriefingPage');
+const CadetPage = lazyPage(() => import('./pages/CadetsPage'), 'CadetPage');
+const CadetsPage = lazyPage(() => import('./pages/CadetsPage'), 'CadetsPage');
+const DebriefPage = lazyPage(() => import('./pages/DebriefsPage'), 'DebriefPage');
+const DiscussionsPage = lazyPage(() => import('./pages/DiscussionsPage'), 'DiscussionsPage');
+const WeaponFormPage = lazyPage(() => import('./pages/WeaponFormPage'), 'WeaponFormPage');
+const DiscussionPage = lazyPage(() => import('./pages/DiscussionsPage'), 'DiscussionPage');
+const DebriefsPage = lazyPage(() => import('./pages/DebriefsPage'), 'DebriefsPage');
+const DocumentsPage = lazyPage(() => import('./pages/DocumentsPage'), 'DocumentsPage');
+const CommitteePage = lazyPage(() => import('./pages/EvaluationsPage'), 'CommitteePage');
+const EvaluationFilePage = lazyPage(() => import('./pages/EvaluationsPage'), 'EvaluationFilePage');
+const EvaluationsPage = lazyPage(() => import('./pages/EvaluationsPage'), 'EvaluationsPage');
+const SociometricPage = lazyPage(() => import('./pages/SociometricPage'), 'SociometricPage');
+const TakpatzHome = lazyPage(() => import('./pages/TakpatzPage'), 'TakpatzHome');
+const TakpatzTeamPage = lazyPage(() => import('./pages/TakpatzPage'), 'TakpatzTeamPage');
+const ExperiencesPage = lazyPage(() => import('./pages/ExperiencesPage'), 'ExperiencesPage');
+const StaffChecksPage = lazyPage(() => import('./pages/StaffChecksPage'), 'StaffChecksPage');
+const ActivityFilesPage = lazyPage(() => import('./pages/ActivityFilesPage'), 'ActivityFilesPage');
+const CommandPage = lazyPage(() => import('./pages/CommandPage'), 'CommandPage');
+const MorePage = lazyPage(() => import('./pages/MorePage'), 'MorePage');
+const EventEditorPage = lazyPage(() => import('./pages/EventEditorPage'), 'EventEditorPage');
+const TrashPage = lazyPage(() => import('./pages/TrashPage'), 'TrashPage');
+const NotificationsPage = lazyPage(() => import('./pages/NotificationsPage'), 'NotificationsPage');
+const RecurringPage = lazyPage(() => import('./pages/RecurringPage'), 'RecurringPage');
+const ActivityPage = lazyPage(() => import('./pages/ReportsPage'), 'ActivityPage');
+const DayEndPage = lazyPage(() => import('./pages/ReportsPage'), 'DayEndPage');
+const LookAheadPage = lazyPage(() => import('./pages/ReportsPage'), 'LookAheadPage');
+const WeeklyReportPage = lazyPage(() => import('./pages/ReportsPage'), 'WeeklyReportPage');
+const RequestsPage = lazyPage(() => import('./pages/RequestsPage'), 'RequestsPage');
+const EntriesPage = lazyPage(() => import('./pages/EntriesPage'), 'EntriesPage');
+const ProceduresPage = lazyPage(() => import('./pages/ProceduresPage'), 'ProceduresPage');
+const DashboardPage = lazyPage(() => import('./pages/DashboardPage'), 'DashboardPage');
+const SearchPage = lazyPage(() => import('./pages/SearchPage'), 'SearchPage');
+const SettingsPage = lazyPage(() => import('./pages/SettingsPage'), 'SettingsPage');
+const TaskPage = lazyPage(() => import('./pages/TaskPage'), 'TaskPage');
+const TasksPage = lazyPage(() => import('./pages/TasksPage'), 'TasksPage');
+const StaffPage = lazyPage(() => import('./pages/TeamPage'), 'StaffPage');
+const TeamPage = lazyPage(() => import('./pages/TeamPage'), 'TeamPage');
+const TemplatesPage = lazyPage(() => import('./pages/TemplatesPage'), 'TemplatesPage');
+const WeekPage = lazyPage(() => import('./pages/WeeksPage'), 'WeekPage');
+const WeeksPage = lazyPage(() => import('./pages/WeeksPage'), 'WeeksPage');
+const TracksPage = lazyPage(() => import('./pages/TracksPage'), 'TracksPage');
+const TrackPage = lazyPage(() => import('./pages/TracksPage'), 'TrackPage');
+const WeekOrderPage = lazyPage(() => import('./pages/WeekOrderPage'), 'WeekOrderPage');
+const AnnouncementsPage = lazyPage(() => import('./pages/AnnouncementsPage'), 'AnnouncementsPage');
+const DirectoryPage = lazyPage(() => import('./pages/DirectoryPage'), 'DirectoryPage');
+const CoursesPage = lazyPage(() => import('./pages/CoursesPage'), 'CoursesPage');
+const AlignmentPage = lazyPage(() => import('./pages/AlignmentPage'), 'AlignmentPage');
+const PlansPage = lazyPage(() => import('./pages/PlansPage'), 'PlansPage');
+const PlanPage = lazyPage(() => import('./pages/PlansPage'), 'PlanPage');
+const ThreeWeekPage = lazyPage(() => import('./pages/ThreeWeekPage'), 'ThreeWeekPage');
+const TalkPage = lazyPage(() => import('./pages/TalkPage'), 'TalkPage');
+const WeeklyHome = lazyPage(() => import('./pages/WeeklyPage'), 'WeeklyHome');
+const WeeklyPage = lazyPage(() => import('./pages/WeeklyPage'), 'WeeklyPage');
+
+/** An address that isn't a screen - say so, rather than silently landing on the home page. */
+function NotFound() {
+  usePageTitle('הדף לא נמצא');
+  return (
+    <div className="page">
+      <Empty
+        icon="search"
+        title="הדף לא נמצא"
+        text={
+          <>
+            הכתובת שגויה, או שהדף הועבר. <Link to="/">לדף הבית</Link>
+          </>
+        }
+      />
+    </div>
+  );
+}
+
+/** The schedule's old address: the calendar, with the day, the view and the event asked for (links in notifications). */
+function ToCalendar() {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: '/', search, hash }} replace />;
+}
+
+function AuthedRoutes() {
+  const { isCommander, can } = useSession();
+  useOpenings();
+  useEffect(() => {
+    prefetchPages();
+  }, []);
+  return (
+    <ToastProvider>
+      <NewTaskProvider>
+        <Layout>
+          {/* while a screen's code arrives */}
+          <Suspense
+            fallback={
+              <div className="page">
+                <Loading rows={5} />
+              </div>
+            }
+          >
+            <Routes>
+              {/* the calendar is the first tab; the overview (the course's for the commander, one's own for the staff) is home */}
+              <Route path="/" element={<SchedulePage />} />
+              <Route path="/overview" element={<DashboardPage />} />
+              <Route path="/my" element={<MyTasksPage />} />
+              <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/tasks/:id" element={<TaskPage />} />
+              <Route path="/weeks" element={<WeeksPage />} />
+              <Route path="/weeks/:id" element={<WeekPage />} />
+              <Route path="/weeks/:id/order" element={<WeekOrderPage />} />
+              <Route path="/weekly" element={<WeeklyHome />} />
+              <Route path="/weekly/:weekId" element={<WeeklyPage />} />
+              <Route path="/tracks" element={<TracksPage />} />
+              <Route path="/tracks/:id" element={<TrackPage />} />
+              <Route path="/plans" element={can('plans') ? <PlansPage /> : <Navigate to="/" />} />
+              <Route path="/plans/:id" element={can('plans') ? <PlanPage /> : <Navigate to="/" />} />
+              <Route path="/three-week" element={can('plans') ? <ThreeWeekPage /> : <Navigate to="/" />} />
+              <Route path="/three-week/:weekId" element={can('plans') ? <ThreeWeekPage /> : <Navigate to="/" />} />
+              <Route path="/schedule" element={<ToCalendar />} />
+              {/* an event's whole form, as Google Calendar's page; the calendar's trash */}
+              <Route path="/event/new" element={<EventEditorPage />} />
+              <Route path="/event/:id/edit" element={<EventEditorPage />} />
+              <Route path="/trash" element={<TrashPage />} />
+              <Route path="/team" element={isCommander ? <TeamPage /> : <Navigate to="/" />} />
+              <Route path="/team/:id" element={<StaffPage />} />
+              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/entries" element={<EntriesPage />} />
+              <Route path="/briefing" element={<BriefingPage />} />
+              <Route path="/reports/weekly" element={<WeeklyReportPage />} />
+              <Route path="/lookahead" element={<LookAheadPage />} />
+              <Route path="/day-end" element={<DayEndPage />} />
+              <Route path="/activity" element={<ActivityPage />} />
+              <Route path="/command" element={<CommandPage />} />
+              <Route path="/templates" element={<TemplatesPage />} />
+              <Route path="/recurring" element={<RecurringPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/cadets" element={<CadetsPage />} />
+              {/* the roll call is no more: its old links go to the cadets */}
+              <Route path="/attendance" element={<Navigate to="/cadets" replace />} />
+              <Route path="/announcements" element={<AnnouncementsPage />} />
+              <Route path="/directory" element={<DirectoryPage />} />
+              <Route path="/courses" element={<CoursesPage />} />
+              <Route path="/alignment" element={<AlignmentPage />} />
+              <Route path="/cadets/:id" element={<CadetPage />} />
+              <Route path="/cadets/:id/talks/:recordId" element={<TalkPage />} />
+              <Route path="/cadets/:id/weapon/:formId" element={<WeaponFormPage />} />
+              <Route path="/experiences" element={<ExperiencesPage />} />
+              <Route path="/staff-checks" element={<StaffChecksPage />} />
+              <Route path="/activity-files" element={<ActivityFilesPage />} />
+              <Route path="/procedures" element={<ProceduresPage />} />
+              <Route path="/evaluations" element={<EvaluationsPage />} />
+              <Route path="/sociometric" element={<SociometricPage />} />
+              <Route path="/takpatz" element={<TakpatzHome />} />
+              <Route path="/takpatz/:teamId" element={<TakpatzTeamPage />} />
+              <Route path="/evaluations/committee/:id" element={<CommitteePage />} />
+              <Route path="/evaluations/:cadetId" element={<EvaluationFilePage />} />
+              <Route path="/debriefs" element={<DebriefsPage />} />
+              <Route path="/debriefs/:id" element={<DebriefPage />} />
+              <Route path="/discussions" element={<DiscussionsPage />} />
+              <Route path="/discussions/:id" element={<DiscussionPage />} />
+              <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/more" element={<MorePage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </Layout>
+        <WeeklyAddHost />
+        <WeekDebriefAddHost />
+        <EntryAddHost />
+        <ProcedureReportHost />
+        <SmartEntryHost />
+      </NewTaskProvider>
+    </ToastProvider>
+  );
+}
+
+/** The app without a router, so the demo build can use an in-memory one. */
+export function AppShell() {
+  return (
+    <>
+      <SessionGate anon={(onLogin) => <LoginPage onLogin={onLogin} />}>
+        <AuthedRoutes />
+      </SessionGate>
+      <ConfirmHost />
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
+  );
+}

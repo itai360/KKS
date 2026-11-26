@@ -1,0 +1,564 @@
+import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { Link } from 'react-router';
+import type { Tone } from '@shared/constants';
+import { Icon } from './Icon';
+import { PageBack } from './BackButton';
+import { usePageTitle } from '../lib/title';
+import { ask } from './Confirm';
+import { changesSettled } from '../lib/api';
+import { useSheetGesture } from './sheetGesture';
+import { lockScroll } from '../lib/scrollLock';
+import { trapFocus } from '../lib/focusTrap';
+import { useMedia } from '../lib/media';
+import { BOTTOM_BAR_MEDIA } from '../lib/bottomBar';
+import { Sheet } from './pickers';
+import { onTabListKey, tabProps } from '../lib/tabKeys';
+
+// the pickers live in their own module; every screen imports them from here as before
+export { DateInput, Select, SuggestInput, TimeInput } from './pickers';
+
+/**
+ * A row or card that opens on click is also reached with Tab and opened with
+ * Enter, like a link. Enter on a button inside it stays that button's.
+ * Table rows keep their row role ({ role: false }).
+ */
+export function openable(open: () => void, opts: { role?: boolean } = {}) {
+  return {
+    onClick: open,
+    tabIndex: 0,
+    ...(opts.role === false ? {} : { role: 'link' as const }),
+    onKeyDown: (e: ReactKeyboardEvent) => {
+      if (e.key !== 'Enter' || e.target !== e.currentTarget) return;
+      e.preventDefault();
+      open();
+    },
+  };
+}
+
+function fieldValue(el: Element): string {
+  if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) return String(el.checked);
+  return (el as HTMLInputElement).value.trim();
+}
+
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+  wide,
+  narrow,
+  closable = true,
+  readOnly,
+  className,
+  autosave,
+}: {
+  title: ReactNode;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+  wide?: boolean;
+  /** a short question (the confirmation dialog) */
+  narrow?: boolean;
+  /** false: no close button, Escape or outside click - the dialog's own buttons answer it */
+  closable?: boolean;
+  /** only text to read: the body itself takes focus, so it scrolls from the keyboard */
+  readOnly?: boolean;
+  /** a look of its own (the menu sheet) */
+  className?: string;
+  /**
+   * Each field here saves itself as it is left or changed (the teams dialog), so it is never "unsaved" and
+   * closing does not ask about it. A pinned "שמירה" (when there is no footer of its own) saves the field being
+   * edited and a form inside with something typed in it (a new row), then closes once the saves came back.
+   */
+  autosave?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const onCloseRef = useRef(closable ? onClose : () => undefined);
+  onCloseRef.current = closable ? onClose : () => undefined;
+  const autosaveRef = useRef(autosave);
+  autosaveRef.current = autosave;
+  // what each field held when first touched: closing by Escape, a click outside or the X
+  // after typing asks first, so a long text is not lost to a stray click
+  const initial = useRef(new Map<Element, string>());
+  const unsaved = () => [...initial.current].some(([el, was]) => el.isConnected && fieldValue(el) !== was);
+  // saving as you go: the field being edited saves as it is left, so leave it now (a tap on a phone's
+  // button does not take the focus from it)
+  const commit = () => {
+    const active = document.activeElement as HTMLElement | null;
+    if (active && ref.current?.contains(active) && active.matches('input, textarea, select')) active.blur();
+  };
+  // closes once the saves on their way came back - unless one failed: its error is on screen, so it stays
+  const closeWhenSaved = async () => {
+    const { failed } = await changesSettled();
+    if (failed) return false;
+    onCloseRef.current();
+    return true;
+  };
+  const tryClose = useRef(async () => {
+    if (autosaveRef.current) commit();
+    if (unsaved() && !(await ask({ title: 'לסגור בלי לשמור?', body: 'מה שהוקלד בחלון הזה יימחק.', confirm: 'סגירה בלי שמירה', cancel: 'המשך עריכה', danger: true }))) return;
+    if (autosaveRef.current) await closeWhenSaved();
+    else onCloseRef.current();
+  });
+  const [saving, setSaving] = useState(false);
+  const saveAll = async () => {
+    commit();
+    // a form inside with something typed in it (a new team's name): added too
+    ref.current?.querySelectorAll('form').forEach((form) => {
+      if ([...initial.current].some(([el, was]) => form.contains(el) && el.isConnected && fieldValue(el) !== was)) form.requestSubmit();
+    });
+    setSaving(true);
+    if (!(await closeWhenSaved())) setSaving(false);
+  };
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // with nested dialogs only the topmost one closes
+      const all = document.querySelectorAll('.modal');
+      if (all[all.length - 1] === ref.current) void tryClose.current();
+    };
+    document.addEventListener('keydown', onKey);
+    const touched = (e: FocusEvent) => {
+      const el = e.target as Element;
+      // saving as you go, only a form's fields wait for a button (the new team's name)
+      if (autosaveRef.current && !el.closest('form')) return;
+      if (el.matches('input, textarea, select') && !el.matches('[data-transient], [type=hidden], [type=file]') && !initial.current.has(el)) initial.current.set(el, fieldValue(el));
+    };
+    ref.current?.addEventListener('focusin', touched);
+    // prefer an explicit autofocus target, then the first field - never the close button. On a phone only the
+    // one asked for: a field focused by itself raises the keyboard over a dialog that is mostly to read or
+    // choose from (the dialog itself takes the focus, for a screen reader)
+    const body = ref.current?.querySelector('.modal-body');
+    const touch = typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches;
+    const first =
+      ref.current?.querySelector<HTMLElement>('[data-autofocus]') ??
+      (touch
+        ? null
+        : (body?.querySelector<HTMLElement>('input:not([type=hidden]):not([type=checkbox]), textarea, select') ?? body?.querySelector<HTMLElement>('button')));
+    if (first) first.focus();
+    else ref.current?.focus({ preventScroll: true });
+    const unlock = lockScroll();
+    const box = ref.current;
+    // the keyboard stays in the dialog while it is the topmost one
+    const layer = box?.closest<HTMLElement>('.modal-backdrop');
+    const untrap = layer
+      ? trapFocus(layer, () => {
+          const open = document.querySelectorAll('.modal-backdrop:not(.is-leaving)');
+          return open[open.length - 1] === layer;
+        })
+      : () => undefined;
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      box?.removeEventListener('focusin', touched);
+      untrap();
+      unlock();
+      prev?.focus?.();
+    };
+    // once per opening: re-running on every parent render would steal focus mid-typing
+  }, []);
+  // its edges show only where content runs under them: the title's once the body is scrolled, the
+  // buttons' while more of it is below - not hard lines drawn whether or not anything is there
+  useEffect(() => {
+    const box = ref.current;
+    const body = box?.querySelector<HTMLElement>('.modal-body');
+    if (!box || !body) return;
+    let frame = 0;
+    const edges = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        box.toggleAttribute('data-under-head', body.scrollTop > 1);
+        box.toggleAttribute('data-more-below', body.scrollTop + body.clientHeight < body.scrollHeight - 1);
+      });
+    };
+    edges();
+    body.addEventListener('scroll', edges, { passive: true });
+    const sized = new ResizeObserver(edges);
+    sized.observe(body);
+    const changed = new MutationObserver(edges);
+    changed.observe(body, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      body.removeEventListener('scroll', edges);
+      sized.disconnect();
+      changed.disconnect();
+    };
+  }, []);
+  // closing - however it closes - does not cut it off: a still copy of it, as it was, fades out in its place
+  const bodyScroll = useRef(0);
+  useLayoutEffect(() => {
+    const box = ref.current;
+    const backdrop = box?.parentElement;
+    const body = box?.querySelector('.modal-body');
+    const onScroll = () => {
+      bodyScroll.current = body?.scrollTop ?? 0;
+    };
+    body?.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      body?.removeEventListener('scroll', onScroll);
+      if (!backdrop || !backdrop.isConnected || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const ghost = backdrop.cloneNode(true) as HTMLElement;
+      // what was typed shows in the copy too (a copy takes the fields' first values)
+      const from = backdrop.querySelectorAll<HTMLInputElement>('input, textarea, select');
+      ghost.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el, i) => {
+        if (el.type === 'checkbox' || el.type === 'radio') el.checked = from[i]?.checked ?? el.checked;
+        else el.value = from[i]?.value ?? el.value;
+      });
+      ghost.classList.add('is-leaving');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.inert = true;
+      ghost.removeAttribute('id');
+      ghost.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+      document.body.appendChild(ghost);
+      const ghostBody = ghost.querySelector('.modal-body');
+      if (ghostBody) ghostBody.scrollTop = bodyScroll.current;
+      setTimeout(() => ghost.remove(), 220);
+    };
+  }, []);
+
+  // on a phone the dialog is a sheet from the bottom: pulled down - by its top, or by its content
+  // scrolled to the top - it follows the finger, and let go it closes or comes back (sheetGesture.ts)
+  const backdrop = useRef<HTMLDivElement>(null);
+  useSheetGesture(ref, {
+    enabled: closable,
+    canLeave: () => {
+      if (autosaveRef.current) commit();
+      return !unsaved();
+    },
+    leave: () => onCloseRef.current(),
+    refused: () => void tryClose.current(),
+    backdrop,
+    handle: '.modal-grab, .modal-head',
+    scroller: '.modal-body',
+  });
+
+  // on the page body: a dialog opened inside an animated card or a sticky column would otherwise
+  // stay inside that box's layer, under the phone's bottom bar
+  return createPortal(
+    <div className="modal-backdrop" ref={backdrop} onMouseDown={(e) => e.target === e.currentTarget && void tryClose.current()}>
+      <div className={`modal${wide ? ' wide' : narrow ? ' narrow' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref} tabIndex={-1}>
+        {closable && <div className="modal-grab" aria-hidden="true" />}
+        <div className="modal-head">
+          <h2 id={titleId}>{title}</h2>
+          {closable && (
+            <button className="icon-btn" onClick={() => void tryClose.current()} aria-label="סגירה" type="button">
+              <Icon name="x" />
+            </button>
+          )}
+        </div>
+        <div className="modal-body" tabIndex={readOnly ? 0 : undefined}>
+          {children}
+        </div>
+        {footer ? (
+          <div className="modal-foot">{footer}</div>
+        ) : (
+          autosave &&
+          closable && (
+            // saving as you go: still a button that says so, in sight however long the dialog is
+            <div className="modal-foot modal-save-foot">
+              <button type="button" className="btn btn-primary modal-save" onClick={() => void saveAll()} disabled={saving}>
+                <Icon name="check" /> {saving ? 'שומר...' : 'שמירה'}
+              </button>
+            </div>
+          )
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * A form's buttons, floating: capsules over the content that stay in sight while the fields above are filled
+ * in - at the foot of the screen on a page (above the phone's bar), at the foot of a dialog inside one. Every
+ * form's save floats, as the dialogs' footers do (styles.css: float-actions).
+ */
+export function FloatingActions({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={`float-actions no-print${className ? ` ${className}` : ''}`}>{children}</div>;
+}
+
+export function Field({ label, required, hint, children, className }: { label: ReactNode; required?: boolean; hint?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <label className={`field ${className ?? ''}`}>
+      <span>
+        {label}
+        {required && <span className="req"> *</span>}
+      </span>
+      {children}
+      {hint && <span className="hint">{hint}</span>}
+    </label>
+  );
+}
+
+export function Empty({ title, text, icon = 'check', mark }: { title: string; text?: ReactNode; icon?: string; mark?: ReactNode }) {
+  return (
+    <div className="empty">
+      {mark ?? <Icon name={icon} />}
+      <div className="big">{title}</div>
+      {text && <div className="small">{text}</div>}
+    </div>
+  );
+}
+
+export function Loading({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="list" role="status" aria-busy="true" aria-label="טוען">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="skeleton" />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A screen whose item could not be loaded: one that does not exist (or was
+ * deleted while the screen was open) says so and leads back to its list.
+ */
+export function PageError({
+  error,
+  status,
+  what,
+  feminine,
+  back,
+  backLabel,
+}: {
+  error: string | null;
+  status: number | null;
+  what: string;
+  feminine?: boolean;
+  back: string;
+  backLabel: string;
+}) {
+  const missing = `${what} ${feminine ? 'לא נמצאה' : 'לא נמצא'}`;
+  usePageTitle(status === 404 ? missing : null);
+  if (status !== 404) return <ErrorBox error={error} />;
+  return (
+    <Empty
+      icon="search"
+      title={missing}
+      text={
+        <>
+          {feminine ? 'ייתכן שנמחקה' : 'ייתכן שנמחק'}, או שהקישור שגוי. <Link to={back}>{backLabel}</Link>
+        </>
+      }
+    />
+  );
+}
+
+export function ErrorBox({ error }: { error: string | null | undefined }) {
+  if (!error) return null;
+  return (
+    <div className="error-box" role="alert">
+      {error}
+    </div>
+  );
+}
+
+export function readinessTone(p: number, total = 1): Tone {
+  if (total === 0) return 'gray';
+  if (p >= 90) return 'green';
+  if (p >= 70) return 'yellow';
+  if (p >= 40) return 'orange';
+  return 'red';
+}
+
+export function Ring({ value, size = 92, tone }: { value: number; size?: number; tone?: Tone }) {
+  return (
+    <div className={`ring t-${tone ?? readinessTone(value)}`} style={{ ['--p' as string]: value, ['--size' as string]: `${size}px` }}>
+      <span>{value}%</span>
+    </div>
+  );
+}
+
+export function Bar({ value, tone, label }: { value: number; tone?: Tone; label: string }) {
+  return (
+    <div className={`bar t-${tone ?? readinessTone(value)}`} role="progressbar" aria-label={label} aria-valuenow={Math.round(value)} aria-valuemin={0} aria-valuemax={100}>
+      <div className="bar-fill" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+    </div>
+  );
+}
+
+export function Seg<T extends string>({
+  value,
+  options,
+  onChange,
+  wrap,
+}: {
+  value: T;
+  options: { value: T; label: ReactNode; icon?: string }[];
+  onChange: (v: T) => void;
+  /** options that are sentences: they wrap and share the width */
+  wrap?: boolean;
+}) {
+  // the highlight slides from the option chosen before to the one chosen now
+  const ref = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<CSSProperties | null>(null);
+  const optionKey = options.map((o) => o.value).join('|');
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    const measure = () => {
+      const on = box.querySelector<HTMLElement>(':scope > button.on');
+      setPill(
+        on
+          ? ({ '--pill-x': `${on.offsetLeft}px`, '--pill-y': `${on.offsetTop}px`, '--pill-w': `${on.offsetWidth}px`, '--pill-h': `${on.offsetHeight}px` } as CSSProperties)
+          : null,
+      );
+    };
+    measure();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    ro?.observe(box);
+    return () => ro?.disconnect();
+  }, [value, optionKey]);
+  return (
+    <div className={`seg${wrap ? ' seg-wrap' : ''}${pill ? ' has-pill' : ''}`} role="tablist" ref={ref} style={pill ?? undefined} onKeyDown={onTabListKey}>
+      {pill && <span className="seg-pill" aria-hidden="true" />}
+      {options.map((o, i) => (
+        <button key={o.value} type="button" className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)} {...tabProps(value === o.value || (i === 0 && !options.some((x) => x.value === value)))}>
+          {o.icon && <Icon name={o.icon} />}
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function PageHead({
+  eyebrow,
+  title,
+  tags,
+  sub,
+  actions,
+  docTitle,
+}: {
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  /** beside the title, not in it: a status to change, a count - in the app's own font, whatever the title's */
+  tags?: ReactNode;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  docTitle?: string;
+}) {
+  usePageTitle(docTitle ?? (typeof title === 'string' ? title : null));
+  return (
+    <div className="page-head">
+      <div className="titles">
+        <PageBack />
+        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
+        {tags ? (
+          <div className="page-title-row">
+            <h1 className="page-title">{title}</h1>
+            <div className="page-tags">{tags}</div>
+          </div>
+        ) : (
+          <h1 className="page-title">{title}</h1>
+        )}
+        {sub && <div className="page-sub">{sub}</div>}
+      </div>
+      {actions && <PageActions>{actions}</PageActions>}
+    </div>
+  );
+}
+
+/** the actions as a flat list: fragments opened, nothing for what is not shown */
+function flatActions(nodes: ReactNode, path = ''): ReactElement[] {
+  const out: ReactElement[] = [];
+  Children.forEach(nodes, (n, i) => {
+    if (!isValidElement(n)) return;
+    if (n.type === Fragment) out.push(...flatActions((n.props as { children?: ReactNode }).children, `${path}${i}.`));
+    else out.push(cloneElement(n, { key: n.key ?? `${path}${i}` }));
+  });
+  return out;
+}
+
+const classOf = (el: ReactElement) => String((el.props as { className?: string }).className ?? '');
+
+/**
+ * A screen's actions. On a phone the header stays short: the main action (and a switch like table / list)
+ * in sight, the others in "עוד" - a sheet of full-width rows - instead of rows of small buttons before
+ * the content even starts. A computer shows them all.
+ */
+function PageActions({ children }: { children: ReactNode }) {
+  const phone = useMedia(BOTTOM_BAR_MEDIA);
+  if (!phone) return <div className="page-actions">{children}</div>;
+  const all = flatActions(children).filter((el) => !/\bhide-mobile\b/.test(classOf(el)));
+  const keep = (el: ReactElement) => /\bbtn-primary\b/.test(classOf(el)) || el.type === Seg || (el.props as { 'data-keep'?: boolean })['data-keep'];
+  const rest = all.filter((el) => !keep(el));
+  const primary = all.some((el) => /\bbtn-primary\b/.test(classOf(el)));
+  // a menu for one or two quick links would only hide them
+  if (rest.length < 2 || (!primary && rest.length < 3)) return <div className="page-actions">{children}</div>;
+  return (
+    <div className="page-actions">
+      {all.filter(keep)}
+      <MoreMenu>{rest}</MoreMenu>
+    </div>
+  );
+}
+
+/** "עוד": actions that need not be in sight, as full-width rows in a sheet - a choice made closes it */
+export function MoreMenu({ children, title = 'עוד פעולות', small }: { children: ReactNode; title?: string; small?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const more = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button ref={more} type="button" className={`btn page-more${small ? ' btn-sm' : ''}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+        <Icon name="more" /> עוד
+      </button>
+      <Sheet open={open} title={title} onClose={() => setOpen(false)} back={more} className="page-more-sheet">
+        <div
+          className="pick-sheet-body page-more-list"
+          // a choice made closes it: one of its rows pressed, or something chosen in a list that a field here
+          // opens (that list's sheet is put outside this one, yet its presses come up here). A file chooser,
+          // a field, a field opening its list, and that list's search, months or own close do not
+          onClick={(e) => {
+            const t = e.target as HTMLElement;
+            if (t.closest('[role="option"], [data-day]')) {
+              setOpen(false);
+              return;
+            }
+            if (!e.currentTarget.contains(t) || t.closest('label, input, select, textarea, [role="combobox"], [aria-haspopup]')) return;
+            if (t.closest('button, a')) setOpen(false);
+          }}
+        >
+          {children}
+        </div>
+      </Sheet>
+    </>
+  );
+}
+
+export function initials(name: string): string {
+  const clean = name.replace(/["'״׳]/g, '').trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length >= 2 && /\d/.test(parts[parts.length - 1])) return parts[parts.length - 1].slice(0, 2);
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join('');
+}
+
+/** a number that counts up to its value when it first shows, and moves to a new value when it changes */
+export function CountUp({ value, ms = 650 }: { value: number; ms?: number }) {
+  const [shown, setShown] = useState(0);
+  const from = useRef(0);
+  useEffect(() => {
+    const start = from.current;
+    from.current = value;
+    if (start === value || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setShown(value);
+      return;
+    }
+    const t0 = performance.now();
+    let frame = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / ms);
+      setShown(Math.round(start + (value - start) * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [value, ms]);
+  return <>{shown}</>;
+}

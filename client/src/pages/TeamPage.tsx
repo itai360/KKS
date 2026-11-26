@@ -1,0 +1,262 @@
+// Sections 11-12: the staff and each staff member's page.
+
+import { useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
+import { shortDate } from '@shared/dates';
+import type { Experience, StaffPageData, StaffStatus } from '@shared/types';
+import { staffHealthLabel } from '@shared/taskLogic';
+import { AbsencesCard } from '../components/Absences';
+import { ContactButtons } from '../components/ContactButtons';
+import { Icon } from '../components/Icon';
+import { useNewTask } from '../components/NewTask';
+import { TaskList } from '../components/TaskRow';
+import { CountUp, Empty, ErrorBox, PageError, Loading, PageHead, Ring, initials } from '../components/ui';
+import { useSession } from '../lib/session';
+import { useApi } from '../lib/useApi';
+import { onTabListKey, tabProps } from '../lib/tabKeys';
+
+export function TeamPage() {
+  const { data, error, loading } = useApi<StaffStatus[]>('/api/team', ['tasks', 'users', 'settings']);
+  const navigate = useNavigate();
+  return (
+    <div className="page">
+      <PageHead title="הסגל" sub="אצל מי יש עומס או עיכוב - בלי לעבור איש-איש ולשאול." />
+      <ErrorBox error={error} />
+      {loading && !data ? (
+        <Loading rows={3} />
+      ) : !data?.length ? (
+        <Empty icon="users" title="אין אנשי סגל" text="הוסיפו אנשי סגל במסך ההגדרות." />
+      ) : (
+        <div className="staff-grid fade-in">
+          {data.map((s) => (
+            <div key={s.userId} className="card staff-card" onClick={() => navigate(`/team/${s.userId}`)} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`/team/${s.userId}`)}>
+              <div className="row">
+                <div className="avatar">{initials(s.name)}</div>
+                <div className="grow">
+                  <div className="strong" style={{ fontSize: 17 }}>
+                    {s.name}
+                  </div>
+                  <div className={`small ${s.overdue ? 'text-red strong' : 'muted'}`}>
+                    <span className={`dot t-${s.overdue > 1 ? 'red' : s.overdue === 1 ? 'orange' : 'green'}`} /> {staffHealthLabel(s.overdue)}
+                  </div>
+                </div>
+              </div>
+              {/* each number opens the tasks it counts - straight from the card */}
+              <div className="staff-nums">
+                {(
+                  [
+                    [s.open, 'פתוחות', 'scope=open', ''],
+                    [s.inProgress, 'בטיפול', 'scope=open&status=in_progress', ''],
+                    [s.overdue, 'באיחור', 'scope=overdue', s.overdue ? 'text-red' : ''],
+                    [s.done, 'הושלמו', 'scope=done', ''],
+                  ] as const
+                ).map(([n, label, q, tone]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="staff-num"
+                    disabled={!n}
+                    aria-label={`${s.name}: ${n} ${label}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/tasks?owner=${s.userId}&${q}`);
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <b className={tone}>{n}</b>
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+              {(s.waiting > 0 || s.dueToday > 0) && (
+                <div className="row gap-6 mt-12 wrap">
+                  {s.dueToday > 0 && <span className="badge t-orange">{s.dueToday} להיום</span>}
+                  {s.waiting > 0 && <span className="badge t-purple">{s.waiting} ממתינות</span>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type Tab = 'open' | 'overdue' | 'done' | 'self' | 'commander';
+
+export function StaffPage() {
+  const { id } = useParams();
+  const { isCommander, user } = useSession();
+  const newTask = useNewTask();
+  const { data, error, loading, status } = useApi<StaffPageData>(`/api/team/${id}`, ['tasks', 'weeks', 'events', 'cadets', 'debriefs', 'users', 'settings']);
+  const [tab, setTab] = useState<Tab>('open');
+  // a number at the top opens its list below
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const show = (k: Tab) => {
+    setTab(k);
+    tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  if (loading && !data)
+    return (
+      <div className="page">
+        <Loading rows={4} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <PageError error={error} status={status} what="איש הסגל" back="/team" backLabel="לרשימת הסגל" />
+      </div>
+    );
+  const s = data.stats;
+  const lists: Record<Tab, { label: string; tasks: StaffPageData['open'] }> = {
+    open: { label: 'פתוחות', tasks: data.open },
+    overdue: { label: 'באיחור', tasks: data.overdue },
+    done: { label: 'הושלמו', tasks: data.done },
+    self: { label: 'שפתח לעצמו', tasks: data.selfCreated },
+    commander: { label: 'ממפקד הקורס', tasks: data.fromCommander },
+  };
+
+  return (
+    <div className="page">
+      <PageHead
+        eyebrow={data.user.title || (data.user.role === 'commander' ? 'מפקד הקורס' : 'איש סגל')}
+        title={data.user.displayName}
+        sub={staffHealthLabel(s.overdue)}
+        actions={
+          <>
+            <ContactButtons phone={data.user.phone} name={data.user.displayName} />
+            {isCommander && (
+              <button className="btn btn-primary" onClick={() => newTask({ ownerIds: [data.user.id] })} title={`משימה ל${data.user.displayName}`}>
+                <Icon name="plus" /> <span className="clip-text">משימה ל{data.user.displayName}</span>
+              </button>
+            )}
+          </>
+        }
+      />
+      <div className="stats fade-in">
+        <button type="button" className="card stat" style={{ textAlign: 'start' }} onClick={() => show('open')} disabled={!s.open} aria-label={`פתוחות: ${s.open}`}>
+          <span className="stat-label">פתוחות</span>
+          <span className="stat-num">
+            <CountUp value={s.open} />
+          </span>
+          <span className="stat-hint">{s.inProgress} בטיפול · {s.waiting} ממתינות</span>
+        </button>
+        <button type="button" className={`card stat${s.overdue ? ' alert' : ''}`} style={{ textAlign: 'start' }} onClick={() => show('overdue')} disabled={!s.overdue} aria-label={`באיחור: ${s.overdue}`}>
+          <span className="stat-label">באיחור</span>
+          <span className="stat-num">
+            <CountUp value={s.overdue} />
+          </span>
+        </button>
+        <button type="button" className="card stat" style={{ textAlign: 'start' }} onClick={() => show('done')} disabled={!s.done} aria-label={`הושלמו: ${s.done}`}>
+          <span className="stat-label">הושלמו</span>
+          <span className="stat-num">
+            <CountUp value={s.done} />
+          </span>
+          <span className="stat-hint">{s.doneThisWeek} השבוע</span>
+        </button>
+        <div className="card stat" style={{ cursor: 'default' }}>
+          <span className="stat-label">עמידה בזמנים</span>
+          <span className="stat-num">{s.onTimePct}%</span>
+          <span className="stat-hint">
+            באיחור {s.latePct}% · פתוחות באיחור {s.openLatePct}%
+          </span>
+        </div>
+      </div>
+      <p className="tiny muted mt-8">הנתונים נועדו לבקרה ניהולית ולא לציון פורמלי.</p>
+
+      <div className="split mt-16">
+        <div>
+          <div className="tabs" ref={tabsRef} style={{ scrollMarginTop: 'calc(var(--top-h) + 12px)' }} role="tablist" aria-label="המשימות לפי מצב" onKeyDown={onTabListKey}>
+            {(Object.keys(lists) as Tab[]).map((k) => (
+              <button key={k} className={`tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)} {...tabProps(tab === k)}>
+                {lists[k].label}
+                <span className="n">{lists[k].tasks.length}</span>
+              </button>
+            ))}
+          </div>
+          <TaskList tasks={lists[tab].tasks} showOwner={false} collapse={false} empty={<Empty title="אין משימות" />} />
+        </div>
+        <div className="col gap-16 sticky-side">
+          <AbsencesCard userId={Number(id)} mine={Number(id) === user.id} canEdit={isCommander || Number(id) === user.id} />
+          <div className="card">
+            <div className="card-head">
+              <h3>הקרובות ביותר</h3>
+            </div>
+            <div className="card-body">
+              {data.upcoming.length ? <TaskList tasks={data.upcoming.slice(0, 5)} showOwner={false} collapse={false} /> : <p className="small muted">אין משימות קרובות.</p>}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-head">
+              <h3>שבועות באחריותו</h3>
+            </div>
+            {data.weeks.length === 0 && <div className="card-body small muted">לא אחראי על אף שבוע.</div>}
+            {data.weeks.map((w) => (
+              <Link key={w.id} to={`/weeks/${w.id}`} className="row" style={{ padding: '12px 18px', borderTop: '1px solid var(--line)' }}>
+                <div className="grow">
+                  <div className="strong">{w.name}</div>
+                  <div className="tiny muted">
+                    {shortDate(w.startDate)}-{shortDate(w.endDate)}
+                  </div>
+                </div>
+                <Ring value={w.readiness} size={54} tone={w.totalTasks === 0 ? 'gray' : undefined} />
+              </Link>
+            ))}
+          </div>
+          <StaffExperiences data={data} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PHASE: Record<Experience['phase'], { label: string; tone: string }> = {
+  planned: { label: 'מתוכננת', tone: '' },
+  active: { label: 'עכשיו', tone: 't-blue' },
+  awaiting_feedback: { label: 'מחכה למשוב', tone: 't-orange' },
+  done: { label: 'הסתיימה', tone: 't-green' },
+};
+
+/** the cadets' experiences this staff member runs, and the teams they command (their checklist) */
+function StaffExperiences({ data }: { data: StaffPageData }) {
+  const open = data.experiences.filter((x) => x.phase !== 'done');
+  const done = data.experiences.length - open.length;
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3 className="grow">התנסויות שמעביר</h3>
+        <span className="count-pill">{data.experiences.length}</span>
+      </div>
+      {data.teams.length > 0 && (
+        <Link to="/staff-checks" className="row small staff-checks-link">
+          <Icon name="checks" size={15} />
+          <span className="grow">מעקב על צוערים - {data.teams.map((t) => t.name).join(', ')}</span>
+        </Link>
+      )}
+      {!data.experiences.length ? (
+        <div className="card-body small muted">לא חונך אף התנסות.</div>
+      ) : (
+        <ul className="staff-exp-list">
+          {open.map((x) => (
+            <li key={x.id}>
+              <Link to={`/cadets/${x.cadetId}`} className="staff-exp">
+                <div className="grow">
+                  <div className="strong">{x.cadetName}</div>
+                  <div className="tiny muted">
+                    {x.role}
+                    {x.teamName ? ` · ${x.teamName}` : ''} · {shortDate(x.startDate)}
+                    {x.endDate !== x.startDate ? `-${shortDate(x.endDate)}` : ''}
+                  </div>
+                </div>
+                <span className={`badge ${PHASE[x.phase].tone}`}>{PHASE[x.phase].label}</span>
+              </Link>
+            </li>
+          ))}
+          {done > 0 && <li className="tiny muted staff-exp-done">ועוד {done === 1 ? 'התנסות אחת שהסתיימה' : `${done} התנסויות שהסתיימו`}</li>}
+        </ul>
+      )}
+    </div>
+  );
+}

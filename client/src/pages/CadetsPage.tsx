@@ -1,0 +1,1545 @@
+// Section 31 - cadets: list by team, profile with notes, personal talks,
+// discipline, evaluations, development tracking and experiences.
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import {
+  CADET_STATUS_LABELS,
+  CADET_STATUS_TONES,
+  CADET_STATUSES,
+  committeeTo,
+  DISCIPLINE_COMMITTEE_KIND,
+  DISCIPLINE_NOTE_LIMIT,
+  DISCIPLINE_SEVERITIES,
+  EVALUATION_CRITERIA,
+  MANAGER_RECORD_KINDS,
+  RECORD_KIND_LABELS,
+  RECORD_KINDS,
+  RESTRICTED_RECORD_KINDS,
+  TALK_TYPES,
+  type CadetStatus,
+  type RecordKind,
+} from '@shared/constants';
+import { shortDate } from '@shared/dates';
+import { sortHe } from '@shared/sort';
+import type { Cadet, CadetDetail, CadetRecord, DisciplinePreview, Exemption, Experience, Team } from '@shared/types';
+import { BulkCheck, bulkClick, BulkScope, BulkToggle, useBulk } from '../components/Bulk';
+import { DisciplineSummary, GuideModal, NotesBadge, timeLabel, useGuide } from '../components/Discipline';
+import { ContactButtons } from '../components/ContactButtons';
+import { DocPager, useDocNav, type DocLink } from '../components/DocNav';
+import { DoneDrawer } from '../components/DoneDrawer';
+import { Icon } from '../components/Icon';
+import { DateTimeInputs, useNewTask } from '../components/NewTask';
+import { unlessHeld, useRowMenu, type RowMenuItem } from '../components/RowMenu';
+import { OpenTaskList } from '../components/TaskRow';
+import { useToast } from '../components/Toasts';
+import { DateInput, Empty, ErrorBox, Field, FloatingActions, initials, Loading, Modal, openable, PageError, PageHead, Seg, Select, SuggestInput } from '../components/ui';
+import { api, changedFields, qs } from '../lib/api';
+import { telHref, waHref } from '../lib/contact';
+import { saveSheet } from '../lib/sheet';
+import { fmtAgo, fmtDateTime, isoAt, todayKey } from '../lib/format';
+import { useLeaving } from '../lib/leaving';
+import { emitLocalChange } from '../lib/realtime';
+import { useSession } from '../lib/session';
+import { useApi } from '../lib/useApi';
+import { ExperienceCard, ExperienceForm } from './ExperiencesPage';
+import { useDraft } from '../lib/draft';
+import { matchesSearch } from '@shared/search';
+import { ask } from '../components/Confirm';
+import { TalkDialog, TalkHighlights, TalkView } from '../components/Talks';
+import { SocioCard } from '../components/SocioCard';
+import { WeaponFormDialog, WeaponFormsCard } from './WeaponFormPage';
+
+export function CadetsPage() {
+  const { isCommander, can, user, viewing } = useSession();
+  const toast = useToast();
+  const [params, setParams] = useSearchParams();
+  const team = params.get('team') ?? '';
+  const status = params.get('status') ?? 'active';
+  const notesOnly = params.get('notes') === '1';
+  const exemptOnly = params.get('exempt') === '1';
+  const [q, setQ] = useState('');
+  const teams = useApi<Team[]>('/api/teams', ['cadets']);
+  const cadets = useApi<Cadet[]>(`/api/cadets${qs({ team, status })}`, ['cadets']);
+  const [dialog, setDialog] = useState<null | 'cadet' | 'import' | 'teams' | 'guide' | 'discipline'>(null);
+  const guide = useGuide();
+  const myTeams = (teams.data ?? []).filter((t) => t.commanderId === user.id);
+  // every team's cadets - the commander's, and the staff's where the commander lets them
+  const allTeams = can('cadets');
+  const canAdd = allTeams || myTeams.length > 0;
+
+  const shown = (cadets.data ?? []).filter((c) => matchesSearch(q, c.fullName, c.personalNumber) && (!notesOnly || c.disciplineNotes > 0) && (!exemptOnly || c.exemptions.length > 0));
+  const grouped = useMemo(() => {
+    const map = new Map<string, Cadet[]>();
+    for (const c of shown) map.set(c.teamName ?? 'ללא צוות', [...(map.get(c.teamName ?? 'ללא צוות') ?? []), c]);
+    return [...map.entries()];
+  }, [shown]);
+
+  const set = (k: string, v: string) => {
+    const next = new URLSearchParams(params);
+    if (v) next.set(k, v);
+    else next.delete(k);
+    setParams(next, { replace: true });
+  };
+
+  return (
+    <BulkScope
+      quickDelete={false}
+      entity="cadets"
+      noun="צוערים"
+      topics={['cadets']}
+      ids={shown.map((c) => c.id)}
+      actions={[
+        { key: 'team', label: 'העברה לצוות', icon: 'users', ask: { title: 'העברה לצוות', label: 'צוות', options: [...(allTeams ? (teams.data ?? []) : myTeams).map((t) => ({ value: String(t.id), label: t.name })), ...(allTeams ? [{ value: '', label: 'ללא צוות' }] : [])] } },
+        { key: 'status', label: 'סטטוס', ask: { title: 'שינוי סטטוס', label: 'סטטוס', options: CADET_STATUSES.map((x) => ({ value: x, label: CADET_STATUS_LABELS[x] })) } },
+        { key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, show: isCommander, confirm: 'למחוק {n} צוערים וכל התיקים שלהם? לסיום קורס או הדחה עדיף לשנות סטטוס.' },
+      ]}
+    >
+    <div className="page">
+      <PageHead
+        title="צוערים"
+        sub="רשימת צוערים לפי צוותים, הערות, שיחות אישיות, משמעת, הערכות ומעקב התפתחות."
+        actions={
+          <>
+            {canAdd && <BulkToggle />}
+            <button
+              className="btn"
+              title="ייצוא הרשימה המסוננת - נפתח ב-Google Sheets ובאקסל"
+              disabled={!shown.length}
+              onClick={() =>
+                void saveSheet(
+                  'צוערים',
+                  ['שם מלא', 'מספר אישי', 'צוות', 'טלפון', 'סטטוס', 'רישומים', 'ציון ממוצע', 'משמעת', 'הערות משמעת', 'שיחות', 'רישום אחרון', 'הערות'],
+                  shown.map((c) => [
+                    c.fullName,
+                    c.personalNumber,
+                    c.teamName ?? '',
+                    c.phone,
+                    CADET_STATUS_LABELS[c.status],
+                    c.recordCount,
+                    c.avgScore === null ? '' : c.avgScore.toFixed(1),
+                    c.disciplineCount,
+                    c.disciplineNotes,
+                    c.talkCount,
+                    c.lastRecordAt ? fmtDateTime(c.lastRecordAt) : '',
+                    c.notes,
+                  ]),
+                ).catch((e: Error) => toast({ title: e.message, tone: 'red' }))
+              }
+            >
+              <Icon name="download" /> Sheets / אקסל
+            </button>
+            {!viewing && (
+              <button className="btn" onClick={() => setDialog('discipline')} title="רישום משמעת לצוער, בלי לפתוח את התיק">
+                <Icon name="shield" /> רישום משמעת
+              </button>
+            )}
+            {!!guide.data?.offenses.length && (
+              <button className="btn" onClick={() => setDialog('guide')} title="מה עושים בכל מקרה, לפי הפעם">
+                <Icon name="shield" /> מדרג אכיפה
+              </button>
+            )}
+            {can('teams') && (
+              <button className="btn" onClick={() => setDialog('teams')}>
+                <Icon name="users" /> צוותים
+              </button>
+            )}
+            {can('imports') && (
+              <button className="btn" onClick={() => setDialog('import')}>
+                <Icon name="upload" /> ייבוא רשימה
+              </button>
+            )}
+            {canAdd && (
+              <button className="btn btn-primary" onClick={() => setDialog('cadet')}>
+                <Icon name="plus" /> צוער
+              </button>
+            )}
+          </>
+        }
+      />
+      <div className="chips chips-scroll mb-12">
+        <button className={`chip${!team ? ' on' : ''}`} onClick={() => set('team', '')}>
+          כל הצוותים
+        </button>
+        {(teams.data ?? []).map((t) => (
+          <button key={t.id} className={`chip${team === String(t.id) ? ' on' : ''}`} onClick={() => set('team', String(t.id))}>
+            {t.name} <span className="mono tiny">{t.cadetCount}</span>
+          </button>
+        ))}
+      </div>
+      <div className="filters">
+        <input className="input" placeholder="שם או מספר אישי" value={q} onChange={(e) => setQ(e.target.value)} aria-label="חיפוש לפי שם או מספר אישי" />
+        <Select className="select" value={status} onChange={(e) => set('status', e.target.value === 'active' ? '' : e.target.value)} aria-label="סטטוס">
+          {CADET_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {CADET_STATUS_LABELS[s]}
+            </option>
+          ))}
+          <option value="all">הכל</option>
+        </Select>
+        <button type="button" className={`chip${notesOnly ? ' on' : ''}`} onClick={() => set('notes', notesOnly ? '' : '1')} aria-pressed={notesOnly}>
+          עם הערות משמעת
+        </button>
+        <button type="button" className={`chip${exemptOnly ? ' on' : ''}`} onClick={() => set('exempt', exemptOnly ? '' : '1')} aria-pressed={exemptOnly}>
+          עם פטורים
+        </button>
+      </div>
+      <ErrorBox error={cadets.error} />
+      {cadets.loading && !cadets.data ? (
+        <Loading rows={4} />
+      ) : !shown.length ? (
+        <Empty icon="users" title="אין צוערים" text={canAdd ? 'הוסיפו צוערים אחד-אחד או הדביקו רשימה מאקסל בעזרת "ייבוא רשימה".' : undefined} />
+      ) : (
+        grouped.map(([teamName, list]) => {
+          const t = (teams.data ?? []).find((x) => x.name === teamName);
+          return (
+            <section key={teamName} className="mb-12">
+              <div className="group-title">
+                <span>{teamName}</span>
+                {t?.commanderName && <span className="tiny muted">מפקד הצוות: {t.commanderName}</span>}
+                <span className="n">{list.length}</span>
+                <span className="line" />
+              </div>
+              <CadetRows list={list} />
+            </section>
+          );
+        })
+      )}
+      {dialog === 'cadet' && <CadetForm teams={allTeams ? (teams.data ?? []) : myTeams} defaultTeam={team ? Number(team) : undefined} onClose={() => setDialog(null)} />}
+      {dialog === 'import' && <ImportCadets teams={teams.data ?? []} onClose={() => setDialog(null)} />}
+      {dialog === 'teams' && <TeamsDialog teams={teams.data ?? []} onClose={() => setDialog(null)} />}
+      {dialog === 'guide' && guide.data && <GuideModal guide={guide.data} onClose={() => setDialog(null)} />}
+      {dialog === 'discipline' && <QuickDiscipline onClose={() => setDialog(null)} />}
+    </div>
+    </BulkScope>
+  );
+}
+
+function CadetRows({ list }: { list: Cadet[] }) {
+  const [exempting, setExempting] = useState<Cadet | null>(null);
+  return (
+    <div className="card">
+      {exempting && <ExemptionDialog cadet={exempting} onClose={() => setExempting(null)} />}
+      {list.map((c) => (
+        <CadetRow key={c.id} c={c} onExempt={() => setExempting(c)} />
+      ))}
+    </div>
+  );
+}
+
+function CadetRow({ c, onExempt }: { c: Cadet; onExempt: () => void }) {
+  const navigate = useNavigate();
+  const bulk = useBulk();
+  // held (a phone) or right-clicked (a computer): what is written about a cadet most, without opening the file first
+  const menu = useRowMenu({ title: c.fullName, items: useCadetMenuItems(c, onExempt), disabled: bulk?.active });
+  return (
+    <div
+      className={`health holdable${bulk?.selected.has(c.id) ? ' selected' : ''}${menu.lifted ? ' is-lifted' : ''}`}
+      {...openable(bulkClick(bulk, c.id, unlessHeld(menu, () => navigate(`/cadets/${c.id}`))))}
+      {...menu.bind}
+    >
+      <BulkCheck id={c.id} />
+      <div className="avatar">{initials(c.fullName)}</div>
+      <div className="grow">
+        <div className="strong">{c.fullName}</div>
+        <div className="tiny muted">
+          {c.personalNumber && <span className="mono">{c.personalNumber} · </span>}
+          {c.recordCount ? (
+            <>
+              {c.recordCount} רישומים<span className="hide-mobile"> · עודכן {fmtAgo(c.lastRecordAt!)}</span>
+            </>
+          ) : (
+            'אין רישומים עדיין'
+          )}
+        </div>
+      </div>
+      {c.status !== 'active' && <span className={`badge t-${CADET_STATUS_TONES[c.status]}`}>{CADET_STATUS_LABELS[c.status]}</span>}
+      <NotesBadge count={c.disciplineNotes} />
+      {c.exemptions.length > 0 && (
+        <span className="badge t-purple clip" title={`פטור מ: ${c.exemptions.join(', ')}`}>
+          <span className="clip-text">פטור: {c.exemptions.join(', ')}</span>
+        </span>
+      )}
+      {c.disciplineCount > 0 && <span className="badge t-orange hide-mobile">{c.disciplineCount} משמעת</span>}
+      {c.talkCount > 0 && <span className="badge t-blue">{c.talkCount} שיחות</span>}
+      {c.avgScore !== null && (
+        <span className="mono strong" title="ממוצע הערכות (1-5)">
+          {c.avgScore.toFixed(1)}
+        </span>
+      )}
+      {c.canEdit && !bulk?.active && (
+        <button
+          type="button"
+          className="icon-btn exemption-add"
+          aria-label={`הוספת פטור ל${c.fullName}`}
+          title="הוספת פטור"
+          onClick={(e) => {
+            e.stopPropagation();
+            onExempt();
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Icon name="flag" size={15} />
+        </button>
+      )}
+      <Icon name="chevronLeft" size={16} className="faint" />
+      {menu.menu}
+    </div>
+  );
+}
+
+/** A cadet's quick actions: a note, a talk, discipline or an evaluation opens the file ready to write; and a call. */
+function useCadetMenuItems(c: Cadet, onExempt: () => void): RowMenuItem[] {
+  const navigate = useNavigate();
+  const { viewing } = useSession();
+  const write = (kind: RecordKind) => navigate(`/cadets/${c.id}?add=${kind}`);
+  // a talk is the team commander's (or the course commander's); a note, discipline or an evaluation anyone's
+  const may = (kind: RecordKind) => !viewing && (c.canManage || !MANAGER_RECORD_KINDS.includes(kind));
+  const tel = telHref(c.phone);
+  const wa = waHref(c.phone);
+  return [
+    ...(may('note') ? [{ key: 'note', label: 'רישום הערה', icon: 'edit', primary: true, run: () => write('note') }] : []),
+    ...(may('talk') ? [{ key: 'talk', label: 'שיחה אישית', icon: 'message', run: () => write('talk') }] : []),
+    ...(may('discipline') ? [{ key: 'discipline', label: 'רישום משמעת', icon: 'shield', run: () => write('discipline') }] : []),
+    ...(may('evaluation') ? [{ key: 'evaluation', label: 'הערכה', icon: 'chart', run: () => write('evaluation') }] : []),
+    ...(!viewing ? [{ key: 'weapon', label: 'טופס נשק חריג', icon: 'alert', run: () => navigate(`/cadets/${c.id}?add=weapon`) }] : []),
+    ...(c.canEdit && !viewing ? [{ key: 'exempt', label: 'הוספת פטור', icon: 'flag', run: onExempt }] : []),
+    ...(tel ? [{ key: 'call', label: 'חיוג', icon: 'phone', run: () => void (location.href = tel) }] : []),
+    ...(wa ? [{ key: 'wa', label: 'וואטסאפ', icon: 'message', run: () => void window.open(wa, '_blank', 'noopener') }] : []),
+    ...(c.canManage ? [{ key: 'eval', label: 'תיק הערכה', icon: 'folder', run: () => navigate(`/evaluations/${c.id}`) }] : []),
+    { key: 'open', label: 'פתיחת התיק', icon: 'chevronLeft', run: () => navigate(`/cadets/${c.id}`) },
+  ];
+}
+
+function CadetForm({ cadet, teams, defaultTeam, onClose }: { cadet?: Cadet; teams: Team[]; defaultTeam?: number; onClose: () => void }) {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const isCommander = useSession().can('cadets');
+  const [firstName, setFirstName] = useState(cadet?.firstName ?? '');
+  const [lastName, setLastName] = useState(cadet?.lastName ?? '');
+  const [personalNumber, setPersonalNumber] = useState(cadet?.personalNumber ?? '');
+  const [phone, setPhone] = useState(cadet?.phone ?? '');
+  const [teamId, setTeamId] = useState<string>(String(cadet?.teamId ?? defaultTeam ?? teams[0]?.id ?? ''));
+  const [status, setStatus] = useState<CadetStatus>(cadet?.status ?? 'active');
+  const [notes, setNotes] = useState(cadet?.notes ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setError(null);
+    // the notes are the personal file's: whoever does not see them does not send them
+    const seesNotes = !cadet || cadet.canManage;
+    const body = { firstName, lastName, personalNumber, phone, ...(seesNotes ? { notes } : {}), status, ...(isCommander || !cadet ? { teamId: teamId ? Number(teamId) : null } : {}) };
+    try {
+      if (cadet) {
+        const patch = changedFields<typeof body>(cadet, body);
+        if (Object.keys(patch).length) await api.patch(`/api/cadets/${cadet.id}`, patch);
+      } else {
+        const d = await api.post<CadetDetail>('/api/cadets', body);
+        navigate(`/cadets/${d.cadet.id}`);
+      }
+      toast({ title: 'הצוער נשמר', tone: 'green' });
+      emitLocalChange('cadets');
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Modal
+      title={cadet ? `עריכת ${cadet.fullName}` : 'צוער חדש'}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => void save()} disabled={!firstName.trim()}>
+            שמור
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <div className="form-grid">
+        <Field label="שם פרטי" required>
+          <input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+        </Field>
+        <Field label="שם משפחה">
+          <input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+        </Field>
+        <Field label="מספר אישי">
+          <input className="input" dir="ltr" value={personalNumber} onChange={(e) => setPersonalNumber(e.target.value)} />
+        </Field>
+        <Field label="טלפון">
+          <input className="input" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Field label="צוות">
+          <Select className="select" value={teamId} onChange={(e) => setTeamId(e.target.value)} disabled={!!cadet && !isCommander}>
+            {isCommander && <option value="">ללא צוות</option>}
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {cadet && (
+          <Field label="סטטוס">
+            <Select className="select" value={status} onChange={(e) => setStatus(e.target.value as CadetStatus)}>
+              {CADET_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {CADET_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        {(!cadet || cadet.canManage) && (
+          <Field label="הערות כלליות (גלויות למפקד הצוות ולמפקד הקורס)" className="span-2">
+            <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </Field>
+        )}
+      </div>
+      <div className="mt-12">
+        <ErrorBox error={error} />
+      </div>
+    </Modal>
+  );
+}
+
+function ImportCadets({ teams, onClose }: { teams: Team[]; onClose: () => void }) {
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const [teamId, setTeamId] = useState('');
+  const [link, setLink] = useState('');
+  const [found, setFound] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const lines = text.split('\n').filter((l) => l.trim()).length;
+
+  // Each spreadsheet joins the text already typed, with its own column headers.
+  const read = async (fn: () => Promise<{ text: string; sheet: string; cadets: number; teams: string[] }>) => {
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await fn();
+      setText((current) => current.trim() ? `${current}\n${r.text}` : r.text);
+      setFound(`נמצאו ${r.cadets} צוערים${r.teams.length ? ` ב-${r.teams.length} צוותים (${r.teams.join(', ')})` : ''} בגיליון "${r.sheet}". בדקו את הרשימה ולחצו "ייבא".`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async () => {
+    setError(null);
+    try {
+      const r = await api.post<{ imported: number; updated: number; skipped: number }>('/api/cadets/import', { text, teamId: teamId ? Number(teamId) : null });
+      const parts = [`${r.imported} חדשים`, r.updated && `הושלמו פרטים חסרים ל-${r.updated}`, r.skipped && `${r.skipped} כבר היו ברשימה`].filter(Boolean);
+      toast({ title: `ייבוא הצוערים הסתיים: ${parts.join(', ')}`, tone: 'green' });
+      emitLocalChange('cadets');
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Modal
+      title="ייבוא רשימת צוערים"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => void submit()} disabled={!lines || busy}>
+            ייבוא הרשימה
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-16">
+        <div className="row wrap gap-6">
+          <label className="btn">
+            <Icon name="upload" /> קובץ אקסל / CSV
+            <input
+              type="file"
+              accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              hidden
+              disabled={busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) void read(() => api.upload('/api/cadets/import/file', f));
+              }}
+            />
+          </label>
+          <input className="input grow" dir={link ? 'ltr' : undefined} placeholder="או קישור ל-Google Sheets / Drive" value={link} onChange={(e) => setLink(e.target.value)} style={{ minWidth: 220 }} />
+          <button className="btn" disabled={busy || link.trim().length < 10} onClick={() => void read(() => api.post('/api/cadets/import/link', { url: link }))}>
+            {busy ? 'קורא...' : 'קריאה מהקישור'}
+          </button>
+        </div>
+        {found && <div className="info-box">{found}</div>}
+        <div className="info-box">
+          אפשר גם להדביק רשימה או לכתוב שורה לכל צוער: <b>שם מלא, מספר אישי, טלפון, צוות</b>. רק השם חובה. כל קובץ נוסף לרשימה שכבר כתבתם, והעמודות מזוהות לפי הכותרות שלו. צוותים שלא קיימים ייווצרו. צוער שכבר ברשימה לא ייווסף שוב: רק פרטים חסרים יושלמו, והצוות והפרטים שכבר הוזנו יישמרו. קישור ל-Google צריך להיות משותף ל"כל מי שיש לו את הקישור".
+        </div>
+        <Field label="שיוך כל הרשימה לצוות (לא חובה)">
+          <Select className="select" value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ maxWidth: 260 }}>
+            <option value="">לפי עמודת הצוות ברשימה</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <textarea className="textarea" style={{ minHeight: 220, fontFamily: 'var(--mono)' }} value={text} onChange={(e) => setText(e.target.value)} placeholder={'דניאל כהן, 8123456, 050-1234567, צוות 1\nמאיה לוי, 8123457, , צוות 2'} data-autofocus />
+        <ErrorBox error={error} />
+      </div>
+    </Modal>
+  );
+}
+
+function TeamsDialog({ teams, onClose }: { teams: Team[]; onClose: () => void }) {
+  const { staff } = useSession();
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const run = async (fn: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await fn();
+      emitLocalChange('cadets');
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <BulkScope quickDelete={false} entity="teams" noun="צוותים" topics={['cadets']} ids={teams.map((t) => t.id)} actions={[{ key: 'delete', label: 'מחיקה', icon: 'trash', danger: true, confirm: 'למחוק {n} צוותים? הצוערים שלהם יישארו ללא צוות.' }]}>
+    {/* each field saves as it is left; "שמירה" saves the one being edited (and a new team typed in) and closes */}
+    <Modal title="צוותים ומפקדי צוות" onClose={onClose} autosave>
+      <div className="col gap-6">
+        {teams.length > 1 && (
+          <div>
+            <BulkToggle label="בחירת צוותים" />
+          </div>
+        )}
+        {teams.length > 0 && (
+          <div className="team-edit-row teams-head tiny muted" aria-hidden="true">
+            <span className="te-chk" />
+            <span className="te-num">מס׳</span>
+            <span className="te-name">שם הצוות</span>
+            <span className="te-cmd">מפקד הצוות</span>
+            <span className="te-count">צוערים</span>
+            <span className="te-del" />
+          </div>
+        )}
+        {teams.map((t) => (
+          <div key={t.id} className="team-edit-row">
+            <span className="te-chk">
+              <BulkCheck id={t.id} />
+            </span>
+            {/* the team's number: the teams and their commanders are listed by it, everywhere (1, 2, 3...) */}
+            <input
+              key={`n${t.sort}`}
+              className="input te-num"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={100}
+              defaultValue={t.sort}
+              onBlur={(e) => {
+                const n = Number(e.target.value);
+                if (Number.isInteger(n) && n >= 1 && n <= 100 && n !== t.sort) void run(() => api.put(`/api/teams/${t.id}`, { name: t.name, commanderId: t.commanderId, sort: n }));
+                else e.target.value = String(t.sort);
+              }}
+              placeholder="מס׳"
+              aria-label={`מספר הצוות ${t.name}`}
+              title="מספר הצוות - הצוותים ומפקדיהם מסודרים לפיו"
+            />
+            <input
+              className="input te-name"
+              defaultValue={t.name}
+              onBlur={(e) => e.target.value.trim() && e.target.value !== t.name && void run(() => api.put(`/api/teams/${t.id}`, { name: e.target.value.trim(), commanderId: t.commanderId }))}
+              aria-label="שם הצוות"
+            />
+            <Select
+              className="select te-cmd"
+              value={t.commanderId ?? ''}
+              onChange={(e) => void run(() => api.put(`/api/teams/${t.id}`, { name: t.name, commanderId: e.target.value ? Number(e.target.value) : null }))}
+              aria-label="מפקד הצוות"
+            >
+              <option value="">מפקד צוות...</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.displayName}
+                </option>
+              ))}
+            </Select>
+            <span className="tiny muted mono te-count" title="צוערים בצוות">
+              {t.cadetCount}
+            </span>
+            <button
+              className="icon-btn te-del"
+              aria-label="מחיקת צוות"
+              onClick={async () => (await ask({ title: `למחוק את ${t.name}?`, body: 'הצוערים שבו יישארו ללא צוות.', confirm: 'מחיקה', danger: true })) && void run(() => api.del(`/api/teams/${t.id}`))}
+            >
+              <Icon name="trash" size={16} />
+            </button>
+          </div>
+        ))}
+        <form
+          className="row mt-12"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) void run(() => api.post('/api/teams', { name: name.trim() })).then(() => {
+              setName('');
+              toast({ title: 'הצוות נוסף', tone: 'green' });
+            });
+          }}
+        >
+          <input className="input grow" value={name} onChange={(e) => setName(e.target.value)} placeholder="צוות חדש" />
+          <button className="btn" disabled={!name.trim()}>
+            <Icon name="plus" /> הוסף
+          </button>
+        </form>
+        <p className="tiny muted">
+          מפקד הצוות רואה ומנהל את הצוערים בצוות שלו, כולל שיחות אישיות ומשמעת. הצוותים ומפקדי הצוותים מסודרים בכל המסכים לפי מספר הצוות.
+        </p>
+        <ErrorBox error={error} />
+      </div>
+    </Modal>
+    </BulkScope>
+  );
+}
+
+// ---------------- profile ----------------
+
+/** a cadet's experiences: the ones under way or ahead; the done ones in a line under them - one given its
+ *  feedback while the file is open is marked a moment, then folds into it (as on the experiences page) */
+function CadetExperiences({ experiences }: { experiences: Experience[] }) {
+  const open = useMemo(() => experiences.filter((x) => x.phase !== 'done'), [experiences]);
+  const done = useMemo(() => experiences.filter((x) => x.phase === 'done'), [experiences]);
+  const leaving = useLeaving(open, (x) => x.id, (id) => done.find((x) => x.id === id));
+  if (!experiences.length) return <p className="small muted">לא שובץ להתנסויות.</p>;
+  return (
+    <>
+      {leaving.rows.length ? leaving.rows.map((x) => <ExperienceCard key={x.id} x={x} compact leaving={leaving.phaseOf(x.id)} />) : <p className="small muted">כל ההתנסויות הושלמו.</p>}
+      <DoneDrawer id="cadet-experiences-done" count={done.length} label="הושלמו">
+        <div className="col gap-6">
+          {done.map((x) => (
+            <ExperienceCard key={x.id} x={x} compact />
+          ))}
+        </div>
+      </DoneDrawer>
+    </>
+  );
+}
+
+export function CadetPage() {
+  const { id } = useParams();
+  const { data, error, loading, status } = useApi<CadetDetail>(`/api/cadets/${id}`, ['cadets', 'tasks', 'weeks', 'users', 'settings']);
+  const teams = useApi<Team[]>('/api/teams', ['cadets']);
+  const { isCommander, user, viewing } = useSession();
+  const newTask = useNewTask();
+  const [kind, setKind] = useState<RecordKind | 'all'>('all');
+  const [dialog, setDialog] = useState<null | 'edit' | 'experience' | 'talk' | 'weapon'>(null);
+  const navigate = useNavigate();
+  // opened from a cadet's quick menu (?add=note): the file comes up ready to write that, once
+  const [params, setParams] = useSearchParams();
+  const add = params.get('add') as RecordKind | 'weapon' | null;
+  const ready = !!data;
+  // the cadets of the same team, one after another: the one before and the one after, by name and the arrows
+  const all = useApi<Cadet[]>('/api/cadets', ['cadets']).data ?? [];
+  const me = all.find((x) => String(x.id) === id);
+  const team = me ? all.filter((x) => x.teamId === me.teamId && (x.status === 'active') === (me.status === 'active')) : [];
+  const at = team.findIndex((x) => String(x.id) === id);
+  const link = (i: number): DocLink | null => {
+    const x = team[i];
+    return x ? { to: `/cadets/${x.id}`, label: x.fullName, api: `/api/cadets/${x.id}` } : null;
+  };
+  const prev = at > 0 ? link(at - 1) : null;
+  const next = at >= 0 ? link(at + 1) : null;
+  useDocNav({ prev, next });
+  useEffect(() => {
+    if (!ready || !add) return;
+    if (add === 'talk') setDialog('talk');
+    if (add === 'weapon') setDialog('weapon');
+    setParams(
+      (p) => {
+        p.delete('add');
+        return p;
+      },
+      { replace: true },
+    );
+  }, [ready, add, setParams]);
+
+  if (loading && !data)
+    return (
+      <div className="page">
+        <Loading rows={4} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <PageError error={error} status={status} what="הצוער" back="/cadets" backLabel="לרשימת הצוערים" />
+      </div>
+    );
+  const c = data.cadet;
+  const records = data.records.filter((r) => kind === 'all' || r.kind === kind);
+
+  return (
+    // a new cadet, a fresh page: what was being written for one cadet never carries over to the next
+    <div className="page" key={c.id}>
+      <PageHead
+        eyebrow={
+          <Link to={`/cadets${c.teamId ? `?team=${c.teamId}` : ''}`} className="muted">
+            צוערים · {c.teamName ?? 'ללא צוות'}
+          </Link>
+        }
+        title={c.fullName}
+        tags={
+          <>
+            <StatusPill cadet={c} />
+            <NotesBadge count={c.disciplineNotes} />
+          </>
+        }
+        docTitle={c.fullName}
+        sub={[c.personalNumber && `מ.א. ${c.personalNumber}`, c.phone].filter(Boolean).join(' · ')}
+        actions={
+          <>
+            <ContactButtons phone={c.phone} name={c.fullName} />
+            {c.canManage && (
+              <button className="btn" onClick={() => setDialog('talk')}>
+                <Icon name="message" /> שיחה אישית
+              </button>
+            )}
+            {!viewing && (
+              <button className="btn" onClick={() => setDialog('weapon')}>
+                <Icon name="alert" /> טופס נשק חריג
+              </button>
+            )}
+            {c.canEdit && (
+              <button className="btn" onClick={() => setDialog('edit')}>
+                <Icon name="edit" /> עריכה
+              </button>
+            )}
+            {c.canManage && (
+              <Link className="btn" to={`/evaluations/${c.id}`}>
+                <Icon name="folder" /> תיק הערכה
+              </Link>
+            )}
+            {c.canEdit && (
+              <button className="btn" onClick={() => setDialog('experience')}>
+                <Icon name="target" /> שיבוץ להתנסות
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={() => newTask({ heading: `משימה בנושא ${c.fullName}`, ownerIds: [user.id], domain: 'צוערים', description: `בנושא הצוער ${c.fullName}` })}>
+              <Icon name="plus" /> משימה
+            </button>
+          </>
+        }
+      />
+      {team.length > 1 && (
+        <div className="eval-nav no-print">
+          <DocPager prev={prev} next={next} noun="צוערי הצוות" position={`${at + 1} מתוך ${team.length}${c.teamName ? ` ב${c.teamName}` : ''}`} />
+        </div>
+      )}
+      <div className="split">
+        <div className="col gap-16">
+          <RecordForm cadet={c} records={data.records} onFullTalk={() => setDialog('talk')} start={add && add !== 'talk' && add !== 'weapon' ? add : undefined} />
+          <div>
+            <div className="row wrap mb-12">
+              <div className="section-title grow" style={{ margin: 0 }}>
+                <h2 style={{ whiteSpace: 'nowrap' }}>תיק הצוער</h2>
+                <span className="count-pill">{data.records.length}</span>
+              </div>
+              <div className="chips">
+                <button className={`chip chip-sm${kind === 'all' ? ' on' : ''}`} onClick={() => setKind('all')}>
+                  הכל
+                </button>
+                {sortHe(RECORD_KINDS, (k) => RECORD_KIND_LABELS[k]).filter((k) => data.records.some((r) => r.kind === k)).map((k) => (
+                  <button key={k} className={`chip chip-sm${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>
+                    {RECORD_KIND_LABELS[k]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {records.length === 0 ? <Empty icon="file" title="אין רישומים" text="הערות, שיחות אישיות, משמעת והערכות יופיעו כאן לפי תאריך." /> : <Records records={records} cadet={c} all={data.records} />}
+          </div>
+        </div>
+        <div className="col gap-16 sticky-side">
+          {(c.canManage || data.records.some((r) => r.kind === 'talk')) && <TalkHighlights cadet={c} records={data.records} onNew={c.canManage ? () => setDialog('talk') : undefined} />}
+          {(c.canManage || c.disciplineNotes > 0) && (
+            <DisciplineSummary count={c.disciplineNotes} committee={c.notesCommittee} notes={data.records.filter((r) => r.kind === 'discipline' && r.formal).sort((a, b) => (a.noteNumber ?? 0) - (b.noteNumber ?? 0))} />
+          )}
+          {data.weaponForms.length > 0 && <WeaponFormsCard cadetId={c.id} forms={data.weaponForms} onNew={viewing ? undefined : () => setDialog('weapon')} />}
+          {(c.canEdit || data.exemptions.length > 0) && <ExemptionsCard cadet={c} exemptions={data.exemptions} />}
+          {c.canManage && <SocioCard cadetId={c.id} />}
+          <Development detail={data} />
+          {c.notes && (
+            <div className="card card-pad">
+              <div className="label-caps">הערות כלליות</div>
+              <p className="small mt-8" style={{ whiteSpace: 'pre-wrap' }}>
+                {c.notes}
+              </p>
+            </div>
+          )}
+          <div className="card">
+            <div className="card-head">
+              <Icon name="target" />
+              <h3 className="grow">התנסויות</h3>
+              <span className="mono tiny muted">{data.experiences.length}</span>
+            </div>
+            <div className="card-body col gap-6">
+              <CadetExperiences experiences={data.experiences} />
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-head">
+              <h3 className="grow">משימות בנושא הצוער</h3>
+            </div>
+            <div className="card-body">
+              <OpenTaskList tasks={data.tasks} drawerId="cadet-tasks-done" empty={<p className="small muted">אין משימות מקושרות.</p>} />
+            </div>
+          </div>
+          {isCommander && (
+            <button
+              className="btn btn-ghost btn-sm text-red"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={async () => {
+                const ok = await ask({
+                  title: `למחוק את ${c.fullName}?`,
+                  body: 'כל התיק שלו יימחק: רישומים, הערכות, התנסויות ותיק ההערכה. לסיום קורס או הדחה עדיף לשנות את הסטטוס - אז התיק נשמר.',
+                  confirm: 'מחיקה לצמיתות',
+                  danger: true,
+                });
+                if (ok) void api.del(`/api/cadets/${c.id}`).then(() => navigate('/cadets'));
+              }}
+            >
+              <Icon name="trash" /> מחיקת צוער
+            </button>
+          )}
+        </div>
+      </div>
+      {dialog === 'edit' && <CadetForm cadet={c} teams={teams.data ?? []} onClose={() => setDialog(null)} />}
+      {dialog === 'experience' && <ExperienceForm cadetId={c.id} onClose={() => setDialog(null)} />}
+      {dialog === 'talk' && <TalkDialog cadet={c} records={data.records} onClose={() => setDialog(null)} />}
+      {dialog === 'weapon' && <WeaponFormDialog cadetId={c.id} cadetName={c.fullName} onClose={() => setDialog(null)} />}
+    </div>
+  );
+}
+
+/** The cadet's status next to the name: green while active, red when dismissed or withdrew; managers change it right there. */
+function StatusPill({ cadet }: { cadet: Cadet }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const tone = `status-pill t-${CADET_STATUS_TONES[cadet.status]}`;
+  if (!cadet.canEdit) return <span className={tone}>{CADET_STATUS_LABELS[cadet.status]}</span>;
+  const change = async (status: CadetStatus) => {
+    if (
+      status === 'dropped' &&
+      !(await ask({ title: `לסמן את ${cadet.fullName} כ"${CADET_STATUS_LABELS.dropped}"?`, body: 'הצוער יצא מרשימת הצוערים הפעילים. התיק נשמר, ואפשר להחזיר אותו בכל עת.', confirm: 'סימון' }))
+    )
+      return;
+    setBusy(true);
+    try {
+      await api.patch(`/api/cadets/${cadet.id}`, { status });
+      emitLocalChange('cadets');
+      toast({ title: `${cadet.fullName}: ${CADET_STATUS_LABELS[status]}`, tone: CADET_STATUS_TONES[status] });
+    } catch (e) {
+      toast({ title: (e as Error).message, tone: 'red' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Select fit className={tone} value={cadet.status} disabled={busy} onChange={(e) => void change(e.target.value as CadetStatus)} aria-label="סטטוס הצוער" title="שינוי סטטוס">
+      {CADET_STATUSES.map((s) => (
+        <option key={s} value={s}>
+          {CADET_STATUS_LABELS[s]}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+const KIND_TONE: Record<RecordKind, string> = { note: 'gray', talk: 'blue', discipline: 'orange', evaluation: 'green' };
+
+const EXEMPTION_SUBJECTS = ['דיגום', 'נשק', 'טלפונים', 'זמנים', 'כושר גופני', 'שמירות', 'תורנויות', 'אוכל', 'גילוח', 'מאמץ גופני', 'נעליים', 'נשיאת משקל'];
+
+/**
+ * What the cadet is exempt from (פטורים) - shaving, running, carrying weight - so nobody remarks on
+ * what was allowed. Every staff member sees what and until when; the reason stays with the team
+ * commander and the course commander.
+ */
+function ExemptionsCard({ cadet, exemptions }: { cadet: Cadet; exemptions: Exemption[] }) {
+  const [adding, setAdding] = useState(false);
+  const current = exemptions.filter((x) => x.active);
+  const past = exemptions.filter((x) => !x.active);
+  const remove = async (x: Exemption) => {
+    if (!(await ask({ title: `להסיר את הפטור "${x.subject}"?`, body: `הסגל יפסיק לראות אותו אצל ${cadet.fullName}.`, confirm: 'הסרה', danger: true }))) return;
+    await api.del(`/api/exemptions/${x.id}`);
+    emitLocalChange('cadets');
+  };
+  const row = (x: Exemption) => (
+    <div key={x.id} className="exemption-row">
+      <div className="grow">
+        <div className="small">
+          <b>{x.subject}</b>
+          {x.details && ` - ${x.details}`}
+        </div>
+        <div className="tiny muted">
+          {x.until ? `עד ${shortDate(x.until)}` : 'עד להודעה חדשה'}
+          {x.reason && ` · ${x.reason}`}
+          {x.createdByName && ` · ${x.createdByName}`}
+        </div>
+      </div>
+      {x.canDelete && (
+        <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label={`הסרת הפטור ${x.subject}`} onClick={() => void remove(x)}>
+          <Icon name="trash" size={14} />
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div className={`card${current.length ? ' t-purple exemption-card' : ''}`}>
+      <div className="card-head">
+        <Icon name="flag" />
+        <h3 className="grow">פטורים</h3>
+        {cadet.canEdit && (
+          <button className="btn btn-sm" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={14} /> פטור
+          </button>
+        )}
+      </div>
+      <div className="card-body col gap-6">
+        {current.length === 0 && <p className="small muted" style={{ margin: 0 }}>אין פטורים פעילים.</p>}
+        {current.map(row)}
+        {/* what has ended is out of the way, one line under the rest */}
+        <DoneDrawer id="exemptions-past" count={past.length} label="פטורים שהסתיימו">
+          <div className="col gap-6">{past.map(row)}</div>
+        </DoneDrawer>
+      </div>
+      {adding && <ExemptionDialog cadet={cadet} onClose={() => setAdding(false)} />}
+    </div>
+  );
+}
+
+/** a new exemption, from the cadet's card or straight from the list */
+function ExemptionDialog({ cadet, onClose }: { cadet: Pick<Cadet, 'id' | 'fullName' | 'canManage'>; onClose: () => void }) {
+  const toast = useToast();
+  const guide = useGuide(cadet.canManage);
+  const [subject, setSubject] = useState('');
+  const [details, setDetails] = useState('');
+  const [reason, setReason] = useState('');
+  const [until, setUntil] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const subjects = sortHe([...new Set([...(guide.data?.offenses.map((o) => o.category).filter(Boolean) ?? []), ...EXEMPTION_SUBJECTS])]);
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/api/cadets/${cadet.id}/exemptions`, { subject, details, reason, until: until || null });
+      toast({ title: 'הפטור נרשם', body: 'כל הסגל קיבל עדכון', tone: 'green' });
+      emitLocalChange('cadets');
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`פטור ל${cadet.fullName}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" disabled={busy || !subject.trim()} onClick={() => void add()}>
+            שמירה ועדכון הסגל
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ביטול
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        <Field label="ממה הצוער פטור" required>
+          <SuggestInput value={subject} onChange={setSubject} options={subjects} placeholder="לדוגמה: גילוח" data-autofocus />
+        </Field>
+        <Field label="פירוט (גלוי לכל הסגל)">
+          <input className="input" value={details} onChange={(e) => setDetails(e.target.value)} placeholder="לדוגמה: פטור מריצות עד הבדיקה הבאה" />
+        </Field>
+        <Field label="סיבה (רק למפקד הצוות ולמפקד הקורס)">
+          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: אישור רפואי" />
+        </Field>
+        <Field label="עד תאריך" hint="ריק - עד להודעה חדשה">
+          <DateInput value={until} min={todayKey()} onChange={(v) => setUntil(v)} />
+        </Field>
+        <ErrorBox error={error} />
+      </div>
+    </Modal>
+  );
+}
+
+/** Discipline in one dialog, from anywhere: find the cadet, then the record with the enforcement ladder. */
+export function QuickDiscipline({ onClose }: { onClose: () => void }) {
+  const cadets = useApi<Cadet[]>('/api/cadets', ['cadets']);
+  const [q, setQ] = useState('');
+  const [picked, setPicked] = useState<number | null>(null);
+  const detail = useApi<CadetDetail>(picked ? `/api/cadets/${picked}` : null, ['cadets', 'tasks', 'weeks', 'users', 'settings']);
+  const term = q.trim();
+  // any cadet of the course - those of the user's own teams first
+  const mine = [...(cadets.data ?? [])].sort((a, b) => Number(b.canManage) - Number(a.canManage));
+  const matches = mine.filter((c) => matchesSearch(term, c.fullName, c.personalNumber, c.teamName));
+  const d = picked && detail.data?.cadet.id === picked ? detail.data : undefined;
+  return (
+    <Modal title="רישום משמעת" onClose={onClose} wide>
+      {!picked ? (
+        <div className="col gap-6">
+          <input
+            className="input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && matches[0]) setPicked(matches[0].id);
+            }}
+            placeholder="שם הצוער, מספר אישי או צוות"
+            aria-label="חיפוש צוער"
+            data-autofocus
+            data-transient
+          />
+          <ErrorBox error={cadets.error} />
+          {cadets.loading && !cadets.data && <Loading rows={3} />}
+          {cadets.data && !mine.length && <p className="small muted">אין עדיין צוערים בקורס.</p>}
+          {matches.length > 0 && (
+            <div className="pick-list">
+              {matches.slice(0, 40).map((c) => (
+                <button key={c.id} type="button" className="pick-row" onClick={() => setPicked(c.id)}>
+                  <span className="avatar">{initials(c.fullName)}</span>
+                  <span className="grow">
+                    <span className="strong">{c.fullName}</span> <span className="tiny muted">{c.teamName ?? 'ללא צוות'}</span>
+                  </span>
+                  <NotesBadge count={c.disciplineNotes} />
+                </button>
+              ))}
+            </div>
+          )}
+          {matches.length > 40 && <div className="tiny muted">ועוד {matches.length - 40} - אפשר לחפש לפי שם.</div>}
+          {cadets.data && mine.length > 0 && !matches.length && <p className="small muted">לא נמצא צוער כזה.</p>}
+        </div>
+      ) : !d ? (
+        <Loading rows={3} />
+      ) : (
+        <div className="col gap-16">
+          <div className="row wrap gap-6">
+            <span className="strong">{d.cadet.fullName}</span>
+            <span className="tiny muted">{d.cadet.teamName ?? 'ללא צוות'}</span>
+            <NotesBadge count={d.cadet.disciplineNotes} />
+            <span className="grow" />
+            <Link to={`/cadets/${d.cadet.id}`} className="small" onClick={onClose}>
+              לתיק הצוער
+            </Link>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPicked(null)}>
+              צוער אחר
+            </button>
+          </div>
+          <RecordForm cadet={d.cadet} records={d.records} only="discipline" onSaved={onClose} />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/** Recording in the cadet file; `only` keeps it to one kind (the quick discipline dialog). */
+function RecordForm({
+  cadet,
+  records,
+  only,
+  onSaved,
+  onFullTalk,
+  start,
+}: {
+  cadet: Cadet;
+  records: CadetRecord[];
+  only?: RecordKind;
+  onSaved?: (d: CadetDetail) => void;
+  onFullTalk?: () => void;
+  /** opened to write this: that kind is picked and the text field is ready for typing */
+  start?: RecordKind;
+}) {
+  const toast = useToast();
+  const { user, users, settings, isCommander } = useSession();
+  // every staff member records discipline: the enforcement ladder for all
+  const guide = useGuide();
+  const kinds = only ? [only] : RECORD_KINDS.filter((k) => cadet.canManage || !MANAGER_RECORD_KINDS.includes(k));
+  const [kind, setKind] = useState<RecordKind>(only ?? (start && kinds.includes(start) ? start : 'note'));
+  const text = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!start || !text.current) return;
+    text.current.scrollIntoView({ block: 'center' });
+    text.current.focus({ preventScroll: true });
+    // only on the first showing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [category, setCategory] = useState('');
+  const [body, setBody] = useDraft(`record:${cadet.id}`);
+  const [score, setScore] = useState<number | null>(null);
+  const [followUp, setFollowUp] = useState('');
+  const [priv, setPriv] = useState(false);
+  const [date, setDate] = useState(todayKey());
+  const [withTask, setWithTask] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskOwner, setTaskOwner] = useState(user.id);
+  const [taskDate, setTaskDate] = useState(todayKey());
+  const [taskTime, setTaskTime] = useState(settings.defaultDeadlineTime);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // discipline: the offense on the enforcement ladder, and whether this is a discipline note
+  const [offense, setOffense] = useState('');
+  // what the user chose by hand; until then both follow the ladder for the current count
+  const [formalSet, setFormalSet] = useState<boolean | null>(null);
+  const [letterSet, setLetterSet] = useState<number | null | undefined>(undefined);
+  const offenses = guide.data?.offenses ?? [];
+  const letters = guide.data?.letters ?? [];
+  const chosen = offenses.find((o) => o.key === offense) ?? null;
+  const prior = offense ? records.filter((r) => r.kind === 'discipline' && r.offense === offense) : [];
+  // the cadet's discipline is seen by the team commander and the course commander; anyone else recording it
+  // is told by the server what the record shows once saved: which time this is, and the notes so far
+  const preview = useApi<DisciplinePreview>(kind === 'discipline' && !cadet.canManage ? `/api/cadets/${cadet.id}/discipline-preview${qs({ offense })}` : null, ['cadets']).data;
+  const occurrence = cadet.canManage ? prior.length + 1 : (preview?.occurrence ?? 1);
+  const notesSoFar = cadet.canManage ? cadet.disciplineNotes : preview?.notes;
+  // a discipline note now sends the cadet to an evaluation committee
+  const toCommittee = cadet.canManage ? cadet.status === 'active' && cadet.disciplineNotes + 1 >= DISCIPLINE_NOTE_LIMIT && cadet.notesCommittee?.decision !== null : !!preview?.refers;
+  /** what the ladder says for this time; past its last step, the last step */
+  const stepFor = (o: typeof chosen, n: number) => (o ? (o.steps[n - 1] ?? (n > o.steps.length ? ([...o.steps].reverse().find(Boolean) ?? null) : null)) : null);
+  const step = stepFor(chosen, occurrence);
+  // an exemption on this subject: maybe it is allowed
+  const exempted = chosen ? cadet.exemptions.find((x) => x === chosen.category || x === chosen.name || chosen.name.includes(x) || (chosen.category && x.includes(chosen.category))) : undefined;
+  const beyond = !!chosen && occurrence > chosen.steps.length;
+  const formal = formalSet ?? !!step?.note;
+  const letter = letterSet !== undefined ? letterSet : beyond ? null : (step?.letter ?? null);
+  const pickOffense = (key: string) => {
+    setOffense(key);
+    setFormalSet(null);
+    setLetterSet(undefined);
+  };
+  const insertLetter = () => {
+    const l = letter === null ? null : letters[letter];
+    if (l) setBody(`${body.trim() ? `${body.trim()}\n\n` : ''}${l.title}\n${l.body}`);
+  };
+  const categories = kind === 'evaluation' ? EVALUATION_CRITERIA : kind === 'discipline' ? DISCIPLINE_SEVERITIES : kind === 'talk' ? TALK_TYPES : [];
+
+  const reset = () => {
+    setBody('');
+    setScore(null);
+    setFollowUp('');
+    setCategory('');
+    setWithTask(false);
+    setTaskTitle('');
+    pickOffense('');
+  };
+  const submit = async () => {
+    const note = kind === 'discipline' && formal;
+    const refers = note && toCommittee;
+    if (
+      refers &&
+      !(await ask({
+        title: `זו הערת המשמעת ה-${(notesSoFar ?? 0) + 1} של ${cadet.fullName}`,
+        body: `לפי הנוהל הוא עולה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}: הוועדה תיפתח בתיק ההערכה שלו, עם התיק כפי שהוא עכשיו, ומפקד הקורס יקבל התראה.\nאם ההערה תימחק לפני החלטת הוועדה, ההעברה תבוטל.`,
+        confirm: `שמירה והעברה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`,
+      }))
+    )
+      return;
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await api.post<CadetDetail>(`/api/cadets/${cadet.id}/records`, {
+        kind,
+        offense: kind === 'discipline' ? offense : '',
+        formal: note,
+        category,
+        body: body.trim(),
+        score: kind === 'evaluation' ? score : null,
+        followUp,
+        private: priv,
+        occurredOn: date,
+        followUpTask: withTask ? { title: taskTitle.trim() || `המשך: ${cadet.fullName}`, deadline: isoAt(taskDate, taskTime), ownerId: cadet.canManage ? taskOwner : user.id } : undefined,
+      });
+      // what this person may know of the count: the file's, or what it was told before saving, and this note
+      const n = cadet.canManage ? res.cadet.disciplineNotes : (notesSoFar ?? 0) + 1;
+      if (refers && (!cadet.canManage || res.cadet.notesCommittee?.decision === null)) toast({ title: `${cadet.fullName} עלה ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`, body: `הערת משמעת ${n} מתוך ${DISCIPLINE_NOTE_LIMIT}`, tone: 'red' });
+      else if (note) toast({ title: `הערת משמעת נשמרה בתיק (${n} מתוך ${DISCIPLINE_NOTE_LIMIT})`, tone: 'green' });
+      else toast({ title: `${RECORD_KIND_LABELS[kind]} נשמרה בתיק`, tone: 'green' });
+      reset();
+      emitLocalChange('cadets', 'tasks');
+      onSaved?.(res);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={only ? 'col gap-16' : 'card card-pad col gap-16'}>
+      {!only && <Seg value={kind} onChange={(k) => (setKind(k), setCategory(''), pickOffense(''))} options={kinds.map((k) => ({ value: k, label: RECORD_KIND_LABELS[k] }))} />}
+      {categories.length > 0 && (
+        <div className="chips">
+          {categories.map((x) => (
+            <button key={x} type="button" className={`chip chip-sm${category === x ? ' on' : ''}`} onClick={() => setCategory(category === x ? '' : x)}>
+              {x}
+            </button>
+          ))}
+        </div>
+      )}
+      {kind === 'discipline' && offenses.length > 0 && (
+        <Field label="המקרה לפי מדרג האכיפה">
+          <Select className="select" value={offense} onChange={(e) => pickOffense(e.target.value)}>
+            <option value="">אחר / לא מהמדרג</option>
+            {sortHe([...new Set(offenses.map((o) => o.category))]).map((cat) => (
+              <optgroup key={cat || '-'} label={cat || 'מקרים'}>
+                {sortHe(
+                  offenses.filter((o) => o.category === cat),
+                  (o) => o.name,
+                ).map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </Select>
+        </Field>
+      )}
+      {kind === 'discipline' && offenses.length === 0 && isCommander && guide.data && (
+        <div className="tiny muted">
+          אפשר לטעון את מדרג האכיפה של הקורס ב<Link to="/settings">הגדרות</Link>, ואז המערכת תראה כאן איזו פעם זו ומה הצעד לפי המדרג.
+        </div>
+      )}
+      {chosen && (
+        <div className={`ladder-hint ${step?.note || step?.committee ? 't-red' : 't-orange'}`} role="status">
+          <div className="strong">
+            {timeLabel(occurrence)} של {cadet.firstName} · {chosen.name}
+          </div>
+          {step ? (
+            <div style={{ whiteSpace: 'pre-wrap' }}>
+              {beyond ? 'מעבר לשלבים שבמדרג. הצעד האחרון במדרג: ' : 'לפי המדרג: '}
+              {step.text}
+            </div>
+          ) : (
+            <div>אין במדרג צעד לפעם הזו.</div>
+          )}
+          {step?.committee && (
+            <div>
+              עולה לוועדת הערכה · <Link to={`/evaluations/${cadet.id}`}>לתיק ההערכה</Link>
+            </div>
+          )}
+          {cadet.canManage && prior.length > 0 && <div className="tiny muted">קודם: {prior.map((r) => shortDate(r.occurredOn)).join(', ')}</div>}
+          {!cadet.canManage && occurrence > 1 && <div className="tiny muted">נרשם כבר {occurrence === 2 ? 'פעם אחת' : `${occurrence - 1} פעמים`} קודם</div>}
+          {exempted && (
+            <div className="strong" style={{ color: 'var(--blue)' }}>
+              שימו לב: ל{cadet.firstName} יש פטור בנושא {exempted} - כדאי לבדוק בכרטיס הפטורים לפני שרושמים.
+            </div>
+          )}
+        </div>
+      )}
+      {kind === 'discipline' && (
+        <label className="check">
+          <input type="checkbox" checked={formal} onChange={(e) => setFormalSet(e.target.checked)} />
+          <span>
+            <b>הערת משמעת</b>{' '}
+            {notesSoFar !== undefined && (
+              <span className="small muted">
+                · עד עכשיו {notesSoFar} מתוך {DISCIPLINE_NOTE_LIMIT}
+                {toCommittee && ` - הערה נוספת תעלה אותו ${committeeTo(DISCIPLINE_COMMITTEE_KIND)}`}
+              </span>
+            )}
+          </span>
+        </label>
+      )}
+      {kind === 'discipline' && formal && letters.length > 0 && (
+        <div className="row wrap gap-6">
+          <Select className="select grow" value={letter ?? ''} onChange={(e) => setLetterSet(e.target.value === '' ? null : Number(e.target.value))} aria-label="נוסח הערת המשמעת" style={{ minWidth: 200 }}>
+            <option value="">נוסח הערת המשמעת מהמסמך...</option>
+            {sortHe(
+              letters.map((l, i) => ({ l, i })),
+              (x) => x.l.title,
+            ).map(({ l, i }) => (
+              <option key={i} value={i}>
+                {l.title}
+              </option>
+            ))}
+          </Select>
+          <button type="button" className="btn btn-sm" disabled={letter === null} onClick={insertLetter}>
+            הוספת הנוסח
+          </button>
+        </div>
+      )}
+      {kind === 'evaluation' && (
+        <Field label="ציון" required>
+          <div className="chips">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" className={`chip${score === n ? ' on' : ''}`} onClick={() => setScore(n)} style={{ minWidth: 44, justifyContent: 'center' }}>
+                {n}
+              </button>
+            ))}
+            <span className="tiny muted" style={{ alignSelf: 'center' }}>
+              1 - חלש · 5 - מצוין
+            </span>
+          </div>
+        </Field>
+      )}
+      <textarea
+        ref={text}
+        className="textarea"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder={kind === 'talk' ? 'עיקרי השיחה...' : kind === 'discipline' ? 'מה קרה ומה הצעד שננקט...' : kind === 'evaluation' ? 'על מה מבוססת ההערכה...' : 'הערה...'}
+        style={{ minHeight: 80 }}
+      />
+      {kind === 'talk' && <input className="input" value={followUp} onChange={(e) => setFollowUp(e.target.value)} placeholder="על מה סוכם / צעדי המשך" />}
+      {kind === 'talk' && onFullTalk && (
+        <div className="row wrap gap-6 small">
+          <span className="muted grow">רישום קצר כאן, או השיחה המלאה לפי סעיפים (היכרות, אמצע, משוב...):</span>
+          <button type="button" className="btn btn-sm" onClick={onFullTalk}>
+            <Icon name="message" size={14} /> מילוי שיחה מלאה
+          </button>
+        </div>
+      )}
+      <div className="row wrap">
+        <label className="field" style={{ width: 170 }}>
+          <span>תאריך</span>
+          <DateInput value={date} onChange={(v) => setDate(v)} />
+        </label>
+        {!RESTRICTED_RECORD_KINDS.includes(kind) && (
+          <label className="check small">
+            <input type="checkbox" checked={priv} onChange={(e) => setPriv(e.target.checked)} />
+            פרטי (רק אני, מפקד הצוות ומפקד הקורס)
+          </label>
+        )}
+        <label className="check small">
+          <input type="checkbox" checked={withTask} onChange={(e) => setWithTask(e.target.checked)} />
+          פתח משימת המשך
+        </label>
+      </div>
+      {RESTRICTED_RECORD_KINDS.includes(kind) && <div className="tiny muted">שיחות אישיות ומשמעת גלויות רק לך, למפקד הצוות ולמפקד הקורס.</div>}
+      {withTask && (
+        <div className="form-grid">
+          <Field label="משימת המשך" className="span-2">
+            <input className="input" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder={`לדוגמה: שיחה חוזרת עם ${cadet.firstName}`} />
+          </Field>
+          {cadet.canManage && (
+            <Field label="אחראי">
+              <Select className="select" value={taskOwner} onChange={(e) => setTaskOwner(Number(e.target.value))}>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.displayName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <Field label="דד-ליין">
+            <DateTimeInputs date={taskDate} time={taskTime} onDate={setTaskDate} onTime={setTaskTime} />
+          </Field>
+        </div>
+      )}
+      <FloatingActions>
+        <button className="btn btn-primary" disabled={busy || (!body.trim() && !(kind === 'discipline' && offense)) || (kind === 'evaluation' && !score)} onClick={() => void submit()}>
+          שמור בתיק
+        </button>
+        <ErrorBox error={error} />
+      </FloatingActions>
+    </div>
+  );
+}
+
+function Records({ records, cadet, all }: { records: CadetRecord[]; cadet: Cadet; all: CadetRecord[] }) {
+  const toast = useToast();
+  return (
+    <div className="list">
+      {records.map((r) => (
+        <div key={r.id} className={`card card-pad tone-edge t-${r.formal ? 'red' : KIND_TONE[r.kind]}`} style={{ padding: 14 }}>
+          <div className="row wrap gap-6">
+            <span className={`badge t-${KIND_TONE[r.kind]}`}>{RECORD_KIND_LABELS[r.kind]}</span>
+            {r.formal && (
+              <span className="badge t-red">
+                הערת משמעת{r.noteNumber ? ` ${r.noteNumber}/${DISCIPLINE_NOTE_LIMIT}` : ''}
+              </span>
+            )}
+            {r.occurrence && (
+              <span className="badge" title={r.offense}>
+                {timeLabel(r.occurrence)}
+              </span>
+            )}
+            {r.category && <span className="badge">{r.category}</span>}
+            {r.score !== null && <span className="badge t-gray mono">ציון {r.score}/5</span>}
+            {r.private && (
+              <span className="badge" title="גלוי רק לכותב, למפקד הצוות ולמפקד הקורס">
+                <Icon name="lock" size={11} /> פרטי
+              </span>
+            )}
+            <span className="grow" />
+            <span className="tiny muted">
+              {r.authorName} · <span className="mono">{shortDate(r.occurredOn)}</span>
+              {r.weekName && ` · ${r.weekName}`}
+            </span>
+            {r.canDelete && (
+              <button
+                className="icon-btn"
+                style={{ width: 28, height: 28 }}
+                aria-label="מחיקת רישום"
+                onClick={async () =>
+                  (await ask({ title: 'למחוק את הרישום מהתיק?', confirm: 'מחיקה', danger: true })) &&
+                  void api.del(`/api/records/${r.id}`).then(() => {
+                    toast({ title: 'הרישום נמחק', tone: 'green' });
+                    emitLocalChange('cadets');
+                  })
+                }
+              >
+                <Icon name="trash" size={14} />
+              </button>
+            )}
+          </div>
+          {r.title && <div className="strong mt-8">{r.title}</div>}
+          {r.talk ? (
+            <TalkView record={r} cadet={cadet} records={all} />
+          ) : (
+            <>
+              {r.body && (
+                <p className="mt-8" style={{ whiteSpace: 'pre-wrap', fontSize: 14.5 }}>
+                  {r.body}
+                </p>
+              )}
+              {r.followUp && <p className="small mt-8"><b>סוכם:</b> {r.followUp}</p>}
+            </>
+          )}
+          {r.taskId && (
+            <Link to={`/tasks/${r.taskId}`} className="small mt-8" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+              <Icon name="tasks" size={14} /> {r.taskTitle}
+            </Link>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Development tracking: average evaluation score per date (one series, 1-5 scale),
+ * plus the average per criterion. The record list below is the table view.
+ */
+function Development({ detail }: { detail: CadetDetail }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const points = useMemo(() => {
+    const byDate = new Map<string, { sum: number; n: number; criteria: string[] }>();
+    for (const s of detail.scores) {
+      const e = byDate.get(s.date) ?? { sum: 0, n: 0, criteria: [] };
+      e.sum += s.score;
+      e.n++;
+      e.criteria.push(`${s.criterion} ${s.score}`);
+      byDate.set(s.date, e);
+    }
+    return [...byDate.entries()].map(([date, e]) => ({ date, avg: Math.round((e.sum / e.n) * 10) / 10, criteria: e.criteria }));
+  }, [detail.scores]);
+  const byCriterion = useMemo(() => {
+    const m = new Map<string, number[]>();
+    for (const s of detail.scores) m.set(s.criterion, [...(m.get(s.criterion) ?? []), s.score]);
+    return [...m.entries()].map(([k, v]) => ({ criterion: k, avg: Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10, n: v.length })).sort((a, b) => b.avg - a.avg);
+  }, [detail.scores]);
+
+  // right-to-left: the first evaluation sits on the right, like the rest of the page
+  const W = 320;
+  const H = 150;
+  const pad = { l: 22, r: 24, t: 16, b: 24 };
+  // points sit inside the grid so the end markers never touch the axis labels
+  const inset = 18;
+  const plotW = W - pad.l - pad.r - inset * 2;
+  const x = (i: number) => (points.length === 1 ? pad.l + inset + plotW / 2 : W - pad.r - inset - (i * plotW) / (points.length - 1));
+  const y = (v: number) => pad.t + ((5 - v) * (H - pad.t - pad.b)) / 4;
+  const path = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.avg).toFixed(1)}`).join(' ');
+  const last = points[points.length - 1];
+  const hp = hover !== null ? points[hover] : null;
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <Icon name="chart" />
+        <h3 className="grow">מעקב התפתחות</h3>
+        {detail.cadet.avgScore !== null && (
+          <span className="tiny muted">
+            ממוצע <b className="mono" style={{ color: 'var(--ink)' }}>{detail.cadet.avgScore.toFixed(1)}</b>
+          </span>
+        )}
+      </div>
+      <div className="card-body">
+        {points.length === 0 ? (
+          <p className="small muted">אין עדיין הערכות. הערכות מהתנסויות ומהסגל יופיעו כאן לאורך הקורס.</p>
+        ) : (
+          <>
+            <div className="small muted mb-12">ציון ממוצע לפי תאריך הערכה (1-5)</div>
+            <div style={{ position: 'relative' }}>
+              <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="group" aria-label="ציוני הערכה לאורך הקורס" style={{ display: 'block', overflow: 'visible' }}>
+                {[1, 2, 3, 4, 5].map((v) => (
+                  <g key={v}>
+                    <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeWidth={1} />
+                    <text x={W - pad.r + 8} y={y(v) + 3.5} fontSize={11} fill="var(--muted)" fontFamily="var(--mono)" textAnchor="start">
+                      {v}
+                    </text>
+                  </g>
+                ))}
+                {points.length > 1 && <path d={path} fill="none" stroke="var(--ink)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+                {points.map((p, i) => (
+                  <g key={p.date} onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)} tabIndex={0} role="img" aria-label={`${shortDate(p.date)}: ציון ממוצע ${p.avg}`}>
+                    <circle cx={x(i)} cy={y(p.avg)} r={12} fill="transparent" />
+                    <circle cx={x(i)} cy={y(p.avg)} r={hover === i ? 6 : 4.5} fill="var(--ink)" stroke="var(--card)" strokeWidth={2} />
+                  </g>
+                ))}
+                {points.map((p, i) =>
+                  i === 0 || i === points.length - 1 ? (
+                    <text key={`d${p.date}`} x={x(i)} y={H - 6} fontSize={11} fill="var(--muted)" textAnchor="middle" fontFamily="var(--mono)">
+                      {shortDate(p.date)}
+                    </text>
+                  ) : null,
+                )}
+                {last && hover === null && (
+                  <text x={x(points.length - 1)} y={y(last.avg) - 11} fontSize={11} fontWeight={700} fill="var(--ink)" textAnchor="middle" fontFamily="var(--mono)">
+                    {last.avg.toFixed(1)}
+                  </text>
+                )}
+              </svg>
+              {hp && (
+                <div className="chart-tip" style={{ left: `${(x(hover!) / W) * 100}%`, top: `${(y(hp.avg) / H) * 100}%` }}>
+                  <b className="mono">{hp.avg.toFixed(1)}</b> · <span className="mono">{shortDate(hp.date)}</span>
+                  <div className="tiny muted">{hp.criteria.join(' · ')}</div>
+                </div>
+              )}
+            </div>
+            {byCriterion.length > 0 && (
+              <div className="col gap-6 mt-16">
+                <div className="label-caps">לפי קריטריון</div>
+                {byCriterion.map((cr) => (
+                  <div key={cr.criterion} className="row small">
+                    <span style={{ width: 120 }}>{cr.criterion}</span>
+                    <div className="grow bar" style={{ height: 6 }}>
+                      <div className="bar-fill" style={{ width: `${(cr.avg / 5) * 100}%`, background: 'var(--ink-2)' }} />
+                    </div>
+                    <span className="mono" style={{ width: 54, textAlign: 'left' }}>
+                      {cr.avg.toFixed(1)} <span className="muted">({cr.n})</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
